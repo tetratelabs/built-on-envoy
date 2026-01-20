@@ -1,0 +1,87 @@
+---
+layout: ../../../layouts/DocsLayout.astro
+title: ee config
+description: Manage CLI configuration
+---
+
+# ee config
+
+Manage CLI configuration.
+
+## Usage
+
+```bash
+ee config <command> [options]
+```
+
+## Commands
+
+### `get <key>`
+Get configuration value
+
+```bash
+ee config get proxy.port
+```
+
+### `set <key> <value>`
+Set configuration value
+
+```bash
+ee config set envoy.version 1.37.0
+```
+
+### `list`
+List all configuration
+
+```bash
+ee config list
+```
+
+### `reset`
+Reset to defaults
+
+```bash
+ee config reset
+```
+
+## Configuration Keys
+
+### `envoy.version`
+Default Envoy version
+
+### `proxy.port`
+Default proxy port
+
+### `admin.port`
+Default admin port
+
+### `log.level`
+Default log level
+
+### `marketplace.url`
+Marketplace URL
+
+### `editor`
+Default editor for manifest files
+
+## Examples
+
+### Set default Envoy version
+```bash
+ee config set envoy.version 1.37.0
+```
+
+### Get current proxy port
+```bash
+ee config get proxy.port
+```
+
+### List all configuration
+```bash
+ee config list
+```
+
+### Reset to defaults
+```bash
+ee config reset
+```

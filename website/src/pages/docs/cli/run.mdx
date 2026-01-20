@@ -1,0 +1,103 @@
+---
+layout: ../../../layouts/DocsLayout.astro
+title: ee run
+description: Run Envoy with a specific extension
+---
+
+# ee run
+
+Run Envoy with a specific extension. Automatically configures Envoy with test upstreams and provides example requests.
+
+## Usage
+
+```bash
+ee run --plugin <name> [options]
+```
+
+## Options
+
+### `--plugin <name>`
+Extension to run (required). Can be:
+- A marketplace extension name: `rate-limiter`
+- A local path: `./my-filter`
+- A Git URL: `github.com/user/repo`
+
+### `--config <key=value>`
+Extension configuration (comma-separated)
+
+Example: `--config limit=100,window=1m`
+
+### `--envoy-version <version>`
+Envoy version to use (default: latest)
+
+Example: `--envoy-version 1.37.0`
+
+### `--port <port>`
+Proxy port (default: 10000)
+
+Example: `--port 8080`
+
+### `--admin-port <port>`
+Admin interface port (default: 9901)
+
+Example: `--admin-port 9000`
+
+### `--log-level <level>`
+Envoy log level (default: info)
+
+Options: `trace`, `debug`, `info`, `warning`, `error`, `critical`
+
+### `--upstream <url>`
+Custom upstream target
+
+Example: `--upstream http://localhost:8080`
+
+### `--no-defaults`
+Disable default test upstream configuration
+
+## Examples
+
+### Run a marketplace extension
+```bash
+ee run --plugin rate-limiter
+```
+
+### Run with custom configuration
+```bash
+ee run --plugin rate-limiter --config limit=100,window=1m,backend=redis
+```
+
+### Run a local extension
+```bash
+ee run --plugin ./my-custom-filter
+```
+
+### Run with custom upstream
+```bash
+ee run --plugin cors --upstream http://api.example.com
+```
+
+### Run specific Envoy version
+```bash
+ee run --plugin auth-jwt --envoy-version 1.36.0
+```
+
+## Output
+
+When running an extension, the CLI displays:
+- ✓ Envoy version and startup confirmation
+- → Local proxy URL (http://localhost:10000)
+- → Admin interface URL (http://localhost:9901)
+- Example curl commands for testing
+
+```
+✓ Starting Envoy 1.37.0 with rate-limiter...
+→ Proxy: http://localhost:10000
+→ Admin: http://localhost:9901
+
+Test with:
+  curl http://localhost:10000/
+  curl http://localhost:9901/stats
+
+Press Ctrl+C to stop
+```

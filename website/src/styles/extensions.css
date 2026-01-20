@@ -10,12 +10,8 @@
 .page-hero h1 {
 	font-size: 48px;
 	font-weight: 700;
-	color: var(--primary-dark);
+	color: #4c1d95;
 	margin-bottom: 16px;
-	background: linear-gradient(135deg, var(--primary) 0%, var(--primary-pink) 100%);
-	-webkit-background-clip: text;
-	-webkit-text-fill-color: transparent;
-	background-clip: text;
 }
 
 .page-hero .hero-subtitle {

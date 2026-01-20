@@ -1,5 +1,5 @@
 ---
-import '../styles/main.css';
+import Head from '../components/Head.astro';
 import Header from '../components/Header.astro';
 import Hero from '../components/Hero.astro';
 import Features from '../components/Features.astro';
@@ -11,19 +11,11 @@ import Footer from '../components/Footer.astro';
 
 <!DOCTYPE html>
 <html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/png" href="/favicon.png" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Envoy Ecosystem - Extensions Marketplace for Envoy Proxy</title>
-		<meta name="description" content="Discover, run, and build extensions for Envoy Proxy. A community-driven marketplace with zero-friction developer experience, powered by Tetrate" />
-		<style>
-			/* Critical CSS to prevent FOUC */
-			body { margin: 0; opacity: 0; }
-			body.loaded { opacity: 1; transition: opacity 0.2s ease-in; }
-		</style>
-	</head>
+	<Head
+		title="Envoy Ecosystem - Extensions Marketplace for Envoy Proxy"
+		description="Discover, run, and build extensions for Envoy Proxy. A community-driven marketplace with zero-friction developer experience, powered by Tetrate"
+		preventFOUC={true}
+	/>
 	<body>
 		<Header />
 

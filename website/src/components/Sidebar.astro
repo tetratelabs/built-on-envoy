@@ -1,0 +1,47 @@
+---
+import SidebarSection from './SidebarSection.astro';
+import { readFileSync } from 'fs';
+import { parse } from 'yaml';
+
+interface Props {
+	yamlPath: string;
+}
+
+const { yamlPath } = Astro.props;
+
+const sidebarYaml = readFileSync(yamlPath, 'utf-8');
+const sidebarData = parse(sidebarYaml);
+---
+
+<aside class="docs-sidebar">
+	<nav>
+		{sidebarData.sections.map((section: any) => (
+			<SidebarSection title={section.title} items={section.items} />
+		))}
+	</nav>
+</aside>
+
+<script>
+	document.addEventListener('DOMContentLoaded', () => {
+		// Toggle sidebar sections
+		const toggleButtons = document.querySelectorAll('.section-toggle');
+		toggleButtons.forEach(button => {
+			button.addEventListener('click', () => {
+				const section = button.closest('.sidebar-section');
+				const isExpanded = button.getAttribute('aria-expanded') === 'true';
+				button.setAttribute('aria-expanded', (!isExpanded).toString());
+				section?.setAttribute('aria-expanded', (!isExpanded).toString());
+			});
+		});
+
+		// Highlight current page
+		const currentPath = window.location.pathname;
+		const links = document.querySelectorAll('.sidebar-section a');
+		links.forEach(link => {
+			const linkPath = link.getAttribute('data-page');
+			if (linkPath === currentPath) {
+				link.classList.add('active');
+			}
+		});
+	});
+</script>

@@ -1,0 +1,61 @@
+---
+layout: ../../../layouts/DocsLayout.astro
+title: ee plugin info
+description: Show detailed information about an extension
+---
+
+# ee plugin info
+
+Show detailed information about an extension.
+
+## Usage
+
+```bash
+ee plugin info <name>
+```
+
+## Arguments
+
+### `<name>`
+Extension name (required)
+
+## Examples
+
+### Show extension details
+```bash
+ee plugin info rate-limiter
+```
+
+## Output
+
+```
+Extension: rate-limiter
+Version:   1.0.0
+Category:  Popular
+Author:    Tetrate
+License:   Apache-2.0
+
+Description:
+  Token bucket rate limiting with Redis backend support
+
+Long Description:
+  A robust rate limiting extension that implements the token bucket algorithm.
+  Supports both in-memory and Redis backends for distributed rate limiting
+  across multiple Envoy instances.
+
+Tags:
+  rate-limiting, redis, protection, throttling
+
+Usage:
+  ee run --plugin rate-limiter --config limit=100,window=1m
+
+Examples:
+  # Basic rate limiting
+  ee run --plugin rate-limiter --config limit=100,window=1m
+
+  # Redis backend
+  ee run --plugin rate-limiter --config backend=redis,redis-url=redis://localhost:6379
+
+Repository:
+  https://github.com/tetratelabs/envoy-ecosystem/tree/main/extensions/rate-limiter
+```

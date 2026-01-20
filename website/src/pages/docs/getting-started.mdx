@@ -1,0 +1,70 @@
+---
+layout: ../../layouts/DocsLayout.astro
+title: Getting Started
+description: Get started with Envoy Ecosystem CLI
+---
+
+# Getting Started
+
+The `ee` (Envoy Ecosystem) CLI provides a zero-friction developer experience for discovering, running, and building Envoy Proxy extensions.
+
+## Installation
+
+Choose your preferred installation method:
+
+### Homebrew (macOS/Linux)
+
+```bash
+brew install tetratelabs/tap/envoy-ecosystem
+```
+
+### Install Script
+
+```bash
+curl -sL https://get.envoy-ecosystem.io | bash
+```
+
+### Build from Source
+
+```bash
+git clone https://github.com/tetratelabs/envoy-ecosystem
+cd envoy-ecosystem
+make install
+```
+
+## Quick Start
+
+Once installed, you can immediately start using extensions:
+
+### Run an Extension
+
+```bash
+# Run an extension from the marketplace
+ee run --plugin rate-limiter
+```
+
+### Create Your Own Extension
+
+```bash
+# Create a new extension
+ee create-plugin my-filter
+
+# Test your extension locally
+ee run --plugin ./my-filter
+```
+
+### Browse Available Extensions
+
+```bash
+# List all available extensions
+ee plugin list
+
+# Get details about a specific extension
+ee plugin info rate-limiter
+```
+
+## Next Steps
+
+- Explore the [CLI Commands](/docs/cli/commands) to learn what `ee` can do
+- Browse the [Extensions Marketplace](/extensions) to find extensions for your use case
+- Learn how to [create your own extension](/docs/cli/create-plugin)

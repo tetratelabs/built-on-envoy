@@ -1,0 +1,35 @@
+---
+interface Props {
+	title: string;
+	description?: string;
+	additionalStylesheets?: string[];
+	preventFOUC?: boolean;
+}
+
+const {
+	title,
+	description,
+	additionalStylesheets = [],
+	preventFOUC = false
+} = Astro.props;
+---
+
+<head>
+	<meta charset="utf-8" />
+	<link rel="icon" type="image/png" href="/envoy-icon.png" />
+	<meta name="viewport" content="width=device-width" />
+	<meta name="generator" content={Astro.generator} />
+	<title>{title}</title>
+	{description && <meta name="description" content={description} />}
+	<link rel="stylesheet" href="/src/styles/main.css" />
+	{additionalStylesheets.map(stylesheet => (
+		<link rel="stylesheet" href={stylesheet} />
+	))}
+	{preventFOUC && (
+		<style>
+			/* Critical CSS to prevent FOUC */
+			body { margin: 0; opacity: 0; }
+			body.loaded { opacity: 1; transition: opacity 0.2s ease-in; }
+		</style>
+	)}
+</head>

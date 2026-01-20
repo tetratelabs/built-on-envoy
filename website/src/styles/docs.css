@@ -1,0 +1,262 @@
+/* Documentation Layout Styles */
+
+.docs-container {
+	display: flex;
+	max-width: 1400px;
+	margin: 0 auto;
+}
+
+.docs-sidebar {
+	width: 280px;
+	flex-shrink: 0;
+	padding: 32px 24px;
+	border-right: 1px solid var(--border);
+	height: calc(100vh - 60px);
+	overflow-y: auto;
+	position: sticky;
+	top: 60px;
+}
+
+.docs-sidebar nav {
+	display: flex;
+	flex-direction: column;
+	gap: 24px;
+}
+
+.section-toggle {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	width: 100%;
+	padding: 8px 12px;
+	background: none;
+	border: none;
+	cursor: pointer;
+	border-radius: 6px;
+	transition: background 0.2s;
+	margin-bottom: 8px;
+}
+
+.section-toggle:hover {
+	background: rgba(124, 58, 237, 0.08);
+}
+
+.section-toggle h3 {
+	font-size: 16px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	color: #4c1d95;
+	margin: 0;
+	text-align: left;
+}
+
+.chevron {
+	flex-shrink: 0;
+	transition: transform 0.2s;
+	color: #6b7280;
+	margin-left: auto;
+}
+
+.sidebar-section[aria-expanded="false"] .chevron {
+	transform: rotate(-90deg);
+}
+
+.sidebar-section ul {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	overflow: hidden;
+}
+
+.sidebar-section[aria-expanded="false"] ul {
+	display: none;
+}
+
+.sidebar-section[aria-expanded="true"] ul {
+	display: flex;
+}
+
+.sidebar-section li {
+	margin: 0;
+}
+
+.sidebar-section a {
+	display: block;
+	padding: 8px 12px;
+	color: #6b7280;
+	text-decoration: none;
+	border-radius: 6px;
+	font-size: 16px;
+	transition: all 0.2s;
+}
+
+.sidebar-section a:hover {
+	color: var(--primary);
+	background: rgba(124, 58, 237, 0.08);
+}
+
+.sidebar-section a.active {
+	color: var(--primary);
+	background: rgba(124, 58, 237, 0.12);
+}
+
+.docs-main {
+	flex: 1;
+	padding: 48px;
+	min-width: 0;
+}
+
+@media (max-width: 1024px) {
+	.docs-container {
+		flex-direction: column;
+	}
+
+	.docs-sidebar {
+		width: 100%;
+		height: auto;
+		position: static;
+		border-right: none;
+		border-bottom: 1px solid var(--border);
+	}
+
+	.docs-main {
+		padding: 32px 24px;
+	}
+}
+
+/* Prose Styles */
+
+.prose {
+	color: var(--text);
+	line-height: 1.7;
+}
+
+.prose h1 {
+	font-size: 42px;
+	font-weight: 700;
+	margin: 0 0 24px 0;
+	color: #4c1d95;
+	line-height: 1.2;
+}
+
+.prose h2 {
+	font-size: 32px;
+	font-weight: 700;
+	margin: 48px 0 16px 0;
+	color: #4b5563;
+	border-bottom: 2px solid var(--border);
+	padding-bottom: 8px;
+}
+
+.prose h3 {
+	font-size: 24px;
+	font-weight: 600;
+	margin: 32px 0 12px 0;
+	color: #4b5563;
+}
+
+.prose h4 {
+	font-size: 20px;
+	font-weight: 600;
+	margin: 24px 0 12px 0;
+	color: #6b7280;
+}
+
+.prose p {
+	margin: 0 0 16px 0;
+	color: var(--text-secondary);
+}
+
+.prose a {
+	color: var(--primary);
+	text-decoration: none;
+	transition: color 0.2s;
+}
+
+.prose a:hover {
+	color: var(--primary-light);
+	text-decoration: underline;
+}
+
+.prose code {
+	font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+	font-size: 0.9em;
+	background: var(--bg-secondary);
+	padding: 2px 6px;
+	border-radius: 4px;
+	color: var(--text);
+}
+
+.prose pre {
+	background: #1e293b;
+	padding: 20px;
+	border-radius: 8px;
+	overflow-x: auto;
+	margin: 16px 0;
+	border: 1px solid var(--border);
+}
+
+.prose pre code {
+	background: none;
+	padding: 0;
+	color: #e2e8f0;
+}
+
+.prose ul,
+.prose ol {
+	margin: 0 0 16px 0;
+	padding-left: 24px;
+}
+
+.prose li {
+	margin: 8px 0;
+	color: var(--text-secondary);
+}
+
+.prose blockquote {
+	border-left: 4px solid var(--primary);
+	padding: 12px 20px;
+	margin: 16px 0;
+	background: var(--bg-secondary);
+	border-radius: 4px;
+}
+
+.prose table {
+	width: 100%;
+	border-collapse: collapse;
+	margin: 16px 0;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	overflow: hidden;
+}
+
+.prose th {
+	background: var(--bg-secondary);
+	padding: 12px;
+	text-align: left;
+	font-weight: 600;
+	border-bottom: 2px solid var(--border);
+}
+
+.prose td {
+	padding: 12px;
+	border-bottom: 1px solid var(--border);
+}
+
+.prose tr:last-child td {
+	border-bottom: none;
+}
+
+.prose tr:hover {
+	background: var(--bg-secondary);
+}
+
+.prose hr {
+	border: none;
+	border-top: 2px solid var(--border);
+	margin: 32px 0;
+}

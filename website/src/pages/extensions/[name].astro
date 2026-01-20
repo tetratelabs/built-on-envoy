@@ -1,6 +1,5 @@
 ---
-import '../../styles/main.css';
-import '../../styles/extension-detail.css';
+import Head from '../../components/Head.astro';
 import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
 import { GITHUB_REPO, EXTENSIONS_PATH } from '../../constants';
@@ -53,19 +52,12 @@ const { extension } = Astro.props as { extension: Extension };
 
 <!DOCTYPE html>
 <html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/png" href="/favicon.png" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>{extension.name} - Envoy Ecosystem</title>
-		<meta name="description" content={extension.description} />
-		<style>
-			/* Critical CSS to prevent FOUC */
-			body { margin: 0; opacity: 0; }
-			body.loaded { opacity: 1; transition: opacity 0.2s ease-in; }
-		</style>
-	</head>
+	<Head
+		title={`${extension.name} - Envoy Ecosystem`}
+		description={extension.description}
+		additionalStylesheets={['/src/styles/extension-detail.css']}
+		preventFOUC={true}
+	/>
 	<body>
 		<Header />
 

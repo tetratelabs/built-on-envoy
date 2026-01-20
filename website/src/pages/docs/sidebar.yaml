@@ -1,0 +1,29 @@
+sections:
+  - title: Getting Started
+    items:
+      - title: Getting Started
+        href: /docs/getting-started
+
+  - title: CLI Commands
+    items:
+      - title: ee run
+        href: /docs/cli/run
+      - title: ee create-plugin
+        href: /docs/cli/create-plugin
+      - title: ee plugin list
+        href: /docs/cli/plugin-list
+      - title: ee plugin info
+        href: /docs/cli/plugin-info
+      - title: ee plugin publish
+        href: /docs/cli/plugin-publish
+      - title: ee config
+        href: /docs/cli/config
+
+  - title: Reference
+    items:
+      - title: Environment Variables
+        href: /docs/reference/environment-variables
+      - title: Configuration File
+        href: /docs/reference/config-file
+      - title: Extension Manifest
+        href: /docs/reference/manifest

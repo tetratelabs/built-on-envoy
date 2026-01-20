@@ -1,0 +1,190 @@
+---
+layout: ../../../layouts/DocsLayout.astro
+title: Extension Manifest
+description: Extension manifest file reference
+---
+
+# Extension Manifest
+
+Extensions use a `manifest.yaml` file for metadata and configuration.
+
+## File Location
+
+```
+my-extension/
+└── manifest.yaml
+```
+
+## Complete Example
+
+```yaml
+name: my-filter
+version: 1.0.0
+category: Security
+author: Your Name
+featured: false
+description: Short description of the extension
+
+longDescription: |
+  Detailed description of the extension.
+  Supports multiple paragraphs and formatting.
+
+tags:
+  - security
+  - authentication
+  - jwt
+
+license: Apache-2.0
+
+envoy:
+  min_version: 1.28.0
+  max_version: 1.38.0
+
+config:
+  - name: timeout
+    type: duration
+    default: 30s
+    description: Request timeout
+
+  - name: enabled
+    type: boolean
+    default: true
+    description: Enable the filter
+
+examples:
+  - title: Basic usage
+    description: Simple configuration
+    code: |
+      ee run --plugin my-filter --config timeout=60s
+
+  - title: Advanced usage
+    description: With multiple options
+    code: |
+      ee run --plugin my-filter --config timeout=60s,enabled=true
+```
+
+## Required Fields
+
+### `name`
+Extension name (kebab-case)
+
+```yaml
+name: my-filter
+```
+
+### `version`
+Semantic version
+
+```yaml
+version: 1.0.0
+```
+
+### `category`
+Extension category
+
+Options: `Popular`, `Security`, `Network`, `Performance`, `Transform`, `Observability`
+
+```yaml
+category: Security
+```
+
+### `author`
+Author name or organization
+
+```yaml
+author: Your Name
+```
+
+### `description`
+Short description (one line)
+
+```yaml
+description: JWT authentication and validation
+```
+
+### `license`
+License identifier
+
+```yaml
+license: Apache-2.0
+```
+
+## Optional Fields
+
+### `featured`
+Whether the extension is featured
+
+```yaml
+featured: true
+```
+
+### `longDescription`
+Detailed description (supports multiline)
+
+```yaml
+longDescription: |
+  A comprehensive JWT authentication filter that validates
+  JSON Web Tokens against configured issuers and audiences.
+```
+
+### `tags`
+Search tags
+
+```yaml
+tags:
+  - security
+  - authentication
+  - jwt
+```
+
+### `envoy`
+Envoy version compatibility
+
+```yaml
+envoy:
+  min_version: 1.28.0
+  max_version: 1.38.0
+```
+
+### `config`
+Configuration parameters
+
+```yaml
+config:
+  - name: timeout
+    type: duration
+    default: 30s
+    description: Request timeout
+
+  - name: max_retries
+    type: integer
+    default: 3
+    description: Maximum retry attempts
+```
+
+#### Config Parameter Types
+
+- `string` - Text value
+- `integer` - Whole number
+- `boolean` - true/false
+- `duration` - Time duration (e.g., `30s`, `1m`, `2h`)
+- `url` - URL string
+
+### `examples`
+Usage examples
+
+```yaml
+examples:
+  - title: Basic usage
+    description: Simple configuration
+    code: |
+      ee run --plugin my-filter --config timeout=60s
+```
+
+## Validation
+
+Validate your manifest before publishing:
+
+```bash
+ee plugin publish --dry-run
+```

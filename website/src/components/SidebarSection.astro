@@ -1,0 +1,26 @@
+---
+interface Props {
+	title: string;
+	items: Array<{ title: string; href: string }>;
+}
+
+const { title, items } = Astro.props;
+---
+
+<div class="sidebar-section" aria-expanded="true">
+	<button class="section-toggle" aria-expanded="true">
+		<h3>{title}</h3>
+		<svg class="chevron" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+			<path d="M4 6L8 10L12 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</svg>
+	</button>
+	<ul>
+		{items.map(item => (
+			<li>
+				<a href={item.href} data-page={item.href}>
+					{item.title}
+				</a>
+			</li>
+		))}
+	</ul>
+</div>

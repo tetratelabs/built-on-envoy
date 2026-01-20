@@ -1,0 +1,93 @@
+---
+layout: ../../../layouts/DocsLayout.astro
+title: ee create-plugin
+description: Scaffold a new Envoy extension
+---
+
+# ee create-plugin
+
+Scaffold a new extension with ready-to-use templates. Creates a complete project structure with example code, tests, and documentation.
+
+## Usage
+
+```bash
+ee create-plugin <name> [options]
+```
+
+## Arguments
+
+### `<name>`
+Extension name (required)
+
+Must be kebab-case: `my-filter`, `auth-checker`
+
+## Options
+
+### `--language <lang>`
+Programming language (default: go)
+
+Options: `go`, `rust`, `cpp`
+
+### `--type <type>`
+Extension type (default: http-filter)
+
+Options: `http-filter`, `network-filter`, `access-logger`
+
+### `--template <name>`
+Use a specific template
+
+Options: `minimal`, `standard`, `full`
+
+Default: `standard`
+
+### `--no-examples`
+Skip generating example code
+
+### `--no-tests`
+Skip generating test files
+
+## Examples
+
+### Create a basic HTTP filter
+```bash
+ee create-plugin my-filter
+```
+
+### Create a Rust network filter
+```bash
+ee create-plugin tcp-inspector --language rust --type network-filter
+```
+
+### Create with minimal template
+```bash
+ee create-plugin simple-logger --template minimal
+```
+
+## Generated Structure
+
+```
+my-filter/
+├── manifest.yaml           # Extension metadata
+├── README.md              # Documentation
+├── src/
+│   ├── filter.go         # Main filter implementation
+│   └── config.go         # Configuration handling
+├── test/
+│   ├── filter_test.go    # Unit tests
+│   └── integration_test.go
+├── examples/
+│   └── basic.yaml        # Example configuration
+└── .ee/
+    └── config.yaml       # CLI configuration
+```
+
+## Next Steps
+
+After creating an extension:
+
+```bash
+cd my-filter
+ee run --plugin .
+```
+
+Learn more about [publishing your extension](/docs/cli/plugin-publish).
