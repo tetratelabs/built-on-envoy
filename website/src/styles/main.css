@@ -77,6 +77,8 @@ header .container {
 	display: flex;
 	align-items: center;
 	gap: 16px;
+	text-decoration: none;
+	color: inherit;
 }
 
 .logo-icon {
@@ -378,7 +380,7 @@ nav a:hover {
 
 .extensions-grid {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+	grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 	gap: 24px;
 	margin-bottom: 48px;
 }

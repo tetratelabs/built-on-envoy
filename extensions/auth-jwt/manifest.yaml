@@ -1,0 +1,27 @@
+name: auth-jwt
+version: 1.2.0
+category: Security
+author: Tetrate
+description: JWT authentication and validation with JWKS endpoint support
+longDescription: |
+  Comprehensive JWT authentication extension with support for JWKS endpoints,
+  multiple issuers, and custom claims validation. Seamlessly integrates with
+  popular identity providers like Auth0, Okta, and Keycloak. Includes automatic
+  token refresh and caching for optimal performance.
+tags:
+  - authentication
+  - jwt
+  - security
+  - jwks
+  - oauth
+repository: https://github.com/tetratelabs/envoy-ecosystem
+license: Apache-2.0
+examples:
+  - title: Basic JWT validation
+    description: Validate tokens with a JWKS endpoint
+    code: |
+      ee run --plugin auth-jwt --config jwks-url=https://your-domain.auth0.com/.well-known/jwks.json
+  - title: Custom claims validation
+    description: Require specific claims in the JWT
+    code: |
+      ee run --plugin auth-jwt --config jwks-url=...,required-claims=role:admin

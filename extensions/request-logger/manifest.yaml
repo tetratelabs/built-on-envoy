@@ -1,0 +1,26 @@
+name: request-logger
+version: 1.0.0
+category: Observability
+author: Tetrate
+description: Advanced request/response logging with custom formatters
+longDescription: |
+  A powerful logging extension that captures detailed request and response information.
+  Supports multiple output formats (JSON, structured text, CEF), custom field selection,
+  and integration with popular log aggregation systems. Includes sampling and filtering
+  to reduce log volume in high-traffic environments.
+tags:
+  - logging
+  - observability
+  - monitoring
+  - debugging
+repository: https://github.com/tetratelabs/envoy-ecosystem
+license: Apache-2.0
+examples:
+  - title: JSON logging
+    description: Log requests in JSON format
+    code: |
+      ee run --plugin request-logger --config format=json,output=/var/log/envoy/requests.log
+  - title: Filtered logging
+    description: Only log specific status codes
+    code: |
+      ee run --plugin request-logger --config filter=status>=400

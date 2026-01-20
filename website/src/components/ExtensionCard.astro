@@ -1,0 +1,36 @@
+---
+interface Props {
+	name: string;
+	category: string;
+	description: string;
+	href?: string;
+}
+
+const { name, category, description, href } = Astro.props;
+---
+
+{href ? (
+	<a href={href} class="extension-card-link">
+		<div class="extension-card">
+			<div class="extension-header">
+				<h3>{name}</h3>
+				<span class="extension-badge">{category}</span>
+			</div>
+			<p>{description}</p>
+			<div class="extension-footer">
+				<code>ee run --plugin {name}</code>
+			</div>
+		</div>
+	</a>
+) : (
+	<div class="extension-card">
+		<div class="extension-header">
+			<h3>{name}</h3>
+			<span class="extension-badge">{category}</span>
+		</div>
+		<p>{description}</p>
+		<div class="extension-footer">
+			<code>ee run --plugin {name}</code>
+		</div>
+	</div>
+)}

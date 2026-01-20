@@ -1,0 +1,26 @@
+name: cache
+version: 1.3.0
+category: Performance
+author: Tetrate
+description: HTTP caching with TTL control and cache key customization
+longDescription: |
+  A high-performance HTTP caching extension that implements RFC 7234 caching semantics.
+  Supports both in-memory and Redis backends, custom cache keys based on headers/query
+  parameters, and flexible TTL configuration. Includes cache warming, stale-while-revalidate,
+  and automatic cache invalidation for optimal performance and freshness.
+tags:
+  - caching
+  - performance
+  - optimization
+  - redis
+repository: https://github.com/tetratelabs/envoy-ecosystem
+license: Apache-2.0
+examples:
+  - title: Basic caching
+    description: Cache responses for 5 minutes
+    code: |
+      ee run --plugin cache --config ttl=5m
+  - title: Custom cache key
+    description: Include query parameters in cache key
+    code: |
+      ee run --plugin cache --config ttl=5m,key-params=user_id,locale

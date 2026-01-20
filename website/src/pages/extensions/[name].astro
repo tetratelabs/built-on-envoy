@@ -1,0 +1,459 @@
+---
+import '../../styles/main.css';
+import Header from '../../components/Header.astro';
+import Footer from '../../components/Footer.astro';
+import { parse } from 'yaml';
+import fs from 'fs';
+import path from 'path';
+
+export async function getStaticPaths() {
+	const extensionsDir = path.join(process.cwd(), '../extensions');
+	const extensionFolders = fs.readdirSync(extensionsDir)
+		.filter(item => {
+			const itemPath = path.join(extensionsDir, item);
+			return fs.statSync(itemPath).isDirectory();
+		});
+
+	return extensionFolders.map(folder => {
+		const manifestPath = path.join(extensionsDir, folder, 'manifest.yaml');
+		if (!fs.existsSync(manifestPath)) return null;
+
+		const manifestContent = fs.readFileSync(manifestPath, 'utf-8');
+		const manifest = parse(manifestContent);
+
+		return {
+			params: { name: manifest.name },
+			props: { extension: manifest }
+		};
+	}).filter(Boolean);
+}
+
+interface Example {
+	title: string;
+	description: string;
+	code: string;
+}
+
+interface Extension {
+	name: string;
+	version: string;
+	category: string;
+	author: string;
+	description: string;
+	longDescription: string;
+	tags: string[];
+	repository: string;
+	license: string;
+	examples?: Example[];
+}
+
+const { extension } = Astro.props as { extension: Extension };
+---
+
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<link rel="icon" type="image/png" href="/favicon.png" />
+		<meta name="viewport" content="width=device-width" />
+		<meta name="generator" content={Astro.generator} />
+		<title>{extension.name} - Envoy Ecosystem</title>
+		<meta name="description" content={extension.description} />
+	</head>
+	<body>
+		<Header />
+
+		<main>
+			<section class="extension-hero">
+				<div class="container">
+					<nav class="breadcrumb">
+						<a href="/">Home</a>
+						<span class="separator">→</span>
+						<a href="/extensions">Extensions</a>
+						<span class="separator">→</span>
+						<span>{extension.name}</span>
+					</nav>
+
+					<div class="extension-header">
+						<div class="extension-title-group">
+							<h1>{extension.name}</h1>
+							<span class="extension-badge">{extension.category}</span>
+						</div>
+						<p class="extension-description">{extension.description}</p>
+					</div>
+
+					<div class="extension-meta">
+						<div class="meta-item">
+							<span class="meta-label">Version</span>
+							<span class="meta-value">{extension.version}</span>
+						</div>
+						<div class="meta-item">
+							<span class="meta-label">Author</span>
+							<span class="meta-value">{extension.author}</span>
+						</div>
+						<div class="meta-item">
+							<span class="meta-label">License</span>
+							<span class="meta-value">{extension.license}</span>
+						</div>
+					</div>
+				</div>
+			</section>
+
+			<section class="extension-content">
+				<div class="container">
+					<div class="content-grid">
+						<div class="main-content">
+							<section class="content-section">
+								<h2>About</h2>
+								<div class="long-description">
+									{extension.longDescription.split('\n').map(para => para.trim() && <p>{para.trim()}</p>)}
+								</div>
+							</section>
+
+							{extension.examples && extension.examples.length > 0 && (
+								<section class="content-section">
+									<h2>Usage Examples</h2>
+									{extension.examples.map(example => (
+										<div class="example-block">
+											<h3>{example.title}</h3>
+											<p class="example-description">{example.description}</p>
+											<div class="code-block-wrapper">
+												<pre class="code-block"><code>{example.code.trim()}</code></pre>
+												<button class="copy-btn" aria-label="Copy code">📋</button>
+											</div>
+										</div>
+									))}
+								</section>
+							)}
+
+							<section class="content-section">
+								<h2>Quick Start</h2>
+								<div class="quick-start">
+									<p>Get started with this extension in seconds:</p>
+									<div class="code-block-wrapper">
+										<pre class="code-block"><code>ee run --plugin {extension.name}</code></pre>
+										<button class="copy-btn" aria-label="Copy code">📋</button>
+									</div>
+								</div>
+							</section>
+						</div>
+
+						<aside class="sidebar">
+							<div class="sidebar-section">
+								<h3>Tags</h3>
+								<div class="tags">
+									{extension.tags.map(tag => (
+										<span class="tag">{tag}</span>
+									))}
+								</div>
+							</div>
+
+							<div class="sidebar-section">
+								<h3>Resources</h3>
+								<ul class="resource-links">
+									<li>
+										<a href={extension.repository} target="_blank" rel="noopener noreferrer">
+											View on GitHub →
+										</a>
+									</li>
+									<li>
+										<a href="/extensions">← Back to Catalog</a>
+									</li>
+								</ul>
+							</div>
+						</aside>
+					</div>
+				</div>
+			</section>
+		</main>
+
+		<Footer />
+
+		<script>
+			// Copy button functionality
+			document.querySelectorAll('.copy-btn').forEach(btn => {
+				btn.addEventListener('click', async () => {
+					const codeBlock = btn.previousElementSibling;
+					if (codeBlock) {
+						await navigator.clipboard.writeText(codeBlock.textContent || '');
+						const originalHTML = btn.innerHTML;
+						btn.innerHTML = '✓';
+						setTimeout(() => {
+							btn.innerHTML = originalHTML;
+						}, 2000);
+					}
+				});
+			});
+		</script>
+	</body>
+</html>
+
+<style>
+	.extension-hero {
+		background: linear-gradient(135deg, rgba(124, 58, 237, 0.05) 0%, rgba(6, 182, 212, 0.05) 100%);
+		padding: 40px 0 60px;
+		border-bottom: 1px solid var(--border);
+	}
+
+	.breadcrumb {
+		font-size: 14px;
+		color: var(--text-muted);
+		margin-bottom: 32px;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		flex-wrap: wrap;
+	}
+
+	.breadcrumb a {
+		color: var(--primary);
+		text-decoration: none;
+	}
+
+	.breadcrumb a:hover {
+		text-decoration: underline;
+	}
+
+	.separator {
+		color: var(--text-light);
+	}
+
+	.extension-header {
+		margin-bottom: 32px;
+	}
+
+	.extension-title-group {
+		display: flex;
+		align-items: center;
+		gap: 16px;
+		margin-bottom: 16px;
+		flex-wrap: wrap;
+	}
+
+	.extension-hero h1 {
+		font-size: 48px;
+		font-weight: 700;
+		color: var(--primary-dark);
+		font-family: 'Monaco', 'Menlo', monospace;
+		margin: 0;
+	}
+
+	.extension-description {
+		font-size: 20px;
+		color: var(--text-muted);
+		line-height: 1.6;
+	}
+
+	.extension-meta {
+		display: flex;
+		gap: 32px;
+		flex-wrap: wrap;
+	}
+
+	.meta-item {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+
+	.meta-label {
+		font-size: 12px;
+		color: var(--text-light);
+		text-transform: uppercase;
+		font-weight: 600;
+		letter-spacing: 0.5px;
+	}
+
+	.meta-value {
+		font-size: 16px;
+		color: var(--text);
+		font-weight: 500;
+	}
+
+	.extension-content {
+		padding: 80px 0;
+	}
+
+	.content-grid {
+		display: grid;
+		grid-template-columns: 1fr 300px;
+		gap: 64px;
+	}
+
+	.content-section {
+		margin-bottom: 48px;
+	}
+
+	.content-section:last-child {
+		margin-bottom: 0;
+	}
+
+	.content-section h2 {
+		font-size: 32px;
+		font-weight: 600;
+		color: var(--primary-dark);
+		margin-bottom: 24px;
+	}
+
+	.long-description p {
+		color: var(--text);
+		line-height: 1.8;
+		margin-bottom: 16px;
+	}
+
+	.long-description p:last-child {
+		margin-bottom: 0;
+	}
+
+	.example-block {
+		margin-bottom: 32px;
+		padding: 24px;
+		background: var(--bg-subtle);
+		border-radius: 12px;
+		border: 1px solid var(--border);
+	}
+
+	.example-block:last-child {
+		margin-bottom: 0;
+	}
+
+	.example-block h3 {
+		font-size: 20px;
+		font-weight: 600;
+		color: var(--primary-dark);
+		margin-bottom: 8px;
+	}
+
+	.example-description {
+		color: var(--text-muted);
+		margin-bottom: 16px;
+	}
+
+	.code-block-wrapper {
+		position: relative;
+	}
+
+	.code-block {
+		background: var(--bg-code);
+		color: #e2e8f0;
+		padding: 16px 20px;
+		border-radius: 8px;
+		font-family: 'Monaco', 'Menlo', monospace;
+		font-size: 14px;
+		line-height: 1.6;
+		overflow-x: auto;
+		margin: 0;
+	}
+
+	.copy-btn {
+		position: absolute;
+		top: 12px;
+		right: 12px;
+		background: rgba(255, 255, 255, 0.1);
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		color: white;
+		padding: 6px 12px;
+		border-radius: 6px;
+		cursor: pointer;
+		font-size: 14px;
+		transition: all 0.2s;
+	}
+
+	.copy-btn:hover {
+		background: rgba(255, 255, 255, 0.2);
+		border-color: rgba(255, 255, 255, 0.3);
+	}
+
+	.quick-start p {
+		color: var(--text);
+		margin-bottom: 16px;
+	}
+
+	.sidebar-section {
+		background: var(--bg-subtle);
+		border: 1px solid var(--border);
+		border-radius: 12px;
+		padding: 24px;
+		margin-bottom: 24px;
+	}
+
+	.sidebar-section:last-child {
+		margin-bottom: 0;
+	}
+
+	.sidebar-section h3 {
+		font-size: 16px;
+		font-weight: 600;
+		color: var(--primary-dark);
+		margin-bottom: 16px;
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+	}
+
+	.tags {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+
+	.tag {
+		background: var(--bg);
+		color: var(--primary);
+		padding: 6px 12px;
+		border-radius: 6px;
+		font-size: 13px;
+		font-weight: 500;
+		border: 1px solid var(--border);
+	}
+
+	.resource-links {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+	}
+
+	.resource-links li {
+		margin-bottom: 12px;
+	}
+
+	.resource-links li:last-child {
+		margin-bottom: 0;
+	}
+
+	.resource-links a {
+		color: var(--primary);
+		text-decoration: none;
+		font-weight: 500;
+		transition: color 0.2s;
+	}
+
+	.resource-links a:hover {
+		color: var(--primary-light);
+		text-decoration: underline;
+	}
+
+	@media (max-width: 1024px) {
+		.content-grid {
+			grid-template-columns: 1fr;
+			gap: 48px;
+		}
+
+		.sidebar {
+			order: -1;
+		}
+	}
+
+	@media (max-width: 768px) {
+		.extension-hero h1 {
+			font-size: 32px;
+		}
+
+		.extension-description {
+			font-size: 18px;
+		}
+
+		.content-section h2 {
+			font-size: 24px;
+		}
+	}
+</style>

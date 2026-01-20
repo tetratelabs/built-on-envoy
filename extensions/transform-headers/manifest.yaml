@@ -1,0 +1,26 @@
+name: transform-headers
+version: 1.0.0
+category: Transform
+author: Tetrate
+description: Add, modify, or remove headers with templating support
+longDescription: |
+  A versatile header manipulation extension that allows you to add, modify, or remove
+  HTTP headers based on request/response context. Supports dynamic values using Go
+  templates with access to request metadata, connection info, and custom variables.
+  Perfect for adding security headers, routing metadata, or custom tracking information.
+tags:
+  - headers
+  - transform
+  - routing
+  - metadata
+repository: https://github.com/tetratelabs/envoy-ecosystem
+license: Apache-2.0
+examples:
+  - title: Add security headers
+    description: Add common security headers
+    code: |
+      ee run --plugin transform-headers --config add=X-Frame-Options:DENY,X-Content-Type-Options:nosniff
+  - title: Dynamic headers
+    description: Add headers with dynamic values
+    code: |
+      ee run --plugin transform-headers --config add='X-Request-ID:{{.RequestId}}'
