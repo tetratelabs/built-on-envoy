@@ -3,7 +3,7 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-name: CI
+name: CLI
 
 on:
   push:
@@ -30,6 +30,7 @@ jobs:
             code:
               - '!**/*.md'
               - '!examples/**'
+              - '!website/**'
               - '!CODEOWNERS'
           predicate-quantifier: every  # Make the filters be AND-ed
           token: "" # don't use github api
@@ -109,7 +110,7 @@ jobs:
       - run: make lint
 
   # Aggregate all the required jobs and make it easier to customize CI required jobs
-  ci-checks:
+  cli-checks:
     runs-on: ubuntu-latest
     needs:
       - check

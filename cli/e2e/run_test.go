@@ -16,8 +16,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	internaltesting "github.com/tetratelabs/envoy-ecosystem/cli/internal/testing"
 	"github.com/tetratelabs/func-e/experimental/admin"
+
+	internaltesting "github.com/tetratelabs/envoy-ecosystem/cli/internal/testing"
 )
 
 func TestAdminEndpoints(t *testing.T) {
