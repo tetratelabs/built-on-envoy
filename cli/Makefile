@@ -102,7 +102,7 @@ docker:  ## Build the Docker iamge
 ##@ Code Quality
 
 .PHONY: lint
-lint:  ## Run the linters
+lint: gen  ## Run the linters
 	@echo "golangci-lint => ./..."
 	@$(GO_TOOL) golangci-lint run ./...
 
