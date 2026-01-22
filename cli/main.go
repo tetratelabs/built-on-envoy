@@ -10,7 +10,8 @@ import (
 	"os"
 
 	"github.com/alecthomas/kong"
-	"github.com/envoy-ecosystem/cli/cmd/run"
+
+	"github.com/tetratelabs/envoy-ecosystem/cli/cmd/run"
 )
 
 var CLI struct {

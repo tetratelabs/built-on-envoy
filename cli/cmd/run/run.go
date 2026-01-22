@@ -7,7 +7,7 @@
 package run
 
 import (
-	"github.com/envoy-ecosystem/cli/internal/envoy"
+	"github.com/tetratelabs/envoy-ecosystem/cli/internal/envoy"
 )
 
 // Cmd represents the run command

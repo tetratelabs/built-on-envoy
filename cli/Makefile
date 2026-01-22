@@ -48,6 +48,7 @@ format:  ## Format code.
 
 .PHONY: check
 check: format  ## Run all necessary steps to prepare for a commit and check for any differences in the codebase
+	@go mod tidy
 	@if [ ! -z "`git status -s`" ]; then \
 		echo "The following differences will fail CI until committed:"; \
 		git status; \
