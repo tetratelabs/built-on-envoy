@@ -1,19 +1,27 @@
 ---
 interface Props {
 	name: string;
-	category: string;
+	type: string;
 	description: string;
 	href: string;
 }
 
-const { name, category, description, href } = Astro.props;
+const { name, type, description, href } = Astro.props;
+
+// Helper function to format type names (snake_case to Title Case)
+function formatTypeName(t: string): string {
+	return t
+		.split('_')
+		.map(word => word.charAt(0).toUpperCase() + word.slice(1))
+		.join(' ');
+}
 ---
 
 <a href={href} class="extension-card-link">
 	<div class="extension-card">
 		<div class="extension-header">
 			<h3>{name}</h3>
-			<span class="extension-badge">{category}</span>
+			<span class={`extension-badge extension-badge--${type}`}>{formatTypeName(type)}</span>
 		</div>
 		<p>{description}</p>
 		<div class="extension-footer">

@@ -454,13 +454,30 @@ nav a:focus {
 }
 
 .extension-badge {
-	background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary) 100%);
 	color: white;
 	font-size: 11px;
 	padding: 4px 8px;
 	border-radius: 4px;
 	font-weight: 600;
 	text-transform: uppercase;
+	background: var(--primary);
+}
+
+/* Extension type color variants (purple/pink palette) */
+.extension-badge--dynamic_module {
+	background: #6d28d9;
+}
+
+.extension-badge--lua {
+	background: #c026d3;
+}
+
+.extension-badge--wasm {
+	background: #a855f7;
+}
+
+.extension-badge--composer {
+	background: #cc69db;
 }
 
 .extension-card > p {

@@ -213,6 +213,21 @@
 	letter-spacing: 0.5px;
 }
 
+.categories {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.category {
+	background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary) 100%);
+	color: white;
+	padding: 6px 12px;
+	border-radius: 6px;
+	font-size: 13px;
+	font-weight: 500;
+}
+
 .tags {
 	display: flex;
 	flex-wrap: wrap;

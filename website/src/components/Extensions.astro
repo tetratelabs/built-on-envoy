@@ -15,7 +15,7 @@ const extensionFolders = fs.readdirSync(extensionsDir)
 interface Extension {
 	name: string;
 	version: string;
-	category: string;
+	type: string;
 	author: string;
 	featured?: boolean;
 	description: string;
@@ -46,7 +46,7 @@ const featuredExtensions: Extension[] = extensionFolders
 			{featuredExtensions.map(ext => (
 				<ExtensionCard
 					name={ext.name}
-					category={ext.category}
+					type={ext.type}
 					description={ext.description}
 					href={`/extensions/${ext.name}`}
 				/>

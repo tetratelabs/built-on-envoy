@@ -53,6 +53,7 @@
 	color: var(--text-light);
 }
 
+.type-filter select,
 .category-filter select {
 	padding: 14px 40px 14px 20px;
 	border: 2px solid var(--border);
@@ -70,12 +71,14 @@
 	background-position: right 12px center;
 }
 
+.type-filter select:focus,
 .category-filter select:focus {
 	outline: none;
 	border-color: var(--primary);
 	box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
 }
 
+.type-filter select:hover,
 .category-filter select:hover {
 	border-color: var(--primary-light);
 }
@@ -143,6 +146,7 @@
 		flex-direction: column;
 	}
 
+	.type-filter select,
 	.category-filter select {
 		width: 100%;
 	}

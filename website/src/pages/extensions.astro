@@ -18,7 +18,8 @@ const extensionFolders = fs.readdirSync(extensionsDir)
 interface Extension {
 	name: string;
 	version: string;
-	category: string;
+	type: string;
+	categories: string[];
 	author: string;
 	description: string;
 	longDescription: string;
@@ -39,9 +40,21 @@ const extensions: Extension[] = extensionFolders
 	.filter((ext): ext is Extension => ext !== null)
 	.sort((a, b) => a.name.localeCompare(b.name));
 
-// Collect unique categories from extensions and sort alphabetically
-const sortedCategories = [...new Set(extensions.map(ext => ext.category))]
+// Collect unique types from extensions and sort alphabetically
+const sortedTypes = [...new Set(extensions.map(ext => ext.type))]
 	.sort((a, b) => a.localeCompare(b));
+
+// Collect unique categories from extensions and sort alphabetically
+const sortedCategories = [...new Set(extensions.flatMap(ext => ext.categories))]
+	.sort((a, b) => a.localeCompare(b));
+
+// Helper function to format type names (snake_case to Title Case)
+function formatTypeName(type: string): string {
+	return type
+		.split('_')
+		.map(word => word.charAt(0).toUpperCase() + word.slice(1))
+		.join(' ');
+}
 ---
 
 <!DOCTYPE html>
@@ -80,6 +93,14 @@ const sortedCategories = [...new Set(extensions.map(ext => ext.category))]
 								))}
 							</select>
 						</div>
+						<div class="type-filter">
+							<select id="type-filter" aria-label="Filter by type">
+								<option value="">All Types</option>
+								{sortedTypes.map(type => (
+									<option value={type}>{formatTypeName(type)}</option>
+								))}
+							</select>
+						</div>
 					</div>
 				</div>
 			</section>
@@ -90,12 +111,14 @@ const sortedCategories = [...new Set(extensions.map(ext => ext.category))]
 						<>
 							<div class="extensions-grid" id="extensions-grid">
 								{extensions.map(ext => (
-									<ExtensionCard
-										name={ext.name}
-										category={ext.category}
-										description={ext.description}
-										href={`/extensions/${ext.name}`}
-									/>
+									<div data-categories={ext.categories.join(',')}>
+										<ExtensionCard
+											name={ext.name}
+											type={ext.type}
+											description={ext.description}
+											href={`/extensions/${ext.name}`}
+										/>
+									</div>
 								))}
 							</div>
 							<div class="empty-state" id="no-results" style="display: none;">
@@ -119,32 +142,37 @@ const sortedCategories = [...new Set(extensions.map(ext => ext.category))]
 
 			// Extension filtering functionality
 			const searchInput = document.getElementById('search-input') as HTMLInputElement;
+			const typeFilter = document.getElementById('type-filter') as HTMLSelectElement;
 			const categoryFilter = document.getElementById('category-filter') as HTMLSelectElement;
 			const extensionsGrid = document.getElementById('extensions-grid');
 			const noResults = document.getElementById('no-results');
 
 			function filterExtensions() {
 				const searchTerm = searchInput?.value.toLowerCase() || '';
+				const selectedType = typeFilter?.value || '';
 				const selectedCategory = categoryFilter?.value || '';
 
-				const cards = extensionsGrid?.querySelectorAll('.extension-card-link, .extension-card');
+				const cardWrappers = extensionsGrid?.querySelectorAll('[data-categories]');
 				let visibleCount = 0;
 
-				cards?.forEach((card) => {
-					const name = card.querySelector('h3')?.textContent?.toLowerCase() || '';
-					const description = card.querySelector('p')?.textContent?.toLowerCase() || '';
-					const category = card.querySelector('.extension-badge')?.textContent || '';
+				cardWrappers?.forEach((wrapper) => {
+					const card = wrapper.querySelector('.extension-card-link, .extension-card');
+					const name = card?.querySelector('h3')?.textContent?.toLowerCase() || '';
+					const description = card?.querySelector('p')?.textContent?.toLowerCase() || '';
+					const type = card?.querySelector('.extension-badge')?.textContent || '';
+					const categories = (wrapper as HTMLElement).dataset.categories?.split(',') || [];
 
 					const matchesSearch = searchTerm === '' ||
 						name.includes(searchTerm) ||
 						description.includes(searchTerm);
-					const matchesCategory = selectedCategory === '' || category === selectedCategory;
+					const matchesType = selectedType === '' || type === selectedType;
+					const matchesCategory = selectedCategory === '' || categories.includes(selectedCategory);
 
-					if (matchesSearch && matchesCategory) {
-						(card as HTMLElement).style.display = '';
+					if (matchesSearch && matchesType && matchesCategory) {
+						(wrapper as HTMLElement).style.display = '';
 						visibleCount++;
 					} else {
-						(card as HTMLElement).style.display = 'none';
+						(wrapper as HTMLElement).style.display = 'none';
 					}
 				});
 
@@ -162,6 +190,7 @@ const sortedCategories = [...new Set(extensions.map(ext => ext.category))]
 
 			// Add event listeners
 			searchInput?.addEventListener('input', filterExtensions);
+			typeFilter?.addEventListener('change', filterExtensions);
 			categoryFilter?.addEventListener('change', filterExtensions);
 		</script>
 	</body>
