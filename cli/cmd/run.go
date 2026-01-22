@@ -3,8 +3,8 @@
 // The full text of the Apache license is available in the LICENSE file at
 // the root of the repo.
 
-// Package run implements the 'ee run' command.
-package run
+// Package cmd contains the CLI commands
+package cmd
 
 import (
 	"context"
@@ -25,8 +25,8 @@ import (
 // defaultLogLevel is the default Envoy component log level.
 const defaultLogLevel = "error"
 
-// Cmd represents the run command
-type Cmd struct {
+// Run represents the run command
+type Run struct {
 	EnvoyVersion string   `help:"Envoy version to use (e.g., 1.31.0)" env:"ENVOY_VERSION"`
 	LogLevel     string   `help:"Envoy component log level (default: all:error)" short:"l" default:"all:error"`
 	RunID        string   `name:"run-id" env:"EE_RUN_ID" help:"Run identifier for this invocation. Defaults to timestamp-based ID or $EE_RUN_ID. Use '0' for Docker/Kubernetes."`
@@ -39,24 +39,24 @@ type Cmd struct {
 }
 
 // BeforeApply is called by Kong before applying defaults to set computed default values.
-func (c *Cmd) BeforeApply(_ *kong.Context) error {
+func (r *Run) BeforeApply(_ *kong.Context) error {
 	// Set RunID default if not provided
-	if c.RunID == "" {
-		c.RunID = generateRunID(time.Now())
+	if r.RunID == "" {
+		r.RunID = generateRunID(time.Now())
 	}
 	return nil
 }
 
 // Validate is called by Kong after parsing to validate the command arguments.
-func (c *Cmd) Validate() error {
+func (r *Run) Validate() error {
 	var err error
 
-	c.defaultLogLevel, c.componentLogLevel, err = parseLogLevels(c.LogLevel)
+	r.defaultLogLevel, r.componentLogLevel, err = parseLogLevels(r.LogLevel)
 	if err != nil {
 		return err
 	}
 
-	for _, name := range c.Extensions {
+	for _, name := range r.Extensions {
 		if _, found := extensions.Manifests[name]; !found {
 			available := slices.Collect(maps.Keys(extensions.Manifests))
 			sort.Strings(available)
@@ -68,20 +68,20 @@ func (c *Cmd) Validate() error {
 }
 
 // Run executes the run command
-func (c *Cmd) Run(ctx context.Context, dirs *xdg.Directories) error {
-	manifests := make([]*extensions.Manifest, 0, len(c.Extensions))
-	for _, name := range c.Extensions {
+func (r *Run) Run(ctx context.Context, dirs *xdg.Directories) error {
+	manifests := make([]*extensions.Manifest, 0, len(r.Extensions))
+	for _, name := range r.Extensions {
 		manifests = append(manifests, extensions.Manifests[name])
 	}
 
 	runner := &envoy.Runner{
-		EnvoyVersion:      c.EnvoyVersion,
-		DefaultLogLevel:   c.defaultLogLevel,
-		ComponentLogLevel: c.componentLogLevel,
+		EnvoyVersion:      r.EnvoyVersion,
+		DefaultLogLevel:   r.defaultLogLevel,
+		ComponentLogLevel: r.componentLogLevel,
 		Dirs:              dirs,
-		RunID:             c.RunID,
-		ListenPort:        c.ListenPort,
-		AdminPort:         c.AdminPort,
+		RunID:             r.RunID,
+		ListenPort:        r.ListenPort,
+		AdminPort:         r.AdminPort,
 		Extensions:        manifests,
 	}
 

@@ -63,8 +63,6 @@ func (r *Runner) Run(ctx context.Context) error {
 	start := time.Now()
 	startupHook := func(_ context.Context, adminClient admin.AdminClient, _ string) error {
 		startDuration := time.Since(start).Round(100 * time.Millisecond)
-		// _, _ = fmt.Fprintf(os.Stderr, "Envoy listening on http://localhost:%d (admin http://localhost:%d) after %v\n",
-		// 	r.ListenPort, adminClient.Port(), startDuration)
 		_, _ = fmt.Fprintf(os.Stderr, `
 %[4]s✓ Envoy is ready after %[3]v%[5]s
   → %[4]sProxy:%[5]s http://localhost:%[1]d

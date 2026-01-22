@@ -17,12 +17,13 @@ import (
 
 	"github.com/alecthomas/kong"
 
-	"github.com/tetratelabs/envoy-ecosystem/cli/cmd/run"
+	"github.com/tetratelabs/envoy-ecosystem/cli/cmd"
 	"github.com/tetratelabs/envoy-ecosystem/cli/internal/xdg"
 )
 
 type CLI struct {
-	Run run.Cmd `cmd:"" help:"Run Envoy with extensions"`
+	List cmd.List `cmd:"" help:"List available extensions"`
+	Run  cmd.Run  `cmd:"" help:"Run Envoy with extensions"`
 
 	// Global XDG flags
 	ConfigHome string `name:"config-home" env:"EE_CONFIG_HOME" help:"Configuration files directory. Defaults to ~/.config/ee" type:"path" default:"~/.config/ee"`

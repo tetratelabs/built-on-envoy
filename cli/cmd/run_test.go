@@ -3,7 +3,7 @@
 // The full text of the Apache license is available in the LICENSE file at
 // the root of the repo.
 
-package run
+package cmd
 
 import (
 	"bytes"
@@ -20,9 +20,9 @@ import (
 	"github.com/tetratelabs/envoy-ecosystem/cli/internal/extensions"
 )
 
-func TestParseCommandHelp(t *testing.T) {
+func TestParseCmdRunHelp(t *testing.T) {
 	var cli struct {
-		Run Cmd `cmd:"" help:"Run Envoy with extensions"`
+		Run Run `cmd:"" help:"Run Envoy with extensions"`
 	}
 
 	var buf bytes.Buffer
@@ -58,9 +58,9 @@ Flags:
 	require.Equal(t, expected, buf.String())
 }
 
-func TestParseCommandDefaults(t *testing.T) {
+func TestParseCmdRunDefaults(t *testing.T) {
 	var cli struct {
-		Run Cmd `cmd:"" help:"Run Envoy with extensions"`
+		Run Run `cmd:"" help:"Run Envoy with extensions"`
 	}
 
 	parser, err := kong.New(&cli, kong.Name("ee"), kong.Exit(func(int) {}))
@@ -81,9 +81,9 @@ func TestParseCommandDefaults(t *testing.T) {
 	require.Regexp(t, `^\d{8}_\d{6}_\d{3}$`, cli.Run.RunID)
 }
 
-func TestParseCommandCustomValues(t *testing.T) {
+func TestParseCmdRunCustomValues(t *testing.T) {
 	var cli struct {
-		Run Cmd `cmd:"" help:"Run Envoy with extensions"`
+		Run Run `cmd:"" help:"Run Envoy with extensions"`
 	}
 
 	parser, err := kong.New(&cli, kong.Name("ee"), kong.Exit(func(int) {}))
@@ -114,7 +114,7 @@ func TestParseInvalidExtension(t *testing.T) {
 	sort.Strings(available)
 
 	var cli struct {
-		Run Cmd `cmd:"" help:"Run Envoy with extensions"`
+		Run Run `cmd:"" help:"Run Envoy with extensions"`
 	}
 
 	parser, err := kong.New(&cli, kong.Name("ee"), kong.Exit(func(int) {}))
@@ -188,7 +188,7 @@ func TestValidateLogLevel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cmd := Cmd{LogLevel: tt.logLevel}
+			cmd := Run{LogLevel: tt.logLevel}
 			err := cmd.Validate()
 			if tt.wantError == "" {
 				require.NoError(t, err)
