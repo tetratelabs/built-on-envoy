@@ -1,2 +1,6 @@
 .makerc
 out/
+
+# Manifests directory copied from the root extensions so it can
+# be embedded in the CLI binary.
+internal/extensions/manifests

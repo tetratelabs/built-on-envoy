@@ -7,10 +7,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/alecthomas/kong"
 
@@ -51,15 +54,25 @@ func (c *CLI) BeforeApply(ctx *kong.Context) error {
 }
 
 func main() {
-	ctx := kong.Parse(&CLI{},
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Handle OS signals for graceful shutdown
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		cancel()
+	}()
+
+	kongCtx := kong.Parse(&CLI{},
 		kong.Name("ee"),
 		kong.Description("Envoy Ecosystem CLI - Discover, run, and build custom filters with zero friction"),
 		kong.UsageOnError(),
+		kong.BindTo(ctx, (*context.Context)(nil)), // Bind it so it can be injected into commands
 	)
 
-	err := ctx.Run()
-	ctx.FatalIfErrorf(err)
-	os.Exit(0)
+	kongCtx.FatalIfErrorf(kongCtx.Run(ctx))
 }
 
 // expandPath expands environment variables and tilde in paths, then converts to absolute path.

@@ -7,6 +7,7 @@
 package run
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -35,7 +36,7 @@ func (c *Cmd) BeforeApply(_ *kong.Context) error {
 }
 
 // Run executes the run command
-func (c *Cmd) Run(dirs *xdg.Directories) error {
+func (c *Cmd) Run(ctx context.Context, dirs *xdg.Directories) error {
 	runner := &envoy.Runner{
 		EnvoyVersion: c.EnvoyVersion,
 		LogLevel:     c.LogLevel,
@@ -44,7 +45,7 @@ func (c *Cmd) Run(dirs *xdg.Directories) error {
 		ListenPort:   c.ListenPort,
 		AdminPort:    c.AdminPort,
 	}
-	return runner.Run()
+	return runner.Run(ctx)
 }
 
 // generateRunID generates a unique run identifier based on the current time.

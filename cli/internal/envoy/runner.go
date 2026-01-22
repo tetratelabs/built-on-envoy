@@ -10,9 +10,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 	"time"
 
 	funce "github.com/tetratelabs/func-e"
@@ -42,18 +40,7 @@ type Runner struct {
 }
 
 // Run starts Envoy using func-e as a library
-func (r *Runner) Run() error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Handle OS signals for graceful shutdown
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigCh
-		cancel()
-	}()
-
+func (r *Runner) Run(ctx context.Context) error {
 	// Define startup hook that will be called when Envoy admin is ready
 	start := time.Now()
 	startupHook := func(_ context.Context, adminClient admin.AdminClient, _ string) error {

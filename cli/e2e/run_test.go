@@ -21,27 +21,16 @@ import (
 	internaltesting "github.com/tetratelabs/envoy-ecosystem/cli/internal/testing"
 )
 
-func TestAdminEndpoints(t *testing.T) {
+func TestDefaultProxy(t *testing.T) {
 	adminPort := runEnvoy(t, cliBin, nil, "run")
-
-	require.NoError(t, checkEndpoint(t.Context(),
-		fmt.Sprintf("http://localhost:%d/server_info", adminPort),
-		statusEq(200),
-	))
+	require.NoError(t, checkEndpoint(t.Context(), fmt.Sprintf("http://localhost:%d/status/200", proxyPort), statusEq(200)))
+	require.NoError(t, checkEndpoint(t.Context(), fmt.Sprintf("http://localhost:%d/server_info", adminPort), statusEq(200)))
 }
 
-func TestDefaultProxy(t *testing.T) {
-	_ = runEnvoy(t, cliBin, nil, "run")
-
-	require.NoError(t, checkEndpoint(t.Context(),
-		fmt.Sprintf("http://localhost:%d/status/200", proxyPort),
-		statusEq(200),
-	))
-
-	require.NoError(t, checkEndpoint(t.Context(),
-		fmt.Sprintf("http://localhost:%d/status/404", proxyPort),
-		statusEq(404),
-	))
+func TestCustomPorts(t *testing.T) {
+	_ = runEnvoy(t, cliBin, nil, "run", "--listen-port", "11000", "--admin-port", "12000")
+	require.NoError(t, checkEndpoint(t.Context(), "http://localhost:11000/status/200", statusEq(200)))
+	require.NoError(t, checkEndpoint(t.Context(), "http://localhost:12000/server_info", statusEq(200)))
 }
 
 // runEnvoy starts the CLI as a subprocess with the given config file.

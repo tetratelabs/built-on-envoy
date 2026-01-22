@@ -1,6 +1,6 @@
 name: rate-limiter
 version: 1.0.0
-category: Popular
+category: Security
 author: Tetrate
 featured: true
 description: Token bucket rate limiting with Redis backend support

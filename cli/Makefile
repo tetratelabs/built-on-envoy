@@ -38,7 +38,7 @@ GO_TOOL := go tool -modfile=tools/go.mod
 GOOS_LIST ?= $(shell go env GOOS)
 GOARCH_LIST ?= $(shell go env GOARCH)
 .PHONY: build
-build: ## Build a binary for the given OS and architectures
+build: gen  ## Build a binary for the given OS and architectures
 	@mkdir -p $(OUTPUT_DIR)
 	@for goos in $(GOOS_LIST); do \
 		for goarch in $(GOARCH_LIST); do \
@@ -49,18 +49,23 @@ build: ## Build a binary for the given OS and architectures
 		done; \
 	done
 
+.PHONY: gen
+gen: ## Generate code
+	@echo "Generating code..."
+	@go generate ./...
+
 .PHONY: clean
 clean:  ## Clean the build artifacts
 	rm -rf $(OUTPUT_DIR)
 
 .PHONY: test
-test:  ## Run the unit tests
+test: gen  ## Run the unit tests
 	@PKGS=$$(go list ./... | grep -v -E "e2e"); \
 	  echo "Running unit tests for packages: $$PKGS"; \
 	  go test $(GO_TEST_ARGS) $$PKGS
 
 .PHONY: test-e2e
-test-e2e:  ## Run the end-to-end tests
+test-e2e: gen  ## Run the end-to-end tests
 	@echo "Run e2e tests"
 	@go test $(GO_TEST_ARGS) ./e2e/...
 

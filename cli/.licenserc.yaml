@@ -19,6 +19,8 @@ header:
       the root of the repo.
   paths-ignore:
     - out/
+    # Ignore the code-generated extension manifests
+    - internal/extensions/manifests/
     - "**/go.mod"
     - "**/go.sum"
     - "**/*.md"
