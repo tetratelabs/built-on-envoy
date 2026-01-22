@@ -6,7 +6,6 @@ require (
 	github.com/alecthomas/kong v1.13.0
 	github.com/stretchr/testify v1.11.1
 	github.com/tetratelabs/func-e v1.3.0
-	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -23,4 +22,5 @@ require (
 	github.com/ulikunitz/xz v0.5.15 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	golang.org/x/sys v0.35.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
