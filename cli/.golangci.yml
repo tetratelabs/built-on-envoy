@@ -1,0 +1,55 @@
+# Copyright Envoy Ecosystem
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+version: "2"
+linters:
+  enable:
+    - bodyclose
+    - copyloopvar
+    - errorlint
+    - gocritic
+    - gosec
+    - importas
+    - misspell
+    - revive
+    - staticcheck
+    - testifylint
+    - unconvert
+  settings:
+    gocritic:
+      enabled-tags:
+        - performance
+    govet:
+      disable:
+        - fieldalignment
+      enable-all: true
+    testifylint:
+      enable:
+        - bool-compare
+        - compares
+        - empty
+        - error-is-as
+        - error-nil
+        - expected-actual
+        - len
+        - require-error
+        - suite-dont-use-pkg
+        - suite-extra-assert-call
+      disable:
+        - float-compare
+        - go-require
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+formatters:
+  enable:
+    - gci
+    - gofumpt
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/tetratelabs/envoy-ecosystem)
