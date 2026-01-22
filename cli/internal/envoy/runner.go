@@ -16,6 +16,7 @@ import (
 	"github.com/tetratelabs/func-e/api"
 	"github.com/tetratelabs/func-e/experimental/admin"
 
+	"github.com/tetratelabs/envoy-ecosystem/cli/internal"
 	"github.com/tetratelabs/envoy-ecosystem/cli/internal/extensions"
 	"github.com/tetratelabs/envoy-ecosystem/cli/internal/xdg"
 )
@@ -51,12 +52,29 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
+	names := make([]string, 0, len(r.Extensions))
+	for _, ext := range r.Extensions {
+		names = append(names, ext.Name)
+	}
+	_, _ = fmt.Fprintf(os.Stderr, "%s✓ Starting Envoy with extensions: %v...%s\n",
+		internal.ANSIBold, names, internal.ANSIReset)
+
 	// Define startup hook that will be called when Envoy admin is ready
 	start := time.Now()
 	startupHook := func(_ context.Context, adminClient admin.AdminClient, _ string) error {
 		startDuration := time.Since(start).Round(100 * time.Millisecond)
-		_, _ = fmt.Fprintf(os.Stderr, "Envoy listening on http://localhost:%d (admin http://localhost:%d) after %v\n",
-			r.ListenPort, adminClient.Port(), startDuration)
+		// _, _ = fmt.Fprintf(os.Stderr, "Envoy listening on http://localhost:%d (admin http://localhost:%d) after %v\n",
+		// 	r.ListenPort, adminClient.Port(), startDuration)
+		_, _ = fmt.Fprintf(os.Stderr, `
+%[4]s✓ Envoy is ready after %[3]v%[5]s
+  → %[4]sProxy:%[5]s http://localhost:%[1]d
+  → %[4]sAdmin:%[5]s http://localhost:%[2]d
+
+%[4]sTest with:%[5]s
+  curl http://localhost:%[1]d/
+
+Press Ctrl+C to stop
+`, r.ListenPort, adminClient.Port(), startDuration, internal.ANSIBold, internal.ANSIReset)
 		return nil
 	}
 

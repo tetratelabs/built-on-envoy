@@ -20,14 +20,16 @@ my-extension/
 ```yaml
 name: my-filter
 version: 1.0.0
-category: Security
+type: lua
+categories:
+  - Security
 author: Your Name
 featured: false
 description: Short description of the extension
 
 longDescription: |
   Detailed description of the extension.
-  Supports multiple paragraphs and formatting.
+  Supports multiple paragraphs and markdown formatting.
 
 tags:
   - security
@@ -35,21 +37,6 @@ tags:
   - jwt
 
 license: Apache-2.0
-
-envoy:
-  min_version: 1.28.0
-  max_version: 1.38.0
-
-config:
-  - name: timeout
-    type: duration
-    default: 30s
-    description: Request timeout
-
-  - name: enabled
-    type: boolean
-    default: true
-    description: Enable the filter
 
 examples:
   - title: Basic usage
@@ -63,72 +50,120 @@ examples:
       ee run --plugin my-filter --config timeout=60s,enabled=true
 ```
 
-## Required Fields
+## Field Reference
 
 ### `name`
-Extension name (kebab-case)
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Pattern** | `^[a-z][a-z0-9-]*$` |
+
+Unique identifier for the extension. Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens.
 
 ```yaml
 name: my-filter
 ```
 
 ### `version`
-Semantic version
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Pattern** | `^\d+\.\d+\.\d+$` |
+
+Semantic version of the extension.
 
 ```yaml
 version: 1.0.0
 ```
 
-### `category`
-Extension category
+### `type`
 
-Options: `Popular`, `Security`, `Network`, `Performance`, `Transform`, `Observability`
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Allowed values** | `lua`, `wasm`, `dynamic_module`, `composer` |
+
+Type of the extension.
 
 ```yaml
-category: Security
+type: lua
+```
+
+### `categories`
+
+| | |
+|---|---|
+| **Type** | `array` of `string` |
+| **Required** | Yes |
+| **Allowed values** | `AI`, `Network`, `Observability`, `Performance`, `Transform`, `Security` |
+
+Functional categories of the extension. An extension can belong to multiple categories.
+
+```yaml
+categories:
+  - Security
+  - Network
 ```
 
 ### `author`
-Author name or organization
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+
+Author or organization name.
 
 ```yaml
 author: Your Name
 ```
 
 ### `description`
-Short description (one line)
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Max length** | 200 characters |
+
+Short single-line description of the extension.
 
 ```yaml
-description: JWT authentication and validation
-```
-
-### `license`
-License identifier
-
-```yaml
-license: Apache-2.0
-```
-
-## Optional Fields
-
-### `featured`
-Whether the extension is featured
-
-```yaml
-featured: true
+description: JWT authentication and validation with JWKS endpoint support
 ```
 
 ### `longDescription`
-Detailed description (supports multiline)
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+
+Detailed multi-line description with markdown support.
 
 ```yaml
 longDescription: |
   A comprehensive JWT authentication filter that validates
   JSON Web Tokens against configured issuers and audiences.
+
+  Supports JWKS endpoints for key rotation and caching.
 ```
 
 ### `tags`
-Search tags
+
+| | |
+|---|---|
+| **Type** | `array` of `string` |
+| **Required** | Yes |
+| **Min items** | 1 |
+| **Pattern** | `^[a-z][a-z0-9-]*$` |
+
+Searchable tags for categorization. Tags must be unique, start with a lowercase letter, and contain only lowercase letters, numbers, and hyphens.
 
 ```yaml
 tags:
@@ -137,41 +172,28 @@ tags:
   - jwt
 ```
 
-### `envoy`
-Envoy version compatibility
+### `license`
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+
+SPDX license identifier.
 
 ```yaml
-envoy:
-  min_version: 1.28.0
-  max_version: 1.38.0
+license: Apache-2.0
 ```
-
-### `config`
-Configuration parameters
-
-```yaml
-config:
-  - name: timeout
-    type: duration
-    default: 30s
-    description: Request timeout
-
-  - name: max_retries
-    type: integer
-    default: 3
-    description: Maximum retry attempts
-```
-
-#### Config Parameter Types
-
-- `string` - Text value
-- `integer` - Whole number
-- `boolean` - true/false
-- `duration` - Time duration (e.g., `30s`, `1m`, `2h`)
-- `url` - URL string
 
 ### `examples`
-Usage examples
+
+| | |
+|---|---|
+| **Type** | `array` of `object` |
+| **Required** | Yes |
+| **Min items** | 1 |
+
+Usage examples for the extension. Each example must have `title`, `description`, and `code` fields.
 
 ```yaml
 examples:
@@ -179,6 +201,28 @@ examples:
     description: Simple configuration
     code: |
       ee run --plugin my-filter --config timeout=60s
+```
+
+#### Example Object
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `title` | `string` | Yes | Short title for the example |
+| `description` | `string` | Yes | Explanation of what the example demonstrates |
+| `code` | `string` | Yes | Code snippet showing usage |
+
+### `featured`
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+| **Default** | `false` |
+
+Whether to feature this extension in UI/listings.
+
+```yaml
+featured: true
 ```
 
 ## Validation
