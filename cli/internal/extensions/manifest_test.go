@@ -15,7 +15,7 @@ import (
 
 func TestAllManifestsAreValid(t *testing.T) {
 	for _, manifest := range Manifests {
-		assert.NoErrorf(t, validateManifest(&manifest), "manifest: %s", manifest.Name)
+		assert.NoErrorf(t, validateManifest(manifest), "manifest: %s", manifest.Name)
 	}
 }
 

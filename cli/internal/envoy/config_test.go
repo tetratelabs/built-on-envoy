@@ -19,7 +19,7 @@ func TestDefaultConfigTemplateIsNotEmpty(t *testing.T) {
 }
 
 func TestRenderConfig(t *testing.T) {
-	rendered, err := RenderConfig(ConfigTemplateParams{
+	rendered, err := RenderConfig(ConfigGenerationParams{
 		AdminPort:    9901,
 		ListenerPort: 10000,
 	})

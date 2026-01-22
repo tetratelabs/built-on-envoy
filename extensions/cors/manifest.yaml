@@ -1,6 +1,7 @@
 name: cors
 version: 1.1.0
-category: Network
+categories:
+  - Network
 author: Tetrate
 featured: true
 description: Configurable CORS policy with wildcard and regex support
@@ -9,6 +10,7 @@ longDescription: |
   sharing policies. Supports wildcards, regex patterns, and per-route configuration.
   Handles preflight requests automatically and provides fine-grained control over
   allowed origins, methods, headers, and credentials.
+type: lua
 tags:
   - cors
   - network

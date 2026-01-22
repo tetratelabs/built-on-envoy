@@ -1,6 +1,8 @@
 name: rate-limiter
 version: 1.0.0
-category: Security
+categories:
+  - Security
+  - Performance
 author: Tetrate
 featured: true
 description: Token bucket rate limiting with Redis backend support
@@ -9,6 +11,7 @@ longDescription: |
   Supports both in-memory and Redis backends for distributed rate limiting across
   multiple Envoy instances. Perfect for protecting your APIs from abuse and ensuring
   fair resource allocation.
+type: composer
 tags:
   - rate-limiting
   - redis

@@ -1,6 +1,7 @@
 name: request-logger
 version: 1.0.0
-category: Observability
+categories:
+  - Observability
 author: Tetrate
 featured: true
 description: Advanced request/response logging with custom formatters
@@ -9,6 +10,7 @@ longDescription: |
   Supports multiple output formats (JSON, structured text, CEF), custom field selection,
   and integration with popular log aggregation systems. Includes sampling and filtering
   to reduce log volume in high-traffic environments.
+type: wasm
 tags:
   - logging
   - observability

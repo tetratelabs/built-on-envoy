@@ -25,11 +25,12 @@ type (
 	Manifest struct {
 		Name            string    `yaml:"name" json:"name"`
 		Version         string    `yaml:"version" json:"version"`
-		Category        string    `yaml:"category" json:"category"`
+		Categories      []string  `yaml:"categories" json:"categories"`
 		Author          string    `yaml:"author" json:"author"`
 		Featured        bool      `yaml:"featured" json:"featured,omitempty"`
 		Description     string    `yaml:"description" json:"description"`
 		LongDescription string    `yaml:"longDescription" json:"longDescription"`
+		Type            Type      `yaml:"type" json:"type"`
 		Tags            []string  `yaml:"tags" json:"tags"`
 		License         string    `yaml:"license" json:"license"`
 		Examples        []Example `yaml:"examples" json:"examples"`
@@ -41,9 +42,23 @@ type (
 		Description string `yaml:"description" json:"description"`
 		Code        string `yaml:"code" json:"code"`
 	}
+
+	// Type represents the type of an Envoy extension.
+	Type string
 )
 
-const schemaURL = "manifest.schema.json"
+const (
+	// TypeLua represents a Lua extension.
+	TypeLua Type = "lua"
+	// TypeWasm represents a Wasm extension.
+	TypeWasm Type = "wasm"
+	// TypeDynamicModule represents a Dynamic Module extension.
+	TypeDynamicModule Type = "dynamic_module"
+	// TypeComposer represents a Composer extension.
+	TypeComposer Type = "composer"
+
+	schemaURL = "manifest.schema.json"
+)
 
 var (
 	//go:embed manifests/**/*.yaml
@@ -54,7 +69,7 @@ var (
 	manifestSchema     *jsonschema.Schema
 
 	// Manifests contains all loaded extension manifests.
-	Manifests []Manifest
+	Manifests map[string]*Manifest
 )
 
 func init() {
@@ -82,8 +97,8 @@ func init() {
 }
 
 // loadManifests walks the embedded filesystem and loads all manifest.yaml files.
-func loadManifests(fsys embed.FS) ([]Manifest, error) {
-	var result []Manifest
+func loadManifests(fsys embed.FS) (map[string]*Manifest, error) {
+	result := make(map[string]*Manifest)
 	err := fs.WalkDir(fsys, "manifests", func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || filepath.Base(path) != "manifest.yaml" {
 			return nil
@@ -96,7 +111,7 @@ func loadManifests(fsys embed.FS) ([]Manifest, error) {
 		if err := yaml.Unmarshal(data, &m); err != nil {
 			return fmt.Errorf("failed to unmarshal manifest file %s: %w", path, err)
 		}
-		result = append(result, m)
+		result[m.Name] = &m
 		return nil
 	})
 	return result, err

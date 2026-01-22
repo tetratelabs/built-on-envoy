@@ -1,6 +1,7 @@
 name: transform-headers
 version: 1.0.0
-category: Transform
+categories:
+  - Network
 author: Tetrate
 featured: true
 description: Add, modify, or remove headers with templating support
@@ -9,6 +10,7 @@ longDescription: |
   HTTP headers based on request/response context. Supports dynamic values using Go
   templates with access to request metadata, connection info, and custom variables.
   Perfect for adding security headers, routing metadata, or custom tracking information.
+type: composer
 tags:
   - headers
   - transform

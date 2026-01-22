@@ -9,21 +9,33 @@ package run
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/alecthomas/kong"
 
 	"github.com/tetratelabs/envoy-ecosystem/cli/internal/envoy"
+	"github.com/tetratelabs/envoy-ecosystem/cli/internal/extensions"
 	"github.com/tetratelabs/envoy-ecosystem/cli/internal/xdg"
 )
 
+// defaultLogLevel is the default Envoy component log level.
+const defaultLogLevel = "error"
+
 // Cmd represents the run command
 type Cmd struct {
-	EnvoyVersion string `help:"Envoy version to use (e.g., 1.31.0)" env:"ENVOY_VERSION"`
-	LogLevel     string `help:"Envoy component log level (default: all:error)" short:"l" default:"all:error"`
-	RunID        string `name:"run-id" env:"EE_RUN_ID" help:"Run identifier for this invocation. Defaults to timestamp-based ID or $EE_RUN_ID. Use '0' for Docker/Kubernetes."`
-	ListenPort   int    `help:"Port for Envoy listener to accept incoming traffic  (default: 10000)" default:"10000"`
-	AdminPort    int    `help:"Port for Envoy admin interface (default: 9901)" default:"9901"`
+	EnvoyVersion string   `help:"Envoy version to use (e.g., 1.31.0)" env:"ENVOY_VERSION"`
+	LogLevel     string   `help:"Envoy component log level (default: all:error)" short:"l" default:"all:error"`
+	RunID        string   `name:"run-id" env:"EE_RUN_ID" help:"Run identifier for this invocation. Defaults to timestamp-based ID or $EE_RUN_ID. Use '0' for Docker/Kubernetes."`
+	ListenPort   int      `help:"Port for Envoy listener to accept incoming traffic  (default: 10000)" default:"10000"`
+	AdminPort    int      `help:"Port for Envoy admin interface (default: 9901)" default:"9901"`
+	Extensions   []string `name:"extension" help:"Extensions to enable (by name)." sep:","`
+
+	defaultLogLevel   string `kong:"-"` // Internal field: parsed defaut log level
+	componentLogLevel string `kong:"-"` // Internal field: parsed component log levels
 }
 
 // BeforeApply is called by Kong before applying defaults to set computed default values.
@@ -35,16 +47,44 @@ func (c *Cmd) BeforeApply(_ *kong.Context) error {
 	return nil
 }
 
+// Validate is called by Kong after parsing to validate the command arguments.
+func (c *Cmd) Validate() error {
+	var err error
+
+	c.defaultLogLevel, c.componentLogLevel, err = parseLogLevels(c.LogLevel)
+	if err != nil {
+		return err
+	}
+
+	for _, name := range c.Extensions {
+		if _, found := extensions.Manifests[name]; !found {
+			available := slices.Collect(maps.Keys(extensions.Manifests))
+			sort.Strings(available)
+			return fmt.Errorf("unknown extension %q; available extensions: %s", name, strings.Join(available, ","))
+		}
+	}
+
+	return nil
+}
+
 // Run executes the run command
 func (c *Cmd) Run(ctx context.Context, dirs *xdg.Directories) error {
-	runner := &envoy.Runner{
-		EnvoyVersion: c.EnvoyVersion,
-		LogLevel:     c.LogLevel,
-		Dirs:         dirs,
-		RunID:        c.RunID,
-		ListenPort:   c.ListenPort,
-		AdminPort:    c.AdminPort,
+	manifests := make([]*extensions.Manifest, 0, len(c.Extensions))
+	for _, name := range c.Extensions {
+		manifests = append(manifests, extensions.Manifests[name])
 	}
+
+	runner := &envoy.Runner{
+		EnvoyVersion:      c.EnvoyVersion,
+		DefaultLogLevel:   c.defaultLogLevel,
+		ComponentLogLevel: c.componentLogLevel,
+		Dirs:              dirs,
+		RunID:             c.RunID,
+		ListenPort:        c.ListenPort,
+		AdminPort:         c.AdminPort,
+		Extensions:        manifests,
+	}
+
 	return runner.Run(ctx)
 }
 
@@ -54,4 +94,43 @@ func (c *Cmd) Run(ctx context.Context, dirs *xdg.Directories) error {
 func generateRunID(now time.Time) string {
 	micro := now.Nanosecond() / 1000 % 1000
 	return fmt.Sprintf("%s_%03d", now.Format("20060102_150405"), micro)
+}
+
+// parseLogLevels parses a log level string in the format "component:level,component2:level".
+// It extracts the "all" component (if present) for the --log-level flag and returns the
+// remaining components for --component-log-level. If "all" is not specified, it defaults
+// to DefaultLogLevel.
+func parseLogLevels(logLevel string) (string, string, error) {
+	if logLevel == "" {
+		return defaultLogLevel, "", nil
+	}
+
+	var (
+		baseLevel       = defaultLogLevel
+		componentLevels []string
+	)
+	for part := range strings.SplitSeq(logLevel, ",") {
+		component, level, found := strings.Cut(strings.TrimSpace(part), ":")
+		if !found {
+			return "", "", fmt.Errorf("invalid log level format %q: expected component:level", part)
+		}
+
+		component = strings.TrimSpace(component)
+		level = strings.TrimSpace(level)
+
+		if component == "" {
+			return "", "", fmt.Errorf("invalid log level format %q: component cannot be empty", part)
+		}
+		if level == "" {
+			return "", "", fmt.Errorf("invalid log level format %q: level cannot be empty", part)
+		}
+
+		if component == "all" {
+			baseLevel = level
+		} else {
+			componentLevels = append(componentLevels, component+":"+level)
+		}
+	}
+
+	return baseLevel, strings.Join(componentLevels, ","), nil
 }

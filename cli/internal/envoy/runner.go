@@ -10,25 +10,24 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	funce "github.com/tetratelabs/func-e"
 	"github.com/tetratelabs/func-e/api"
 	"github.com/tetratelabs/func-e/experimental/admin"
 
+	"github.com/tetratelabs/envoy-ecosystem/cli/internal/extensions"
 	"github.com/tetratelabs/envoy-ecosystem/cli/internal/xdg"
 )
-
-// defaultLogLevel is the default Envoy component log level.
-const defaultLogLevel = "error"
 
 // Runner handles running Envoy via func-e
 type Runner struct {
 	// EnvoyVersion specifies the Envoy version to run. If empty, func-e's default version is used.
 	EnvoyVersion string
-	// LogLevel specifies the Envoy component log level.
-	LogLevel string
+	// DefaultLogLevel specifies the base Envoy log level.
+	DefaultLogLevel string
+	// ComponentLogLevel specifies the Envoy component log level.
+	ComponentLogLevel string
 	// Dirs specifies XDG directories for func-e
 	Dirs *xdg.Directories
 	// RunID specifies the run identifier for this invocation.
@@ -37,10 +36,21 @@ type Runner struct {
 	ListenPort int
 	// AdminPort is the port for Envoy admin interface.
 	AdminPort int
+	// Extensions specifies the extensions to enable.
+	Extensions []*extensions.Manifest
 }
 
 // Run starts Envoy using func-e as a library
 func (r *Runner) Run(ctx context.Context) error {
+	config, err := RenderConfig(ConfigGenerationParams{
+		AdminPort:    r.AdminPort,
+		ListenerPort: r.ListenPort,
+		Extensions:   r.Extensions,
+	})
+	if err != nil {
+		return err
+	}
+
 	// Define startup hook that will be called when Envoy admin is ready
 	start := time.Now()
 	startupHook := func(_ context.Context, adminClient admin.AdminClient, _ string) error {
@@ -66,48 +76,11 @@ func (r *Runner) Run(ctx context.Context) error {
 		opts = append(opts, api.EnvoyVersion(r.EnvoyVersion))
 	}
 
-	config, err := RenderConfig(ConfigTemplateParams{
-		AdminPort:    r.AdminPort,
-		ListenerPort: r.ListenPort,
-	})
-	if err != nil {
-		return err
-	}
-
 	// Run Envoy with embedded config
-	baseLevel, componentLevels := parseLogLevels(r.LogLevel)
-	args := []string{"--config-yaml", config, "--log-level", baseLevel}
-	if componentLevels != "" {
-		args = append(args, "--component-log-level", componentLevels)
+	args := []string{"--config-yaml", config, "--log-level", r.DefaultLogLevel}
+	if r.ComponentLogLevel != "" {
+		args = append(args, "--component-log-level", r.ComponentLogLevel)
 	}
 
 	return funce.Run(ctx, args, opts...)
-}
-
-// parseLogLevels parses a log level string in the format "component:level,component2:level".
-// It extracts the "all" component (if present) for the --log-level flag and returns the
-// remaining components for --component-log-level. If "all" is not specified, it defaults
-// to DefaultLogLevel.
-func parseLogLevels(logLevel string) (string, string) {
-	if logLevel == "" {
-		return defaultLogLevel, ""
-	}
-
-	var (
-		baseLevel       = defaultLogLevel
-		componentLevels []string
-	)
-	for part := range strings.SplitSeq(logLevel, ",") {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		if after, ok := strings.CutPrefix(part, "all:"); ok {
-			baseLevel = after
-		} else {
-			componentLevels = append(componentLevels, part)
-		}
-	}
-
-	return baseLevel, strings.Join(componentLevels, ",")
 }

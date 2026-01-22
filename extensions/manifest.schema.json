@@ -7,10 +7,11 @@
   "required": [
     "name",
     "version",
-    "category",
+    "categories",
     "author",
     "description",
     "longDescription",
+    "type",
     "tags",
     "license",
     "examples"
@@ -28,17 +29,20 @@
       "description": "Semantic version of the extension",
       "pattern": "^\\d+\\.\\d+\\.\\d+$"
     },
-    "category": {
-      "type": "string",
-      "description": "Functional category of the extension",
-      "enum": [
-        "AI",
-        "Network",
-        "Observability",
-        "Performance",
-        "Transform",
-        "Security"
-      ]
+    "categories": {
+      "type": "array",
+      "description": "Functional categories of the extension",
+      "items": {
+        "type": "string",
+        "enum": [
+          "AI",
+          "Network",
+          "Observability",
+          "Performance",
+          "Transform",
+          "Security"
+        ]
+      }
     },
     "author": {
       "type": "string",
@@ -59,6 +63,16 @@
       "type": "string",
       "description": "Detailed multi-line description with markdown support",
       "minLength": 1
+    },
+    "type": {
+      "type": "string",
+      "description": "Type of the extension",
+      "enum": [
+        "lua",
+        "wasm",
+        "dynamic_module",
+        "composer"
+      ]
     },
     "tags": {
       "type": "array",
@@ -82,7 +96,11 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["title", "description", "code"],
+        "required": [
+          "title",
+          "description",
+          "code"
+        ],
         "additionalProperties": false,
         "properties": {
           "title": {

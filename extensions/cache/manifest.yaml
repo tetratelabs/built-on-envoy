@@ -1,6 +1,7 @@
 name: cache
 version: 1.3.0
-category: Performance
+categories:
+  - Performance
 author: Tetrate
 featured: true
 description: HTTP caching with TTL control and cache key customization
@@ -9,6 +10,7 @@ longDescription: |
   Supports both in-memory and Redis backends, custom cache keys based on headers/query
   parameters, and flexible TTL configuration. Includes cache warming, stale-while-revalidate,
   and automatic cache invalidation for optimal performance and freshness.
+type: dynamic_module
 tags:
   - caching
   - performance
