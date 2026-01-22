@@ -124,9 +124,16 @@ func isPortInUse(ctx context.Context, port int) bool {
 	return false
 }
 
-// checkEndpointAvailable checks if the given HTTP endpoint is available
+// statusIs returns a condition function that checks if the response status code matches the given code.
+func statusEq(code int) func(r *http.Response) bool {
+	return func(r *http.Response) bool {
+		return r.StatusCode == code
+	}
+}
+
+// checkEndpoint checks if the given HTTP endpoint is available
 // according to the provided condition.
-func checkEndpointAvailable(ctx context.Context, url string, condition func(r *http.Response) bool) error {
+func checkEndpoint(ctx context.Context, url string, condition func(r *http.Response) bool) error {
 	reqCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, nil)
