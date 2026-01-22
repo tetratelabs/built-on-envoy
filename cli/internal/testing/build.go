@@ -40,7 +40,7 @@ func BuildGoBinary(binaryName, packagePath string) (string, error) {
 	outputDir := filepath.Join(projectRoot, "out")
 
 	// Create output directory.
-	if err := os.MkdirAll(outputDir, 0o750); err != nil {
+	if err := os.MkdirAll(outputDir, 0o755); err != nil { // nolint:gosec
 		return "", fmt.Errorf("failed to create output directory: %w", err)
 	}
 
@@ -60,7 +60,7 @@ func BuildGoBinary(binaryName, packagePath string) (string, error) {
 	}
 
 	// Make executable.
-	if err := os.Chmod(binaryPath, 0o600); err != nil {
+	if err := os.Chmod(binaryPath, 0o755); err != nil { // nolint:gosec
 		return "", fmt.Errorf("failed to make binary executable: %w", err)
 	}
 	return binaryPath, nil
