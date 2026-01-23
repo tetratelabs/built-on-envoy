@@ -1,8 +1,8 @@
 {
-  "name": "envoy-ecosystem-website",
+  "name": "built-on-envoy-website",
   "type": "module",
   "version": "1.0.0",
-  "description": "Official website for Envoy Ecosystem - Extensions marketplace for Envoy Proxy",
+  "description": "Official website for Built On Envoy - Extensions marketplace for Envoy Proxy",
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",

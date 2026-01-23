@@ -10,7 +10,7 @@ import (
 	"os"
 	"testing"
 
-	internaltesting "github.com/tetratelabs/envoy-ecosystem/cli/internal/testing"
+	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 
 var cliBin string

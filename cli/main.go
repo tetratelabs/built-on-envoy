@@ -17,8 +17,8 @@ import (
 
 	"github.com/alecthomas/kong"
 
-	"github.com/tetratelabs/envoy-ecosystem/cli/cmd"
-	"github.com/tetratelabs/envoy-ecosystem/cli/internal/xdg"
+	"github.com/tetratelabs/built-on-envoy/cli/cmd"
+	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
 type CLI struct {

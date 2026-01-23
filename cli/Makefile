@@ -14,7 +14,7 @@ BINARY_NAME ?= boe
 
 # Arguments for Docker builds.
 OCI_REGISTRY           ?= docker.io/tetratelabs
-OCI_REPOSITORY_PREFIX  ?= ${OCI_REGISTRY}/envoy-ecosystem
+OCI_REPOSITORY_PREFIX  ?= ${OCI_REGISTRY}/built-on-envoy
 ENABLE_MULTI_PLATFORMS ?= false
 IMAGE_NAME	           ?= cli
 TAG                    ?= latest

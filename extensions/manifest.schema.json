@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/tetratelabs/envoy-ecosystem/extensions/manifest.schema.json",
+  "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/manifest.schema.json",
   "title": "Extension Manifest",
-  "description": "Schema for Envoy Ecosystem extension manifest files",
+  "description": "Schema for Built On Envoy extension manifest files",
   "type": "object",
   "required": [
     "name",

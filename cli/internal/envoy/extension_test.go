@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/tetratelabs/envoy-ecosystem/cli/internal/extensions"
+	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 )
 
 func TestGenerateFilterConfig(t *testing.T) {

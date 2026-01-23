@@ -12,61 +12,61 @@ Configure CLI behavior with environment variables:
 
 ## Available Variables
 
-### `EE_ENVOY_VERSION`
+### `BOE_ENVOY_VERSION`
 Default Envoy version
 
 ```bash
-export EE_ENVOY_VERSION=1.36.0
+export BOE_ENVOY_VERSION=1.36.0
 ```
 
-### `EE_PROXY_PORT`
+### `BOE_PROXY_PORT`
 Default proxy port
 
 ```bash
-export EE_PROXY_PORT=8080
+export BOE_PROXY_PORT=8080
 ```
 
-### `EE_ADMIN_PORT`
+### `BOE_ADMIN_PORT`
 Default admin port
 
 ```bash
-export EE_ADMIN_PORT=9000
+export BOE_ADMIN_PORT=9000
 ```
 
-### `EE_LOG_LEVEL`
+### `BOE_LOG_LEVEL`
 Default log level
 
 ```bash
-export EE_LOG_LEVEL=debug
+export BOE_LOG_LEVEL=debug
 ```
 
-### `EE_MARKETPLACE_URL`
+### `BOE_MARKETPLACE_URL`
 Custom marketplace URL
 
 ```bash
-export EE_MARKETPLACE_URL=https://custom-marketplace.example.com
+export BOE_MARKETPLACE_URL=https://custom-marketplace.example.com
 ```
 
-### `EE_CACHE_DIR`
+### `BOE_CACHE_DIR`
 Cache directory location
 
 ```bash
-export EE_CACHE_DIR=~/.cache/envoy-ecosystem
+export BOE_CACHE_DIR=~/.cache/built-on-envoy
 ```
 
-### `EE_NO_COLOR`
+### `BOE_NO_COLOR`
 Disable colored output
 
 ```bash
-export EE_NO_COLOR=1
+export BOE_NO_COLOR=1
 ```
 
 ## Example Usage
 
 ```bash
 # Set environment variables
-export EE_ENVOY_VERSION=1.36.0
-export EE_LOG_LEVEL=debug
+export BOE_ENVOY_VERSION=1.36.0
+export BOE_LOG_LEVEL=debug
 
 # Run CLI with these settings
 <CLIName/> run --plugin rate-limiter

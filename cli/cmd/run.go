@@ -17,9 +17,9 @@ import (
 
 	"github.com/alecthomas/kong"
 
-	"github.com/tetratelabs/envoy-ecosystem/cli/internal/envoy"
-	"github.com/tetratelabs/envoy-ecosystem/cli/internal/extensions"
-	"github.com/tetratelabs/envoy-ecosystem/cli/internal/xdg"
+	"github.com/tetratelabs/built-on-envoy/cli/internal/envoy"
+	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
+	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
 // defaultLogLevel is the default Envoy component log level.

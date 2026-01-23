@@ -16,9 +16,9 @@ import (
 	"github.com/tetratelabs/func-e/api"
 	"github.com/tetratelabs/func-e/experimental/admin"
 
-	"github.com/tetratelabs/envoy-ecosystem/cli/internal"
-	"github.com/tetratelabs/envoy-ecosystem/cli/internal/extensions"
-	"github.com/tetratelabs/envoy-ecosystem/cli/internal/xdg"
+	"github.com/tetratelabs/built-on-envoy/cli/internal"
+	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
+	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
 // Runner handles running Envoy via func-e

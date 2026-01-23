@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tetratelabs/func-e/experimental/admin"
 
-	internaltesting "github.com/tetratelabs/envoy-ecosystem/cli/internal/testing"
+	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 
 func TestDefaultProxy(t *testing.T) {

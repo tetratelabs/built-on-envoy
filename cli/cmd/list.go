@@ -15,7 +15,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/tetratelabs/envoy-ecosystem/cli/internal/extensions"
+	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 )
 
 // List represents the list command
