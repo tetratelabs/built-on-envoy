@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <!-- Gradient for the hexagon border -->
+    <linearGradient id="hexGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#d14a9b"/>
+      <stop offset="100%" style="stop-color:#a53795"/>
+    </linearGradient>
+
+    <!-- Blue-purple gradient for the icon -->
+    <linearGradient id="iconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6b4a9b"/>
+      <stop offset="100%" style="stop-color:#4a3080"/>
+    </linearGradient>
+
+    <!-- Lighter purple -->
+    <linearGradient id="iconGradientLight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#8b6abb"/>
+      <stop offset="100%" style="stop-color:#6a50a0"/>
+    </linearGradient>
+
+    <!-- Pink gradient for slash -->
+    <linearGradient id="slashGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#d14a9b"/>
+      <stop offset="100%" style="stop-color:#a53795"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Transparent hexagon fill -->
+  <polygon
+    points="100,15 172,52 172,148 100,185 28,148 28,52"
+    fill="transparent"
+  />
+
+  <!-- Pink hexagon border -->
+  <polygon
+    points="100,15 172,52 172,148 100,185 28,148 28,52"
+    fill="none"
+    stroke="url(#hexGradient)"
+    stroke-width="12"
+  />
+
+  <!-- Code window with brackets - scaled down -->
+  <g transform="translate(100, 100) scale(0.8)">
+
+    <!-- Window/terminal background -->
+    <rect x="-55" y="-50" width="110" height="100" rx="8" fill="url(#iconGradient)"/>
+
+    <!-- Window title bar -->
+    <rect x="-55" y="-50" width="110" height="20" rx="8" fill="url(#iconGradientLight)"/>
+    <rect x="-55" y="-38" width="110" height="8" fill="url(#iconGradientLight)"/>
+
+    <!-- Window buttons -->
+    <circle cx="-42" cy="-40" r="4" fill="#ffffff" opacity="0.7"/>
+    <circle cx="-30" cy="-40" r="4" fill="#ffffff" opacity="0.5"/>
+    <circle cx="-18" cy="-40" r="4" fill="#ffffff" opacity="0.3"/>
+
+    <!-- Code </> centered in window body area (y offset for title bar) -->
+    <g transform="translate(0, 8)">
+      <!-- Left bracket < (more closed) -->
+      <path
+        d="M-16,-10 L-34,0 L-16,10"
+        fill="none"
+        stroke="#ffffff"
+        stroke-width="5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+
+      <!-- Slash / in center (shorter) -->
+      <line
+        x1="5" y1="-15"
+        x2="-5" y2="15"
+        stroke="#ffffff"
+        stroke-width="5"
+        stroke-linecap="round"
+        opacity="0.85"
+      />
+
+      <!-- Right bracket > (more closed) -->
+      <path
+        d="M16,-10 L34,0 L16,10"
+        fill="none"
+        stroke="#ffffff"
+        stroke-width="5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    </g>
+
+  </g>
+</svg>
