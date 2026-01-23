@@ -8,6 +8,7 @@ package cmd
 import (
 	"bytes"
 	"fmt"
+	"io/fs"
 	"maps"
 	"slices"
 	"sort"
@@ -56,6 +57,8 @@ Flags:
       --admin-port=9901            Port for Envoy admin interface (default:
                                    9901)
       --extension=EXTENSION,...    Extensions to enable (by name).
+      --local=LOCAL                Path to a directory containing a local
+                                   Extension to enable.
 `
 	require.Equal(t, expected, buf.String())
 }
@@ -127,6 +130,25 @@ func TestParseInvalidExtension(t *testing.T) {
 	require.EqualError(t, err,
 		fmt.Sprintf(`run: unknown extension "unknown-extension"; available extensions: %s`,
 			strings.Join(available, ",")))
+}
+
+func TestValidateLocalExtensionPath(t *testing.T) {
+	var cli struct {
+		Run Run `cmd:"" help:"Run Envoy with extensions"`
+	}
+
+	parser, err := kong.New(&cli, kong.Name("boe"), kong.Exit(func(int) {}))
+	require.NoError(t, err)
+
+	_, err = parser.Parse([]string{"run", "--local", "./testdata"})
+	require.NoError(t, err)
+
+	_, err = parser.Parse([]string{"run", "--local", "./"})
+	require.ErrorContains(t, err, "failed to read manifest")
+
+	_, err = parser.Parse([]string{"run", "--local", "/path/to/nonexistent/dir"})
+	var pathErr *fs.PathError
+	require.ErrorAs(t, err, &pathErr)
 }
 
 func TestValidateLogLevel(t *testing.T) {

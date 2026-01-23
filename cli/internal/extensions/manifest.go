@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -34,6 +35,8 @@ type (
 		Tags            []string  `yaml:"tags" json:"tags"`
 		License         string    `yaml:"license" json:"license"`
 		Examples        []Example `yaml:"examples" json:"examples"`
+		// Only used when loading manifests from a local path
+		Path string `yaml:"-" json:"-"`
 	}
 
 	// Example represents an example usage of an extension.
@@ -117,8 +120,22 @@ func loadManifests(fsys embed.FS) (map[string]*Manifest, error) {
 	return result, err
 }
 
-// validateManifest validates the manifest against the JSON schema.
-func validateManifest(manifest *Manifest) error {
+// LoadLocalManifest loads a manifest from the given file path.
+func LoadLocalManifest(path string) (*Manifest, error) {
+	data, err := os.ReadFile(filepath.Clean(path))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read manifest file %s: %w", path, err)
+	}
+	var m Manifest
+	if err := yaml.Unmarshal(data, &m); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal manifest file %s: %w", path, err)
+	}
+	m.Path = path
+	return &m, nil
+}
+
+// ValidateManifest validates the manifest against the JSON schema.
+func ValidateManifest(manifest *Manifest) error {
 	// Convert manifest to JSON for schema validation
 	jsonData, err := json.Marshal(manifest)
 	if err != nil {
