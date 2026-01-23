@@ -1,7 +1,11 @@
+---
+import { CLI_NAME } from '../constants';
+---
+
 <section class="hero">
 	<div class="container">
 		<div class="hero-logo">
-			<img src="/envoy-icon.png" alt="Envoy Logo" />
+			<img src="/logo.svg" alt="Envoy Logo" />
 		</div>
 		<h2>Innovate on AI and API with Envoy<span class="trademark">®</span></h2>
 		<p class="hero-subtitle">
@@ -12,7 +16,7 @@
 		<div class="install-section">
 			<h3>Get Started</h3>
 			<div class="code-block">
-				<code>curl -sL https://envoy-ecosystem.io/install.sh | sh</code>
+				<code>curl -sL https://built-on-envoy.io/install.sh | sh</code>
 				<button class="copy-btn" aria-label="Copy command">
 					<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
 						<path d="M5.5 2.5h-3v11h7v-3m-4-8h7v7h-7v-7z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -22,7 +26,7 @@
 
 			<p class="install-note">Then run your first extension:</p>
 			<div class="code-block">
-				<code>ee run --plugin rate-limiter --plugin auth-jwt</code>
+				<code>{CLI_NAME} run --plugin rate-limiter --plugin auth-jwt</code>
 				<button class="copy-btn" aria-label="Copy command">
 					<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
 						<path d="M5.5 2.5h-3v11h7v-3m-4-8h7v7h-7v-7z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>

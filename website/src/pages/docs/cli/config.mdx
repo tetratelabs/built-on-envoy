@@ -1,17 +1,19 @@
 ---
 layout: ../../../layouts/DocsLayout.astro
-title: ee config
+title: config
 description: Manage CLI configuration
 ---
 
-# ee config
+import CLIName from '../../../components/CLIName.astro';
+
+# <CLIName/> config
 
 Manage CLI configuration.
 
 ## Usage
 
 ```bash
-ee config <command> [options]
+<CLIName/> config <command> [options]
 ```
 
 ## Commands
@@ -20,28 +22,28 @@ ee config <command> [options]
 Get configuration value
 
 ```bash
-ee config get proxy.port
+<CLIName/> config get proxy.port
 ```
 
 ### `set <key> <value>`
 Set configuration value
 
 ```bash
-ee config set envoy.version 1.37.0
+<CLIName/> config set envoy.version 1.37.0
 ```
 
 ### `list`
 List all configuration
 
 ```bash
-ee config list
+<CLIName/> config list
 ```
 
 ### `reset`
 Reset to defaults
 
 ```bash
-ee config reset
+<CLIName/> config reset
 ```
 
 ## Configuration Keys
@@ -68,20 +70,20 @@ Default editor for manifest files
 
 ### Set default Envoy version
 ```bash
-ee config set envoy.version 1.37.0
+<CLIName/> config set envoy.version 1.37.0
 ```
 
 ### Get current proxy port
 ```bash
-ee config get proxy.port
+<CLIName/> config get proxy.port
 ```
 
 ### List all configuration
 ```bash
-ee config list
+<CLIName/> config list
 ```
 
 ### Reset to defaults
 ```bash
-ee config reset
+<CLIName/> config reset
 ```

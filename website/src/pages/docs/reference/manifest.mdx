@@ -4,6 +4,8 @@ title: Extension Manifest
 description: Extension manifest file reference
 ---
 
+import CLIName from '../../../components/CLIName.astro';
+
 # Extension Manifest
 
 Extensions use a `manifest.yaml` file for metadata and configuration.
@@ -42,12 +44,12 @@ examples:
   - title: Basic usage
     description: Simple configuration
     code: |
-      ee run --plugin my-filter --config timeout=60s
+      <CLIName/> run --plugin my-filter --config timeout=60s
 
   - title: Advanced usage
     description: With multiple options
     code: |
-      ee run --plugin my-filter --config timeout=60s,enabled=true
+      <CLIName/> run --plugin my-filter --config timeout=60s,enabled=true
 ```
 
 ## Field Reference
@@ -200,7 +202,7 @@ examples:
   - title: Basic usage
     description: Simple configuration
     code: |
-      ee run --plugin my-filter --config timeout=60s
+      <CLIName/> run --plugin my-filter --config timeout=60s
 ```
 
 #### Example Object
@@ -230,5 +232,5 @@ featured: true
 Validate your manifest before publishing:
 
 ```bash
-ee plugin publish --dry-run
+<CLIName/> plugin publish --dry-run
 ```

@@ -1,17 +1,19 @@
 ---
 layout: ../../../layouts/DocsLayout.astro
-title: ee plugin list
+title: plugin list
 description: List available extensions in the marketplace
 ---
 
-# ee plugin list
+import CLIName from '../../../components/CLIName.astro';
+
+# <CLIName/> plugin list
 
 List available extensions in the marketplace.
 
 ## Usage
 
 ```bash
-ee plugin list [options]
+<CLIName/> plugin list [options]
 ```
 
 ## Options
@@ -38,22 +40,22 @@ Show only featured extensions
 
 ### List all extensions
 ```bash
-ee plugin list
+<CLIName/> plugin list
 ```
 
 ### List security extensions
 ```bash
-ee plugin list --category security
+<CLIName/> plugin list --category security
 ```
 
 ### List as JSON
 ```bash
-ee plugin list --format json
+<CLIName/> plugin list --format json
 ```
 
 ### List featured extensions
 ```bash
-ee plugin list --featured
+<CLIName/> plugin list --featured
 ```
 
 ## Output

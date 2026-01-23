@@ -1,5 +1,5 @@
 ---
-import { GITHUB_REPO_RAW } from '../constants';
+import { CLI_NAME, GITHUB_REPO_RAW } from '../constants';
 ---
 
 <section class="features">
@@ -10,7 +10,7 @@ import { GITHUB_REPO_RAW } from '../constants';
 				<h3>Run Extensions</h3>
 				<p>Start Envoy with community extensions in a single command. Auto-configured with test upstreams and example requests.</p>
 				<div class="code-example">
-					<code>ee run --plugin cors</code>
+					<code>{CLI_NAME} run --plugin cors</code>
 				</div>
 				<div class="code-output">
 					<span class="output-success">✓</span> Starting Envoy 1.37.0...<br/>
@@ -24,12 +24,12 @@ import { GITHUB_REPO_RAW } from '../constants';
 				<h3>Build Extensions</h3>
 				<p>Scaffold a new extension with ready-to-use templates. Iterate locally and test immediately.</p>
 				<div class="code-example">
-					<code>ee create-plugin my-filter</code>
+					<code>{CLI_NAME} create-plugin my-filter</code>
 				</div>
 				<div class="code-output">
 					<span class="output-success">✓</span> Scaffolding plugin...<br/>
 					<span class="output-info">→</span> Created my-filter/<br/>
-					<span class="output-muted">Next:</span> ee run --plugin ./my-filter
+					<span class="output-muted">Next:</span> {CLI_NAME} run --plugin ./my-filter
 				</div>
 			</div>
 
@@ -38,7 +38,7 @@ import { GITHUB_REPO_RAW } from '../constants';
 				<h3>Share Extensions</h3>
 				<p>Publish your extension to the ecosystem with a single command. Open a PR to the community repository.</p>
 				<div class="code-example">
-					<code>ee plugin publish ./my-filter</code>
+					<code>{CLI_NAME} plugin publish ./my-filter</code>
 				</div>
 				<div class="code-output">
 					<span class="output-success">✓</span> Extension validated<br/>

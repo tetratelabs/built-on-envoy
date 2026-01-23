@@ -22,8 +22,8 @@ examples:
   - title: Basic JWT validation
     description: Validate tokens with a JWKS endpoint
     code: |
-      ee run --plugin auth-jwt --config jwks-url=https://your-domain.auth0.com/.well-known/jwks.json
+      boe run --plugin auth-jwt --config jwks-url=https://your-domain.auth0.com/.well-known/jwks.json
   - title: Custom claims validation
     description: Require specific claims in the JWT
     code: |
-      ee run --plugin auth-jwt --config jwks-url=...,required-claims=role:admin
+      boe run --plugin auth-jwt --config jwks-url=...,required-claims=role:admin

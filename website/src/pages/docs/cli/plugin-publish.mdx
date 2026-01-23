@@ -1,17 +1,19 @@
 ---
 layout: ../../../layouts/DocsLayout.astro
-title: ee plugin publish
+title: plugin publish
 description: Publish your extension to the marketplace
 ---
 
-# ee plugin publish
+import CLIName from '../../../components/CLIName.astro';
+
+# <CLIName/> plugin publish
 
 Publish your extension to the marketplace. Opens a pull request to the community repository.
 
 ## Usage
 
 ```bash
-ee plugin publish <path> [options]
+<CLIName/> plugin publish <path> [options]
 ```
 
 ## Arguments
@@ -41,22 +43,22 @@ Custom PR description
 
 ### Publish current directory
 ```bash
-ee plugin publish
+<CLIName/> plugin publish
 ```
 
 ### Publish specific directory
 ```bash
-ee plugin publish ./my-filter
+<CLIName/> plugin publish ./my-filter
 ```
 
 ### Dry run validation
 ```bash
-ee plugin publish --dry-run
+<CLIName/> plugin publish --dry-run
 ```
 
 ### Custom PR message
 ```bash
-ee plugin publish --message "Add advanced caching filter with LRU eviction"
+<CLIName/> plugin publish --message "Add advanced caching filter with LRU eviction"
 ```
 
 ## Validation

@@ -1,17 +1,19 @@
 ---
 layout: ../../../layouts/DocsLayout.astro
-title: ee create-plugin
+title: create-plugin
 description: Scaffold a new Envoy extension
 ---
 
-# ee create-plugin
+import CLIName from '../../../components/CLIName.astro';
+
+# <CLIName/> create-plugin
 
 Scaffold a new extension with ready-to-use templates. Creates a complete project structure with example code, tests, and documentation.
 
 ## Usage
 
 ```bash
-ee create-plugin <name> [options]
+<CLIName/> create-plugin <name> [options]
 ```
 
 ## Arguments
@@ -50,17 +52,17 @@ Skip generating test files
 
 ### Create a basic HTTP filter
 ```bash
-ee create-plugin my-filter
+<CLIName/> create-plugin my-filter
 ```
 
 ### Create a Rust network filter
 ```bash
-ee create-plugin tcp-inspector --language rust --type network-filter
+<CLIName/> create-plugin tcp-inspector --language rust --type network-filter
 ```
 
 ### Create with minimal template
 ```bash
-ee create-plugin simple-logger --template minimal
+<CLIName/> create-plugin simple-logger --template minimal
 ```
 
 ## Generated Structure
@@ -77,7 +79,7 @@ my-filter/
 │   └── integration_test.go
 ├── examples/
 │   └── basic.yaml        # Example configuration
-└── .ee/
+└── .<CLIName/>/
     └── config.yaml       # CLI configuration
 ```
 
@@ -87,7 +89,7 @@ After creating an extension:
 
 ```bash
 cd my-filter
-ee run --plugin .
+<CLIName/> run --plugin .
 ```
 
 Learn more about [publishing your extension](/docs/cli/plugin-publish).

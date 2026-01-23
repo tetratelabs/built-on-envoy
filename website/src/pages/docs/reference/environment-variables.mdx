@@ -4,6 +4,8 @@ title: Environment Variables
 description: Configure CLI behavior with environment variables
 ---
 
+import CLIName from '../../../components/CLIName.astro';
+
 # Environment Variables
 
 Configure CLI behavior with environment variables:
@@ -67,5 +69,5 @@ export EE_ENVOY_VERSION=1.36.0
 export EE_LOG_LEVEL=debug
 
 # Run CLI with these settings
-ee run --plugin rate-limiter
+<CLIName/> run --plugin rate-limiter
 ```

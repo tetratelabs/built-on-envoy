@@ -21,8 +21,8 @@ examples:
   - title: Add security headers
     description: Add common security headers
     code: |
-      ee run --plugin transform-headers --config add=X-Frame-Options:DENY,X-Content-Type-Options:nosniff
+      boe run --plugin transform-headers --config add=X-Frame-Options:DENY,X-Content-Type-Options:nosniff
   - title: Dynamic headers
     description: Add headers with dynamic values
     code: |
-      ee run --plugin transform-headers --config add='X-Request-ID:{{.RequestId}}'
+      boe run --plugin transform-headers --config add='X-Request-ID:{{.RequestId}}'

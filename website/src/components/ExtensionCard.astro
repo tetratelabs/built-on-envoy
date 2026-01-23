@@ -1,4 +1,6 @@
 ---
+import { CLI_NAME } from '../constants';
+
 interface Props {
 	name: string;
 	type: string;
@@ -25,7 +27,7 @@ function formatTypeName(t: string): string {
 		</div>
 		<p>{description}</p>
 		<div class="extension-footer">
-			<code>ee run --plugin {name}</code>
+			<code>{CLI_NAME} run --plugin {name}</code>
 		</div>
 	</div>
 </a>

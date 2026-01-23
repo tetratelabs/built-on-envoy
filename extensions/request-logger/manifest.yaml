@@ -21,8 +21,8 @@ examples:
   - title: JSON logging
     description: Log requests in JSON format
     code: |
-      ee run --plugin request-logger --config format=json,output=/var/log/envoy/requests.log
+      boe run --plugin request-logger --config format=json,output=/var/log/envoy/requests.log
   - title: Filtered logging
     description: Only log specific status codes
     code: |
-      ee run --plugin request-logger --config filter=status>=400
+      boe run --plugin request-logger --config filter=status>=400

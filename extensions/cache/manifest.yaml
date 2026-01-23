@@ -21,8 +21,8 @@ examples:
   - title: Basic caching
     description: Cache responses for 5 minutes
     code: |
-      ee run --plugin cache --config ttl=5m
+      boe run --plugin cache --config ttl=5m
   - title: Custom cache key
     description: Include query parameters in cache key
     code: |
-      ee run --plugin cache --config ttl=5m,key-params=user_id,locale
+      boe run --plugin cache --config ttl=5m,key-params=user_id,locale

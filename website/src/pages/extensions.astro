@@ -1,4 +1,5 @@
 ---
+import { PROJECT_NAME } from '../constants';
 import Head from '../components/Head.astro';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
@@ -60,8 +61,8 @@ function formatTypeName(type: string): string {
 <!DOCTYPE html>
 <html lang="en">
 	<Head
-		title="Extension Catalog - Envoy Ecosystem"
-		description="Browse all available extensions for Envoy Proxy in the Envoy Ecosystem marketplace"
+		title={`Extension Catalog - ${PROJECT_NAME}`}
+		description={`Browse all available extensions for Envoy Proxy in the ${PROJECT_NAME} marketplace`}
 		additionalStylesheets={['/src/styles/extensions.css']}
 		preventFOUC={true}
 	/>

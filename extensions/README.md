@@ -19,7 +19,7 @@ extension-name/
 
 1. Fork this repository
 2. Create a new directory under `extensions/` with your extension name
-3. Add all required files (see structure above)
+3. Add all required files (sboe structure above)
 4. Ensure your README includes:
    - Description of what the extension does
    - Installation/usage instructions
@@ -27,7 +27,7 @@ extension-name/
    - Examples
 5. Open a pull request
 
-Or use the CLI: `ee plugin publish ./your-extension`
+Or use the CLI: `boe plugin publish ./your-extension`
 
 ## Extension Guidelines
 

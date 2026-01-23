@@ -22,8 +22,8 @@ examples:
   - title: Basic rate limiting
     description: Limit requests to 100 per minute
     code: |
-      ee run --plugin rate-limiter --config limit=100,window=1m
+      boe run --plugin rate-limiter --config limit=100,window=1m
   - title: Redis backend
     description: Use Redis for distributed rate limiting
     code: |
-      ee run --plugin rate-limiter --config backend=redis,redis-url=redis://localhost:6379
+      boe run --plugin rate-limiter --config backend=redis,redis-url=redis://localhost:6379

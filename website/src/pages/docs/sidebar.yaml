@@ -6,24 +6,22 @@ sections:
 
   - title: CLI Commands
     items:
-      - title: ee run
+      - title: run
         href: /docs/cli/run
-      - title: ee create-plugin
+      - title: create-plugin
         href: /docs/cli/create-plugin
-      - title: ee plugin list
+      - title: plugin list
         href: /docs/cli/plugin-list
-      - title: ee plugin info
+      - title: plugin info
         href: /docs/cli/plugin-info
-      - title: ee plugin publish
+      - title: plugin publish
         href: /docs/cli/plugin-publish
-      - title: ee config
+      - title: config
         href: /docs/cli/config
 
   - title: Reference
     items:
       - title: Environment Variables
         href: /docs/reference/environment-variables
-      - title: Configuration File
-        href: /docs/reference/config-file
       - title: Extension Manifest
         href: /docs/reference/manifest

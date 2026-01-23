@@ -1,3 +1,7 @@
+---
+import { CLI_NAME } from '../constants';
+---
+
 <section class="cli-features" id="docs">
 	<div class="container">
 		<h2>Complete CLI Toolkit</h2>
@@ -5,37 +9,37 @@
 		<div class="cli-grid">
 			<div class="cli-item">
 				<h4>Discover</h4>
-				<code>ee plugin list</code>
+				<code>{CLI_NAME} plugin list</code>
 				<p>Browse available extensions</p>
 			</div>
 
 			<div class="cli-item">
 				<h4>Run</h4>
-				<code>ee run --plugin name</code>
+				<code>{CLI_NAME} run --plugin name</code>
 				<p>Start Envoy with extensions</p>
 			</div>
 
 			<div class="cli-item">
 				<h4>Test Locally</h4>
-				<code>ee run --plugin ./path</code>
+				<code>{CLI_NAME} run --plugin ./path</code>
 				<p>Iterate on local extensions</p>
 			</div>
 
 			<div class="cli-item">
 				<h4>Generate Config</h4>
-				<code>ee gen --plugin name</code>
+				<code>{CLI_NAME} gen --plugin name</code>
 				<p>Export Envoy configuration</p>
 			</div>
 
 			<div class="cli-item">
 				<h4>Scaffold</h4>
-				<code>ee create-plugin name</code>
+				<code>{CLI_NAME} create-plugin name</code>
 				<p>Create new extension template</p>
 			</div>
 
 			<div class="cli-item">
 				<h4>Publish</h4>
-				<code>ee plugin publish ./path</code>
+				<code>{CLI_NAME} plugin publish ./path</code>
 				<p>Share with the community</p>
 			</div>
 		</div>

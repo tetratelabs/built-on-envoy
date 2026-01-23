@@ -1,8 +1,8 @@
 ---
+import { PROJECT_NAME, CLI_NAME, GITHUB_REPO, EXTENSIONS_PATH } from '../../constants';
 import Head from '../../components/Head.astro';
 import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
-import { GITHUB_REPO, EXTENSIONS_PATH } from '../../constants';
 import { parse } from 'yaml';
 import fs from 'fs';
 import path from 'path';
@@ -62,7 +62,7 @@ function formatTypeName(type: string): string {
 <!DOCTYPE html>
 <html lang="en">
 	<Head
-		title={`${extension.name} - Envoy Ecosystem`}
+		title={`${extension.name} - ${PROJECT_NAME}`}
 		description={extension.description}
 		additionalStylesheets={['/src/styles/extension-detail.css']}
 		preventFOUC={true}
@@ -138,7 +138,7 @@ function formatTypeName(type: string): string {
 								<div class="quick-start">
 									<p>Get started with this extension in seconds:</p>
 									<div class="code-block-wrapper">
-										<pre class="code-block"><code>ee run --plugin {extension.name}</code></pre>
+										<pre class="code-block"><code>{CLI_NAME} run --plugin {extension.name}</code></pre>
 										<button class="copy-btn" aria-label="Copy code">📋</button>
 									</div>
 								</div>

@@ -1,17 +1,19 @@
 ---
 layout: ../../../layouts/DocsLayout.astro
-title: ee run
+title: run
 description: Run Envoy with a specific extension
 ---
 
-# ee run
+import CLIName from '../../../components/CLIName.astro';
+
+# <CLIName/> run
 
 Run Envoy with a specific extension. Automatically configures Envoy with test upstreams and provides example requests.
 
 ## Usage
 
 ```bash
-ee run --plugin <name> [options]
+<CLIName/> run --plugin <name> [options]
 ```
 
 ## Options
@@ -59,27 +61,27 @@ Disable default test upstream configuration
 
 ### Run a marketplace extension
 ```bash
-ee run --plugin rate-limiter
+<CLIName/> run --plugin rate-limiter
 ```
 
 ### Run with custom configuration
 ```bash
-ee run --plugin rate-limiter --config limit=100,window=1m,backend=redis
+<CLIName/> run --plugin rate-limiter --config limit=100,window=1m,backend=redis
 ```
 
 ### Run a local extension
 ```bash
-ee run --plugin ./my-custom-filter
+<CLIName/> run --plugin ./my-custom-filter
 ```
 
 ### Run with custom upstream
 ```bash
-ee run --plugin cors --upstream http://api.example.com
+<CLIName/> run --plugin cors --upstream http://api.example.com
 ```
 
 ### Run specific Envoy version
 ```bash
-ee run --plugin auth-jwt --envoy-version 1.36.0
+<CLIName/> run --plugin auth-jwt --envoy-version 1.36.0
 ```
 
 ## Output

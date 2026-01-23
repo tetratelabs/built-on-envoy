@@ -11,6 +11,11 @@ longDescription: |
   Handles preflight requests automatically and provides fine-grained control over
   allowed origins, methods, headers, and credentials.
 type: lua
+
+lua:
+  path: extension.lua
+
+
 tags:
   - cors
   - network
@@ -21,8 +26,8 @@ examples:
   - title: Allow all origins
     description: Enable CORS for all origins (development only)
     code: |
-      ee run --plugin cors --config allow-origin=*
+      boe run --plugin cors --config allow-origin=*
   - title: Specific origins
     description: Allow specific domains
     code: |
-      ee run --plugin cors --config allow-origin=https://app.example.com,https://admin.example.com
+      boe run --plugin cors --config allow-origin=https://app.example.com,https://admin.example.com

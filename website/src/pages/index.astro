@@ -1,4 +1,5 @@
 ---
+import { PROJECT_NAME } from '../constants';
 import Head from '../components/Head.astro';
 import Header from '../components/Header.astro';
 import Hero from '../components/Hero.astro';
@@ -12,8 +13,8 @@ import Footer from '../components/Footer.astro';
 <!DOCTYPE html>
 <html lang="en">
 	<Head
-		title="Envoy Ecosystem - Extensions Marketplace for Envoy Proxy"
-		description="Discover, run, and build extensions for Envoy Proxy. A community-driven marketplace with zero-friction developer experience, powered by Tetrate"
+		title={`${PROJECT_NAME} - Extensions Marketplace for Envoy Proxy`}
+		description={`Discover, run, and build extensions for Envoy Proxy. A community-driven marketplace with zero-friction developer experience, powered by Tetrate`}
 		preventFOUC={true}
 	/>
 	<body>

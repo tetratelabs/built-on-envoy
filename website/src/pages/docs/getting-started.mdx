@@ -4,9 +4,12 @@ title: Getting Started
 description: Get started with Envoy Ecosystem CLI
 ---
 
+import CLIName from '../../components/CLIName.astro';
+import ProjectName from '../../components/ProjectName.astro';
+
 # Getting Started
 
-The `ee` (Envoy Ecosystem) CLI provides a zero-friction developer experience for discovering, running, and building Envoy® Proxy extensions.
+The <code><CLIName/></code> (<ProjectName/>) CLI provides a zero-friction developer experience for discovering, running, and building Envoy® Proxy extensions.
 
 ## Installation
 
@@ -40,31 +43,31 @@ Once installed, you can immediately start using extensions:
 
 ```bash
 # Run an extension from the marketplace
-ee run --plugin rate-limiter
+<CLIName/> run --plugin rate-limiter
 ```
 
 ### Create Your Own Extension
 
 ```bash
 # Create a new extension
-ee create-plugin my-filter
+<CLIName/> create-plugin my-filter
 
 # Test your extension locally
-ee run --plugin ./my-filter
+<CLIName/> run --plugin ./my-filter
 ```
 
 ### Browse Available Extensions
 
 ```bash
 # List all available extensions
-ee plugin list
+<CLIName/> plugin list
 
 # Get details about a specific extension
-ee plugin info rate-limiter
+<CLIName/> plugin info rate-limiter
 ```
 
 ## Next Steps
 
-- Explore the CLI Commands ([ee run](/docs/cli/run), [ee create-plugin](/docs/cli/create-plugin), [ee plugin list](/docs/cli/plugin-list)) to learn what `ee` can do
+- Explore the CLI Commands ([<CLIName/> run](/docs/cli/run), [<CLIName/> create-plugin](/docs/cli/create-plugin), [<CLIName/> plugin list](/docs/cli/plugin-list)) to learn what <code><CLIName/></code> can do
 - Browse the [Extensions Marketplace](/extensions) to find extensions for your use case
 - Learn how to [create your own extension](/docs/cli/create-plugin)

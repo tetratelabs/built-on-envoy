@@ -1,5 +1,5 @@
 ---
-import { GITHUB_REPO, SLACK } from '../constants';
+import { PROJECT_NAME, GITHUB_REPO, SLACK } from '../constants';
 import ExternalLink from './ExternalLink.astro';
 ---
 
@@ -7,8 +7,8 @@ import ExternalLink from './ExternalLink.astro';
 	<div class="container">
 		<div class="footer-content">
 			<div class="footer-section">
-				<h4>Envoy Ecosystem</h4>
-				<p class="footer-built-by">Built by <img src="/tetrate-logo-white.png" alt="Tetrate" class="tetrate-logo" /></p>
+				<h4>{PROJECT_NAME}</h4>
+				<p class="footer-built-by">By <img src="/tetrate-logo-white.png" alt="Tetrate" class="tetrate-logo" /></p>
 			</div>
 			<div class="footer-section">
 				<h4>Resources</h4>

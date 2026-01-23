@@ -1,17 +1,19 @@
 ---
 layout: ../../../layouts/DocsLayout.astro
-title: ee plugin info
+title: plugin info
 description: Show detailed information about an extension
 ---
 
-# ee plugin info
+import CLIName from '../../../components/CLIName.astro';
+
+# <CLIName/> plugin info
 
 Show detailed information about an extension.
 
 ## Usage
 
 ```bash
-ee plugin info <name>
+<CLIName/> plugin info <name>
 ```
 
 ## Arguments
@@ -23,7 +25,7 @@ Extension name (required)
 
 ### Show extension details
 ```bash
-ee plugin info rate-limiter
+<CLIName/> plugin info rate-limiter
 ```
 
 ## Output
@@ -47,14 +49,14 @@ Tags:
   rate-limiting, redis, protection, throttling
 
 Usage:
-  ee run --plugin rate-limiter --config limit=100,window=1m
+  <CLIName/> run --plugin rate-limiter --config limit=100,window=1m
 
 Examples:
   # Basic rate limiting
-  ee run --plugin rate-limiter --config limit=100,window=1m
+  <CLIName/> run --plugin rate-limiter --config limit=100,window=1m
 
   # Redis backend
-  ee run --plugin rate-limiter --config backend=redis,redis-url=redis://localhost:6379
+  <CLIName/> run --plugin rate-limiter --config backend=redis,redis-url=redis://localhost:6379
 
 Repository:
   https://github.com/tetratelabs/envoy-ecosystem/tree/main/extensions/rate-limiter
