@@ -1,4 +1,4 @@
-// Copyright Envoy Ecosystem
+// Copyright Built On Envoy
 // SPDX-License-Identifier: Apache-2.0
 // The full text of the Apache license is available in the LICENSE file at
 // the root of the repo.
@@ -27,7 +27,7 @@ func TestParseCmdRunHelp(t *testing.T) {
 
 	var buf bytes.Buffer
 	parser, err := kong.New(&cli,
-		kong.Name("ee"),
+		kong.Name("boe"),
 		kong.Writers(&buf, &buf),
 		kong.Exit(func(int) {}),
 	)
@@ -35,7 +35,9 @@ func TestParseCmdRunHelp(t *testing.T) {
 
 	_, _ = parser.Parse([]string{"run", "--help"})
 
-	expected := `Usage: ee run [flags]
+	fmt.Println(buf.String())
+
+	expected := `Usage: boe run [flags]
 
 Run Envoy with extensions
 
@@ -46,9 +48,9 @@ Flags:
                                    ($ENVOY_VERSION)
   -l, --log-level="all:error"      Envoy component log level (default:
                                    all:error)
-      --run-id=STRING              Run identifier for this invocation.
-                                   Defaults to timestamp-based ID or $EE_RUN_ID.
-                                   Use '0' for Docker/Kubernetes ($EE_RUN_ID).
+      --run-id=STRING              Run identifier for this invocation. Defaults
+                                   to timestamp-based ID or $BOE_RUN_ID. Use '0'
+                                   for Docker/Kubernetes ($BOE_RUN_ID).
       --listen-port=10000          Port for Envoy listener to accept incoming
                                    traffic (default: 10000)
       --admin-port=9901            Port for Envoy admin interface (default:
@@ -63,7 +65,7 @@ func TestParseCmdRunDefaults(t *testing.T) {
 		Run Run `cmd:"" help:"Run Envoy with extensions"`
 	}
 
-	parser, err := kong.New(&cli, kong.Name("ee"), kong.Exit(func(int) {}))
+	parser, err := kong.New(&cli, kong.Name("boe"), kong.Exit(func(int) {}))
 	require.NoError(t, err)
 
 	_, err = parser.Parse([]string{"run"})
@@ -86,7 +88,7 @@ func TestParseCmdRunCustomValues(t *testing.T) {
 		Run Run `cmd:"" help:"Run Envoy with extensions"`
 	}
 
-	parser, err := kong.New(&cli, kong.Name("ee"), kong.Exit(func(int) {}))
+	parser, err := kong.New(&cli, kong.Name("boe"), kong.Exit(func(int) {}))
 	require.NoError(t, err)
 
 	_, err = parser.Parse([]string{
@@ -117,7 +119,7 @@ func TestParseInvalidExtension(t *testing.T) {
 		Run Run `cmd:"" help:"Run Envoy with extensions"`
 	}
 
-	parser, err := kong.New(&cli, kong.Name("ee"), kong.Exit(func(int) {}))
+	parser, err := kong.New(&cli, kong.Name("boe"), kong.Exit(func(int) {}))
 	require.NoError(t, err)
 
 	_, err = parser.Parse([]string{"run", "--extension=unknown-extension"})

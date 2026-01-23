@@ -1,6 +1,6 @@
-# Envoy Ecosystem CLI (`ee`)
+# Built On Envoy CLI (`boe`)
 
-Command-line tool for working with Envoy Ecosystem extensions.
+Command-line tool for working with Built On Envoy extensions.
 
 ## Status
 
@@ -12,20 +12,20 @@ Command-line tool for working with Envoy Ecosystem extensions.
 
 ```bash
 # Discovery
-ee plugin list                    # List all available extensions
+boe plugin list                    # List all available extensions
 
 # Running Extensions
-ee run --plugin <name>           # Run Envoy with extensions
-ee run --plugin ./path           # Run with local extension
-ee run --config envoy.yaml       # Run with custom config
+boe run --plugin <name>           # Run Envoy with extensions
+boe run --plugin ./path           # Run with local extension
+boe run --config envoy.yaml       # Run with custom config
 
 # Development
-ee create-plugin <name>          # Scaffold new extension
-ee plugin publish <path>         # Publish extension to marketplace
+boe create-plugin <name>          # Scaffold new extension
+boe plugin publish <path>         # Publish extension to marketplace
 
 # Configuration Generation
-ee gen --plugin <name>           # Generate Envoy config
-ee gen --plugin <name> --full    # Generate full config
+boe gen --plugin <name>           # Generate Envoy config
+boe gen --plugin <name> --full    # Generate full config
 ```
 
 ### Implementation Details

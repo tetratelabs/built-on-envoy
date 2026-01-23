@@ -1,9 +1,9 @@
-// Copyright Envoy Ecosystem
+// Copyright Built On Envoy
 // SPDX-License-Identifier: Apache-2.0
 // The full text of the Apache license is available in the LICENSE file at
 // the root of the repo.
 
-// Envoy Ecosystem CLI (ee) - Work with Envoy extensions.
+// Built On Envoy CLI (boe) - Work with Envoy extensions.
 package main
 
 import (
@@ -26,10 +26,10 @@ type CLI struct {
 	Run  cmd.Run  `cmd:"" help:"Run Envoy with extensions"`
 
 	// Global XDG flags
-	ConfigHome string `name:"config-home" env:"EE_CONFIG_HOME" help:"Configuration files directory. Defaults to ~/.config/ee" type:"path" default:"~/.config/ee"`
-	DataHome   string `name:"data-home" env:"EE_DATA_HOME" help:"Downloaded Envoy binaries directory. Defaults to ~/.local/share/ee" type:"path" default:"~/.local/share/ee"`
-	StateHome  string `name:"state-home" env:"EE_STATE_HOME" help:"Persistent state and logs directory. Defaults to ~/.local/state/ee" type:"path" default:"~/.local/state/ee"`
-	RuntimeDir string `name:"runtime-dir" env:"EE_RUNTIME_DIR" help:"Ephemeral runtime files directory. Defaults to /tmp/ee-$UID" type:"path"`
+	ConfigHome string `name:"config-home" env:"BOE_CONFIG_HOME" help:"Configuration files directory. Defaults to ~/.config/boe" type:"path" default:"~/.config/boe"`
+	DataHome   string `name:"data-home" env:"BOE_DATA_HOME" help:"Downloaded Envoy binaries directory. Defaults to ~/.local/share/boe" type:"path" default:"~/.local/share/boe"`
+	StateHome  string `name:"state-home" env:"BOE_STATE_HOME" help:"Persistent state and logs directory. Defaults to ~/.local/state/boe" type:"path" default:"~/.local/state/boe"`
+	RuntimeDir string `name:"runtime-dir" env:"BOE_RUNTIME_DIR" help:"Ephemeral runtime files directory. Defaults to /tmp/boe-$UID" type:"path"`
 }
 
 // BeforeApply is called by Kong before applying defaults to set XDG directory defaults.
@@ -40,7 +40,7 @@ func (c *CLI) BeforeApply(ctx *kong.Context) error {
 	c.StateHome = expandPath(c.StateHome)
 
 	if c.RuntimeDir == "" {
-		c.RuntimeDir = fmt.Sprintf("/tmp/ee-%d", os.Getuid())
+		c.RuntimeDir = fmt.Sprintf("/tmp/boe-%d", os.Getuid())
 	}
 	c.RuntimeDir = expandPath(c.RuntimeDir)
 
@@ -67,8 +67,8 @@ func main() {
 	}()
 
 	kongCtx := kong.Parse(&CLI{},
-		kong.Name("ee"),
-		kong.Description("Envoy Ecosystem CLI - Discover, run, and build custom filters with zero friction"),
+		kong.Name("boe"),
+		kong.Description("Built On Envoy CLI - Discover, run, and build custom filters with zero friction"),
 		kong.UsageOnError(),
 		kong.BindTo(ctx, (*context.Context)(nil)), // Bind it so it can be injected into commands
 	)

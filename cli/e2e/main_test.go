@@ -1,4 +1,4 @@
-// Copyright Envoy Ecosystem
+// Copyright Built On Envoy
 // SPDX-License-Identifier: Apache-2.0
 // The full text of the Apache license is available in the LICENSE file at
 // the root of the repo.
@@ -31,5 +31,5 @@ func TestMain(m *testing.M) {
 // buildCLIOnDemand builds the CLI binary unless CLI_BIN is set.
 // If CLI_BIN environment variable is set, it will use that path instead.
 func buildCLIOnDemand() (string, error) {
-	return internaltesting.BuildGoBinaryOnDemand("CLI_BIN", "ee", ".")
+	return internaltesting.BuildGoBinaryOnDemand("CLI_BIN", "boe", ".")
 }

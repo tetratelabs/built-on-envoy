@@ -1,4 +1,4 @@
-# Copyright Envoy Ecosystem
+# Copyright Built On Envoy
 # SPDX-License-Identifier: Apache-2.0
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
@@ -10,7 +10,7 @@
 
 # Arguments for builds.
 OUTPUT_DIR ?= out
-BINARY_NAME ?= ee
+BINARY_NAME ?= boe
 
 # Arguments for Docker builds.
 OCI_REGISTRY           ?= docker.io/tetratelabs
@@ -131,6 +131,6 @@ check: format  ## Run all necessary steps to prepare for a commit and check for 
 
 .PHONY: help
 help:  ## Show this help info
-	@echo "Envoy Ecosystem. Discover, run, and build custom filters with zero friction.\n"
+	@echo "Built On Envoy. Discover, run, and build custom filters with zero friction.\n"
 	@echo "Usage:\n  make \033[36m<Target>\033[0m \n\nTargets:"
 	@awk 'BEGIN {FS = ":.*##"; printf ""} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)

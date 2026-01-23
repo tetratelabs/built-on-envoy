@@ -1,4 +1,4 @@
-// Copyright Envoy Ecosystem
+// Copyright Built On Envoy
 // SPDX-License-Identifier: Apache-2.0
 // The full text of the Apache license is available in the LICENSE file at
 // the root of the repo.
@@ -29,7 +29,7 @@ const defaultLogLevel = "error"
 type Run struct {
 	EnvoyVersion string   `help:"Envoy version to use (e.g., 1.31.0)" env:"ENVOY_VERSION"`
 	LogLevel     string   `help:"Envoy component log level (default: all:error)" short:"l" default:"all:error"`
-	RunID        string   `name:"run-id" env:"EE_RUN_ID" help:"Run identifier for this invocation. Defaults to timestamp-based ID or $EE_RUN_ID. Use '0' for Docker/Kubernetes."`
+	RunID        string   `name:"run-id" env:"BOE_RUN_ID" help:"Run identifier for this invocation. Defaults to timestamp-based ID or $BOE_RUN_ID. Use '0' for Docker/Kubernetes."`
 	ListenPort   int      `help:"Port for Envoy listener to accept incoming traffic  (default: 10000)" default:"10000"`
 	AdminPort    int      `help:"Port for Envoy admin interface (default: 9901)" default:"9901"`
 	Extensions   []string `name:"extension" help:"Extensions to enable (by name)." sep:","`

@@ -1,4 +1,4 @@
-// Copyright Envoy Ecosystem
+// Copyright Built On Envoy
 // SPDX-License-Identifier: Apache-2.0
 // The full text of the Apache license is available in the LICENSE file at
 // the root of the repo.
@@ -35,7 +35,7 @@ func TestCustomPorts(t *testing.T) {
 
 // runEnvoy starts the CLI as a subprocess with the given config file.
 func runEnvoy(t *testing.T, cliBin string, env []string, arg ...string) (adminPort int) {
-	// Wait up to 10 seconds for both ports to be free.
+	// Wait up to 10 seconds for both ports to be frboe.
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
@@ -50,9 +50,9 @@ func runEnvoy(t *testing.T, cliBin string, env []string, arg ...string) (adminPo
 	}
 
 	// Capture logs, only dump on failure.
-	buffers := internaltesting.DumpLogsOnFail(t, "ee Stdout", "ee Stderr")
+	buffers := internaltesting.DumpLogsOnFail(t, "boe Stdout", "boe Stderr")
 
-	t.Logf("Starting ee with args: %v", arg)
+	t.Logf("Starting boe with args: %v", arg)
 	// Note: do not pass t.Context() to CommandContext, as it's canceled
 	// *before* t.Cleanup functions are called.
 	//
@@ -76,13 +76,13 @@ func runEnvoy(t *testing.T, cliBin string, env []string, arg ...string) (adminPo
 
 		// Graceful shutdown, should kill the Envoy subprocess, too.
 		if err := cmd.Process.Signal(os.Interrupt); err != nil {
-			t.Logf("Failed to send interrupt to ee process: %v", err)
+			t.Logf("Failed to send interrupt to boe process: %v", err)
 		}
 		// Wait for the process to exit gracefully, in worst case this is
 		// killed in 3 seconds by WaitDelay above. In that case, you may
 		// have a zombie Envoy process left behind!
 		if _, err := cmd.Process.Wait(); err != nil {
-			t.Logf("Failed to wait for ee process to exit: %v", err)
+			t.Logf("Failed to wait for boe process to exit: %v", err)
 		}
 
 		// Delete the hard-coded path to certs defined in Envoy AI Gateway
@@ -91,9 +91,9 @@ func runEnvoy(t *testing.T, cliBin string, env []string, arg ...string) (adminPo
 		}
 	})
 
-	t.Logf("ee process started with PID %d", cmd.Process.Pid)
+	t.Logf("boe process started with PID %d", cmd.Process.Pid)
 
-	t.Log("Waiting for ee to start (Envoy admin endpoint)...")
+	t.Log("Waiting for boe to start (Envoy admin endpoint)...")
 
 	adminClient, err := admin.NewAdminClient(t.Context(), cmd.Process.Pid)
 	require.NoError(t, err)
@@ -101,7 +101,7 @@ func runEnvoy(t *testing.T, cliBin string, env []string, arg ...string) (adminPo
 	err = adminClient.AwaitReady(t.Context(), time.Second)
 	require.NoError(t, err)
 
-	t.Log("ee CLI is ready")
+	t.Log("boe CLI is ready")
 	return adminClient.Port()
 }
 
