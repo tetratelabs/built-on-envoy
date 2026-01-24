@@ -35,8 +35,9 @@ type Run struct {
 	Extensions   []string `name:"extension" help:"Extensions to enable (by name)." sep:","`
 	Local        []string `name:"local" help:"Path to a directory containing a local Extension to enable." type:"existingdir" sep:","`
 
-	defaultLogLevel   string `kong:"-"` // Internal field: parsed defaut log level
-	componentLogLevel string `kong:"-"` // Internal field: parsed component log levels
+	defaultLogLevel   string                 `kong:"-"` // Internal field: parsed defaut log level
+	componentLogLevel string                 `kong:"-"` // Internal field: parsed component log levels
+	extensions        []*extensions.Manifest `kong:"-"` // Internal field: loaded extension manifests
 }
 
 // BeforeApply is called by Kong before applying defaults to set computed default values.
@@ -57,15 +58,6 @@ func (r *Run) Validate() error {
 		return err
 	}
 
-	// Load manifests from local extensions
-	for _, localPath := range r.Local {
-		manifest, err := extensions.LoadLocalManifest(localPath + "/manifest.yaml")
-		if err != nil {
-			return fmt.Errorf("failed to load local manifest from %s: %w", localPath, err)
-		}
-		extensions.Manifests[manifest.Name] = manifest
-	}
-
 	// Validate official extensions
 	for _, name := range r.Extensions {
 		if _, found := extensions.Manifests[name]; !found {
@@ -73,6 +65,16 @@ func (r *Run) Validate() error {
 			sort.Strings(available)
 			return fmt.Errorf("unknown extension %q; available extensions: %s", name, strings.Join(available, ","))
 		}
+		r.extensions = append(r.extensions, extensions.Manifests[name])
+	}
+
+	// Load manifests from local extensions
+	for _, localPath := range r.Local {
+		manifest, err := extensions.LoadLocalManifest(localPath + "/manifest.yaml")
+		if err != nil {
+			return fmt.Errorf("failed to load local manifest from %s: %w", localPath, err)
+		}
+		r.extensions = append(r.extensions, manifest)
 	}
 
 	return nil
@@ -80,11 +82,6 @@ func (r *Run) Validate() error {
 
 // Run executes the run command
 func (r *Run) Run(ctx context.Context, dirs *xdg.Directories) error {
-	manifests := make([]*extensions.Manifest, 0, len(r.Extensions))
-	for _, name := range r.Extensions {
-		manifests = append(manifests, extensions.Manifests[name])
-	}
-
 	runner := &envoy.Runner{
 		EnvoyVersion:      r.EnvoyVersion,
 		DefaultLogLevel:   r.defaultLogLevel,
@@ -93,7 +90,7 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories) error {
 		RunID:             r.RunID,
 		ListenPort:        r.ListenPort,
 		AdminPort:         r.AdminPort,
-		Extensions:        manifests,
+		Extensions:        r.extensions,
 	}
 
 	return runner.Run(ctx)
