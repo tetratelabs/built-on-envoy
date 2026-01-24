@@ -111,6 +111,9 @@ func loadManifests(fsys embed.FS) (map[string]*Manifest, error) {
 		if err := yaml.Unmarshal(data, &m); err != nil {
 			return fmt.Errorf("failed to unmarshal manifest file %s: %w", path, err)
 		}
+		if _, ok := result[m.Name]; ok {
+			return fmt.Errorf("duplicate manifest name: %s", m.Name)
+		}
 		result[m.Name] = &m
 		return nil
 	})
