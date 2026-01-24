@@ -10,17 +10,39 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 )
 
 func TestRenderDefaultConfig(t *testing.T) {
-	want, err := os.ReadFile("testdata/config.yaml")
+	want, err := os.ReadFile("testdata/output_config.yaml")
 	require.NoError(t, err)
 
-	cfg, err := buildConfig(9901, 10000, nil)
+	cfg, err := RenderConfig(ConfigGenerationParams{
+		AdminPort:    9901,
+		ListenerPort: 10000,
+	})
+	require.NoError(t, err)
+	require.YAMLEq(t, string(want), cfg)
+}
+
+func TestRenderConfigWithExtensions(t *testing.T) {
+	want, err := os.ReadFile("testdata/output_config_with_extensions.yaml")
 	require.NoError(t, err)
 
-	cfgYAML, err := ProtoToYaml(cfg)
-	require.NoError(t, err)
+	extensionManifests := []*extensions.Manifest{
+		{
+			Name: "lua-inline",
+			Type: extensions.TypeLua,
+			Lua:  &extensions.Lua{Inline: `test`},
+		},
+	}
 
-	require.YAMLEq(t, string(want), string(cfgYAML))
+	cfg, err := RenderConfig(ConfigGenerationParams{
+		AdminPort:    9901,
+		ListenerPort: 10000,
+		Extensions:   extensionManifests,
+	})
+	require.NoError(t, err)
+	require.YAMLEq(t, string(want), cfg)
 }

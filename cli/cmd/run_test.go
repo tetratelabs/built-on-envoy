@@ -140,15 +140,21 @@ func TestValidateLocalExtensionPath(t *testing.T) {
 	parser, err := kong.New(&cli, kong.Name("boe"), kong.Exit(func(int) {}))
 	require.NoError(t, err)
 
-	_, err = parser.Parse([]string{"run", "--local", "./testdata"})
-	require.NoError(t, err)
+	t.Run("valid-path", func(t *testing.T) {
+		_, err = parser.Parse([]string{"run", "--local", "./testdata"})
+		require.NoError(t, err)
+	})
 
-	_, err = parser.Parse([]string{"run", "--local", "./"})
-	require.ErrorContains(t, err, "failed to read manifest")
+	t.Run("invalid-paths", func(t *testing.T) {
+		_, err = parser.Parse([]string{"run", "--local", "./"})
+		require.ErrorIs(t, err, extensions.ErrOpenManifestFile)
+	})
 
-	_, err = parser.Parse([]string{"run", "--local", "/path/to/nonexistent/dir"})
-	var pathErr *fs.PathError
-	require.ErrorAs(t, err, &pathErr)
+	t.Run("nonexistent-path", func(t *testing.T) {
+		_, err = parser.Parse([]string{"run", "--local", "/path/to/nonexistent/dir"})
+		var pathErr *fs.PathError
+		require.ErrorAs(t, err, &pathErr)
+	})
 }
 
 func TestValidateLogLevel(t *testing.T) {

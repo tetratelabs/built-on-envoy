@@ -12,6 +12,11 @@ description: A test extension
 longDescription: |
   This is a longer description of the test extension.
 type: wasm
+lua:
+  inline: |
+    function envoy_on_request(request_handle)
+      request_handle:logInfo("Hello, World!")
+    end
 tags:
   - test
 license: Apache-2.0
