@@ -76,8 +76,8 @@ func TestParseCmdRunDefaults(t *testing.T) {
 
 	// Verify default values are set
 	require.Equal(t, "all:error", cli.Run.LogLevel)
-	require.Equal(t, 10000, cli.Run.ListenPort)
-	require.Equal(t, 9901, cli.Run.AdminPort)
+	require.Equal(t, uint32(10000), cli.Run.ListenPort)
+	require.Equal(t, uint32(9901), cli.Run.AdminPort)
 	require.Empty(t, cli.Run.EnvoyVersion)
 	require.Empty(t, cli.Run.Extensions)
 
@@ -107,8 +107,8 @@ func TestParseCmdRunCustomValues(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, "all:debug,upstream:trace", cli.Run.LogLevel)
-	require.Equal(t, 8080, cli.Run.ListenPort)
-	require.Equal(t, 9000, cli.Run.AdminPort)
+	require.Equal(t, uint32(8080), cli.Run.ListenPort)
+	require.Equal(t, uint32(9000), cli.Run.AdminPort)
 	require.Equal(t, "1.31.0", cli.Run.EnvoyVersion)
 	require.Equal(t, "custom-run-id", cli.Run.RunID)
 	require.Equal(t, []string{"cors", "rate-limiter", "auth-jwt"}, cli.Run.Extensions)

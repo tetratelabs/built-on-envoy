@@ -12,20 +12,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestDefaultConfigTemplateIsNotEmpty(t *testing.T) {
-	require.NotEmpty(t, defaultConfig)
-	require.Contains(t, defaultConfig, "{{ .AdminPort }}")
-	require.Contains(t, defaultConfig, "{{ .ListenerPort }}")
-}
-
-func TestRenderConfig(t *testing.T) {
-	rendered, err := RenderConfig(ConfigGenerationParams{
-		AdminPort:    9901,
-		ListenerPort: 10000,
-	})
+func TestRenderDefaultConfig(t *testing.T) {
+	want, err := os.ReadFile("testdata/config.yaml")
 	require.NoError(t, err)
 
-	want, err := os.ReadFile("testdata/default-config.yaml")
+	cfg, err := buildConfig(9901, 10000, nil)
 	require.NoError(t, err)
-	require.YAMLEq(t, string(want), rendered)
+
+	cfgYAML, err := ProtoToYaml(cfg)
+	require.NoError(t, err)
+
+	require.YAMLEq(t, string(want), string(cfgYAML))
 }

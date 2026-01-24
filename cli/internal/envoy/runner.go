@@ -34,9 +34,9 @@ type Runner struct {
 	// RunID specifies the run identifier for this invocation.
 	RunID string
 	// ListenPort is the port for Envoy listener to accept incoming traffic.
-	ListenPort int
+	ListenPort uint32
 	// AdminPort is the port for Envoy admin interface.
-	AdminPort int
+	AdminPort uint32
 	// Extensions specifies the extensions to enable.
 	Extensions []*extensions.Manifest
 }

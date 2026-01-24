@@ -6,28 +6,33 @@
 package envoy
 
 import (
-	_ "embed"
 	"fmt"
-	"strings"
-	"text/template"
+
+	accesslogv3 "github.com/envoyproxy/go-control-plane/envoy/config/accesslog/v3"
+	bootstrapv3 "github.com/envoyproxy/go-control-plane/envoy/config/bootstrap/v3"
+	clusterv3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
+	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	endpointv3 "github.com/envoyproxy/go-control-plane/envoy/config/endpoint/v3"
+	listenerv3 "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
+	routev3 "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
+	streamv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/access_loggers/stream/v3"
+	routerv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/router/v3"
+	hcmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
+	tlsv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
+	"sigs.k8s.io/yaml"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
-)
-
-var (
-	//go:embed config.yaml
-	defaultConfig string
-
-	// configTemplate is the parsed template of the default Envoy config.
-	defaultConfigTemplate = template.Must(template.New("envoy-config").Parse(defaultConfig))
 )
 
 // ConfigGenerationParams holds parameters for generating the Envoy config.
 type ConfigGenerationParams struct {
 	// AdminPort is the port for Envoy admin interface.
-	AdminPort int
+	AdminPort uint32
 	// ListenerPort is the port where Envoy listens for incoming traffic.
-	ListenerPort int
+	ListenerPort uint32
 	// Extensions to generate the config for
 	Extensions []*extensions.Manifest
 }
@@ -35,7 +40,7 @@ type ConfigGenerationParams struct {
 // RenderConfig renders the Envoy configuration with the given parameters.
 // The ouyput is a YAML string that is passed to func-e to run Envoy.
 func RenderConfig(params ConfigGenerationParams) (string, error) {
-	filters := make([]any, 0, len(params.Extensions))
+	filters := make([]*hcmv3.HttpFilter, 0, len(params.Extensions))
 	for _, ext := range params.Extensions {
 		filterConfig, err := generateFilterConfig(ext, nil)
 		if err != nil {
@@ -44,15 +49,217 @@ func RenderConfig(params ConfigGenerationParams) (string, error) {
 		filters = append(filters, filterConfig)
 	}
 
-	_ = filters // TODO(nacx): remove when the variable is used (it's here to make linter happy)
-
-	// TODO(nacx): include the filters in the configuration.
-	//             we may awnt to change config generation from a Go template
-	// 		        to something more structured (e.g., using go-control-plane types).
-
-	var renderedConfig strings.Builder
-	if err := defaultConfigTemplate.Execute(&renderedConfig, params); err != nil {
-		return "", fmt.Errorf("failed to render Envoy config template: %w", err)
+	cfg, err := buildConfig(params.AdminPort, params.ListenerPort, filters)
+	if err != nil {
+		return "", fmt.Errorf("failed to build config: %w", err)
 	}
-	return renderedConfig.String(), nil
+	cfgYaml, err := ProtoToYaml(cfg)
+	if err != nil {
+		return "", fmt.Errorf("failed to convert config to YAML: %w", err)
+	}
+
+	return string(cfgYaml), nil
+}
+
+// buildConfig creates the EnvoyConfiguration based on the provided parameters.
+//
+// Note we won't generate a "bootstrap" configuration but normal Envoy config. However,
+// using the Bootstrap struct is convenient as a wrapper as it is already a `proto.Message`
+// and allows us to use the proto marshalling functions. Otherwise, we would have to create a wrapper
+// proto on our own, or marshal the config manually.
+// TODO(nacx): Is there a wrapper for `admin` and `static_resources` we could use other than Bootstrap?
+func buildConfig(adminPort, listenerPort uint32, filters []*hcmv3.HttpFilter) (*bootstrapv3.Bootstrap, error) {
+	testupstreamCluster, err := buildTestUpstreamCluster("httpbin", "httpbin.org", 443)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build test upstream cluster: %w", err)
+	}
+
+	hcm, err := buildHTTPConnectionManager(filters, testupstreamCluster)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build HTTP connection manager: %w", err)
+	}
+
+	hcmAny, err := anypb.New(hcm)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal HTTP connection manager to Any: %w", err)
+	}
+
+	listener := &listenerv3.Listener{
+		Name: "main",
+		Address: &corev3.Address{
+			Address: &corev3.Address_SocketAddress{
+				SocketAddress: &corev3.SocketAddress{
+					Address: "0.0.0.0",
+					PortSpecifier: &corev3.SocketAddress_PortValue{
+						PortValue: listenerPort,
+					},
+				},
+			},
+		},
+		FilterChains: []*listenerv3.FilterChain{
+			{
+				Filters: []*listenerv3.Filter{
+					{
+						Name: "envoy.filters.network.http_connection_manager",
+						ConfigType: &listenerv3.Filter_TypedConfig{
+							TypedConfig: hcmAny,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	admin := &bootstrapv3.Admin{
+		Address: &corev3.Address{
+			Address: &corev3.Address_SocketAddress{
+				SocketAddress: &corev3.SocketAddress{
+					Address: "127.0.0.1",
+					PortSpecifier: &corev3.SocketAddress_PortValue{
+						PortValue: adminPort,
+					},
+				},
+			},
+		},
+	}
+
+	return &bootstrapv3.Bootstrap{
+		Admin: admin,
+		StaticResources: &bootstrapv3.Bootstrap_StaticResources{
+			Listeners: []*listenerv3.Listener{listener},
+			Clusters:  []*clusterv3.Cluster{testupstreamCluster},
+		},
+	}, nil
+}
+
+// buildHTTPConnectionManager creates the HTTP connection manager configuration.
+func buildHTTPConnectionManager(filters []*hcmv3.HttpFilter, testUpstreamCluster *clusterv3.Cluster) (*hcmv3.HttpConnectionManager, error) {
+	// Build the router filter
+	router := &routerv3.Router{}
+	routerAny, err := anypb.New(router)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal router filter to Any: %w", err)
+	}
+
+	// Build the stdout access log
+	stdoutLog := &streamv3.StdoutAccessLog{}
+	stdoutLogAny, err := anypb.New(stdoutLog)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal stdout access log to Any: %w", err)
+	}
+
+	httpFilters := append([]*hcmv3.HttpFilter{}, filters...)
+	httpFilters = append(httpFilters, &hcmv3.HttpFilter{
+		Name: "envoy.filters.http.router",
+		ConfigType: &hcmv3.HttpFilter_TypedConfig{
+			TypedConfig: routerAny,
+		},
+	})
+
+	return &hcmv3.HttpConnectionManager{
+		StatPrefix: "ingress_http",
+		AccessLog: []*accesslogv3.AccessLog{
+			{
+				Name: "envoy.access_loggers.stdout",
+				ConfigType: &accesslogv3.AccessLog_TypedConfig{
+					TypedConfig: stdoutLogAny,
+				},
+			},
+		},
+		HttpFilters: httpFilters,
+		RouteSpecifier: &hcmv3.HttpConnectionManager_RouteConfig{
+			RouteConfig: &routev3.RouteConfiguration{
+				Name: "default_route",
+				VirtualHosts: []*routev3.VirtualHost{
+					{
+						Name:    "default_service",
+						Domains: []string{"*"},
+						Routes: []*routev3.Route{
+							{
+								Match: &routev3.RouteMatch{
+									PathSpecifier: &routev3.RouteMatch_Prefix{
+										Prefix: "/",
+									},
+								},
+								Action: &routev3.Route_Route{
+									Route: &routev3.RouteAction{
+										ClusterSpecifier: &routev3.RouteAction_Cluster{
+											Cluster: testUpstreamCluster.Name,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}, nil
+}
+
+func buildTestUpstreamCluster(name string, hostname string, port uint32) (*clusterv3.Cluster, error) {
+	tlsContext := &tlsv3.UpstreamTlsContext{Sni: hostname}
+	tlsContextAny, err := anypb.New(tlsContext)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal TLS context to Any: %w", err)
+	}
+
+	return &clusterv3.Cluster{
+		Name: name,
+		ClusterDiscoveryType: &clusterv3.Cluster_Type{
+			Type: clusterv3.Cluster_STRICT_DNS,
+		},
+		DnsLookupFamily: clusterv3.Cluster_V4_ONLY,
+		LoadAssignment: &endpointv3.ClusterLoadAssignment{
+			ClusterName: name,
+			Endpoints: []*endpointv3.LocalityLbEndpoints{
+				{
+					LbEndpoints: []*endpointv3.LbEndpoint{
+						{
+							HostIdentifier: &endpointv3.LbEndpoint_Endpoint{
+								Endpoint: &endpointv3.Endpoint{
+									Address: &corev3.Address{
+										Address: &corev3.Address_SocketAddress{
+											SocketAddress: &corev3.SocketAddress{
+												Address: hostname,
+												PortSpecifier: &corev3.SocketAddress_PortValue{
+													PortValue: port,
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		TransportSocket: &corev3.TransportSocket{
+			Name: "envoy.transport_sockets.tls",
+			ConfigType: &corev3.TransportSocket_TypedConfig{
+				TypedConfig: tlsContextAny,
+			},
+		},
+	}, nil
+}
+
+// ProtoToYaml converts a proto Message to YAML
+func ProtoToYaml(msg proto.Message) ([]byte, error) {
+	marshaler := protojson.MarshalOptions{
+		UseProtoNames:   true,
+		EmitUnpopulated: false,
+	}
+
+	jsonBytes, err := marshaler.Marshal(msg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal bootstrap to JSON: %w", err)
+	}
+
+	yamlBytes, err := yaml.JSONToYAML(jsonBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert JSON to YAML: %w", err)
+	}
+
+	return yamlBytes, nil
 }

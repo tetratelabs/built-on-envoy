@@ -18,39 +18,39 @@ func TestGenerateFilterConfig(t *testing.T) {
 		name     string
 		manifest extensions.Manifest
 		want     any
+		wantErr  string
 	}{
 		{
 			name:     "Lua filter",
 			manifest: extensions.Manifest{Type: extensions.TypeLua},
-			want:     "lua",
+			wantErr:  "lua extension filter generation not implemented yet",
 		},
 		{
 			name:     "Wasm filter",
 			manifest: extensions.Manifest{Type: extensions.TypeWasm},
-			want:     "wasm",
+			wantErr:  "wasm extension filter generation not implemented yet",
 		},
 		{
 			name:     "Dynamic Module filter",
 			manifest: extensions.Manifest{Type: extensions.TypeDynamicModule},
-			want:     "dynamic_module",
-		},
-		{
-			name:     "Dynamic Module filter",
-			manifest: extensions.Manifest{Type: extensions.TypeDynamicModule},
-			want:     "dynamic_module",
+			wantErr:  "dynamic module extension filter generation not implemented yet",
 		},
 		{
 			name:     "Composer filter",
 			manifest: extensions.Manifest{Type: extensions.TypeComposer},
-			want:     "composer",
+			wantErr:  "composer extension filter generation not implemented yet",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := generateFilterConfig(&tt.manifest, nil)
-			require.NoError(t, err)
-			require.Equal(t, tt.want, got)
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tt.want, got)
+			}
 		})
 	}
 }

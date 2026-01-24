@@ -8,6 +8,8 @@ package envoy
 import (
 	"fmt"
 
+	hcmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
+
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 )
 
@@ -15,9 +17,7 @@ type (
 	// ExtensionFilterGenerator defines an interface for generating filter configurations
 	ExtensionFilterGenerator interface {
 		// GenerateFilterConfig generates the filter configuration for the given extension manifest.
-		// TODO(nacx): come up with return type: do we want to return a string? do we
-		// want to return go-control-plane types?
-		GenerateFilterConfig(manifest *extensions.Manifest, config any) (any, error)
+		GenerateFilterConfig(manifest *extensions.Manifest, config any) (*hcmv3.HttpFilter, error)
 	}
 
 	// LuaFilterGenerator generates filter configuration for Lua extensions.
@@ -31,7 +31,7 @@ type (
 )
 
 // generateFilterConfig generates the filter configuration for the given extension manifest.
-func generateFilterConfig(manifest *extensions.Manifest, config any) (any, error) {
+func generateFilterConfig(manifest *extensions.Manifest, config any) (*hcmv3.HttpFilter, error) {
 	var generator ExtensionFilterGenerator
 
 	switch manifest.Type {
@@ -51,25 +51,21 @@ func generateFilterConfig(manifest *extensions.Manifest, config any) (any, error
 }
 
 // GenerateFilterConfig generates the filter configuration for Lua extensions.
-func (l LuaFilterGenerator) GenerateFilterConfig(*extensions.Manifest, any) (any, error) {
-	// TODO(nacx): implement Lua filter config generation
-	return "lua", nil
+func (l LuaFilterGenerator) GenerateFilterConfig(*extensions.Manifest, any) (*hcmv3.HttpFilter, error) {
+	return nil, fmt.Errorf("lua extension filter generation not implemented yet")
 }
 
 // GenerateFilterConfig generates the filter configuration for Wasm extensions.
-func (w WasmFilterGenerator) GenerateFilterConfig(*extensions.Manifest, any) (any, error) {
-	// TODO(nacx): implement Wasm filter config generation
-	return "wasm", nil
+func (w WasmFilterGenerator) GenerateFilterConfig(*extensions.Manifest, any) (*hcmv3.HttpFilter, error) {
+	return nil, fmt.Errorf("wasm extension filter generation not implemented yet")
 }
 
 // GenerateFilterConfig generates the filter configuration for Dynamic Module extensions.
-func (d DynamicModuleFilterGenerator) GenerateFilterConfig(*extensions.Manifest, any) (any, error) {
-	// TODO(nacx): implement Dynamic Module filter config generation
-	return "dynamic_module", nil
+func (d DynamicModuleFilterGenerator) GenerateFilterConfig(*extensions.Manifest, any) (*hcmv3.HttpFilter, error) {
+	return nil, fmt.Errorf("dynamic module extension filter generation not implemented yet")
 }
 
 // GenerateFilterConfig generates the filter configuration for Composer extensions.
-func (c ComposerFilterGenerator) GenerateFilterConfig(*extensions.Manifest, any) (any, error) {
-	// TODO(nacx): implement Composer filter config generation
-	return "composer", nil
+func (c ComposerFilterGenerator) GenerateFilterConfig(*extensions.Manifest, any) (*hcmv3.HttpFilter, error) {
+	return nil, fmt.Errorf("composer extension filter generation not implemented yet")
 }
