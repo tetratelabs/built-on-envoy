@@ -29,13 +29,9 @@ comment:
 github_checks:
   annotations: false
 
-exclude:
-  paths:
-    # Main functions are always tested with integration tests.
-    - main.go
-    # These are test-only libraries.
-    - internal/testing/
-
-
-
-
+ignore:
+  # Covered in integration tests.
+  - main.go
+  - internal/envoy/runner.go
+  # These are test-only libraries.
+  - internal/testing/
