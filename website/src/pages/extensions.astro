@@ -157,10 +157,10 @@ function formatTypeName(type: string): string {
 				let visibleCount = 0;
 
 				cardWrappers?.forEach((wrapper) => {
-					const card = wrapper.querySelector('.extension-card-link, .extension-card');
+					const card = wrapper.querySelector('.extension-card');
 					const name = card?.querySelector('h3')?.textContent?.toLowerCase() || '';
 					const description = card?.querySelector('p')?.textContent?.toLowerCase() || '';
-					const type = card?.querySelector('.extension-badge')?.textContent || '';
+					const type = (card as HTMLElement)?.dataset.type || '';
 					const categories = (wrapper as HTMLElement).dataset.categories?.split(',') || [];
 
 					const matchesSearch = searchTerm === '' ||

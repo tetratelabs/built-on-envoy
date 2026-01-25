@@ -20,7 +20,7 @@ function formatTypeName(t: string): string {
 ---
 
 <a href={href} class="extension-card-link">
-	<div class="extension-card">
+	<div class="extension-card" data-type={type}>
 		<div class="extension-header">
 			<h3>{name}</h3>
 			<span class={`extension-badge extension-badge--${type}`}>{formatTypeName(type)}</span>
