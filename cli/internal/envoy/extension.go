@@ -42,8 +42,8 @@ var (
 	ErrMissingLuaCode = fmt.Errorf("lua extension manifest must have inline Lua code")
 )
 
-// generateFilterConfig generates the filter configuration for the given extension manifest.
-func generateFilterConfig(manifest *extensions.Manifest, config any) (*hcmv3.HttpFilter, error) {
+// GenerateFilterConfig generates the filter configuration for the given extension manifest.
+func GenerateFilterConfig(manifest *extensions.Manifest, config any) (*hcmv3.HttpFilter, error) {
 	var generator ExtensionFilterGenerator
 
 	switch manifest.Type {

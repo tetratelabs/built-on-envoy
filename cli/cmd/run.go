@@ -25,7 +25,7 @@ import (
 // defaultLogLevel is the default Envoy component log level.
 const defaultLogLevel = "error"
 
-// Run represents the run command
+// Run is a command to run Envoy with extensions.
 type Run struct {
 	EnvoyVersion string   `help:"Envoy version to use (e.g., 1.31.0)" env:"ENVOY_VERSION"`
 	LogLevel     string   `help:"Envoy component log level (default: all:error)" short:"l" default:"all:error"`
@@ -57,24 +57,9 @@ func (r *Run) Validate() error {
 	if err != nil {
 		return err
 	}
-
-	// Validate official extensions
-	for _, name := range r.Extensions {
-		if _, found := extensions.Manifests[name]; !found {
-			available := slices.Collect(maps.Keys(extensions.Manifests))
-			sort.Strings(available)
-			return fmt.Errorf("unknown extension %q; available extensions: %s", name, strings.Join(available, ","))
-		}
-		r.extensions = append(r.extensions, extensions.Manifests[name])
-	}
-
-	// Load manifests from local extensions
-	for _, localPath := range r.Local {
-		manifest, err := extensions.LoadLocalManifest(localPath + "/manifest.yaml")
-		if err != nil {
-			return fmt.Errorf("failed to load local manifest from %s: %w", localPath, err)
-		}
-		r.extensions = append(r.extensions, manifest)
+	r.extensions, err = validateExtensions(r.Extensions, r.Local)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -141,4 +126,29 @@ func parseLogLevels(logLevel string) (string, string, error) {
 	}
 
 	return baseLevel, strings.Join(componentLevels, ","), nil
+}
+
+// validateExtensions validates the provided extension names and loads local extension manifests.
+func validateExtensions(remote []string, local []string) ([]*extensions.Manifest, error) {
+	ext := make([]*extensions.Manifest, 0, len(remote)+len(local))
+	// Validate official extensions
+	for _, name := range remote {
+		if _, found := extensions.Manifests[name]; !found {
+			available := slices.Collect(maps.Keys(extensions.Manifests))
+			sort.Strings(available)
+			return nil, fmt.Errorf("unknown extension %q; available extensions: %s", name, strings.Join(available, ","))
+		}
+		ext = append(ext, extensions.Manifests[name])
+	}
+
+	// Load manifests from local extensions
+	for _, localPath := range local {
+		manifest, err := extensions.LoadLocalManifest(localPath + "/manifest.yaml")
+		if err != nil {
+			return nil, fmt.Errorf("failed to load local manifest from %s: %w", localPath, err)
+		}
+		ext = append(ext, manifest)
+	}
+
+	return ext, nil
 }

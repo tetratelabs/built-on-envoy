@@ -27,7 +27,7 @@ func TestGenerateFilterConfigUnimplemented(t *testing.T) {
 	} {
 		t.Run(string(et), func(t *testing.T) {
 			manifest := extensions.Manifest{Type: et}
-			_, err := generateFilterConfig(&manifest, nil)
+			_, err := GenerateFilterConfig(&manifest, nil)
 			require.ErrorIs(t, err, ErrUnimplemented)
 		})
 	}
@@ -71,7 +71,7 @@ end
 			localManifest, err := extensions.LoadLocalManifest(manifestPath)
 			require.NoError(t, err)
 
-			got, err := generateFilterConfig(localManifest, nil)
+			got, err := GenerateFilterConfig(localManifest, nil)
 			require.ErrorIs(t, err, tt.wantErr)
 
 			// Check if protos are equal and if not, print their YAML representation
