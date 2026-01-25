@@ -1,0 +1,40 @@
+---
+layout: ../../../layouts/DocsLayout.astro
+title: list
+description: List available extensions
+---
+
+import CLIName from '../../../components/CLIName.astro';
+import CodeBlock from '../../../components/CodeBlock.astro';
+
+# <CLIName/> list
+
+List available extensions in the marketplace.
+
+## Usage
+
+<CodeBlock code="{{CLI_NAME}} list" />
+
+## Output
+
+The command displays a table with the following columns:
+
+| Column | Description |
+|--------|-------------|
+| `NAME` | Extension identifier |
+| `VERSION` | Extension version |
+| `TYPE` | Extension type (`lua`, `wasm`, `dynamic_module`, `composer`) |
+| `DESCRIPTION` | Brief description of the extension |
+
+## Example
+
+<CodeBlock code="{{CLI_NAME}} list" />
+
+```
+NAME               VERSION  TYPE  DESCRIPTION
+auth-jwt           1.0.0    lua   JWT authentication and validation
+cors               1.0.0    lua   Configurable CORS policy
+rate-limiter       1.0.0    lua   Token bucket rate limiting
+request-logger     1.0.0    lua   Advanced request/response logging
+transform-headers  1.0.0    lua   Add, modify, or remove headers
+```

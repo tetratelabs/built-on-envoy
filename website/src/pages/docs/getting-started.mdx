@@ -6,6 +6,7 @@ description: Get started with Built On Envoy CLI
 
 import CLIName from '../../components/CLIName.astro';
 import ProjectName from '../../components/ProjectName.astro';
+import CodeBlock from '../../components/CodeBlock.astro';
 
 # Getting Started
 
@@ -14,12 +15,6 @@ The <code><CLIName/></code> (<ProjectName/>) CLI provides a zero-friction develo
 ## Installation
 
 Choose your preferred installation method:
-
-### Homebrew (macOS/Linux)
-
-```bash
-brew install tetratelabs/tap/built-on-envoy
-```
 
 ### Install Script
 
@@ -31,43 +26,39 @@ curl -sL https://get.built-on-envoy.io | bash
 
 ```bash
 git clone https://github.com/tetratelabs/built-on-envoy
-cd built-on-envoy
-make install
+cd built-on-envoy/cli
+make
 ```
 
 ## Quick Start
 
 Once installed, you can immediately start using extensions:
 
+### List Available Extensions
+
+<CodeBlock code="{{CLI_NAME}} list" />
+
 ### Run an Extension
 
-```bash
-# Run an extension from the marketplace
-<CLIName/> run --plugin rate-limiter
-```
+<CodeBlock code="{{CLI_NAME}} run --extension rate-limiter" />
 
-### Create Your Own Extension
+### Run Multiple Extensions
 
-```bash
-# Create a new extension
-<CLIName/> create-plugin my-filter
+<CodeBlock code="{{CLI_NAME}} run --extension rate-limiter --extension cors" />
 
-# Test your extension locally
-<CLIName/> run --plugin ./my-filter
-```
+### Run a Local Extension
 
-### Browse Available Extensions
+<CodeBlock code="{{CLI_NAME}} run --local ./my-extension" />
 
-```bash
-# List all available extensions
-<CLIName/> plugin list
+### Generate Envoy Configuration
 
-# Get details about a specific extension
-<CLIName/> plugin info rate-limiter
-```
+<CodeBlock code="{{CLI_NAME}} gen-config --extension rate-limiter > envoy.yaml" />
 
 ## Next Steps
 
-- Explore the CLI Commands ([<CLIName/> run](/docs/cli/run), [<CLIName/> create-plugin](/docs/cli/create-plugin), [<CLIName/> plugin list](/docs/cli/plugin-list)) to learn what <code><CLIName/></code> can do
+- Explore the CLI Commands:
+  - [<CLIName/> list](/docs/cli/list) - List available extensions
+  - [<CLIName/> run](/docs/cli/run) - Run Envoy with extensions
+  - [<CLIName/> gen-config](/docs/cli/gen-config) - Generate Envoy configuration
 - Browse the [Extensions Marketplace](/extensions) to find extensions for your use case
-- Learn how to [create your own extension](/docs/cli/create-plugin)
+- Check the [Extension Manifest Reference](/docs/reference/manifest) to create your own extensions

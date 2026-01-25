@@ -37,22 +37,3 @@ Preview the production build:
 ```bash
 npm run preview
 ```
-
-## Deployment
-
-This site is configured for deployment on Netlify. Simply connect your repository to Netlify and it will automatically deploy on every push to the main branch.
-
-### Netlify Configuration
-
-The `../netlify.toml` file is already configured with:
-- Build command: `npm run build`
-- Publish directory: `dist`
-
-### Manual Deployment
-
-You can also deploy manually:
-
-```bash
-npm run build
-netlify deploy --prod --dir=dist
-```

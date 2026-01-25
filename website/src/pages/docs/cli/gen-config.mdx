@@ -1,0 +1,82 @@
+---
+layout: ../../../layouts/DocsLayout.astro
+title: gen-config
+description: Generate Envoy configuration with extensions
+---
+
+import CLIName from '../../../components/CLIName.astro';
+import CodeBlock from '../../../components/CodeBlock.astro';
+
+# <CLIName/> gen-config
+
+Generate Envoy configuration with specified extensions. Outputs the configuration to stdout.
+
+## Usage
+
+<CodeBlock code="{{CLI_NAME}} gen-config [options]" />
+
+## Options
+
+### `--extension <name>`
+
+Extensions to enable by name. Can be specified multiple times or comma-separated.
+
+<CodeBlock code="{{CLI_NAME}} gen-config --extension rate-limiter --extension cors" />
+
+### `--local <path>`
+
+Path to a directory containing a local extension to enable. The directory must contain a `manifest.yaml` file. Can be specified multiple times or comma-separated.
+
+<CodeBlock code="{{CLI_NAME}} gen-config --local ./my-extension" />
+
+### `--only-filters`
+
+Generate configuration with only the extension filters (HTTP filters section only), without the full Envoy bootstrap configuration.
+
+<CodeBlock code="{{CLI_NAME}} gen-config --extension rate-limiter --only-filters" />
+
+### `--listen-port <port>`
+
+Port for Envoy listener to accept incoming traffic.
+
+| | |
+|---|---|
+| **Default** | `10000` |
+
+<CodeBlock code="{{CLI_NAME}} gen-config --extension rate-limiter --listen-port 8080" />
+
+### `--admin-port <port>`
+
+Port for Envoy admin interface.
+
+| | |
+|---|---|
+| **Default** | `9901` |
+
+<CodeBlock code="{{CLI_NAME}} gen-config --extension rate-limiter --admin-port 9000" />
+
+## Examples
+
+### Generate full configuration
+
+<CodeBlock code="{{CLI_NAME}} gen-config --extension rate-limiter" />
+
+### Generate configuration with multiple extensions
+
+<CodeBlock code="{{CLI_NAME}} gen-config --extension rate-limiter --extension cors" />
+
+### Generate only HTTP filters
+
+<CodeBlock code="{{CLI_NAME}} gen-config --extension rate-limiter --only-filters" />
+
+### Save configuration to file
+
+<CodeBlock code="{{CLI_NAME}} gen-config --extension rate-limiter > envoy.yaml" />
+
+### Generate with custom ports
+
+<CodeBlock code="{{CLI_NAME}} gen-config --extension rate-limiter --listen-port 8080 --admin-port 9000" />
+
+### Generate configuration for a local extension
+
+<CodeBlock code="{{CLI_NAME}} gen-config --local ./my-extension" />

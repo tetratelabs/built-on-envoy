@@ -19,8 +19,52 @@ A community-driven marketplace for Envoy Proxy extensions. Discover, run, and bu
 
 ## Quick Start
 
-TODO
+### Install the CLI
+
+```bash
+curl -sL https://get.built-on-envoy.io | bash
+```
+
+Or build from source:
+
+```bash
+git clone https://github.com/tetratelabs/built-on-envoy
+cd built-on-envoy/cli
+make build
+```
+
+### List Available Extensions
+
+```bash
+boe list
+```
+
+### Run an Extension
+
+```bash
+# Run a marketplace extension
+boe run --extension rate-limiter
+
+# Run a local extension
+boe run --local ./my-extension
+```
+
+### Generate Envoy Configuration
+
+```bash
+boe gen-config --extension rate-limiter > envoy.yaml
+```
 
 ## Contributing Extensions
 
-TODO
+1. Fork this repository
+2. Create a new directory under `extensions/` with your extension name
+3. Add a `manifest.yaml` file with the required metadata
+4. Add your extension code (Lua, Wasm, etc.)
+5. Open a pull request!
+
+See the [Extension Guide](./extensions/) for more details.
+
+## License
+
+Apache 2.0 - See [LICENSE](LICENSE) for details.

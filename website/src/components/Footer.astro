@@ -1,6 +1,8 @@
 ---
 import { PROJECT_NAME, GITHUB_REPO, SLACK } from '../constants';
 import ExternalLink from './ExternalLink.astro';
+
+const currentYear = new Date().getFullYear();
 ---
 
 <footer>
@@ -36,7 +38,7 @@ import ExternalLink from './ExternalLink.astro';
 			</div>
 		</div>
 		<div class="footer-bottom">
-			<p>&copy; 2026 Tetrate.</p>
+			<p>&copy; {currentYear} Tetrate.</p>
 			<p>Envoy® is a registered trademark of the Linux Foundation.</p>
 		</div>
 	</div>

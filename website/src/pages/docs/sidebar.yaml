@@ -6,18 +6,12 @@ sections:
 
   - title: CLI Commands
     items:
+      - title: list
+        href: /docs/cli/list
       - title: run
         href: /docs/cli/run
-      - title: create-plugin
-        href: /docs/cli/create-plugin
-      - title: plugin list
-        href: /docs/cli/plugin-list
-      - title: plugin info
-        href: /docs/cli/plugin-info
-      - title: plugin publish
-        href: /docs/cli/plugin-publish
-      - title: config
-        href: /docs/cli/config
+      - title: gen-config
+        href: /docs/cli/gen-config
 
   - title: Reference
     items:

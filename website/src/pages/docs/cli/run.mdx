@@ -1,105 +1,134 @@
 ---
 layout: ../../../layouts/DocsLayout.astro
 title: run
-description: Run Envoy with a specific extension
+description: Run Envoy with extensions
 ---
 
 import CLIName from '../../../components/CLIName.astro';
+import CodeBlock from '../../../components/CodeBlock.astro';
 
 # <CLIName/> run
 
-Run Envoy with a specific extension. Automatically configures Envoy with test upstreams and provides example requests.
+Run Envoy with extensions.
 
 ## Usage
 
-```bash
-<CLIName/> run --plugin <name> [options]
-```
+<CodeBlock code="{{CLI_NAME}} run [options]" />
 
 ## Options
 
-### `--plugin <name>`
-Extension to run (required). Can be:
-- A marketplace extension name: `rate-limiter`
-- A local path: `./my-filter`
-- A Git URL: `github.com/user/repo`
+### `--extension <name>`
 
-### `--config <key=value>`
-Extension configuration (comma-separated)
+Extensions to enable by name. Can be specified multiple times or comma-separated.
 
-Example: `--config limit=100,window=1m`
+<CodeBlock code="{{CLI_NAME}} run --extension rate-limiter --extension cors" />
+
+### `--local <path>`
+
+Path to a directory containing a local extension to enable. The directory must contain a `manifest.yaml` file. Can be specified multiple times or comma-separated.
+
+<CodeBlock code="{{CLI_NAME}} run --local ./my-extension" />
 
 ### `--envoy-version <version>`
-Envoy version to use (default: latest)
 
-Example: `--envoy-version 1.37.0`
+Envoy version to use (e.g., `1.31.0`). Can also be set via the `ENVOY_VERSION` environment variable.
 
-### `--port <port>`
-Proxy port (default: 10000)
+<CodeBlock code="{{CLI_NAME}} run --extension rate-limiter --envoy-version 1.31.0" />
 
-Example: `--port 8080`
+### `--log-level <component:level>`
+
+Envoy component log level in the format `component:level`. Multiple components can be specified comma-separated. Use `all` to set the base log level.
+
+| | |
+|---|---|
+| **Default** | `all:error` |
+
+<CodeBlock code="{{CLI_NAME}} run --extension rate-limiter --log-level all:info,lua:debug" />
+
+### `--listen-port <port>`
+
+Port for Envoy listener to accept incoming traffic.
+
+| | |
+|---|---|
+| **Default** | `10000` |
+
+<CodeBlock code="{{CLI_NAME}} run --extension rate-limiter --listen-port 8080" />
 
 ### `--admin-port <port>`
-Admin interface port (default: 9901)
 
-Example: `--admin-port 9000`
+Port for Envoy admin interface.
 
-### `--log-level <level>`
-Envoy log level (default: info)
+| | |
+|---|---|
+| **Default** | `9901` |
 
-Options: `trace`, `debug`, `info`, `warning`, `error`, `critical`
+<CodeBlock code="{{CLI_NAME}} run --extension rate-limiter --admin-port 9000" />
 
-### `--upstream <url>`
-Custom upstream target
+### `--run-id <id>`
 
-Example: `--upstream http://localhost:8080`
+Run identifier for this invocation. Defaults to a timestamp-based ID (`YYYYMMDD_HHMMSS_UUU`). Use `0` for Docker/Kubernetes environments. Can also be set via the `BOE_RUN_ID` environment variable.
 
-### `--no-defaults`
-Disable default test upstream configuration
+<CodeBlock code="{{CLI_NAME}} run --extension rate-limiter --run-id 0" />
+
+## Global Options
+
+These options apply to all commands:
+
+### `--config-home <path>`
+
+Configuration files directory. Can also be set via `BOE_CONFIG_HOME`.
+
+| | |
+|---|---|
+| **Default** | `~/.config/boe` |
+
+### `--data-home <path>`
+
+Downloaded Envoy binaries directory. Can also be set via `BOE_DATA_HOME`.
+
+| | |
+|---|---|
+| **Default** | `~/.local/share/boe` |
+
+### `--state-home <path>`
+
+Persistent state and logs directory. Can also be set via `BOE_STATE_HOME`.
+
+| | |
+|---|---|
+| **Default** | `~/.local/state/boe` |
+
+### `--runtime-dir <path>`
+
+Ephemeral runtime files directory. Can also be set via `BOE_RUNTIME_DIR`.
+
+| | |
+|---|---|
+| **Default** | `/tmp/boe-$UID` |
 
 ## Examples
 
-### Run a marketplace extension
-```bash
-<CLIName/> run --plugin rate-limiter
-```
+### Run with a marketplace extension
 
-### Run with custom configuration
-```bash
-<CLIName/> run --plugin rate-limiter --config limit=100,window=1m,backend=redis
-```
+<CodeBlock code="{{CLI_NAME}} run --extension rate-limiter" />
+
+### Run with multiple extensions
+
+<CodeBlock code="{{CLI_NAME}} run --extension rate-limiter --extension cors" />
 
 ### Run a local extension
-```bash
-<CLIName/> run --plugin ./my-custom-filter
-```
 
-### Run with custom upstream
-```bash
-<CLIName/> run --plugin cors --upstream http://api.example.com
-```
+<CodeBlock code="{{CLI_NAME}} run --local ./my-extension" />
 
-### Run specific Envoy version
-```bash
-<CLIName/> run --plugin auth-jwt --envoy-version 1.36.0
-```
+### Run with custom ports
 
-## Output
+<CodeBlock code="{{CLI_NAME}} run --extension rate-limiter --listen-port 8080 --admin-port 9000" />
 
-When running an extension, the CLI displays:
-- ✓ Envoy version and startup confirmation
-- → Local proxy URL (http://localhost:10000)
-- → Admin interface URL (http://localhost:9901)
-- Example curl commands for testing
+### Run with debug logging
 
-```
-✓ Starting Envoy 1.37.0 with rate-limiter...
-→ Proxy: http://localhost:10000
-→ Admin: http://localhost:9901
+<CodeBlock code="{{CLI_NAME}} run --extension rate-limiter --log-level all:debug" />
 
-Test with:
-  curl http://localhost:10000/
-  curl http://localhost:9901/stats
+### Run with specific Envoy version
 
-Press Ctrl+C to stop
-```
+<CodeBlock code="{{CLI_NAME}} run --extension rate-limiter --envoy-version 1.31.0" />

@@ -5,16 +5,41 @@ description: Extension manifest file reference
 ---
 
 import CLIName from '../../../components/CLIName.astro';
+import CodeBlock from '../../../components/CodeBlock.astro';
 
 # Extension Manifest
 
 Extensions use a `manifest.yaml` file for metadata and configuration.
 
+## Table of Contents
+
+- [File Location](#file-location)
+- [Complete Example](#complete-example)
+- [Field Reference](#field-reference)
+  - [author](#author)
+  - [categories](#categories)
+  - [description](#description)
+  - [examples](#examples)
+  - [featured](#featured)
+  - [license](#license)
+  - [longDescription](#longdescription)
+  - [lua](#lua)
+  - [name](#name)
+  - [tags](#tags)
+  - [type](#type)
+  - [version](#version)
+- [Type-Specific Configuration](#type-specific-configuration)
+  - [Lua Extensions](#lua-extensions)
+  - [Wasm Extensions](#wasm-extensions)
+  - [Composer Extensions](#composer-extensions)
+- [Schema Validation](#schema-validation)
+
 ## File Location
 
 ```
 my-extension/
-└── manifest.yaml
+├── manifest.yaml
+└── my_extension.lua   # For Lua extensions
 ```
 
 ## Complete Example
@@ -28,72 +53,36 @@ categories:
 author: Your Name
 featured: false
 description: Short description of the extension
-
 longDescription: |
   Detailed description of the extension.
   Supports multiple paragraphs and markdown formatting.
-
 tags:
   - security
   - authentication
-  - jwt
-
 license: Apache-2.0
-
+lua:
+  path: my_filter.lua
 examples:
   - title: Basic usage
     description: Simple configuration
     code: |
-      <CLIName/> run --plugin my-filter --config timeout=60s
-
-  - title: Advanced usage
-    description: With multiple options
-    code: |
-      <CLIName/> run --plugin my-filter --config timeout=60s,enabled=true
+      boe run --extension my-filter
 ```
 
 ## Field Reference
 
-### `name`
+### `author`
 
 | | |
 |---|---|
 | **Type** | `string` |
 | **Required** | Yes |
-| **Pattern** | `^[a-z][a-z0-9-]*$` |
+| **Min length** | 1 |
 
-Unique identifier for the extension. Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens.
-
-```yaml
-name: my-filter
-```
-
-### `version`
-
-| | |
-|---|---|
-| **Type** | `string` |
-| **Required** | Yes |
-| **Pattern** | `^\d+\.\d+\.\d+$` |
-
-Semantic version of the extension.
+Author or organization name.
 
 ```yaml
-version: 1.0.0
-```
-
-### `type`
-
-| | |
-|---|---|
-| **Type** | `string` |
-| **Required** | Yes |
-| **Allowed values** | `lua`, `wasm`, `dynamic_module`, `composer` |
-
-Type of the extension.
-
-```yaml
-type: lua
+author: Tetrate
 ```
 
 ### `categories`
@@ -109,20 +98,7 @@ Functional categories of the extension. An extension can belong to multiple cate
 ```yaml
 categories:
   - Security
-  - Network
-```
-
-### `author`
-
-| | |
-|---|---|
-| **Type** | `string` |
-| **Required** | Yes |
-
-Author or organization name.
-
-```yaml
-author: Your Name
+  - Performance
 ```
 
 ### `description`
@@ -131,60 +107,13 @@ author: Your Name
 |---|---|
 | **Type** | `string` |
 | **Required** | Yes |
-| **Max length** | 200 characters |
+| **Min length** | 1 |
+| **Max length** | 200 |
 
 Short single-line description of the extension.
 
 ```yaml
-description: JWT authentication and validation with JWKS endpoint support
-```
-
-### `longDescription`
-
-| | |
-|---|---|
-| **Type** | `string` |
-| **Required** | Yes |
-
-Detailed multi-line description with markdown support.
-
-```yaml
-longDescription: |
-  A comprehensive JWT authentication filter that validates
-  JSON Web Tokens against configured issuers and audiences.
-
-  Supports JWKS endpoints for key rotation and caching.
-```
-
-### `tags`
-
-| | |
-|---|---|
-| **Type** | `array` of `string` |
-| **Required** | Yes |
-| **Min items** | 1 |
-| **Pattern** | `^[a-z][a-z0-9-]*$` |
-
-Searchable tags for categorization. Tags must be unique, start with a lowercase letter, and contain only lowercase letters, numbers, and hyphens.
-
-```yaml
-tags:
-  - security
-  - authentication
-  - jwt
-```
-
-### `license`
-
-| | |
-|---|---|
-| **Type** | `string` |
-| **Required** | Yes |
-
-SPDX license identifier.
-
-```yaml
-license: Apache-2.0
+description: Token bucket rate limiting with Redis backend support
 ```
 
 ### `examples`
@@ -199,10 +128,14 @@ Usage examples for the extension. Each example must have `title`, `description`,
 
 ```yaml
 examples:
-  - title: Basic usage
-    description: Simple configuration
+  - title: Basic rate limiting
+    description: Limit requests to 100 per minute
     code: |
-      <CLIName/> run --plugin my-filter --config timeout=60s
+      boe run --extension rate-limiter
+  - title: With custom configuration
+    description: Configure rate limit parameters
+    code: |
+      boe run --extension rate-limiter --config limit=100,window=1m
 ```
 
 #### Example Object
@@ -227,10 +160,219 @@ Whether to feature this extension in UI/listings.
 featured: true
 ```
 
-## Validation
+### `license`
 
-Validate your manifest before publishing:
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Min length** | 1 |
 
-```bash
-<CLIName/> plugin publish --dry-run
+SPDX license identifier.
+
+```yaml
+license: Apache-2.0
 ```
+
+### `longDescription`
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Min length** | 1 |
+
+Detailed multi-line description with markdown support.
+
+```yaml
+longDescription: |
+  A robust rate limiting extension that implements the token bucket algorithm.
+  Supports both in-memory and Redis backends for distributed rate limiting
+  across multiple Envoy instances.
+```
+
+### `lua`
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | Yes, when `type` is `lua` |
+
+Lua extension configuration. Required when `type` is `lua`. Must specify either `path` or `inline`, but not both.
+
+#### `lua.path`
+
+Path to the Lua script file, relative to the manifest directory.
+
+```yaml
+type: lua
+lua:
+  path: my_filter.lua
+```
+
+#### `lua.inline`
+
+Inline Lua script code embedded directly in the manifest.
+
+```yaml
+type: lua
+lua:
+  inline: |
+    function envoy_on_request(request_handle)
+      request_handle:headers():add("x-custom-header", "value")
+    end
+```
+
+### `name`
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Pattern** | `^[a-z][a-z0-9-]*$` |
+
+Unique identifier for the extension. Must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens.
+
+```yaml
+name: my-filter
+```
+
+### `tags`
+
+| | |
+|---|---|
+| **Type** | `array` of `string` |
+| **Required** | Yes |
+| **Min items** | 1 |
+| **Unique items** | Yes |
+| **Pattern** | `^[a-z][a-z0-9-]*$` |
+
+Searchable tags for categorization. Tags must be unique, start with a lowercase letter, and contain only lowercase letters, numbers, and hyphens.
+
+```yaml
+tags:
+  - rate-limiting
+  - redis
+  - protection
+```
+
+### `type`
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Allowed values** | `lua`, `wasm`, `dynamic_module`, `composer` |
+
+Type of the extension. Determines what additional configuration is required.
+
+```yaml
+type: lua
+```
+
+### `version`
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Pattern** | `^\d+\.\d+\.\d+$` |
+
+Semantic version of the extension.
+
+```yaml
+version: 1.0.0
+```
+
+## Type-Specific Configuration
+
+### Lua Extensions
+
+For `type: lua`, you must include the `lua` field with either `path` or `inline`:
+
+```yaml
+name: request-logger
+version: 1.0.0
+type: lua
+categories:
+  - Observability
+author: Tetrate
+description: Advanced request/response logging
+longDescription: |
+  A powerful logging extension that captures detailed request
+  and response information.
+tags:
+  - logging
+  - observability
+license: Apache-2.0
+lua:
+  path: request_logger.lua
+examples:
+  - title: Enable logging
+    description: Run with request logging enabled
+    code: |
+      boe run --extension request-logger
+```
+
+### Wasm Extensions
+
+For `type: wasm`, the extension uses WebAssembly modules:
+
+```yaml
+name: cors
+version: 1.1.0
+type: wasm
+categories:
+  - Network
+author: Tetrate
+description: Configurable CORS policy with wildcard support
+longDescription: |
+  A flexible CORS extension that makes it easy to configure
+  cross-origin resource sharing policies.
+tags:
+  - cors
+  - network
+license: Apache-2.0
+examples:
+  - title: Allow all origins
+    description: Enable CORS for all origins
+    code: |
+      boe run --extension cors
+```
+
+### Composer Extensions
+
+For `type: composer`, the extension composes multiple filters:
+
+```yaml
+name: rate-limiter
+version: 1.0.0
+type: composer
+categories:
+  - Security
+  - Performance
+author: Tetrate
+description: Token bucket rate limiting
+longDescription: |
+  A robust rate limiting extension that implements
+  the token bucket algorithm.
+tags:
+  - rate-limiting
+  - protection
+license: Apache-2.0
+examples:
+  - title: Basic rate limiting
+    description: Limit requests
+    code: |
+      boe run --extension rate-limiter
+```
+
+## Schema Validation
+
+The manifest is validated against a JSON schema. The schema enforces:
+
+- All required fields are present
+- Field values match expected types and patterns
+- The `lua` field is required when `type` is `lua`
+- The `lua` field is not allowed for other extension types
+- Either `lua.path` or `lua.inline` is specified (not both)

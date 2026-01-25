@@ -5,69 +5,103 @@ description: Configure CLI behavior with environment variables
 ---
 
 import CLIName from '../../../components/CLIName.astro';
+import CodeBlock from '../../../components/CodeBlock.astro';
 
 # Environment Variables
 
-Configure CLI behavior with environment variables:
+Configure CLI behavior with environment variables.
 
-## Available Variables
+## XDG Directory Variables
 
-### `BOE_ENVOY_VERSION`
-Default Envoy version
+These variables control where the CLI stores its files, following the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/latest/).
+
+### `BOE_CONFIG_HOME`
+
+Configuration files directory.
+
+| | |
+|---|---|
+| **Default** | `~/.config/boe` |
+| **Flag** | `--config-home` |
 
 ```bash
-export BOE_ENVOY_VERSION=1.36.0
+export BOE_CONFIG_HOME=~/.config/boe
 ```
 
-### `BOE_PROXY_PORT`
-Default proxy port
+### `BOE_DATA_HOME`
+
+Downloaded Envoy binaries directory.
+
+| | |
+|---|---|
+| **Default** | `~/.local/share/boe` |
+| **Flag** | `--data-home` |
 
 ```bash
-export BOE_PROXY_PORT=8080
+export BOE_DATA_HOME=~/.local/share/boe
 ```
 
-### `BOE_ADMIN_PORT`
-Default admin port
+### `BOE_STATE_HOME`
+
+Persistent state and logs directory.
+
+| | |
+|---|---|
+| **Default** | `~/.local/state/boe` |
+| **Flag** | `--state-home` |
 
 ```bash
-export BOE_ADMIN_PORT=9000
+export BOE_STATE_HOME=~/.local/state/boe
 ```
 
-### `BOE_LOG_LEVEL`
-Default log level
+### `BOE_RUNTIME_DIR`
+
+Ephemeral runtime files directory.
+
+| | |
+|---|---|
+| **Default** | `/tmp/boe-$UID` |
+| **Flag** | `--runtime-dir` |
 
 ```bash
-export BOE_LOG_LEVEL=debug
+export BOE_RUNTIME_DIR=/tmp/boe-runtime
 ```
 
-### `BOE_MARKETPLACE_URL`
-Custom marketplace URL
+## Run Command Variables
+
+### `ENVOY_VERSION`
+
+Envoy version to use.
+
+| | |
+|---|---|
+| **Default** | Latest available |
+| **Flag** | `--envoy-version` |
 
 ```bash
-export BOE_MARKETPLACE_URL=https://custom-marketplace.example.com
+export ENVOY_VERSION=1.31.0
 ```
 
-### `BOE_CACHE_DIR`
-Cache directory location
+### `BOE_RUN_ID`
+
+Run identifier for the invocation. Use `0` for Docker/Kubernetes environments.
+
+| | |
+|---|---|
+| **Default** | Timestamp-based ID (`YYYYMMDD_HHMMSS_UUU`) |
+| **Flag** | `--run-id` |
 
 ```bash
-export BOE_CACHE_DIR=~/.cache/built-on-envoy
-```
-
-### `BOE_NO_COLOR`
-Disable colored output
-
-```bash
-export BOE_NO_COLOR=1
+export BOE_RUN_ID=0
 ```
 
 ## Example Usage
 
-```bash
-# Set environment variables
-export BOE_ENVOY_VERSION=1.36.0
-export BOE_LOG_LEVEL=debug
+<CodeBlock  code={`# Set Envoy version
+export ENVOY_VERSION=1.31.0
 
-# Run CLI with these settings
-<CLIName/> run --plugin rate-limiter
-```
+# Use custom data directory
+export BOE_DATA_HOME=/opt/boe/data
+
+# Run with extensions
+{{CLI_NAME}} run --extension rate-limiter`} />
