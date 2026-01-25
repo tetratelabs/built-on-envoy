@@ -42,7 +42,7 @@ static_resources:
             typed_config:
               '@type': type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
           http_filters:
-          - name: test-extension
+          - name: test-lua
             typed_config:
               '@type': type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
               default_source_code:

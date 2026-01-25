@@ -31,11 +31,7 @@ func TestRenderConfigWithExtensions(t *testing.T) {
 	require.NoError(t, err)
 
 	extensionManifests := []*extensions.Manifest{
-		{
-			Name: "lua-inline",
-			Type: extensions.TypeLua,
-			Lua:  &extensions.Lua{Inline: `test`},
-		},
+		mustReadManifest(t, "testdata/input_lua_inline.yaml"),
 	}
 
 	cfg, err := RenderConfig(ConfigGenerationParams{
@@ -43,6 +39,13 @@ func TestRenderConfigWithExtensions(t *testing.T) {
 		ListenerPort: 10000,
 		Extensions:   extensionManifests,
 	})
+
 	require.NoError(t, err)
 	require.YAMLEq(t, string(want), cfg)
+}
+
+func mustReadManifest(t *testing.T, path string) *extensions.Manifest {
+	manifest, err := extensions.LoadLocalManifest(path)
+	require.NoError(t, err)
+	return manifest
 }

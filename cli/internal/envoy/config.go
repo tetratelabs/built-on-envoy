@@ -42,7 +42,7 @@ type ConfigGenerationParams struct {
 func RenderConfig(params ConfigGenerationParams) (string, error) {
 	filters := make([]*hcmv3.HttpFilter, 0, len(params.Extensions))
 	for _, ext := range params.Extensions {
-		filterConfig, err := generateFilterConfig(ext, nil)
+		filterConfig, err := GenerateFilterConfig(ext, nil)
 		if err != nil {
 			return "", fmt.Errorf("failed to generate filter config for extension %q: %w", ext.Name, err)
 		}

@@ -18,7 +18,7 @@ import (
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 )
 
-// List represents the list command
+// List is a command that lists available extensions.
 type List struct {
 	output io.Writer `kong:"-"` // Internal field for testing
 }
