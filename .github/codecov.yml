@@ -31,7 +31,7 @@ github_checks:
 
 ignore:
   # Covered in integration tests.
-  - main.go
-  - internal/envoy/runner.go
+  - cli/main.go
+  - cli/internal/envoy/runner.go
   # These are test-only libraries.
-  - internal/testing/
+  - cli/internal/testing/
