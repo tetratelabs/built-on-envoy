@@ -47,7 +47,7 @@ Flags:
 
       --envoy-version=STRING       Envoy version to use (e.g., 1.31.0)
                                    ($ENVOY_VERSION)
-  -l, --log-level="all:error"      Envoy component log level (default:
+      --log-level="all:error"      Envoy component log level (default:
                                    all:error)
       --run-id=STRING              Run identifier for this invocation. Defaults
                                    to timestamp-based ID or $BOE_RUN_ID. Use '0'

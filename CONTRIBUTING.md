@@ -51,9 +51,6 @@ All of the following are required:
   ensuring issues are addressed, even if your AI assistant is unable.
 - You are transparent about your AI usage. It is often helpful to a reviewer to know that an AI tool
   was used; please include that information in the PR description.
-- All generated code must be released under the same [license](LICENSE) as Envoy. You are
-  responsible for ensuring that the tools you use to generate code do not add any additional
-  licensing restrictions.
 
 ### What is not allowed
 
