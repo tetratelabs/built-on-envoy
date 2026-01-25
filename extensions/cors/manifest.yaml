@@ -10,12 +10,7 @@ longDescription: |
   sharing policies. Supports wildcards, regex patterns, and per-route configuration.
   Handles preflight requests automatically and provides fine-grained control over
   allowed origins, methods, headers, and credentials.
-type: lua
-
-lua:
-  path: extension.lua
-
-
+type: wasm
 tags:
   - cors
   - network

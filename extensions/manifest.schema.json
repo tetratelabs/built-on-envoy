@@ -120,6 +120,44 @@
           }
         }
       }
+    },
+    "lua": {
+      "type": "object",
+      "description": "Lua extension configuration",
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Path to the Lua script file",
+          "minLength": 1
+        },
+        "inline": {
+          "type": "string",
+          "description": "Inline Lua script code",
+          "minLength": 1
+        }
+      },
+      "oneOf": [
+        { "required": ["path"] },
+        { "required": ["inline"] }
+      ]
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": { "const": "lua" }
+        }
+      },
+      "then": {
+        "required": ["lua"]
+      },
+      "else": {
+        "properties": {
+          "lua": false
+        }
+      }
+    }
+  ]
 }

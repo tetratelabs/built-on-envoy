@@ -6,50 +6,82 @@
 package envoy
 
 import (
+	"path/filepath"
 	"testing"
 
+	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	luav3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/lua/v3"
+	hcmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 )
 
-func TestGenerateFilterConfig(t *testing.T) {
+func TestGenerateFilterConfigUnimplemented(t *testing.T) {
+	for _, et := range []extensions.Type{
+		extensions.TypeWasm,
+		extensions.TypeDynamicModule,
+		extensions.TypeComposer,
+	} {
+		t.Run(string(et), func(t *testing.T) {
+			manifest := extensions.Manifest{Type: et}
+			_, err := generateFilterConfig(&manifest, nil)
+			require.ErrorIs(t, err, ErrUnimplemented)
+		})
+	}
+}
+
+func TestLuaGenerateFilterConfig(t *testing.T) {
 	tests := []struct {
-		name     string
-		manifest extensions.Manifest
-		want     any
-		wantErr  string
+		name    string
+		want    *hcmv3.HttpFilter
+		wantErr error
 	}{
+		{name: "lua_path.yaml", wantErr: ErrMissingLuaCode},
 		{
-			name:     "Lua filter",
-			manifest: extensions.Manifest{Type: extensions.TypeLua},
-			wantErr:  "lua extension filter generation not implemented yet",
-		},
-		{
-			name:     "Wasm filter",
-			manifest: extensions.Manifest{Type: extensions.TypeWasm},
-			wantErr:  "wasm extension filter generation not implemented yet",
-		},
-		{
-			name:     "Dynamic Module filter",
-			manifest: extensions.Manifest{Type: extensions.TypeDynamicModule},
-			wantErr:  "dynamic module extension filter generation not implemented yet",
-		},
-		{
-			name:     "Composer filter",
-			manifest: extensions.Manifest{Type: extensions.TypeComposer},
-			wantErr:  "composer extension filter generation not implemented yet",
+			name: "lua_inline.yaml",
+			want: &hcmv3.HttpFilter{
+				Name: "test-extension",
+				ConfigType: &hcmv3.HttpFilter_TypedConfig{
+					TypedConfig: func() *anypb.Any {
+						luaConfig := &luav3.Lua{
+							DefaultSourceCode: &corev3.DataSource{
+								Specifier: &corev3.DataSource_InlineString{
+									InlineString: `function envoy_on_request(request_handle)
+  request_handle:logInfo("Hello, World!")
+end
+`,
+								},
+							},
+						}
+						cfg, err := anypb.New(luaConfig)
+						require.NoError(t, err)
+						return cfg
+					}(),
+				},
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := generateFilterConfig(&tt.manifest, nil)
-			if tt.wantErr != "" {
-				require.ErrorContains(t, err, tt.wantErr)
-			} else {
+			manifestPath := filepath.Join("testdata", "input_"+tt.name)
+			localManifest, err := extensions.LoadLocalManifest(manifestPath)
+			require.NoError(t, err)
+
+			got, err := generateFilterConfig(localManifest, nil)
+			require.ErrorIs(t, err, tt.wantErr)
+
+			// Check if protos are equal and if not, print their YAML representation
+			// for easier debugging.
+			if !proto.Equal(tt.want, got) {
+				wantYaml, err := ProtoToYaml(tt.want)
 				require.NoError(t, err)
-				require.Equal(t, tt.want, got)
+				gotYaml, err := ProtoToYaml(got)
+				require.NoError(t, err)
+				require.YAMLEq(t, string(wantYaml), string(gotYaml))
 			}
 		})
 	}

@@ -69,6 +69,17 @@ test-e2e: gen  ## Run the end-to-end tests
 	@echo "Run e2e tests"
 	@go test $(GO_TEST_ARGS) ./e2e/...
 
+# This runs the unit tests for the codebase with coverage check.
+.PHONY: test-coverage
+test-coverage:  ## Run the unit tests for the codebase with coverage check.
+	@mkdir -p $(OUTPUT_DIR)
+	@$(MAKE) test GO_TEST_ARGS="-coverprofile=$(OUTPUT_DIR)/go-test-coverage.out \
+		-covermode=atomic \
+		-coverpkg=github.com/tetratelabs/built-on-envoy/cli/... \
+		-count=1 \
+		$(GO_TEST_ARGS)"
+	@$(GO_TOOL) go-test-coverage --config=.testcoverage.yml
+
 ##@ Docker
 
 # Builds the Docker image for the CLI.

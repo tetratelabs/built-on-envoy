@@ -10,13 +10,15 @@ longDescription: |
   Supports multiple output formats (JSON, structured text, CEF), custom field selection,
   and integration with popular log aggregation systems. Includes sampling and filtering
   to reduce log volume in high-traffic environments.
-type: wasm
 tags:
   - logging
   - observability
   - monitoring
   - debugging
 license: Apache-2.0
+type: lua
+lua:
+  path: request_logger.lua
 examples:
   - title: JSON logging
     description: Log requests in JSON format

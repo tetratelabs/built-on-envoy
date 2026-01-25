@@ -33,6 +33,20 @@ func TestCustomPorts(t *testing.T) {
 	require.NoError(t, checkEndpoint(t.Context(), "http://localhost:12000/server_info", statusEq(200)))
 }
 
+func TestLuaLocalExtension(t *testing.T) {
+	_ = runEnvoy(t, cliBin, nil,
+		"run",
+		"--log-level", "lua:info",
+		"--local", "testdata/lua",
+	)
+
+	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
+	checkHeader := func(r *http.Response) bool {
+		return r.Header.Get("x-e2e-lua") == "lua-e2e-test"
+	}
+	require.NoError(t, checkEndpoint(t.Context(), url, checkHeader))
+}
+
 // runEnvoy starts the CLI as a subprocess with the given config file.
 func runEnvoy(t *testing.T, cliBin string, env []string, arg ...string) (adminPort int) {
 	// Wait up to 10 seconds for both ports to be frboe.

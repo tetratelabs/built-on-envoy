@@ -1,0 +1,21 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+profile: ./out/go-test-coverage.out
+local-prefix: "github.com/tetratelabs/built-on-envoy/cli/"
+
+threshold:
+  file: 75
+  package: 80
+  total: 85
+
+exclude:
+  paths:
+    # Covered in integration tests.
+    - main.go
+    - internal/envoy/runner.go
+    # These are test-only libraries.
+    - internal/testing/
+    

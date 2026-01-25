@@ -11,7 +11,9 @@ author: Test Author
 description: A test extension
 longDescription: |
   This is a longer description of the test extension.
-type: wasm
+type: lua
+lua:
+  path: extension.lua
 tags:
   - test
 license: Apache-2.0

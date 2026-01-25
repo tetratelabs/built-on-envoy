@@ -36,6 +36,41 @@ func TestAllMAnifestsAreLoaded(t *testing.T) {
 	require.Len(t, Manifests, count)
 }
 
+func TestValidateLuaManifest(t *testing.T) {
+	wantInline := &Lua{Inline: `function envoy_on_request(request_handle)
+  request_handle:logInfo("Hello, World!")
+end
+`}
+
+	tests := []struct {
+		name    string
+		want    *Lua
+		wantErr bool
+	}{
+		{"lua_invalid_inline_and_path.yaml", nil, true},
+		{"lua_invalid_missing_settings.yaml", nil, true},
+		{"lua_in_wrong_type.yaml", nil, true},
+		{"lua_valid_path.yaml", &Lua{Path: "extension.lua"}, false},
+		{"lua_valid_inline.yaml", wantInline, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			manifestPath := filepath.Join("testdata", tt.name)
+			localManifest, err := LoadLocalManifest(manifestPath)
+			require.NoError(t, err)
+
+			err = ValidateManifest(localManifest)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tt.want, localManifest.Lua)
+			}
+		})
+	}
+}
+
 func TestLoadLocalManifest(t *testing.T) {
 	t.Run("valid-manifest", func(t *testing.T) {
 		manifestPath := filepath.Join("testdata", "valid_manifest.yaml")
@@ -48,7 +83,7 @@ func TestLoadLocalManifest(t *testing.T) {
 			Author:          "Test Author",
 			Description:     "A test extension",
 			LongDescription: "This is a longer description of the test extension.\n",
-			Type:            TypeLua,
+			Type:            TypeWasm,
 			Tags:            []string{"test"},
 			License:         "Apache-2.0",
 			Examples: []Example{
@@ -64,13 +99,11 @@ func TestLoadLocalManifest(t *testing.T) {
 
 	t.Run("file-not-found", func(t *testing.T) {
 		_, err := LoadLocalManifest(filepath.Join("testdata", "nonexistent.yaml"))
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to read manifest file")
+		require.ErrorIs(t, err, ErrOpenManifestFile)
 	})
 
 	t.Run("invalid-yaml", func(t *testing.T) {
 		_, err := LoadLocalManifest(filepath.Join("testdata", "invalid_manifest.yaml"))
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to unmarshal manifest file")
+		require.ErrorIs(t, err, ErrParseManifestFile)
 	})
 }

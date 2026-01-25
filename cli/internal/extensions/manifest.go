@@ -35,6 +35,9 @@ type (
 		Tags            []string  `yaml:"tags" json:"tags"`
 		License         string    `yaml:"license" json:"license"`
 		Examples        []Example `yaml:"examples" json:"examples"`
+
+		Lua *Lua `yaml:"lua,omitempty" json:"lua,omitempty"`
+
 		// Only used when loading manifests from a local path
 		Path string `yaml:"-" json:"-"`
 	}
@@ -48,6 +51,12 @@ type (
 
 	// Type represents the type of an Envoy extension.
 	Type string
+
+	// Lua configuration for manifests that define Lua extensions
+	Lua struct {
+		Inline string `yaml:"inline,omitempty" json:"inline,omitempty"`
+		Path   string `yaml:"path,omitempty" json:"path,omitempty"`
+	}
 )
 
 const (
@@ -73,6 +82,17 @@ var (
 
 	// Manifests contains all loaded extension manifests.
 	Manifests map[string]*Manifest
+)
+
+var (
+	// ErrDuplicateManifestName is returned when there are duplicate manifest names.
+	ErrDuplicateManifestName = fmt.Errorf("duplicate manifest name")
+	// ErrOpenManifestFile is returned when a manifest file cannot be opened.
+	ErrOpenManifestFile = fmt.Errorf("failed to open manifest file")
+	// ErrReadManifestFile is returned when a manifest file cannot be read.
+	ErrReadManifestFile = fmt.Errorf("failed to read manifest file")
+	// ErrParseManifestFile is returned when a manifest file cannot be parsed.
+	ErrParseManifestFile = fmt.Errorf("failed to parse manifest file")
 )
 
 func init() {
@@ -106,35 +126,48 @@ func loadManifests(fsys embed.FS) (map[string]*Manifest, error) {
 		if err != nil || d.IsDir() || filepath.Base(path) != "manifest.yaml" {
 			return nil
 		}
-		data, err := fsys.ReadFile(path)
+		m, err := loadManifest(fsys, path)
 		if err != nil {
-			return fmt.Errorf("failed to read manifest file %s: %w", path, err)
-		}
-		var m Manifest
-		if err := yaml.Unmarshal(data, &m); err != nil {
-			return fmt.Errorf("failed to unmarshal manifest file %s: %w", path, err)
+			return err
 		}
 		if _, ok := result[m.Name]; ok {
-			return fmt.Errorf("duplicate manifest name: %s", m.Name)
+			return fmt.Errorf("%w: %s", ErrDuplicateManifestName, m.Name)
 		}
-		result[m.Name] = &m
+		result[m.Name] = m
 		return nil
 	})
 	return result, err
 }
 
-// LoadLocalManifest loads a manifest from the given file path.
-func LoadLocalManifest(path string) (*Manifest, error) {
-	data, err := os.ReadFile(filepath.Clean(path))
+// loadManifest loads a manifest from the given filesystem and path.
+func loadManifest(fsys fs.FS, path string) (*Manifest, error) {
+	f, err := fsys.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read manifest file %s: %w", path, err)
+		return nil, fmt.Errorf("%w: %s", ErrOpenManifestFile, path)
 	}
+	defer func() { _ = f.Close() }()
+
+	data, err := fs.ReadFile(fsys, path)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrReadManifestFile, path)
+	}
+
 	var m Manifest
 	if err := yaml.Unmarshal(data, &m); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal manifest file %s: %w", path, err)
+		return nil, fmt.Errorf("%w: %s", ErrParseManifestFile, path)
+	}
+
+	return &m, nil
+}
+
+// LoadLocalManifest loads a manifest from the given file path.
+func LoadLocalManifest(path string) (*Manifest, error) {
+	m, err := loadManifest(os.DirFS(filepath.Dir(path)), filepath.Base(path))
+	if err != nil {
+		return nil, err
 	}
 	m.Path = path
-	return &m, nil
+	return m, nil
 }
 
 // ValidateManifest validates the manifest against the JSON schema.
