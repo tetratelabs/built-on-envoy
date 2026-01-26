@@ -25,4 +25,4 @@ examples:
   - title: Basic usage
     description: Run the extension
     code: |
-      boe run --plugin test-extension
+      boe run --extension test-extension

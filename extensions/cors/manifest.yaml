@@ -21,8 +21,8 @@ examples:
   - title: Allow all origins
     description: Enable CORS for all origins (development only)
     code: |
-      boe run --plugin cors --config allow-origin=*
+      boe run --extension cors --config allow-origin=*
   - title: Specific origins
     description: Allow specific domains
     code: |
-      boe run --plugin cors --config allow-origin=https://app.example.com,https://admin.example.com
+      boe run --extension cors --config allow-origin=https://app.example.com,https://admin.example.com

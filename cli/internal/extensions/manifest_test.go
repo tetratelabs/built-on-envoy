@@ -90,7 +90,7 @@ func TestLoadLocalManifest(t *testing.T) {
 				{
 					Title:       "Basic usage",
 					Description: "Run the extension",
-					Code:        "boe run --plugin test-extension\n",
+					Code:        "boe run --extension test-extension\n",
 				},
 			},
 			Path: manifestPath,
