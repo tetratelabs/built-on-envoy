@@ -1,4 +1,4 @@
-<p align="center"><img size="60%" src="website/public/logo.svg" /></p>
+<p align="center"><img size="60%" src="website/public/logo-shell.gif" /></p>
 
 # Built on Envoy
 
