@@ -347,10 +347,7 @@ nav a:focus {
 .feature-icon {
 	font-size: 32px;
 	margin-bottom: 16px;
-	background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
-	-webkit-background-clip: text;
-	-webkit-text-fill-color: transparent;
-	background-clip: text;
+	color: var(--primary);
 }
 
 .feature-card h3 {
@@ -398,6 +395,7 @@ nav a:focus {
 
 .output-muted {
 	color: var(--text-muted);
+	white-space: pre;
 }
 
 /* Extensions */
