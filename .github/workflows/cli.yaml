@@ -38,6 +38,7 @@ jobs:
           token: "" # don't use github api
     outputs:
       code: ${{ steps.changes.outputs.code }}
+      website: ${{ steps.changes.outputs.website }}
 
   check:
     needs: changes
