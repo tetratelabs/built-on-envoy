@@ -1,6 +1,6 @@
-<p align="center"><img size="60%" src="website/public/logo-text-transparent.png" /></p>
+<p align="center"><img width="50%" src="website/public/logo.svg" /></p>
 
-# Built on Envoy
+---
 
 [![CLI](https://github.com/tetratelabs/built-on-envoy/actions/workflows/cli.yaml/badge.svg)](https://github.com/tetratelabs/built-on-envoy/actions/workflows/cli.yaml)
 [![codecov](https://codecov.io/gh/tetratelabs/built-on-envoy/graph/badge.svg?token=v4u6VpZSqZ)](https://codecov.io/gh/tetratelabs/built-on-envoy)
