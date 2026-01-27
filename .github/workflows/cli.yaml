@@ -51,6 +51,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
       - run: make check
 
   build:
@@ -65,6 +66,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
       - run: make build
 
   test:
@@ -81,6 +83,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
       - run: make test
 
   coverage:
@@ -95,6 +98,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
       - run: make test-coverage
       - uses: codecov/codecov-action@v4
         with:
@@ -112,6 +116,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
       - run: make test-e2e
 
   lint:
@@ -126,6 +131,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
       - run: make lint
 
   website:
