@@ -12,6 +12,8 @@ import (
 
 	clusterv3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	dym "github.com/envoyproxy/go-control-plane/envoy/extensions/dynamic_modules/v3"
+	dymhttp "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/dynamic_modules/v3"
 	luav3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/lua/v3"
 	hcmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -121,6 +123,24 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(*extensions.Manifest,
 }
 
 // GenerateFilterConfig generates the filter configuration for Composer extensions.
-func (c ComposerFilterGenerator) GenerateFilterConfig(*extensions.Manifest, any) (*ExtensionResources, error) {
-	return nil, fmt.Errorf("%w: composer", ErrUnimplemented)
+func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, _ any) (*ExtensionResources, error) {
+	protoConfig := &dymhttp.DynamicModuleFilter{
+		DynamicModuleConfig: &dym.DynamicModuleConfig{
+			Name:         "composer",
+			LoadGlobally: true,
+		},
+		FilterName:   manifest.Name,
+		FilterConfig: nil, // TODO(wbpcode): Support passing filter config to composer extensions.
+	}
+	composerAny, err := anypb.New(protoConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal Composer filter to Any: %w", err)
+	}
+
+	return &hcmv3.HttpFilter{
+		Name: manifest.Name,
+		ConfigType: &hcmv3.HttpFilter_TypedConfig{
+			TypedConfig: composerAny,
+		},
+	}, nil
 }
