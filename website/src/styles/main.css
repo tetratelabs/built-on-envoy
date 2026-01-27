@@ -602,19 +602,38 @@ nav a:focus {
 	color: var(--primary-dark);
 }
 
+.cli-section {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 32px;
+	align-items: center;
+	margin-bottom: 32px;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: 16px;
+	padding: 32px;
+}
+
+.cli-section:last-child {
+	margin-bottom: 0;
+}
+
+.cli-section-title {
+	font-size: 18px;
+	color: var(--primary-dark);
+	font-weight: 600;
+	text-align: center;
+	line-height: 1.4;
+	margin: 0;
+	padding-right: 24px;
+	border-right: 2px solid var(--primary-light);
+}
+
 .cli-grid {
 	display: grid;
-	grid-template-columns: repeat(4, 1fr);
+	grid-template-columns: repeat(3, 1fr);
 	gap: 32px;
 	justify-items: center;
-}
-
-.cli-grid .cli-item:nth-child(5) {
-	grid-column: 2;
-}
-
-.cli-grid .cli-item:nth-child(6) {
-	grid-column: 3;
 }
 
 .cli-item {
