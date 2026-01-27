@@ -789,14 +789,14 @@ footer {
 }
 
 .footer-section a:hover {
-	color: var(--accent);
+	color: #f0abfc;
 }
 
 .footer-section a:focus {
 	outline: none;
 	box-shadow: var(--focus-ring-accent);
 	border-radius: 4px;
-	color: var(--accent);
+	color: #f0abfc;
 }
 
 .external-link {
