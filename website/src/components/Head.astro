@@ -1,15 +1,15 @@
 ---
+import '../styles/main.css';
+
 interface Props {
 	title: string;
 	description?: string;
-	additionalStylesheets?: string[];
 	preventFOUC?: boolean;
 }
 
 const {
 	title,
 	description,
-	additionalStylesheets = [],
 	preventFOUC = false
 } = Astro.props;
 ---
@@ -21,10 +21,6 @@ const {
 	<meta name="generator" content={Astro.generator} />
 	<title>{title}</title>
 	{description && <meta name="description" content={description} />}
-	<link rel="stylesheet" href="/src/styles/main.css" />
-	{additionalStylesheets.map(stylesheet => (
-		<link rel="stylesheet" href={stylesheet} />
-	))}
 	{preventFOUC && (
 		<style>
 			/* Critical CSS to prevent FOUC */

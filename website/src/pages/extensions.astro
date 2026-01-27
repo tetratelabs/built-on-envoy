@@ -7,6 +7,7 @@ import ExtensionCard from '../components/ExtensionCard.astro';
 import { parse } from 'yaml';
 import fs from 'fs';
 import path from 'path';
+import '../styles/extensions.css';
 
 // Read all extension manifests
 const extensionsDir = path.join(process.cwd(), '../extensions');
@@ -63,7 +64,6 @@ function formatTypeName(type: string): string {
 	<Head
 		title={`Extension Catalog - ${PROJECT_NAME}`}
 		description={`Browse all available extensions for Envoy Proxy in the ${PROJECT_NAME} marketplace`}
-		additionalStylesheets={['/src/styles/extensions.css']}
 		preventFOUC={true}
 	/>
 	<body>

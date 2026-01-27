@@ -6,6 +6,7 @@ import Footer from '../../components/Footer.astro';
 import { parse } from 'yaml';
 import fs from 'fs';
 import path from 'path';
+import '../../styles/extension-detail.css';
 
 export async function getStaticPaths() {
 	const extensionsDir = path.join(process.cwd(), '../extensions');
@@ -64,7 +65,6 @@ function formatTypeName(type: string): string {
 	<Head
 		title={`${extension.name} - ${PROJECT_NAME}`}
 		description={extension.description}
-		additionalStylesheets={['/src/styles/extension-detail.css']}
 		preventFOUC={true}
 	/>
 	<body>

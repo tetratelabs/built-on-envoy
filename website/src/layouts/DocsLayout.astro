@@ -4,6 +4,7 @@ import Head from '../components/Head.astro';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 import Sidebar from '../components/Sidebar.astro';
+import '../styles/docs.css';
 
 interface Props {
 	title: string;
@@ -18,7 +19,6 @@ const { title, description } = Astro.props;
 	<Head
 		title={`${title} | ${PROJECT_NAME}`}
 		description={description}
-		additionalStylesheets={['/src/styles/docs.css']}
 	/>
 	<body>
 		<Header />
