@@ -184,21 +184,24 @@ func loadLocalManifests(paths []string) ([]*extensions.Manifest, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%w from %s: %w", errFailedToLoadLocalManifest, path, err)
 		}
-		// Run go mod tidy in the local extension directory to ensure dependencies are up to date.
-		cmd := exec.Command("go", "mod", "tidy")
-		cmd.Dir = localPath
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			return nil, fmt.Errorf("failed to run 'go mod tidy' in %s: %w\nOutput: %s",
-				localPath, err, string(output))
-		}
 
-		// Run make install to install local extension before running under the localPath.
-		cmd = exec.Command("make", "-C", localPath, "install")
-		output, err = cmd.CombinedOutput()
-		if err != nil {
-			return nil, fmt.Errorf("failed to install local extension from %s: %w\nOutput: %s",
-				localPath, err, string(output))
+		if manifest.Type == "composer" {
+			// Run go mod tidy in the local extension directory to ensure dependencies are up to date.
+			cmd := exec.Command("go", "mod", "tidy")
+			cmd.Dir = localPath
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				return nil, fmt.Errorf("failed to run 'go mod tidy' in %s: %w\nOutput: %s",
+					localPath, err, string(output))
+			}
+
+			// Run make install to install local extension before running under the localPath.
+			cmd = exec.Command("make", "-C", localPath, "install")
+			output, err = cmd.CombinedOutput()
+			if err != nil {
+				return nil, fmt.Errorf("failed to install local extension from %s: %w\nOutput: %s",
+					localPath, err, string(output))
+			}
 		}
 
 		ext = append(ext, manifest)

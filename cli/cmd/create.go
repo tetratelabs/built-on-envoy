@@ -8,6 +8,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"text/template"
 )
@@ -59,6 +60,12 @@ func (c *Create) Run() error {
 			return fmt.Errorf("failed to execute template for %s: %w", name, err)
 		}
 		fmt.Printf("Created %s\n", path)
+	}
+
+	cmd := exec.Command("go", "mod", "tidy")
+	cmd.Dir = repoPath
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to run 'go mod tidy': %w\n%s", err, string(output))
 	}
 
 	return nil
