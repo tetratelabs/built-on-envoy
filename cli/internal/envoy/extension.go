@@ -156,13 +156,15 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 }
 
 func getComposerPath(dataHome, composerVersion string) string {
-	// Build the path: $DATA_HOME/cache/dym/composer/v$version/libcomposer.so
-	return filepath.Join(dataHome, "cache", "dym", "composer", "v"+composerVersion, "libcomposer.so")
+	// Build the path: $DATA_HOME/extensions/dym/composer/$version/libcomposer.so
+	return filepath.Join(dataHome, "extensions", "dym", "composer",
+		composerVersion, "libcomposer.so")
 }
 
 func getGoPluginPathFromManifest(dataHome string, manifest *extensions.Manifest) string {
-	// Build the path: $DATA_HOME/cache/goplugin/$name/v$version/plugin.so
-	return filepath.Join(dataHome, "cache", "goplugin", manifest.Name, "v"+manifest.Version, "plugin.so")
+	// Build the path: $DATA_HOME/extensions/goplugin/$name/$version/plugin.so
+	return filepath.Join(dataHome, "extensions", "goplugin", manifest.Name,
+		manifest.Version, "plugin.so")
 }
 
 // GenerateFilterConfig generates the filter configuration for Composer extensions.
@@ -185,7 +187,7 @@ func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manif
 	// Create New proto struct for Composer go plugin filter.
 	configStruct, _ := structpb.NewStruct(map[string]any{
 		"name": manifest.Name,
-		"url":  cachedPluginPath,
+		"url":  "file://" + cachedPluginPath,
 	})
 
 	// Covert to JSON string.

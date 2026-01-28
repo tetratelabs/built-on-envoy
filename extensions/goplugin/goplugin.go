@@ -149,13 +149,13 @@ func createStreamPluginConfigFactory(pluginName string, binaryPath string,
 	if err != nil {
 		return nil, fmt.Errorf("failed to open plugin as Go plugin module: %w", err)
 	}
-	sym, err := plugin.Lookup("WellKnownPluginConfigFactories")
+	sym, err := plugin.Lookup("WellKnownHttpFilterConfigFactories")
 	if err != nil {
-		return nil, fmt.Errorf("failed to lookup WellKnownPluginConfigFactories: %w", err)
+		return nil, fmt.Errorf("failed to lookup WellKnownHttpFilterConfigFactories: %w", err)
 	}
 	factories, ok := sym.(func() map[string]shared.HttpFilterConfigFactory)
 	if !ok {
-		return nil, fmt.Errorf("unexpected 'WellKnownPluginConfigFactories' type: %w", err)
+		return nil, fmt.Errorf("unexpected 'WellKnownHttpFilterConfigFactories' type: %w", err)
 	}
 	goPluginModule := factories()[pluginName]
 	if goPluginModule == nil {

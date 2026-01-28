@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	funce "github.com/tetratelabs/func-e"
@@ -52,6 +53,16 @@ func (r *Runner) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	// For now only golang dynamic modules are supported and will be built into same libcomposer.so.
+	// So, only need to expose path of libcomposer.so to Envoy.
+	// TODO(wbpcode): make this more general when other dynamic module types are supported.
+	composerPath := getComposerPath(r.Dirs.DataHome, extensions.Manifests["goplugin"].Version)
+	composerParentDir := filepath.Dir(composerPath)
+	os.Setenv("ENVOY_DYNAMIC_MODULES_SEARCH_PATH", composerParentDir)
+
+	// Disable cgo pointer checks as Envoy may hold pointers to Go memory.
+	os.Setenv("GODEBUG", "cgocheck=0")
 
 	names := make([]string, 0, len(r.Extensions))
 	for _, ext := range r.Extensions {
