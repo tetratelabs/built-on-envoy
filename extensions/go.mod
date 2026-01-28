@@ -9,4 +9,4 @@ require (
 	google.golang.org/protobuf v1.36.11
 )
 
-replace github.com/envoyproxy/envoy/source/extensions/dynamic_modules => github.com/wbpcode/envoy/source/extensions/dynamic_modules v0.0.0-20260127131816-b3b794acdbc4
+replace github.com/envoyproxy/envoy/source/extensions/dynamic_modules => github.com/wbpcode/envoy/source/extensions/dynamic_modules v0.0.0-20260128123219-3a5bf3e00204

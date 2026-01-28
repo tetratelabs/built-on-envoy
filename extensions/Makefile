@@ -52,11 +52,11 @@ build_local_cache:
 	@version=$$(grep "version:" goplugin/manifest.yaml | awk '{print $$2}'); \
 	mkdir -p $(DATA_HOME)/extensions/dym/composer/$$version; \
 	go build -buildmode=c-shared -o libcomposer.so main.go; \
-	cp libcomposer.so $(DATA_HOME)/extensions/dym/composer/$$version/libcomposer.so;
+	mv libcomposer.so $(DATA_HOME)/extensions/dym/composer/$$version/libcomposer.so;
 	@for plugin in $(ALL_GOPLUGINS); do \
 		echo "Installing $$plugin..."; \
 		go build -buildmode=plugin -o $$plugin.so ./$$plugin; \
 		plugin_version=$$(grep "version:" $$plugin/manifest.yaml | awk '{print $$2}'); \
 		mkdir -p $(DATA_HOME)/extensions/goplugin/$$plugin/$$plugin_version; \
-		cp $$plugin.so $(DATA_HOME)/extensions/goplugin/$$plugin/$$plugin_version/plugin.so; \
+		mv $$plugin.so $(DATA_HOME)/extensions/goplugin/$$plugin/$$plugin_version/plugin.so; \
 	done
