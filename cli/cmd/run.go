@@ -11,6 +11,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -183,6 +184,15 @@ func loadLocalManifests(paths []string) ([]*extensions.Manifest, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%w from %s: %w", errFailedToLoadLocalManifest, path, err)
 		}
+		// Run make install to install local extension before running under the localPath.
+		cmd := exec.Command("make", "-C", localPath, "install")
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("failed to install local extension from %s: %w\nOutput: %s",
+				localPath, err, string(output))
+		}
+
+		ext = append(ext, manifest)
 		manifests = append(manifests, manifest)
 	}
 	return manifests, nil
