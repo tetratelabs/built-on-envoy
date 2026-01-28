@@ -46,6 +46,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	config, err := RenderConfig(ConfigGenerationParams{
 		AdminPort:    r.AdminPort,
 		ListenerPort: r.ListenPort,
+		DataHome:     r.Dirs.DataHome,
 		Extensions:   r.Extensions,
 	})
 	if err != nil {

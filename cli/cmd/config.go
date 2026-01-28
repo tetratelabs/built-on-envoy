@@ -69,12 +69,17 @@ func (c *GenConfig) Run(ctx context.Context, dirs *xdg.Directories) error {
 
 	var config string
 
+	var (
+		config string
+		err    error
+	)
 	if c.Minimal {
-		config, err = c.generateMinimalConfig()
+		config, err = c.generateMinimalConfig(dirs.DataHome)
 	} else {
 		config, err = envoy.RenderConfig(envoy.ConfigGenerationParams{
 			AdminPort:    c.AdminPort,
 			ListenerPort: c.ListenPort,
+			DataHome:     dirs.DataHome,
 			Extensions:   c.extensions,
 		})
 	}
@@ -88,12 +93,12 @@ func (c *GenConfig) Run(ctx context.Context, dirs *xdg.Directories) error {
 }
 
 // generateMinimalConfig generates the Envoy configuration with only the extension-generated resources.
-func (c *GenConfig) generateMinimalConfig() (string, error) {
+func (c *GenConfig) generateMinimalConfig(dataHome string) (string, error) {
 	filters := make([]*hcmv3.HttpFilter, 0, len(c.extensions))
 	clusters := make([]*clusterv3.Cluster, 0)
 	for _, ext := range c.extensions {
 		// TODO(nacx): support config
-		resources, err := envoy.GenerateFilterConfig(ext, nil)
+		resources, err := envoy.GenerateFilterConfig(ext, dataHome, nil)
 		if err != nil {
 			return "", fmt.Errorf("failed to generate filter config for extension %q: %w", ext.Name, err)
 		}
