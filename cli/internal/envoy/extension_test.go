@@ -28,12 +28,10 @@ func TestGenerateFilterConfigUnsupportedType(t *testing.T) {
 func TestGenerateFilterConfigUnimplemented(t *testing.T) {
 	for _, et := range []extensions.Type{
 		extensions.TypeWasm,
-		extensions.TypeDynamicModule,
-		extensions.TypeComposer,
 	} {
 		t.Run(string(et), func(t *testing.T) {
 			manifest := extensions.Manifest{Type: et}
-			_, err := GenerateFilterConfig(&manifest, nil)
+			_, err := GenerateFilterConfig(&manifest, "", nil)
 			require.ErrorIs(t, err, ErrUnimplemented)
 		})
 	}
@@ -113,7 +111,7 @@ end
 			localManifest, err := extensions.LoadLocalManifest(manifestPath)
 			require.NoError(t, err)
 
-			got, err := GenerateFilterConfig(localManifest, nil)
+			got, err := GenerateFilterConfig(localManifest, "", nil)
 			require.ErrorIs(t, err, tt.wantErr)
 			if tt.wantErr != nil {
 				return

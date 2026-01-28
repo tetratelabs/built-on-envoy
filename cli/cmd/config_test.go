@@ -98,7 +98,7 @@ func TestGenConfig(t *testing.T) {
 				output:     &buf,
 			}
 
-			require.NoError(t, cmd.Run(t.Context(), &xdg.Directories{}))
+			require.NoError(t, cmd.Run(t.Context(), &xdg.Directories{DataHome: t.TempDir()}))
 
 			want, err := os.ReadFile(tt.wantFile)
 			require.NoError(t, err)
