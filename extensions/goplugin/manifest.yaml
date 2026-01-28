@@ -1,0 +1,18 @@
+name: goplugin
+version: 0.2.1
+categories:
+  - Network
+author: Tetrate
+featured: true
+description: Dynamic Go plugins for HTTP filters
+longDescription: |
+  A golang based dynamic module which could be used to load other Go plugins as HTTP filters.
+  The Go plugins should be compiled as with `-buildmode=plugin` flag and meet the interface
+  requirements.
+type: dynamic_module
+tags:
+  - go
+  - plugin
+  - http
+  - filter
+license: Apache-2.0
