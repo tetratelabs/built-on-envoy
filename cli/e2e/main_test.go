@@ -15,8 +15,6 @@ import (
 
 var cliBin string
 
-const proxyPort = 10000
-
 func TestMain(m *testing.M) {
 	var err error
 	cliBin, err = buildCLIOnDemand()

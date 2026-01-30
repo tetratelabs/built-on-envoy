@@ -64,6 +64,12 @@ test: gen  ## Run the unit tests
 	  echo "Running unit tests for packages: $$PKGS"; \
 	  go test $(GO_TEST_ARGS) $$PKGS
 
+.PHONY: test-integration
+test-integration: gen  ## Run the unit and integration tests
+	@PKGS=$$(go list ./... | grep -v -E "e2e"); \
+	  echo "Running unit and integration tests for packages: $$PKGS"; \
+	  go test -tags integration $(GO_TEST_ARGS) $$PKGS
+
 .PHONY: test-e2e
 test-e2e: gen  ## Run the end-to-end tests
 	@echo "Run e2e tests"
@@ -77,7 +83,7 @@ test-coverage:  ## Run the unit tests for the codebase with coverage check.
 		-covermode=atomic \
 		-coverpkg=github.com/tetratelabs/built-on-envoy/cli/... \
 		-count=1 \
-		$(GO_TEST_ARGS)"
+		-tags integration $(GO_TEST_ARGS)"
 	@$(GO_TOOL) go-test-coverage --config=.testcoverage.yml
 
 ##@ Docker
@@ -115,7 +121,7 @@ docker:  ## Build the Docker iamge
 .PHONY: lint
 lint: gen  ## Run the linters
 	@echo "golangci-lint => ./..."
-	@$(GO_TOOL) golangci-lint run ./...
+	@$(GO_TOOL) golangci-lint run --build-tags integration ./...
 
 # Some IDEs like Goland place `.go` files in the `.idea` directory when using code templates. Using a
 # git command to find the files ensures that only relevant files are formatted and that git-ignored

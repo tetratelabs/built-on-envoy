@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
+	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
 func TestParseCmdRunHelp(t *testing.T) {
@@ -294,4 +295,9 @@ func TestParseLogLevels(t *testing.T) {
 			require.Equal(t, tt.wantComponentLevel, componentLevels)
 		})
 	}
+}
+
+func TestRunInvalidConfig(t *testing.T) {
+	r := &Run{RunID: "///"}
+	require.Error(t, r.Run(t.Context(), &xdg.Directories{}))
 }

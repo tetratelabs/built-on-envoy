@@ -19,6 +19,12 @@ import (
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 )
 
+func TestGenerateFilterConfigUnsupportedType(t *testing.T) {
+	manifest := extensions.Manifest{Type: "unsupported_type"}
+	_, err := GenerateFilterConfig(&manifest, nil)
+	require.ErrorIs(t, err, ErrUnsupportedExtensionType)
+}
+
 func TestGenerateFilterConfigUnimplemented(t *testing.T) {
 	for _, et := range []extensions.Type{
 		extensions.TypeWasm,

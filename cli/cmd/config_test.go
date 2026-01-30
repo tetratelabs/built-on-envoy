@@ -13,6 +13,7 @@ import (
 	"github.com/alecthomas/kong"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tetratelabs/built-on-envoy/cli/internal/envoy"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 )
 
@@ -94,6 +95,15 @@ func TestGenConfig(t *testing.T) {
 			require.YAMLEq(t, string(want), buf.String())
 		})
 	}
+}
+
+func TestGenConfigError(t *testing.T) {
+	cmd := &GenConfig{
+		extensions: []*extensions.Manifest{
+			{Type: "unsupported_type"},
+		},
+	}
+	require.ErrorIs(t, cmd.Run(), envoy.ErrUnsupportedExtensionType)
 }
 
 func mustReadManifest(t *testing.T, path string) *extensions.Manifest {
