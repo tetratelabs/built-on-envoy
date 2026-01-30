@@ -66,7 +66,7 @@ test: gen  ## Run the unit tests
 
 .PHONY: test-integration
 test-integration: gen  ## Run the integration tests
-	PKGS=$$(go list ./... | grep -v -E "e2e"); \
+	@PKGS=$$(go list ./... | grep -v -E "e2e"); \
 	  echo "Running tests for packages: $$PKGS"; \
 	  go test -tags integration $(GO_TEST_ARGS) $$PKGS
 
