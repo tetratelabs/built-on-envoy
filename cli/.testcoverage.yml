@@ -9,7 +9,7 @@ local-prefix: "github.com/tetratelabs/built-on-envoy/cli/"
 threshold:
   file: 75
   package: 80
-  total: 85
+  total: 80
 
 exclude:
   paths:

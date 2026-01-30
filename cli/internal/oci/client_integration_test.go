@@ -10,6 +10,7 @@ package oci
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -45,22 +46,26 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(fmt.Sprintf("Failed to start local Docker registry: %v\n", err))
 	}
-	defer func() { _ = registryContainer.Terminate(ctx) }()
 
 	// Get the registry host
 	host, err := registryContainer.Host(ctx)
 	if err != nil {
+		_ = registryContainer.Terminate(ctx)
 		panic(fmt.Sprintf("Failed to get registry host: %v\n", err))
 	}
 
 	port, err := registryContainer.MappedPort(ctx, "5000")
 	if err != nil {
+		_ = registryContainer.Terminate(ctx)
 		panic(fmt.Sprintf("Failed to get registry port: %v\n", err))
 	}
 
 	registryAddr = fmt.Sprintf("%s:%s", host, port.Port())
+	code := m.Run()
 
-	m.Run()
+	_ = registryContainer.Terminate(ctx)
+
+	os.Exit(code)
 }
 
 func newLocalRegistryClient(t *testing.T) Client {

@@ -58,6 +58,20 @@ func PackageDirectory(dir string) (io.Reader, error) {
 			if err != nil {
 				return err
 			}
+
+			// Resolve the symlink target relative to the symlink's directory
+			linkDir := filepath.Dir(path)
+			resolvedTarget := filepath.Join(linkDir, link)
+			if filepath.IsAbs(link) {
+				resolvedTarget = link
+			}
+
+			// Clean and verify the resolved path is inside the package directory
+			resolvedTarget = filepath.Clean(resolvedTarget)
+			if !isInsideDir(resolvedTarget, dir) {
+				return &ExternalSymlinkError{Path: relPath, Target: link}
+			}
+
 			header.Linkname = link
 		}
 
@@ -174,6 +188,17 @@ type PathTraversalError struct {
 
 func (e *PathTraversalError) Error() string {
 	return "path traversal attempt: " + e.Path
+}
+
+// ExternalSymlinkError is returned when a symlink points to a target outside
+// the directory being packaged.
+type ExternalSymlinkError struct {
+	Path   string
+	Target string
+}
+
+func (e *ExternalSymlinkError) Error() string {
+	return "symlink " + e.Path + " points outside package directory: " + e.Target
 }
 
 const (

@@ -6,7 +6,9 @@
 package oci
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"io"
@@ -100,6 +102,123 @@ func TestPackageDirectory_PreservesPermissions(t *testing.T) {
 	require.NotZero(t, info.Mode()&0o100, "executable permission not preserved, mode: %o", info.Mode())
 }
 
+func TestPackageDirectory_Symlinks(t *testing.T) {
+	srcDir := t.TempDir()
+
+	// Create a subdirectory
+	subDir := filepath.Join(srcDir, "subdir")
+	require.NoError(t, os.Mkdir(subDir, 0o750))
+
+	// Create test files
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "original.txt"), []byte("original content"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(subDir, "nested.txt"), []byte("nested content"), 0o600))
+
+	// Create symlinks:
+	// 1. Symlink to a file in the same directory
+	require.NoError(t, os.Symlink("original.txt", filepath.Join(srcDir, "link_to_original.txt")))
+	// 2. Symlink to a file in a subdirectory
+	require.NoError(t, os.Symlink("subdir/nested.txt", filepath.Join(srcDir, "link_to_nested.txt")))
+	// 3. Symlink inside a subdirectory pointing to parent
+	require.NoError(t, os.Symlink("../original.txt", filepath.Join(subDir, "link_to_parent.txt")))
+
+	// Package the directory
+	data, err := PackageDirectory(srcDir)
+	require.NoError(t, err)
+
+	// Extract to a new directory
+	destDir := t.TempDir()
+	require.NoError(t, ExtractPackage(data, destDir))
+
+	// Verify symlinks are preserved as symlinks (not copied as files)
+	tests := []struct {
+		linkPath       string
+		expectedTarget string
+	}{
+		{"link_to_original.txt", "original.txt"},
+		{"link_to_nested.txt", "subdir/nested.txt"},
+		{"subdir/link_to_parent.txt", "../original.txt"},
+	}
+
+	for _, tc := range tests {
+		linkPath := filepath.Join(destDir, tc.linkPath)
+
+		// Verify it's a symlink
+		var info os.FileInfo
+		info, err = os.Lstat(linkPath)
+		require.NoErrorf(t, err, "failed to stat symlink %s", tc.linkPath)
+		require.NotZero(t, info.Mode()&os.ModeSymlink, "expected %s to be a symlink", tc.linkPath)
+
+		// Verify the symlink target
+		var target string
+		target, err = os.Readlink(linkPath)
+		require.NoErrorf(t, err, "failed to read symlink %s", tc.linkPath)
+		require.Equalf(t, tc.expectedTarget, target, "symlink %s has wrong target", tc.linkPath)
+	}
+
+	// Verify symlinks resolve to correct content
+	content, err := os.ReadFile(filepath.Clean(filepath.Join(destDir, "link_to_original.txt")))
+	require.NoError(t, err)
+	assert.Equal(t, "original content", string(content))
+
+	content, err = os.ReadFile(filepath.Clean(filepath.Join(destDir, "link_to_nested.txt")))
+	require.NoError(t, err)
+	assert.Equal(t, "nested content", string(content))
+
+	content, err = os.ReadFile(filepath.Clean(filepath.Join(destDir, "subdir", "link_to_parent.txt")))
+	require.NoError(t, err)
+	assert.Equal(t, "original content", string(content))
+}
+
+func TestPackageDirectory_SymlinkToExternalFile(t *testing.T) {
+	// Create a file outside the directory being packaged
+	externalDir := t.TempDir()
+	externalFile := filepath.Join(externalDir, "external.txt")
+	require.NoError(t, os.WriteFile(externalFile, []byte("external content"), 0o600))
+
+	// Create the directory to package with a symlink pointing outside
+	srcDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "internal.txt"), []byte("internal content"), 0o600))
+
+	// Create a symlink to the external file (using absolute path)
+	require.NoError(t, os.Symlink(externalFile, filepath.Join(srcDir, "link_to_external.txt")))
+
+	// Package should fail because the symlink points outside the directory
+	_, err := PackageDirectory(srcDir)
+	require.Error(t, err)
+
+	var symlinkErr *ExternalSymlinkError
+	require.ErrorAs(t, err, &symlinkErr)
+	require.Equal(t, "link_to_external.txt", symlinkErr.Path)
+	require.Equal(t, externalFile, symlinkErr.Target)
+	require.ErrorContains(t, err, symlinkErr.Path)
+	require.ErrorContains(t, err, symlinkErr.Target)
+}
+
+func TestPackageDirectory_SymlinkEscapesWithRelativePath(t *testing.T) {
+	// Create a parent directory with a file
+	parentDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(parentDir, "secret.txt"), []byte("secret"), 0o600))
+
+	// Create a subdirectory to package
+	srcDir := filepath.Join(parentDir, "package")
+	require.NoError(t, os.Mkdir(srcDir, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "internal.txt"), []byte("internal"), 0o600))
+
+	// Create a symlink that escapes using relative path
+	require.NoError(t, os.Symlink("../secret.txt", filepath.Join(srcDir, "escape_link.txt")))
+
+	// Package should fail because the symlink escapes the directory
+	_, err := PackageDirectory(srcDir)
+	require.Error(t, err)
+
+	var symlinkErr *ExternalSymlinkError
+	require.ErrorAs(t, err, &symlinkErr)
+	require.Equal(t, "escape_link.txt", symlinkErr.Path)
+	require.Equal(t, "../secret.txt", symlinkErr.Target)
+	require.ErrorContains(t, err, symlinkErr.Path)
+	require.ErrorContains(t, err, symlinkErr.Target)
+}
+
 func TestExtractPackage_InvalidGzip(t *testing.T) {
 	destDir := t.TempDir()
 	err := ExtractPackage(bytes.NewReader([]byte("not a valid gzip")), destDir)
@@ -107,20 +226,47 @@ func TestExtractPackage_InvalidGzip(t *testing.T) {
 }
 
 func TestExtractPackage_PathTraversal(t *testing.T) {
-	// Create a malicious archive with path traversal
+	// Create a malicious tar.gz archive with path traversal attempt
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gw)
+
+	// Add a file with a path traversal attempt
+	maliciousPath := "../../../tmp/malicious.txt"
+	content := []byte("malicious content")
+	header := &tar.Header{
+		Name: maliciousPath,
+		Mode: 0o600,
+		Size: int64(len(content)),
+	}
+	require.NoError(t, tw.WriteHeader(header))
+	_, err := tw.Write(content)
+	require.NoError(t, err)
+
+	require.NoError(t, tw.Close())
+	require.NoError(t, gw.Close())
+
+	// Attempt to extract the malicious archive
+	destDir := t.TempDir()
+	err = ExtractPackage(&buf, destDir)
+
+	// Should fail with PathTraversalError
+	require.Error(t, err)
+	var pathErr *PathTraversalError
+	require.ErrorAs(t, err, &pathErr)
+	assert.Equal(t, maliciousPath, pathErr.Path)
+	assert.ErrorContains(t, err, maliciousPath)
+}
+
+func TestExtractInvalidLocation(t *testing.T) {
 	srcDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "safe.txt"), []byte("safe"), 0o600))
 
 	data, err := PackageDirectory(srcDir)
 	require.NoError(t, err)
 
-	// The normal archive should extract fine
-	destDir := t.TempDir()
-	require.NoError(t, ExtractPackage(data, destDir))
-
-	// Verify the safe file was extracted
-	_, err = os.Stat(filepath.Join(destDir, "safe.txt"))
-	require.NoError(t, err)
+	err = ExtractPackage(data, "/dev/null")
+	require.Error(t, err)
 }
 
 func TestBuildOCIPackage(t *testing.T) {

@@ -61,13 +61,13 @@ clean:  ## Clean the build artifacts
 .PHONY: test
 test: gen  ## Run the unit tests
 	@PKGS=$$(go list ./... | grep -v -E "e2e"); \
-	  echo "Running tests for packages: $$PKGS"; \
+	  echo "Running unit tests for packages: $$PKGS"; \
 	  go test $(GO_TEST_ARGS) $$PKGS
 
 .PHONY: test-integration
-test-integration: gen  ## Run the integration tests
+test-integration: gen  ## Run the unit and integration tests
 	@PKGS=$$(go list ./... | grep -v -E "e2e"); \
-	  echo "Running tests for packages: $$PKGS"; \
+	  echo "Running unit and integration tests for packages: $$PKGS"; \
 	  go test -tags integration $(GO_TEST_ARGS) $$PKGS
 
 .PHONY: test-e2e
