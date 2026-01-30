@@ -85,7 +85,7 @@ jobs:
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
-      - run: make test
+      - run: make test-integration
 
   coverage:
     needs: changes
