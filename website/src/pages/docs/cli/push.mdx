@@ -1,0 +1,102 @@
+---
+layout: ../../../layouts/DocsLayout.astro
+title: push
+description: Push an extension to an OCI registry
+---
+
+import CLIName from '../../../components/CLIName.astro';
+import CodeBlock from '../../../components/CodeBlock.astro';
+
+# <CLIName/> push
+
+Push an extension to an OCI registry.
+
+## Usage
+
+<CodeBlock code="{{CLI_NAME}} push <local> [options]" />
+
+## Arguments
+
+### `<local>`
+
+Path to a directory containing the extension to push. The directory must contain a valid `manifest.yaml` file.
+
+## Options
+
+### `--registry <url>`
+
+OCI registry URL to push the extension to.
+
+| | |
+|---|---|
+| **Default** | `ghcr.io/tetratelabs/built-on-envoy` |
+
+<CodeBlock code="{{CLI_NAME}} push ./my-extension --registry ghcr.io/myorg/extensions" />
+
+### `--insecure`
+
+Allow pushing to an insecure (HTTP) registry.
+
+| | |
+|---|---|
+| **Default** | `false` |
+
+<CodeBlock code="{{CLI_NAME}} push ./my-extension --registry localhost:5000 --insecure" />
+
+### `--username <username>`
+
+Username for OCI registry authentication. Can also be set via the `BOE_REGISTRY_USERNAME` environment variable.
+
+<CodeBlock code="{{CLI_NAME}} push ./my-extension --username myuser --password mypass" />
+
+### `--password <password>`
+
+Password for OCI registry authentication. Can also be set via the `BOE_REGISTRY_PASSWORD` environment variable.
+
+## How It Works
+
+The push command packages and uploads an extension to an OCI-compliant registry:
+
+1. Loads and validates the `manifest.yaml` file from the extension directory
+2. Constructs the OCI repository reference as `{registry}/extension-{name}`
+3. Uses the extension version from the manifest as the image tag
+4. Pushes the extension to the registry
+
+## Output
+
+On success, the command displays:
+
+- The extension name and version
+- The digest of the pushed artifact
+- The full OCI reference
+
+```
+Pushing extension "cors" (1.0.0) to ghcr.io/tetratelabs/built-on-envoy/extension-cors:1.0.0...
+Successfully pushed extension "cors" (1.0.0)
+Digest: sha256:abc123...
+Reference: ghcr.io/tetratelabs/built-on-envoy/extension-cors:1.0.0
+```
+
+## Examples
+
+### Push to the default registry
+
+<CodeBlock code="{{CLI_NAME}} push ./my-extension" />
+
+### Push to a custom registry
+
+<CodeBlock code="{{CLI_NAME}} push ./my-extension --registry ghcr.io/myorg/extensions" />
+
+### Push to a local registry
+
+<CodeBlock code="{{CLI_NAME}} push ./my-extension --registry localhost:5000 --insecure" />
+
+### Push with authentication
+
+<CodeBlock code="{{CLI_NAME}} push ./my-extension --username myuser --password mypass" />
+
+### Push using environment variables for credentials
+
+<CodeBlock code={`export BOE_REGISTRY_USERNAME=myuser
+export BOE_REGISTRY_PASSWORD=mypass
+{{CLI_NAME}} push ./my-extension`} />

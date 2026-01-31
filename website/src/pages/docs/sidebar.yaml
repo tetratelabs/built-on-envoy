@@ -8,10 +8,14 @@ sections:
     items:
       - title: list
         href: /docs/cli/list
-      - title: run
-        href: /docs/cli/run
       - title: gen-config
         href: /docs/cli/gen-config
+      - title: run
+        href: /docs/cli/run
+      - title: pull
+        href: /docs/cli/pull
+      - title: push
+        href: /docs/cli/push
 
   - title: Reference
     items:

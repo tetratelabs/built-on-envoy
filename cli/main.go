@@ -25,6 +25,8 @@ type CLI struct {
 	List      cmd.List      `cmd:"" help:"List available extensions"`
 	Run       cmd.Run       `cmd:"" help:"Run Envoy with extensions"`
 	GenConfig cmd.GenConfig `cmd:"" help:"Generate Envoy configuration with extensions"`
+	Push      cmd.Push      `cmd:"" help:"Push an extension to an OCI registry"`
+	Pull      cmd.Pull      `cmd:"" help:"Pull an extension from an OCI registry"`
 
 	// Global XDG flags
 	ConfigHome string `name:"config-home" env:"BOE_CONFIG_HOME" help:"Configuration files directory. Defaults to ~/.config/boe" type:"path" default:"~/.config/boe"`

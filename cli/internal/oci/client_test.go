@@ -27,7 +27,7 @@ var clientTests = []clientTest{
 	},
 }
 
-func TestMemoryClient_PushPull(t *testing.T) {
+func TestClient_PushPull(t *testing.T) {
 	for _, tt := range clientTests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := t.Context()
@@ -68,7 +68,7 @@ func TestMemoryClient_PushPull(t *testing.T) {
 	}
 }
 
-func TestMemoryClient_PushPull_MultipleTags(t *testing.T) {
+func TestClient_PushPull_MultipleTags(t *testing.T) {
 	for _, tt := range clientTests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := t.Context()
@@ -112,7 +112,7 @@ func TestMemoryClient_PushPull_MultipleTags(t *testing.T) {
 	}
 }
 
-func TestMemoryClient_Pull_NonExistentTag(t *testing.T) {
+func TestClient_Pull_NonExistentTag(t *testing.T) {
 	for _, tt := range clientTests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := t.Context()
@@ -126,7 +126,7 @@ func TestMemoryClient_Pull_NonExistentTag(t *testing.T) {
 	}
 }
 
-func TestMemoryClient_Push_NonExistentPath(t *testing.T) {
+func TestClient_Push_NonExistentPath(t *testing.T) {
 	for _, tt := range clientTests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := t.Context()

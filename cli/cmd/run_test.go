@@ -57,7 +57,8 @@ Flags:
                                    traffic (default: 10000)
       --admin-port=9901            Port for Envoy admin interface (default:
                                    9901)
-      --extension=EXTENSION,...    Extensions to enable (by name).
+      --extension=EXTENSION,...    Extensions to enable (in the format:
+                                   "name:version").
       --local=LOCAL                Path to a directory containing a local
                                    Extension to enable.
 `

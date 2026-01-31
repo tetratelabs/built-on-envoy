@@ -20,7 +20,7 @@ import (
 type GenConfig struct {
 	OnlyFilters bool `kong:"help='Generate configuration with only extension filters.'"`
 
-	ListenPort uint32   `help:"Port for Envoy listener to accept incoming traffic  (default: 10000)" default:"10000"`
+	ListenPort uint32   `help:"Port for Envoy listener to accept incoming traffic (default: 10000)" default:"10000"`
 	AdminPort  uint32   `help:"Port for Envoy admin interface (default: 9901)" default:"9901"`
 	Extensions []string `name:"extension" help:"Extensions to enable (by name)." sep:","`
 	Local      []string `name:"local" help:"Path to a directory containing a local Extension to enable." type:"existingdir" sep:","`

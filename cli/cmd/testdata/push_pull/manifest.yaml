@@ -1,0 +1,25 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: test-lua
+version: 1.0.0
+categories:
+  - Network
+author: Tetrate
+featured: false
+description: e2e lua test
+longDescription: |
+  Adds a response header for the lua e2e tests
+tags:
+  - test
+license: Apache-2.0
+type: lua
+lua:
+  path: plugin/test.lua
+examples:
+  - title: Test Lua Extension
+    description: Enable the lua test extension
+    code: |
+      boe run --extension test-lua

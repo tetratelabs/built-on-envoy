@@ -1,0 +1,10 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# This manifest parses as valid YAML but fails schema validation
+# because required fields are missing (categories, author, description, etc.)
+name: invalid-extension
+version: 1.0.0
+type: wasm

@@ -67,6 +67,36 @@ Ephemeral runtime files directory.
 export BOE_RUNTIME_DIR=/tmp/boe-runtime
 ```
 
+## OCI Registry Variables
+
+These variables configure authentication for OCI registries when using the `push` and `pull` commands.
+
+### `BOE_REGISTRY_USERNAME`
+
+Username for OCI registry authentication.
+
+| | |
+|---|---|
+| **Default** | (none) |
+| **Flag** | `--username` |
+
+```bash
+export BOE_REGISTRY_USERNAME=myuser
+```
+
+### `BOE_REGISTRY_PASSWORD`
+
+Password for OCI registry authentication.
+
+| | |
+|---|---|
+| **Default** | (none) |
+| **Flag** | `--password` |
+
+```bash
+export BOE_REGISTRY_PASSWORD=mypass
+```
+
 ## Run Command Variables
 
 ### `ENVOY_VERSION`

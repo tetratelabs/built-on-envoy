@@ -14,8 +14,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
+
+	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 
 func init() {
@@ -25,46 +25,19 @@ func init() {
 	})
 }
 
-var (
-	registryContainer testcontainers.Container
-	registryAddr      string
-)
+var registryAddr string
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
-
-	// Start a local Docker registry
-	var err error
-	registryContainer, err = testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        "registry:2",
-			ExposedPorts: []string{"5000/tcp"},
-			WaitingFor:   wait.ForHTTP("/v2/").WithPort("5000/tcp"),
-		},
-		Started: true,
-	})
+	registryContainer, addr, err := internaltesting.StartOCIRegistry(ctx)
 	if err != nil {
-		panic(fmt.Sprintf("Failed to start local Docker registry: %v\n", err))
+		fmt.Fprintf(os.Stderr, "failed to start local OCI registry: %v\n", err)
+		os.Exit(1)
 	}
+	registryAddr = addr
 
-	// Get the registry host
-	host, err := registryContainer.Host(ctx)
-	if err != nil {
-		_ = registryContainer.Terminate(ctx)
-		panic(fmt.Sprintf("Failed to get registry host: %v\n", err))
-	}
-
-	port, err := registryContainer.MappedPort(ctx, "5000")
-	if err != nil {
-		_ = registryContainer.Terminate(ctx)
-		panic(fmt.Sprintf("Failed to get registry port: %v\n", err))
-	}
-
-	registryAddr = fmt.Sprintf("%s:%s", host, port.Port())
 	code := m.Run()
-
 	_ = registryContainer.Terminate(ctx)
-
 	os.Exit(code)
 }
 

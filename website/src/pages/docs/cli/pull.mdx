@@ -1,0 +1,108 @@
+---
+layout: ../../../layouts/DocsLayout.astro
+title: pull
+description: Pull an extension from an OCI registry
+---
+
+import CLIName from '../../../components/CLIName.astro';
+import CodeBlock from '../../../components/CodeBlock.astro';
+
+# <CLIName/> pull
+
+Pull an extension from an OCI registry and extract it to a local directory.
+
+## Usage
+
+<CodeBlock code="{{CLI_NAME}} pull <extension> --path=<destination> [options]" />
+
+## Arguments
+
+### `<extension>`
+
+Extension name or OCI repository URL. Supports multiple formats:
+
+| Format | Example | Resolves To |
+|--------|---------|-------------|
+| Simple name | `cors` | `ghcr.io/tetratelabs/built-on-envoy/extension-cors:latest` |
+| Full reference with tag | `ghcr.io/org/repo:1.0.0` | `ghcr.io/org/repo:1.0.0` |
+| Full reference without tag | `ghcr.io/org/repo` | `ghcr.io/org/repo:latest` |
+
+## Options
+
+### `--path <destination>`
+
+Destination path to extract the extension to. **Required.**
+
+<CodeBlock code="{{CLI_NAME}} pull cors --path ./extensions/cors" />
+
+### `--insecure`
+
+Allow pulling from an insecure (HTTP) registry.
+
+| | |
+|---|---|
+| **Default** | `false` |
+
+<CodeBlock code="{{CLI_NAME}} pull localhost:5000/my-extension --path ./ext --insecure" />
+
+### `--username <username>`
+
+Username for OCI registry authentication. Can also be set via the `BOE_REGISTRY_USERNAME` environment variable.
+
+<CodeBlock code="{{CLI_NAME}} pull cors --path ./ext --username myuser --password mypass" />
+
+### `--password <password>`
+
+Password for OCI registry authentication. Can also be set via the `BOE_REGISTRY_PASSWORD` environment variable.
+
+## How It Works
+
+The pull command downloads and extracts an extension from an OCI-compliant registry:
+
+1. Parses the extension reference to determine the repository and tag
+2. For simple names, resolves to the default registry with `extension-` prefix
+3. Pulls the extension artifact from the registry
+4. Extracts the contents to the specified destination path
+
+## Output
+
+On success, the command displays:
+
+- The repository and tag being pulled
+- The digest of the pulled artifact
+- The extraction path
+
+```
+Pulling ghcr.io/tetratelabs/built-on-envoy/extension-cors:latest to ./extensions/cors...
+Successfully pulled extension ghcr.io/tetratelabs/built-on-envoy/extension-cors (latest)
+Digest: sha256:abc123...
+Extracted to: ./extensions/cors
+```
+
+## Examples
+
+### Pull an extension by name
+
+<CodeBlock code="{{CLI_NAME}} pull cors --path ./extensions/cors" />
+
+### Pull a specific version
+
+<CodeBlock code="{{CLI_NAME}} pull ghcr.io/tetratelabs/built-on-envoy/extension-cors:1.0.0 --path ./extensions/cors" />
+
+### Pull from a custom registry
+
+<CodeBlock code="{{CLI_NAME}} pull ghcr.io/myorg/extensions/my-extension:2.0.0 --path ./ext" />
+
+### Pull from a local registry
+
+<CodeBlock code="{{CLI_NAME}} pull localhost:5000/my-extension:v1 --path ./ext --insecure" />
+
+### Pull with authentication
+
+<CodeBlock code="{{CLI_NAME}} pull cors --path ./ext --username myuser --password mypass" />
+
+### Pull using environment variables for credentials
+
+<CodeBlock code={`export BOE_REGISTRY_USERNAME=myuser
+export BOE_REGISTRY_PASSWORD=mypass
+{{CLI_NAME}} pull cors --path ./extensions/cors`} />
