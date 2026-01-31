@@ -1,7 +1,7 @@
+github.com/envoyproxy/envoy/source/extensions/dynamic_modules v0.0.0-20260129014508-e8c1dc7dcbcd h1:IQMTVU/I2HaXkUUYvHD3gtUrFAGLZm8DcH/4Z20vRQQ=
+github.com/envoyproxy/envoy/source/extensions/dynamic_modules v0.0.0-20260129014508-e8c1dc7dcbcd/go.mod h1:NpQosaDAX20s0ak0o/4b5dLOdvkbk15XqoakhSNX1Gg=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
 github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
-github.com/wbpcode/envoy/source/extensions/dynamic_modules v0.0.0-20260128123219-3a5bf3e00204 h1:g1Bv5xIGEVNq/uCgfenLbSadL3dT3zxlWRwbIFmfMmI=
-github.com/wbpcode/envoy/source/extensions/dynamic_modules v0.0.0-20260128123219-3a5bf3e00204/go.mod h1:NpQosaDAX20s0ak0o/4b5dLOdvkbk15XqoakhSNX1Gg=
 go.uber.org/mock v0.6.0 h1:hyF9dfmbgIX5EfOdasqLsWD6xqpNZlXblLB/Dbnwv3Y=
 go.uber.org/mock v0.6.0/go.mod h1:KiVJ4BqZJaMj4svdfmHM0AUx4NJYO8ZNpPnZn1Z+BBU=
 google.golang.org/genproto/googleapis/api v0.0.0-20260126211449-d11affda4bed h1:3ip6+kOPIfzoQ5Gx9IOq79L1dEoarwV51IOs24iQvZE=
