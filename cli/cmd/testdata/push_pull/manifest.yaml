@@ -3,7 +3,7 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-name: test-lua
+name: push-pull
 version: 1.0.0
 categories:
   - Network
@@ -22,4 +22,4 @@ examples:
   - title: Test Lua Extension
     description: Enable the lua test extension
     code: |
-      boe run --extension test-lua
+      boe run --extension push-pull

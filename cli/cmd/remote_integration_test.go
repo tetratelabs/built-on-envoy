@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
+	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
 func TestPushPull(t *testing.T) {
@@ -42,17 +43,14 @@ func TestPushPull(t *testing.T) {
 
 	// Create Pull command and execute
 	pull := &Pull{
-		Extension: repo + "/extension-test-lua:1.0.0",
+		Extension: repo + "/extension-push-pull:1.0.0",
 		Path:      pullDir,
 		Insecure:  true,
 	}
-
-	require.NoError(t, pull.Validate())           // Validate parses the extension reference
-	require.NoError(t, pull.AfterApply(nil, nil)) // AfterApply creates the OCI client
+	require.NoError(t, pull.Validate()) // Validate parses the extension reference
 
 	// Pull the extension
-	require.NoError(t, pull.Run(ctx))
-
-	require.FileExists(t, pullDir+"/extensions/test-lua/1.0.0/manifest.yaml")
-	require.FileExists(t, pullDir+"/extensions/test-lua/1.0.0/plugin/test.lua")
+	require.NoError(t, pull.Run(ctx, &xdg.Directories{}))
+	require.FileExists(t, pullDir+"/extensions/push-pull/1.0.0/manifest.yaml")
+	require.FileExists(t, pullDir+"/extensions/push-pull/1.0.0/plugin/test.lua")
 }

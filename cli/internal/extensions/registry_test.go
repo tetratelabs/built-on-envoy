@@ -8,6 +8,7 @@ package extensions
 import (
 	"testing"
 
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 )
 
@@ -55,4 +56,46 @@ func TestNameFromRepository(t *testing.T) {
 			require.Equal(t, tt.want, NameFromRepository(tt.repository))
 		})
 	}
+}
+
+func TestOCIAnnotationsForManifest(t *testing.T) {
+	manifest := &Manifest{
+		Name:        "test-extension",
+		Description: "A test extension",
+		Version:     "1.0.0",
+		Author:      "Test Author",
+		License:     "Apache-2.0",
+		Type:        TypeLua,
+	}
+
+	annotations := OCIAnnotationsForManifest(manifest)
+
+	require.Equal(t, "test-extension", annotations[ocispec.AnnotationTitle])
+	require.Equal(t, "A test extension", annotations[ocispec.AnnotationDescription])
+	require.Equal(t, "1.0.0", annotations[ocispec.AnnotationVersion])
+	require.Equal(t, "Test Author", annotations[ocispec.AnnotationAuthors])
+	require.Equal(t, "Apache-2.0", annotations[ocispec.AnnotationLicenses])
+	require.Equal(t, "lua", annotations[OCIAnnotationExtensionType])
+}
+
+func TestManifestFromOCI(t *testing.T) {
+	ociManifest := &ocispec.Manifest{
+		Annotations: map[string]string{
+			ocispec.AnnotationTitle:       "test-extension",
+			ocispec.AnnotationDescription: "A test extension",
+			ocispec.AnnotationVersion:     "1.0.0",
+			ocispec.AnnotationAuthors:     "Test Author",
+			ocispec.AnnotationLicenses:    "Apache-2.0",
+			OCIAnnotationExtensionType:    "lua",
+		},
+	}
+
+	manifest := ManifestFromOCI(ociManifest)
+
+	require.Equal(t, "test-extension", manifest.Name)
+	require.Equal(t, "A test extension", manifest.Description)
+	require.Equal(t, "1.0.0", manifest.Version)
+	require.Equal(t, "Test Author", manifest.Author)
+	require.Equal(t, "Apache-2.0", manifest.License)
+	require.Equal(t, TypeLua, manifest.Type)
 }

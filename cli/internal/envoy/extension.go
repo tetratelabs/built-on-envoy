@@ -7,6 +7,8 @@ package envoy
 
 import (
 	"fmt"
+	"os"
+	"path"
 
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	luav3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/lua/v3"
@@ -38,8 +40,8 @@ var (
 	ErrUnsupportedExtensionType = fmt.Errorf("unsupported extension type")
 	// ErrUnimplemented is returned when an extension filter generation is not yet implemented.
 	ErrUnimplemented = fmt.Errorf("extension filter generation not yet implemented")
-	// ErrMissingLuaCode is returned when a Lua extension manifest is missing inline code.
-	ErrMissingLuaCode = fmt.Errorf("lua extension manifest must have inline Lua code")
+	// ErrLuaLoadFile is returned when loading Lua code from file fails.
+	ErrLuaLoadFile = fmt.Errorf("failed to load Lua file")
 )
 
 // GenerateFilterConfig generates the filter configuration for the given extension manifest.
@@ -64,17 +66,22 @@ func GenerateFilterConfig(manifest *extensions.Manifest, config any) (*hcmv3.Htt
 
 // GenerateFilterConfig generates the filter configuration for Lua extensions.
 func (l LuaFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, _ any) (*hcmv3.HttpFilter, error) {
-	// TODO(nacx): Support loading from a file (no only inline). This cannot be done until
-	// we implement the remote extension download to fetch extension contents, not only manifests.
-	// Tracked in: https://github.com/tetratelabs/built-on-envoy/issues/16
-	if manifest.Lua.Inline == "" {
-		return nil, ErrMissingLuaCode
+	var code string
+	if manifest.Lua.Path != "" {
+		absPath := path.Join(path.Dir(manifest.Path), manifest.Lua.Path)
+		bytes, err := os.ReadFile(path.Clean(absPath))
+		if err != nil {
+			return nil, fmt.Errorf("%w %q: %w", ErrLuaLoadFile, manifest.Lua.Path, err)
+		}
+		code = string(bytes)
+	} else if manifest.Lua.Inline != "" {
+		code = manifest.Lua.Inline
 	}
 
 	luaFilter := &luav3.Lua{
 		DefaultSourceCode: &corev3.DataSource{
 			Specifier: &corev3.DataSource_InlineString{
-				InlineString: manifest.Lua.Inline,
+				InlineString: code,
 			},
 		},
 	}

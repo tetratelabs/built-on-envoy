@@ -7,12 +7,7 @@ package cmd
 
 import (
 	"bytes"
-	"fmt"
-	"io/fs"
-	"maps"
-	"slices"
-	"sort"
-	"strings"
+	"context"
 	"testing"
 
 	"github.com/alecthomas/kong"
@@ -32,6 +27,7 @@ func TestParseCmdRunHelp(t *testing.T) {
 		kong.Name("boe"),
 		kong.Writers(&buf, &buf),
 		kong.Exit(func(int) {}),
+		Vars,
 	)
 	require.NoError(t, err)
 
@@ -63,10 +59,19 @@ Flags:
       --listen-port=10000          Port for Envoy listener to accept incoming
                                    traffic.
       --admin-port=9901            Port for Envoy admin interface.
-      --extension=EXTENSION,...    Extensions to enable (in the format:
-                                   "name:version").
+      --extension=EXTENSION,...    Extensions to enable (in the format: "name"
+                                   or "name:version").
       --local=LOCAL                Path to a directory containing a local
                                    Extension to enable.
+      --registry="ghcr.io/tetratelabs/built-on-envoy"
+                                   OCI registry URL to fetch the extension from
+                                   ($BOE_REGISTRY).
+      --insecure                   Allow fetching from an insecure (HTTP)
+                                   registry ($BOE_REGISTRY_INSECURE).
+      --username=STRING            Username for the OCI registry
+                                   ($BOE_REGISTRY_USERNAME).
+      --password=STRING            Password for the OCI registry
+                                   ($BOE_REGISTRY_PASSWORD).
 `
 	require.Equal(t, expected, buf.String())
 }
@@ -76,7 +81,13 @@ func TestParseCmdRunDefaults(t *testing.T) {
 		Run Run `cmd:"" help:"Run Envoy with extensions"`
 	}
 
-	parser, err := kong.New(&cli, kong.Name("boe"), kong.Exit(func(int) {}))
+	parser, err := kong.New(&cli,
+		kong.Name("boe"),
+		kong.Exit(func(int) {}),
+		kong.BindTo(t.Context(), (*context.Context)(nil)),
+		kong.Bind(&xdg.Directories{}),
+		Vars,
+	)
 	require.NoError(t, err)
 
 	_, err = parser.Parse([]string{"run"})
@@ -88,6 +99,8 @@ func TestParseCmdRunDefaults(t *testing.T) {
 	require.Equal(t, uint32(9901), cli.Run.AdminPort)
 	require.Empty(t, cli.Run.EnvoyVersion)
 	require.Empty(t, cli.Run.Extensions)
+	require.Equal(t, extensions.DefaultOCIRegistry, cli.Run.Registry)
+	require.False(t, cli.Run.Insecure)
 
 	// Verify RunID is generated with expected format: YYYYMMDD_HHMMSS_UUU
 	require.NotEmpty(t, cli.Run.RunID)
@@ -99,8 +112,17 @@ func TestParseCmdRunCustomValues(t *testing.T) {
 		Run Run `cmd:"" help:"Run Envoy with extensions"`
 	}
 
-	parser, err := kong.New(&cli, kong.Name("boe"), kong.Exit(func(int) {}))
+	parser, err := kong.New(&cli,
+		kong.Name("boe"),
+		kong.Exit(func(int) {}),
+		kong.BindTo(t.Context(), (*context.Context)(nil)),
+		kong.Bind(&xdg.Directories{}),
+		Vars,
+	)
 	require.NoError(t, err)
+
+	t.Setenv("BOE_REGISTRY_INSECURE", "true")
+	t.Setenv("BOE_REGISTRY", "localhost:5000")
 
 	_, err = parser.Parse([]string{
 		"run",
@@ -109,7 +131,7 @@ func TestParseCmdRunCustomValues(t *testing.T) {
 		"--admin-port=9000",
 		"--envoy-version=1.31.0",
 		"--run-id=custom-run-id",
-		"--extension=cors,rate-limiter",
+		"--extension=cors:1.0.0,rate-limiter",
 		"--extension=auth-jwt",
 	})
 	require.NoError(t, err)
@@ -119,50 +141,9 @@ func TestParseCmdRunCustomValues(t *testing.T) {
 	require.Equal(t, uint32(9000), cli.Run.AdminPort)
 	require.Equal(t, "1.31.0", cli.Run.EnvoyVersion)
 	require.Equal(t, "custom-run-id", cli.Run.RunID)
-	require.Equal(t, []string{"cors", "rate-limiter", "auth-jwt"}, cli.Run.Extensions)
-}
-
-func TestParseInvalidExtension(t *testing.T) {
-	available := slices.Collect(maps.Keys(extensions.Manifests))
-	sort.Strings(available)
-
-	var cli struct {
-		Run Run `cmd:"" help:"Run Envoy with extensions"`
-	}
-
-	parser, err := kong.New(&cli, kong.Name("boe"), kong.Exit(func(int) {}))
-	require.NoError(t, err)
-
-	_, err = parser.Parse([]string{"run", "--extension=unknown-extension"})
-
-	require.EqualError(t, err,
-		fmt.Sprintf(`run: unknown extension "unknown-extension"; available extensions: %s`,
-			strings.Join(available, ",")))
-}
-
-func TestValidateLocalExtensionPath(t *testing.T) {
-	var cli struct {
-		Run Run `cmd:"" help:"Run Envoy with extensions"`
-	}
-
-	parser, err := kong.New(&cli, kong.Name("boe"), kong.Exit(func(int) {}))
-	require.NoError(t, err)
-
-	t.Run("valid-path", func(t *testing.T) {
-		_, err = parser.Parse([]string{"run", "--local", "./testdata"})
-		require.NoError(t, err)
-	})
-
-	t.Run("invalid-paths", func(t *testing.T) {
-		_, err = parser.Parse([]string{"run", "--local", "./"})
-		require.ErrorIs(t, err, extensions.ErrOpenManifestFile)
-	})
-
-	t.Run("nonexistent-path", func(t *testing.T) {
-		_, err = parser.Parse([]string{"run", "--local", "/path/to/nonexistent/dir"})
-		var pathErr *fs.PathError
-		require.ErrorAs(t, err, &pathErr)
-	})
+	require.Equal(t, []string{"cors:1.0.0", "rate-limiter", "auth-jwt"}, cli.Run.Extensions)
+	require.Equal(t, "localhost:5000", cli.Run.Registry)
+	require.True(t, cli.Run.Insecure)
 }
 
 func TestValidateLogLevel(t *testing.T) {
@@ -307,4 +288,74 @@ func TestParseLogLevels(t *testing.T) {
 func TestRunInvalidConfig(t *testing.T) {
 	r := &Run{RunID: "///"}
 	require.Error(t, r.Run(t.Context(), &xdg.Directories{}))
+}
+
+func TestSplitRef(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		wantRepo string
+		wantTag  string
+	}{
+		{
+			name:     "simple name without tag",
+			input:    "cors",
+			wantRepo: "cors",
+			wantTag:  "latest",
+		},
+		{
+			name:     "simple name with tag",
+			input:    "cors:1.0.0",
+			wantRepo: "cors",
+			wantTag:  "1.0.0",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			wantRepo: "",
+			wantTag:  "latest",
+		},
+		{
+			name:     "name with multiple colons takes last",
+			input:    "foo:bar:baz",
+			wantRepo: "foo:bar",
+			wantTag:  "baz",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo, tag := splitRef(tt.input)
+			require.Equal(t, tt.wantRepo, repo)
+			require.Equal(t, tt.wantTag, tag)
+		})
+	}
+}
+
+func TestLoadLocalManifests(t *testing.T) {
+	t.Run("empty paths", func(t *testing.T) {
+		manifests, err := loadLocalManifests([]string{})
+		require.NoError(t, err)
+		require.Empty(t, manifests)
+	})
+
+	t.Run("multiple valid paths", func(t *testing.T) {
+		manifests, err := loadLocalManifests([]string{"./testdata", "./testdata/push_pull"})
+		require.NoError(t, err)
+		require.Len(t, manifests, 2)
+		require.Equal(t, "test-lua", manifests[0].Name)
+		require.Equal(t, "push-pull", manifests[1].Name)
+	})
+
+	t.Run("nonexistent path", func(t *testing.T) {
+		_, err := loadLocalManifests([]string{"/nonexistent/path"})
+		require.Error(t, err)
+		require.ErrorIs(t, err, errFailedToLoadLocalManifest)
+	})
+
+	t.Run("invalid path", func(t *testing.T) {
+		_, err := loadLocalManifests([]string{"./"})
+		require.Error(t, err)
+		require.ErrorIs(t, err, errFailedToLoadLocalManifest)
+	})
 }

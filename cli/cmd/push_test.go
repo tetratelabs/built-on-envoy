@@ -52,7 +52,8 @@ Flags:
       --registry="ghcr.io/tetratelabs/built-on-envoy"
                            OCI registry URL to push the extension to
                            ($BOE_REGISTRY).
-      --insecure           Allow pushing to an insecure (HTTP) registry.
+      --insecure           Allow pushing to an insecure (HTTP) registry
+                           ($BOE_REGISTRY_INSECURE).
       --username=STRING    Username for the OCI registry
                            ($BOE_REGISTRY_USERNAME).
       --password=STRING    Password for the OCI registry
@@ -154,7 +155,7 @@ func TestNewOCIClient(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client, err := newOCIClient(tt.repository, tt.username, tt.password, tt.insecure)
+			client, err := newOCIRepositoryClient(tt.repository, tt.username, tt.password, tt.insecure)
 			require.Equal(t, tt.wantErr, err != nil)
 			require.Equal(t, tt.wantErr, client == nil)
 		})

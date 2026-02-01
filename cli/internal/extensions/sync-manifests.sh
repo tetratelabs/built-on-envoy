@@ -17,6 +17,8 @@ MANIFESTS_TARGET_DIR="${CLI_ROOT}/internal/extensions/manifests"
 
 echo "Synchronizing extension manifests to ${MANIFESTS_TARGET_DIR}..."
 
+rm -rf "${MANIFESTS_TARGET_DIR}"
+
 # Synchronize the manifests and schema, preserving directory structure.
 rsync -amq --include=*/ \
     --include=manifest.yaml \

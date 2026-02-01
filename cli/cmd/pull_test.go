@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
-	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
 func TestParseCmdPullHelp(t *testing.T) {
@@ -52,7 +51,11 @@ Flags:
   -h, --help               Show context-sensitive help.
 
       --path=STRING        Destination path to extract the extension to.
-      --insecure           Allow pulling from an insecure (HTTP) registry.
+      --registry="ghcr.io/tetratelabs/built-on-envoy"
+                           OCI registry URL to pull the extension from
+                           ($BOE_REGISTRY).
+      --insecure           Allow pulling from an insecure (HTTP) registry
+                           ($BOE_REGISTRY_INSECURE).
       --username=STRING    Username for the OCI registry
                            ($BOE_REGISTRY_USERNAME).
       --password=STRING    Password for the OCI registry
@@ -63,17 +66,25 @@ Flags:
 
 func TestParseExtensionReference(t *testing.T) {
 	tests := []struct {
-		name           string
-		input          string
-		wantRepository string
-		wantTag        string
-		wantErr        error
+		name            string
+		input           string
+		defaultRegistry string
+		wantRepository  string
+		wantTag         string
+		wantErr         error
 	}{
 		{
 			name:           "simple extension name",
 			input:          "cors",
 			wantRepository: extensions.DefaultOCIRegistry + "/extension-cors",
 			wantTag:        "latest",
+		},
+		{
+			name:            "simple extension name with custom default registry",
+			input:           "cors",
+			defaultRegistry: "localhost:5000",
+			wantRepository:  "localhost:5000/extension-cors",
+			wantTag:         "latest",
 		},
 		{
 			name:           "simple extension name with hyphen",
@@ -86,6 +97,13 @@ func TestParseExtensionReference(t *testing.T) {
 			input:          "ghcr.io/tetratelabs/built-on-envoy/extension-cors:1.0.0",
 			wantRepository: "ghcr.io/tetratelabs/built-on-envoy/extension-cors",
 			wantTag:        "1.0.0",
+		},
+		{
+			name:            "full OCI reference with tag and custom default registry",
+			input:           "ghcr.io/tetratelabs/built-on-envoy/extension-cors:1.0.0",
+			defaultRegistry: "localhost:5000",
+			wantRepository:  "ghcr.io/tetratelabs/built-on-envoy/extension-cors",
+			wantTag:         "1.0.0",
 		},
 		{
 			name:           "full OCI reference without tag",
@@ -125,22 +143,11 @@ func TestParseExtensionReference(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo, tag, err := parseExtensionReference(tt.input)
+			repo, tag, err := parseExtensionReference(tt.defaultRegistry, tt.input)
 
 			require.ErrorIs(t, err, tt.wantErr)
 			require.Equal(t, tt.wantRepository, repo)
 			require.Equal(t, tt.wantTag, tag)
 		})
 	}
-}
-
-func TestDownloadDirectory(t *testing.T) {
-	dirs := &xdg.Directories{DataHome: "/home/user/.local/share"}
-	p := &Pull{repository: "test", tag: "1.0.1"}
-
-	require.Equal(t, "/home/user/.local/share/extensions/test/1.0.1", p.downloadDirectory(dirs))
-
-	p.Path = "/custom/path"
-	p.downloadDirectory(dirs)
-	require.Equal(t, "/custom/path/extensions/test/1.0.1", p.downloadDirectory(dirs))
 }

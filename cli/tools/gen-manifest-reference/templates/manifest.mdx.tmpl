@@ -29,7 +29,7 @@ import ToC from '../../../components/ToC.astro';
 | **{{.Name}}** | {{.Value}} |
 {{- end}}
 {{- if .OneOf}}
-| **Reqiutes one of** | {{range $i, $v := .OneOf}}{{if $i}}, {{end}}`{{$v}}`{{end}} |
+| **Requires one of** | {{range $i, $v := .OneOf}}{{if $i}}, {{end}}`{{$v}}`{{end}} |
 {{- end}}
 
 {{- if .SubProperties}}

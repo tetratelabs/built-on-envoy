@@ -15,6 +15,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2"
@@ -211,16 +212,22 @@ const (
 // BuildOCIPackage creates an OCI artifact from a .tar.gz byte array and stores it
 // in the provided store. The artifact contains a single layer with the provided content.
 // Returns the manifest descriptor.
-func BuildOCIPackage(ctx context.Context, store content.Pusher, data []byte) (ocispec.Descriptor, error) {
+func BuildOCIPackage(ctx context.Context, store content.Pusher, data []byte, annotations map[string]string) (ocispec.Descriptor, error) {
 	// Push the layer content
 	layerDesc, err := oras.PushBytes(ctx, store, MediaTypeLayer, data)
 	if err != nil {
 		return ocispec.Descriptor{}, err
 	}
 
+	if annotations == nil {
+		annotations = make(map[string]string)
+	}
+	annotations[ocispec.AnnotationCreated] = time.Now().UTC().Format(time.RFC3339)
+
 	// Pack the manifest with the layer
 	packOpts := oras.PackManifestOptions{
-		Layers: []ocispec.Descriptor{layerDesc},
+		Layers:              []ocispec.Descriptor{layerDesc},
+		ManifestAnnotations: annotations,
 	}
 
 	manifestDesc, err := oras.PackManifest(ctx, store, oras.PackManifestVersion1_1, ArtifactType, packOpts)
