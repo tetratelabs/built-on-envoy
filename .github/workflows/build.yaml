@@ -151,7 +151,7 @@ jobs:
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
-      - run: cd ../cli && make gen-docs 
+      - run: cd ../cli && make gen 
       - run: npm ci
       - run: npm run build
 
