@@ -40,6 +40,17 @@ type Run struct {
 	extensions        []*extensions.Manifest `kong:"-"` // Internal field: loaded extension manifests
 }
 
+// Help provides detailed help for the run command.
+func (r *Run) Help() string {
+	return strings.ReplaceAll(`The run command starts an Envoy proxy with the specified extensions enabled.
+It automatically downloads the required Envoy binary if not already present, generates the necessary
+configuration, and launches Envoy with the extensions configured in the HTTP filter chain.
+
+You can enable multiple extensions using the {BT}--extension{BT} flag, and also load extensions from
+local directories using {BT}--local{BT} for development and testing purposes. The command manages
+all runtime files, logs, and the Envoy admin interface automatically.`, "{BT}", "`")
+}
+
 // BeforeApply is called by Kong before applying defaults to set computed default values.
 func (r *Run) BeforeApply(_ *kong.Context) error {
 	// Set RunID default if not provided

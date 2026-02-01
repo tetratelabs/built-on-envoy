@@ -37,11 +37,19 @@ func TestParseCmdRunHelp(t *testing.T) {
 
 	_, _ = parser.Parse([]string{"run", "--help"})
 
-	fmt.Println(buf.String())
-
 	expected := `Usage: boe run [flags]
 
 Run Envoy with extensions
+
+The run command starts an Envoy proxy with the specified extensions enabled.
+It automatically downloads the required Envoy binary if not already present,
+generates the necessary configuration, and launches Envoy with the extensions
+configured in the HTTP filter chain.
+
+You can enable multiple extensions using the ` + "`--extension`" + ` flag, and also load
+extensions from local directories using ` + "`--local`" + ` for development and testing
+purposes. The command manages all runtime files, logs, and the Envoy admin
+interface automatically.
 
 Flags:
   -h, --help                       Show context-sensitive help.

@@ -52,6 +52,7 @@ type Arg struct {
 type Command struct {
 	Name        string
 	Description string
+	Detail      string
 	Flags       []Flag
 	Args        []Arg
 }
@@ -197,6 +198,7 @@ func parseCommands() ([]Command, []EnvVar, error) {
 		cmd := Command{
 			Name:        node.Name,
 			Description: node.Help,
+			Detail:      node.Detail,
 		}
 
 		// Extract flags

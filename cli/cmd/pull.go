@@ -38,6 +38,17 @@ type Pull struct {
 	downloadDir string     `kong:"-"` // Internal field: download directory
 }
 
+// Help provides detailed help for the pull command.
+func (p *Pull) Help() string {
+	return strings.ReplaceAll(`The pull command downloads an extension from an OCI-compliant container registry.
+You can specify either a simple extension name (which uses the default registry) or a full
+OCI reference including registry, repository, and tag.
+
+The extension is extracted to a local directory and can then be used with the {BT}run{BT} or
+{BT}gen-config{BT} commands via the {BT}--local{BT} flag. If no destination path is specified,
+the extension is saved to the default data directory.`, "{BT}", "`")
+}
+
 // Validate is called by Kong after parsing to validate the command arguments.
 func (p *Pull) Validate() error {
 	repo, tag, err := parseExtensionReference(p.Extension)

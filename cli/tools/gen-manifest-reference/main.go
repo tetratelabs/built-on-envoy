@@ -343,9 +343,9 @@ func getTypeString(prop *Property) string {
 	// Handle arrays
 	if typeStr == "array" && prop.Items != nil {
 		if prop.Items.Type == "object" {
-			typeStr = "array of object"
+			typeStr = "[]object"
 		} else if prop.Items.Type != "" {
-			typeStr = "array of " + prop.Items.Type
+			typeStr = "[]" + prop.Items.Type
 		}
 	}
 

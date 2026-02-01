@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	hcmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
 
@@ -27,6 +28,17 @@ type GenConfig struct {
 
 	extensions []*extensions.Manifest `kong:"-"` // Internal field: loaded extension manifests
 	output     io.Writer              `kong:"-"` // Internal field for testing
+}
+
+// Help provides detailed help for the gen-config command.
+func (c *GenConfig) Help() string {
+	return strings.ReplaceAll(`The gen-config command generates Envoy configuration YAML for the specified extensions.
+This is useful for inspecting the generated configuration, integrating with existing Envoy deployments,
+or using with external Envoy management tools.
+
+By default, it outputs a complete Envoy bootstrap configuration. Use the {BT}--only-filters{BT} flag
+to generate just the HTTP filter chain configuration, which can be embedded into an existing
+{BT}HttpConnectionManager{BT} configuration.`, "{BT}", "`")
 }
 
 // Validate is called by Kong after parsing to validate the command arguments.

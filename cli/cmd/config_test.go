@@ -36,6 +36,15 @@ func TestParseCmdGenConfigHelp(t *testing.T) {
 
 Generate Envoy configuration with specified extensions
 
+The gen-config command generates Envoy configuration YAML for the specified
+extensions. This is useful for inspecting the generated configuration,
+integrating with existing Envoy deployments, or using with external Envoy
+management tools.
+
+By default, it outputs a complete Envoy bootstrap configuration. Use the
+` + "`--only-filters`" + ` flag to generate just the HTTP filter chain configuration,
+which can be embedded into an existing ` + "`HttpConnectionManager`" + ` configuration.
+
 Flags:
   -h, --help                       Show context-sensitive help.
 

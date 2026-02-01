@@ -35,6 +35,13 @@ func TestParseCmdListHelp(t *testing.T) {
 
 List available extensions
 
+The list command displays all available Envoy extensions. It provides a quick
+overview of what extensions you can use when running Envoy or generating
+configurations, and the versions available for each extension.
+
+This command is useful for discovering which extensions are available before
+using them with the ` + "`run`" + ` or ` + "`gen-config`" + ` commands.
+
 Flags:
   -h, --help    Show context-sensitive help.
 `

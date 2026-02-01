@@ -35,6 +35,14 @@ func TestParseCmdPushHelp(t *testing.T) {
 
 Push an extension to an OCI registry
 
+The push command publishes a local extension to an OCI-compliant container
+registry. This allows you to share extensions with others or deploy them across
+different environments.
+
+The extension directory must contain a valid ` + "`manifest.yaml`" + ` file. The extension
+version from the manifest is used as the image tag. You can specify registry
+credentials via flags or environment variables for authenticated registries.
+
 Arguments:
   <local extension>    Path to a directory containing the extension to push.
 

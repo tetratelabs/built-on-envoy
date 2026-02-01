@@ -8,6 +8,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/alecthomas/kong"
 
@@ -27,6 +28,16 @@ type Push struct {
 	manifest  *extensions.Manifest `kong:"-"` // Internal field: loaded extension manifest
 	reference string               `kong:"-"` // Internal field: full OCI repository reference
 	client    oci.Client           `kong:"-"` // Internal field: OCI client
+}
+
+// Help provides detailed help for the push command.
+func (p *Push) Help() string {
+	return strings.ReplaceAll(`The push command publishes a local extension to an OCI-compliant container registry.
+This allows you to share extensions with others or deploy them across different environments.
+
+The extension directory must contain a valid {BT}manifest.yaml{BT} file. The extension version
+from the manifest is used as the image tag. You can specify registry credentials via flags
+or environment variables for authenticated registries.`, "{BT}", "`")
 }
 
 // errInvalidManifest is returned when the extension manifest is invalid.
