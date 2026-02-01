@@ -89,13 +89,9 @@ func TestExpandPath(t *testing.T) {
 }
 
 func TestExpandPathWithDifferentHOME(t *testing.T) {
-	// Save original HOME
-	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
-
 	// Set a custom HOME
 	customHome := "/custom/home"
-	os.Setenv("HOME", customHome)
+	t.Setenv("HOME", customHome)
 
 	result := expandPath("~/.config")
 	require.Equal(t, filepath.Join(customHome, ".config"), result)

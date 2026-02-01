@@ -3,7 +3,7 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-name: CLI
+name: Build
 
 on:
   push:
@@ -147,6 +147,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+      - run: cd ../cli && make gen-docs 
       - run: npm ci
       - run: npm run build
 
