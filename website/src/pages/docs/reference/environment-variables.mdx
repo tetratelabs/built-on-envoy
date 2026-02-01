@@ -4,134 +4,18 @@ title: Environment Variables
 description: Configure CLI behavior with environment variables
 ---
 
-import CLIName from '../../../components/CLIName.astro';
-import CodeBlock from '../../../components/CodeBlock.astro';
-
 # Environment Variables
 
-Configure CLI behavior with environment variables.
+List of environment variables that can be used to configure the CLI behavior.
 
-## XDG Directory Variables
-
-These variables control where the CLI stores its files, following the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/latest/).
-
-### `BOE_CONFIG_HOME`
-
-Configuration files directory.
-
-| | |
-|---|---|
-| **Default** | `~/.config/boe` |
-| **Flag** | `--config-home` |
-
-```bash
-export BOE_CONFIG_HOME=~/.config/boe
-```
-
-### `BOE_DATA_HOME`
-
-Downloaded Envoy binaries directory.
-
-| | |
-|---|---|
-| **Default** | `~/.local/share/boe` |
-| **Flag** | `--data-home` |
-
-```bash
-export BOE_DATA_HOME=~/.local/share/boe
-```
-
-### `BOE_STATE_HOME`
-
-Persistent state and logs directory.
-
-| | |
-|---|---|
-| **Default** | `~/.local/state/boe` |
-| **Flag** | `--state-home` |
-
-```bash
-export BOE_STATE_HOME=~/.local/state/boe
-```
-
-### `BOE_RUNTIME_DIR`
-
-Ephemeral runtime files directory.
-
-| | |
-|---|---|
-| **Default** | `/tmp/boe-$UID` |
-| **Flag** | `--runtime-dir` |
-
-```bash
-export BOE_RUNTIME_DIR=/tmp/boe-runtime
-```
-
-## OCI Registry Variables
-
-These variables configure authentication for OCI registries when using the `push` and `pull` commands.
-
-### `BOE_REGISTRY_USERNAME`
-
-Username for OCI registry authentication.
-
-| | |
-|---|---|
-| **Default** | (none) |
-| **Flag** | `--username` |
-
-```bash
-export BOE_REGISTRY_USERNAME=myuser
-```
-
-### `BOE_REGISTRY_PASSWORD`
-
-Password for OCI registry authentication.
-
-| | |
-|---|---|
-| **Default** | (none) |
-| **Flag** | `--password` |
-
-```bash
-export BOE_REGISTRY_PASSWORD=mypass
-```
-
-## Run Command Variables
-
-### `ENVOY_VERSION`
-
-Envoy version to use.
-
-| | |
-|---|---|
-| **Default** | Latest available |
-| **Flag** | `--envoy-version` |
-
-```bash
-export ENVOY_VERSION=1.31.0
-```
-
-### `BOE_RUN_ID`
-
-Run identifier for the invocation. Use `0` for Docker/Kubernetes environments.
-
-| | |
-|---|---|
-| **Default** | Timestamp-based ID (`YYYYMMDD_HHMMSS_UUU`) |
-| **Flag** | `--run-id` |
-
-```bash
-export BOE_RUN_ID=0
-```
-
-## Example Usage
-
-<CodeBlock  code={`# Set Envoy version
-export ENVOY_VERSION=1.31.0
-
-# Use custom data directory
-export BOE_DATA_HOME=/opt/boe/data
-
-# Run with extensions
-{{CLI_NAME}} run --extension rate-limiter`} />
+| Name | Description | Default |
+|---|---|---|
+| `BOE_CONFIG_HOME` | Configuration files directory. Defaults to ~/.config/boe | `~/.config/boe` |
+| `BOE_DATA_HOME` | Downloaded Envoy binaries directory. Defaults to ~/.local/share/boe | `~/.local/share/boe` |
+| `BOE_REGISTRY` | OCI registry URL to push the extension to. | `ghcr.io/tetratelabs/built-on-envoy` |
+| `BOE_REGISTRY_PASSWORD` | Password for the OCI registry. | - |
+| `BOE_REGISTRY_USERNAME` | Username for the OCI registry. | - |
+| `BOE_RUNTIME_DIR` | Ephemeral runtime files directory. Defaults to /tmp/boe-$UID | - |
+| `BOE_RUN_ID` | Run identifier for this invocation. Defaults to timestamp-based ID or $BOE_RUN_ID. Use '0' for Docker/Kubernetes. | - |
+| `BOE_STATE_HOME` | Persistent state and logs directory. Defaults to ~/.local/state/boe | `~/.local/state/boe` |
+| `ENVOY_VERSION` | Envoy version to use (e.g., 1.31.0) | - |

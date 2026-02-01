@@ -1,0 +1,15 @@
+---
+layout: ../../../layouts/DocsLayout.astro
+title: Environment Variables
+description: Configure CLI behavior with environment variables
+---
+
+# Environment Variables
+
+List of environment variables that can be used to configure the CLI behavior.
+
+| Name | Description | Default |
+|---|---|---|
+{{- range .}}
+| `{{.Name}}` | {{.Help}} | {{if .Default}}`{{.Default}}`{{else}}-{{end}} |
+{{- end}}

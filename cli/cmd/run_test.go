@@ -48,15 +48,13 @@ Flags:
 
       --envoy-version=STRING       Envoy version to use (e.g., 1.31.0)
                                    ($ENVOY_VERSION)
-      --log-level="all:error"      Envoy component log level (default:
-                                   all:error)
+      --log-level="all:error"      Envoy component log level.
       --run-id=STRING              Run identifier for this invocation. Defaults
                                    to timestamp-based ID or $BOE_RUN_ID. Use '0'
                                    for Docker/Kubernetes ($BOE_RUN_ID).
       --listen-port=10000          Port for Envoy listener to accept incoming
-                                   traffic (default: 10000)
-      --admin-port=9901            Port for Envoy admin interface (default:
-                                   9901)
+                                   traffic.
+      --admin-port=9901            Port for Envoy admin interface.
       --extension=EXTENSION,...    Extensions to enable (in the format:
                                    "name:version").
       --local=LOCAL                Path to a directory containing a local

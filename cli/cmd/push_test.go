@@ -25,6 +25,7 @@ func TestParseCmdPushHelp(t *testing.T) {
 		kong.Name("boe"),
 		kong.Writers(&buf, &buf),
 		kong.Exit(func(int) {}),
+		Vars,
 	)
 	require.NoError(t, err)
 
@@ -41,10 +42,9 @@ Flags:
   -h, --help               Show context-sensitive help.
 
       --registry="ghcr.io/tetratelabs/built-on-envoy"
-                           OCI registry URL to push the extension to. (default:
-                           ghcr.io/tetratelabs/built-on-envoy) ($BOE_REGISTRY)
-      --insecure           Allow pushing to an insecure (HTTP) registry
-                           (default: false)
+                           OCI registry URL to push the extension to
+                           ($BOE_REGISTRY).
+      --insecure           Allow pushing to an insecure (HTTP) registry.
       --username=STRING    Username for the OCI registry
                            ($BOE_REGISTRY_USERNAME).
       --password=STRING    Password for the OCI registry

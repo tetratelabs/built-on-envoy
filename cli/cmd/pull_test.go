@@ -26,6 +26,7 @@ func TestParseCmdPullHelp(t *testing.T) {
 		kong.Name("boe"),
 		kong.Writers(&buf, &buf),
 		kong.Exit(func(int) {}),
+		Vars,
 	)
 	require.NoError(t, err)
 
@@ -36,15 +37,14 @@ func TestParseCmdPullHelp(t *testing.T) {
 Pull an extension from an OCI registry
 
 Arguments:
-  <extension>    Extension name or OCI repository URL (e.g., cors or
-                 ghcr.io/tetratelabs/built-on-envoy/extension-cors:1.0.0)
+  <extension>    Extension name or OCI repository URL (e.g., cache or
+                 ghcr.io/tetratelabs/built-on-envoy/extension-cache:1.0.0)
 
 Flags:
   -h, --help               Show context-sensitive help.
 
       --path=STRING        Destination path to extract the extension to.
-      --insecure           Allow pulling from an insecure (HTTP) registry
-                           (default: false)
+      --insecure           Allow pulling from an insecure (HTTP) registry.
       --username=STRING    Username for the OCI registry
                            ($BOE_REGISTRY_USERNAME).
       --password=STRING    Password for the OCI registry

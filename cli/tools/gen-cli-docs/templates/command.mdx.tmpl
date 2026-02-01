@@ -1,0 +1,39 @@
+---
+layout: ../../../layouts/DocsLayout.astro
+title: {{.Name}}
+description: {{.Description}}
+---
+
+import CLIName from '../../../components/CLIName.astro';
+import CodeBlock from '../../../components/CodeBlock.astro';
+
+# <CLIName/> {{.Name}}
+
+{{.Description}}
+
+## Usage
+
+<CodeBlock code={`{{"{{"}}CLI_NAME{{"}}"}} {{.Name}}{{range .Args}} <{{.Name}}>{{end}} [flags]`} />
+
+To see all available options:
+
+<CodeBlock code={`{{"{{"}}CLI_NAME{{"}}"}} {{.Name}} --help`} />
+
+{{if .Args}}
+## Arguments
+
+| Name | Description | Type | Required |
+|------|-------------|------|----------|
+{{- range .Args}}
+| `{{.Name}}` | {{.Help}} | `{{.Type}}` | {{if .Required}}Yes{{else}}No{{end}} |
+{{- end}}
+{{end}}
+{{if .Flags}}
+## Flags
+
+| Name | Description | Type | Default | Env Var | Required |
+|------|-------------|------|---------|-----|----------|
+{{- range .Flags}}
+| `--{{.Name}}`{{if .Short}} (`-{{.Short}}`){{end}} | {{.Help}} | `{{.Type}}` | {{if .Default}}`{{.Default}}`{{else}}-{{end}} | {{if .EnvVars}}`{{join .EnvVars ", "}}`{{else}}-{{end}} | {{if .Required}}Yes{{else}}No{{end}} |
+{{- end}}
+{{end}}

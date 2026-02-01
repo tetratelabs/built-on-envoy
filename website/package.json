@@ -12,6 +12,7 @@
   "dependencies": {
     "@astrojs/mdx": "^4.3.13",
     "astro": "^5.16.11",
+    "remark-toc": "^9.0.0",
     "yaml": "^2.8.2"
   },
   "devDependencies": {

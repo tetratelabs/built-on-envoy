@@ -24,6 +24,7 @@ header:
     - "**/go.mod"
     - "**/go.sum"
     - "**/*.md"
+    - "**/*.tmpl"
     - "**/.gitignore"
     - .editorconfig
     - LICENSE

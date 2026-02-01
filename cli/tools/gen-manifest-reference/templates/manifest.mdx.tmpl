@@ -1,0 +1,56 @@
+---
+layout: ../../../layouts/DocsLayout.astro
+title: {{.Title}}
+description: {{.Description}}
+---
+
+import ToC from '../../../components/ToC.astro';
+
+# {{.Title}}
+
+{{.Description}}
+
+<ToC maxDepth="4"/>
+
+{{- range .Properties}}
+
+## {{.Name}}
+
+{{.Description}}
+
+| | |
+|---|---|
+| **Type** | `{{.Type}}` |
+| **Required** | {{if .Required}}Yes{{else}}No{{end}} |
+{{- if .EnumValues}}
+| **Allowed values** | {{range $i, $v := .EnumValues}}{{if $i}}, {{end}}`{{$v}}`{{end}} |
+{{- end}}
+{{- range .Constraints}}
+| **{{.Name}}** | {{.Value}} |
+{{- end}}
+{{- if .OneOf}}
+| **Reqiutes one of** | {{range $i, $v := .OneOf}}{{if $i}}, {{end}}`{{$v}}`{{end}} |
+{{- end}}
+
+{{- if .SubProperties}}
+{{ $prop := . }}
+{{range .SubProperties}}
+
+### {{$prop.Name}}.{{.Name}}
+
+{{.Description}}
+
+| | |
+|---|---|
+| **Type** | `{{.Type}}` |
+| **Required** | {{if .Required}}Yes{{else}}No{{end}} |
+{{- range .Constraints}}
+| **{{.Name}}** | {{.Value}} |
+{{- end}}
+{{- if .OneOf}}
+| **Reqiutes one of** | {{range $i, $v := .OneOf}}{{if $i}}, {{end}}`{{$v}}`{{end}} |
+{{- end}}
+{{end}}
+{{- end}}
+
+{{end}}

@@ -25,7 +25,8 @@ GO_TEST_ARGS ?=
 
 # Use a specific go tool invocation that uses the tools module for linters and other tools so that
 # the main go.mod is not polluted with tool dependencies.
-GO_TOOL := go tool -modfile=tools/go.mod
+CLI_ROOT := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
+GO_TOOL := go tool -modfile=$(CLI_ROOT)/tools/go.mod
 
 ##@ Build
 
@@ -38,7 +39,7 @@ GO_TOOL := go tool -modfile=tools/go.mod
 GOOS_LIST ?= $(shell go env GOOS)
 GOARCH_LIST ?= $(shell go env GOARCH)
 .PHONY: build
-build: gen  ## Build a binary for the given OS and architectures
+build: gen-code  ## Build a binary for the given OS and architectures
 	@mkdir -p $(OUTPUT_DIR)
 	@for goos in $(GOOS_LIST); do \
 		for goarch in $(GOARCH_LIST); do \
@@ -49,35 +50,30 @@ build: gen  ## Build a binary for the given OS and architectures
 		done; \
 	done
 
-.PHONY: gen
-gen: ## Generate code
-	@echo "Generating code..."
-	@go generate ./...
-
 .PHONY: clean
 clean:  ## Clean the build artifacts
 	rm -rf $(OUTPUT_DIR)
 
 .PHONY: test
-test: gen  ## Run the unit tests
+test: gen-code  ## Run the unit tests
 	@PKGS=$$(go list ./... | grep -v -E "e2e"); \
 	  echo "Running unit tests for packages: $$PKGS"; \
 	  go test $(GO_TEST_ARGS) $$PKGS
 
 .PHONY: test-integration
-test-integration: gen  ## Run the unit and integration tests
+test-integration: gen-code  ## Run the unit and integration tests
 	@PKGS=$$(go list ./... | grep -v -E "e2e"); \
 	  echo "Running unit and integration tests for packages: $$PKGS"; \
 	  go test -tags integration $(GO_TEST_ARGS) $$PKGS
 
 .PHONY: test-e2e
-test-e2e: gen  ## Run the end-to-end tests
+test-e2e: gen-code  ## Run the end-to-end tests
 	@echo "Run e2e tests"
 	@go test $(GO_TEST_ARGS) ./e2e/...
 
 # This runs the unit tests for the codebase with coverage check.
 .PHONY: test-coverage
-test-coverage:  ## Run the unit tests for the codebase with coverage check.
+test-coverage: gen-code  ## Run the unit tests for the codebase with coverage check.
 	@mkdir -p $(OUTPUT_DIR)
 	@$(MAKE) test GO_TEST_ARGS="-coverprofile=$(OUTPUT_DIR)/go-test-coverage.out \
 		-covermode=atomic \
@@ -85,6 +81,24 @@ test-coverage:  ## Run the unit tests for the codebase with coverage check.
 		-count=1 \
 		-tags integration $(GO_TEST_ARGS)"
 	@$(GO_TOOL) go-test-coverage --config=.testcoverage.yml
+
+##@ Code Generation
+
+.PHONY: gen
+gen: gen-code gen-docs  ## Generate all the code and documentation
+
+.PHONY: gen-code
+gen-code:  ## Generate code
+	@echo "Generating code..."
+	@go generate ./...
+
+.PHONY: gen-docs
+gen-docs:  ## Generate documentation
+	@echo "Generating documentation..."
+	@go run tools/gen-cli-docs/main.go -docs-dir=../website/src/pages/docs
+	@go run tools/gen-manifest-reference/main.go \
+		-schema=../extensions/manifest.schema.json \
+		-output=../website/src/pages/docs/reference/manifest.mdx
 
 ##@ Docker
 
@@ -119,9 +133,13 @@ docker:  ## Build the Docker iamge
 ##@ Code Quality
 
 .PHONY: lint
-lint: gen  ## Run the linters
+lint: gen-code  ## Run the linters
 	@echo "golangci-lint => ./..."
-	@$(GO_TOOL) golangci-lint run --build-tags integration ./...
+	@$(GO_TOOL) golangci-lint run --build-tags integration
+	@echo "golangci-lint => tools/gen-cli-docs/..."
+	@cd tools/gen-cli-docs && $(GO_TOOL) golangci-lint run
+	@echo "golangci-lint => tools/gen-manifest-reference/..."
+	@cd tools/gen-manifest-reference && $(GO_TOOL) golangci-lint run
 
 # Some IDEs like Goland place `.go` files in the `.idea` directory when using code templates. Using a
 # git command to find the files ensures that only relevant files are formatted and that git-ignored
@@ -134,9 +152,13 @@ format:  ## Format code.
 	@echo "licenses => **"
 	@$(GO_TOOL) license-eye header fix
 
+.PHONY: tidy
+tidy:  ## Run go mod tidy.
+	@echo "go mod tidy => ./..."
+	@find . -name go.mod -execdir go mod tidy \;
+
 .PHONY: check
-check: format  ## Run all necessary steps to prepare for a commit and check for any differences in the codebase
-	@go mod tidy
+check: gen tidy format  ## Run all necessary steps to prepare for a commit and check for any differences in the codebase
 	@if [ ! -z "`git status -s`" ]; then \
 		echo "The following differences will fail CI until committed:"; \
 		git status; \

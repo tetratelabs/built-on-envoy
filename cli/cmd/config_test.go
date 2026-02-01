@@ -42,9 +42,8 @@ Flags:
       --only-filters               Generate configuration with only extension
                                    filters.
       --listen-port=10000          Port for Envoy listener to accept incoming
-                                   traffic (default: 10000)
-      --admin-port=9901            Port for Envoy admin interface (default:
-                                   9901)
+                                   traffic.
+      --admin-port=9901            Port for Envoy admin interface.
       --extension=EXTENSION,...    Extensions to enable (by name).
       --local=LOCAL                Path to a directory containing a local
                                    Extension to enable.

@@ -1,0 +1,69 @@
+---
+// ToC.astro - Dynamically generates a table of contents from page headings
+//
+// Usage: Simply add <ToC /> anywhere in your MDX file after the main title.
+// The component will automatically find all h2 and h3 headings on the page.
+//
+// Props:
+//   minDepth - Minimum heading depth to include (default: 2)
+//   maxDepth - Maximum heading depth to include (default: 3)
+
+interface Props {
+  minDepth?: number;
+  maxDepth?: number;
+}
+
+const { minDepth = 2, maxDepth = 3 } = Astro.props;
+---
+
+<nav class="toc" data-min-depth={minDepth} data-max-depth={maxDepth}>
+  <ul></ul>
+</nav>
+
+<script>
+  function buildToC() {
+    const tocNavs = document.querySelectorAll<HTMLElement>('.toc');
+
+    tocNavs.forEach((nav) => {
+      const minDepth = parseInt(nav.dataset.minDepth || '2', 10);
+      const maxDepth = parseInt(nav.dataset.maxDepth || '3', 10);
+      const list = nav.querySelector('ul');
+
+      if (!list) return;
+
+      // Build selector for heading levels
+      const selectors = [];
+      for (let i = minDepth; i <= maxDepth; i++) {
+        selectors.push(`article h${i}`);
+      }
+
+      const headings = document.querySelectorAll<HTMLHeadingElement>(selectors.join(', '));
+
+      headings.forEach((heading) => {
+        // Skip if heading doesn't have an id
+        if (!heading.id) return;
+
+        const depth = parseInt(heading.tagName.charAt(1), 10);
+        const li = document.createElement('li');
+        li.style.marginLeft = `${(depth - minDepth) * 1}rem`;
+
+        const link = document.createElement('a');
+        link.href = `#${heading.id}`;
+        link.style.fontWeight = 'normal';
+
+        // Get the display text - for subproperties (with "."), only show the part after the last "."
+        let text = heading.textContent || '';
+        text = text.substring(text.lastIndexOf('.') + 1);
+        // Capitalize the text
+        link.textContent = text.charAt(0).toUpperCase() + text.slice(1);
+
+        li.appendChild(link);
+        list.appendChild(li);
+      });
+    });
+  }
+
+  // Run on page load and after view transitions
+  buildToC();
+  document.addEventListener('astro:after-swap', buildToC);
+</script>

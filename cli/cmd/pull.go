@@ -26,9 +26,9 @@ var (
 
 // Pull is a command to pull an extension from an OCI registry.
 type Pull struct {
-	Extension string `arg:"" help:"Extension name or OCI repository URL (e.g., cors or ghcr.io/tetratelabs/built-on-envoy/extension-cors:1.0.0)"`
+	Extension string `arg:"" help:"Extension name or OCI repository URL (e.g., cache or ${default_registry}/extension-cache:1.0.0)"`
 	Path      string `name:"path" help:"Destination path to extract the extension to." type:"path"`
-	Insecure  bool   `name:"insecure" help:"Allow pulling from an insecure (HTTP) registry (default: false)" default:"false"`
+	Insecure  bool   `name:"insecure" help:"Allow pulling from an insecure (HTTP) registry." default:"false"`
 	Username  string `name:"username" env:"BOE_REGISTRY_USERNAME" help:"Username for the OCI registry."`
 	Password  string `name:"password" env:"BOE_REGISTRY_PASSWORD" help:"Password for the OCI registry." type:"password"`
 
