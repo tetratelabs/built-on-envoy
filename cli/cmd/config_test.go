@@ -42,14 +42,15 @@ integrating with existing Envoy deployments, or using with external Envoy
 management tools.
 
 By default, it outputs a complete Envoy bootstrap configuration. Use the
-` + "`--only-filters`" + ` flag to generate just the HTTP filter chain configuration,
-which can be embedded into an existing ` + "`HttpConnectionManager`" + ` configuration.
+` + "`--minimal`" + ` flag to generate only the extension-generated resources (HTTP
+filters and clusters).
 
 Flags:
   -h, --help                       Show context-sensitive help.
 
-      --only-filters               Generate configuration with only extension
-                                   filters.
+      --minimal                    Generate configuration with only
+                                   extension-generated resources (HTTP filters
+                                   and clusters).
       --listen-port=10000          Port for Envoy listener to accept incoming
                                    traffic.
       --admin-port=9901            Port for Envoy admin interface.
@@ -72,22 +73,22 @@ Flags:
 
 func TestGenConfig(t *testing.T) {
 	tests := []struct {
-		name       string
-		onlyFilter bool
-		local      []string
-		wantFile   string
+		name     string
+		minimal  bool
+		local    []string
+		wantFile string
 	}{
 		{
-			name:       "only filters",
-			onlyFilter: true,
-			local:      []string{"testdata/input_lua_inline"},
-			wantFile:   "testdata/output_only_filters.yaml",
+			name:     "only filters",
+			minimal:  true,
+			local:    []string{"testdata/input_lua_inline"},
+			wantFile: "testdata/output_only_filters.yaml",
 		},
 		{
-			name:       "full config",
-			onlyFilter: false,
-			local:      []string{"testdata/input_lua_inline"},
-			wantFile:   "testdata/output_full_config.yaml",
+			name:     "full config",
+			minimal:  false,
+			local:    []string{"testdata/input_lua_inline"},
+			wantFile: "testdata/output_full_config.yaml",
 		},
 	}
 
@@ -95,11 +96,11 @@ func TestGenConfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
 			cmd := &GenConfig{
-				OnlyFilters: tt.onlyFilter,
-				AdminPort:   9901,
-				ListenPort:  10000,
-				Local:       tt.local,
-				output:      &buf,
+				Minimal:    tt.minimal,
+				AdminPort:  9901,
+				ListenPort: 10000,
+				Local:      tt.local,
+				output:     &buf,
 			}
 
 			require.NoError(t, cmd.Run(t.Context(), &xdg.Directories{}))

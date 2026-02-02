@@ -136,9 +136,10 @@ func protoListToAny[T proto.Message](items []T) ([]any, error) {
 		return nil, nil
 	}
 
+	marshaler := protojson.MarshalOptions{UseProtoNames: true}
 	out := make([]any, 0, len(items))
 	for _, item := range items {
-		raw, err := protojson.Marshal(item)
+		raw, err := marshaler.Marshal(item)
 		if err != nil {
 			return nil, err
 		}
