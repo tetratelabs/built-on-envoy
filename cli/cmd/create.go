@@ -160,6 +160,7 @@ tags:
   - http
   - filter
 license: Apache-2.0
+examples: []
 `
 
 const makefileTmpl = `PLUGIN_NAME := {{ .Name }}

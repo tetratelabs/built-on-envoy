@@ -21,7 +21,7 @@ import (
 
 func TestGenerateFilterConfigUnsupportedType(t *testing.T) {
 	manifest := extensions.Manifest{Type: "unsupported_type"}
-	_, err := GenerateFilterConfig(&manifest, nil)
+	_, err := GenerateFilterConfig(&manifest, "", nil)
 	require.ErrorIs(t, err, ErrUnsupportedExtensionType)
 }
 

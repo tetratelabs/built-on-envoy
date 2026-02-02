@@ -140,6 +140,9 @@ Commands:
   gen-config [flags]
     Generate Envoy configuration with extensions
 
+  create <name> [flags]
+    Create a new extension template
+
   push <local extension> [flags]
     Push an extension to an OCI registry
 

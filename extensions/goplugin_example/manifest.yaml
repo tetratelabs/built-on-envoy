@@ -14,3 +14,8 @@ tags:
   - http
   - filter
 license: Apache-2.0
+examples:
+  - title: Basic example go plugin
+    description: Load the example go plugin as an HTTP filter
+    code: |
+      boe run --extension goplugin_example

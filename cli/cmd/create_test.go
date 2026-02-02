@@ -36,6 +36,17 @@ func TestParseCmdCreateHelp(t *testing.T) {
 
 Create a new extension template.
 
+The create command generates a new extension template with the specified name
+and type. This is useful for getting started with developing a new extension for
+Built On Envoy.
+
+By default, it creates a 'composer' type extension, which is an HTTP filter
+extension. The generated template includes boilerplate code, a manifest file,
+and a Makefile to help you build and install the extension.
+
+You can specify the output directory using the --path flag. If not specified,
+it defaults to a directory named after the extension.
+
 Arguments:
   <name>    Name of the extension.
 

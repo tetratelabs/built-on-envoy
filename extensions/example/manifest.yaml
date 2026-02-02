@@ -14,3 +14,8 @@ tags:
   - http
   - filter
 license: Apache-2.0
+examples:
+  - title: Basic Example
+    description: Basic example of golang dynamic module for HTTP filters
+    code: |
+      boe run --extension example
