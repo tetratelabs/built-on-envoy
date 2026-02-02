@@ -19,10 +19,3 @@ The output shows a table with the extension name, version, type, and a brief des
     example-lua   1.0.0    lua   A simple Lua extension that adds a custom header
     cors          1.0.0    lua   Cross-Origin Resource Sharing (CORS) support
     ```
-
-## Output Columns
-
-- **NAME**: The name of teh extension .
-- **VERSION**: The current version of the extension.
-- **TYPE**: The extension type (e.g., `lua`).
-- **DESCRIPTION**: A brief description of what the extension does.
