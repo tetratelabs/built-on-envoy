@@ -6,6 +6,7 @@
 package envoy
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -133,4 +134,61 @@ end
 			}
 		})
 	}
+}
+
+func TestDynamicModuleFilterGenerator(t *testing.T) {
+	dataHome := t.TempDir()
+	manifest := &extensions.Manifest{
+		Name:    "test-dynamic-module",
+		Type:    extensions.TypeDynamicModule,
+		Version: "v1.0.0",
+	}
+
+	// Case 1: Composer binary missing
+	_, err := GenerateFilterConfig(manifest, dataHome, nil)
+	require.ErrorContains(t, err, "composer binary not found")
+
+	// Case 2: Composer binary exists
+	composerPath := filepath.Join(dataHome, "extensions", "dym", "composer", manifest.Version)
+	require.NoError(t, os.MkdirAll(composerPath, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(composerPath, "libcomposer.so"), []byte("fake binary"), 0644))
+
+	filter, err := GenerateFilterConfig(manifest, dataHome, nil)
+	require.NoError(t, err)
+	require.NotNil(t, filter)
+	require.Equal(t, manifest.Name, filter.Name)
+}
+
+func TestComposerFilterGenerator(t *testing.T) {
+	dataHome := t.TempDir()
+	manifest := &extensions.Manifest{
+		Name:            "test-composer",
+		Type:            extensions.TypeComposer,
+		Version:         "v0.0.1",
+		ComposerVersion: "v1.0.0",
+	}
+
+	// Case 1: Composer binary missing
+	_, err := GenerateFilterConfig(manifest, dataHome, nil)
+	require.ErrorContains(t, err, "composer binary not found")
+
+	// Create Composer binary
+	composerPath := filepath.Join(dataHome, "extensions", "dym", "composer", manifest.ComposerVersion)
+	require.NoError(t, os.MkdirAll(composerPath, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(composerPath, "libcomposer.so"), []byte("fake binary"), 0644))
+
+	// Case 2: Plugin binary missing
+	_, err = GenerateFilterConfig(manifest, dataHome, nil)
+	require.ErrorContains(t, err, "go plugin binary not found")
+
+	// Create Plugin binary
+	pluginPath := filepath.Join(dataHome, "extensions", "goplugin", manifest.Name, manifest.Version)
+	require.NoError(t, os.MkdirAll(pluginPath, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(pluginPath, "plugin.so"), []byte("fake binary"), 0644))
+
+	// Case 3: Success
+	filter, err := GenerateFilterConfig(manifest, dataHome, nil)
+	require.NoError(t, err)
+	require.NotNil(t, filter)
+	require.Equal(t, manifest.Name, filter.Name)
 }

@@ -40,14 +40,23 @@ func (c *Create) Run() error {
 		c.Path = c.Name
 	}
 
-	repoPath := filepath.Join(c.Path, c.Name)
+	switch c.Type {
+	case "composer":
+		return createComposerHttpFilter(c.Path, c.Name)
+	default:
+		return fmt.Errorf("unsupported extension type: %s", c.Type)
+	}
+}
+
+func createComposerHttpFilter(path, name string) error {
+	repoPath := filepath.Join(path, name)
 	err := os.MkdirAll(repoPath, 0o750)
 	if err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", repoPath, err)
 	}
 
 	data := map[string]string{
-		"Name": c.Name,
+		"Name": name,
 	}
 
 	files := map[string]string{
@@ -87,7 +96,6 @@ func (c *Create) Run() error {
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to run 'go mod tidy': %w\n%s", err, string(output))
 	}
-
 	return nil
 }
 

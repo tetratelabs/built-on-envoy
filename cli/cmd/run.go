@@ -176,6 +176,27 @@ func parseLogLevels(logLevel string) (string, string, error) {
 
 var errFailedToLoadLocalManifest = errors.New("failed to load local manifest")
 
+var buildComposerLocally = func(path string) error {
+	// Run go mod tidy in the local extension directory to ensure dependencies are up to date.
+	cmd := exec.Command("go", "mod", "tidy")
+	cmd.Dir = path
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to run 'go mod tidy' in %s: %w\nOutput: %s",
+			path, err, string(output))
+	}
+
+	// Run make install to install local extension before running under the localPath.
+	// #nosec G204
+	cmd = exec.Command("make", "-C", path, "install")
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to install local extension from %s: %w\nOutput: %s",
+			path, err, string(output))
+	}
+	return nil
+}
+
 // loadLocalManifests loads extension manifests from the specified local paths.
 func loadLocalManifests(paths []string) ([]*extensions.Manifest, error) {
 	manifests := make([]*extensions.Manifest, 0, len(paths))
@@ -186,26 +207,11 @@ func loadLocalManifests(paths []string) ([]*extensions.Manifest, error) {
 		}
 
 		if manifest.Type == "composer" {
-			// Run go mod tidy in the local extension directory to ensure dependencies are up to date.
-			cmd := exec.Command("go", "mod", "tidy")
-			cmd.Dir = localPath
-			output, err := cmd.CombinedOutput()
-			if err != nil {
-				return nil, fmt.Errorf("failed to run 'go mod tidy' in %s: %w\nOutput: %s",
-					localPath, err, string(output))
-			}
-
-			// Run make install to install local extension before running under the localPath.
-			// #nosec G204
-			cmd = exec.Command("make", "-C", localPath, "install")
-			output, err = cmd.CombinedOutput()
-			if err != nil {
-				return nil, fmt.Errorf("failed to install local extension from %s: %w\nOutput: %s",
-					localPath, err, string(output))
+			if err := buildComposerLocally(path); err != nil {
+				return nil, fmt.Errorf("failed to build local composer extension at %s: %w", path, err)
 			}
 		}
 
-		ext = append(ext, manifest)
 		manifests = append(manifests, manifest)
 	}
 	return manifests, nil

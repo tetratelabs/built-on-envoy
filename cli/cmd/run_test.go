@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/alecthomas/kong"
@@ -351,6 +352,37 @@ func TestLoadLocalManifests(t *testing.T) {
 		_, err := loadLocalManifests([]string{"./"})
 		require.Error(t, err)
 		require.ErrorIs(t, err, errFailedToLoadLocalManifest)
+	})
+
+	t.Run("invalid composer path", func(t *testing.T) {
+		// Create a temporary directory and create an template composer plugin with
+		// createComposerHttpFilter.
+		tempDir := t.TempDir()
+		err := createComposerHttpFilter(tempDir, "test_custom")
+		require.NoError(t, err)
+
+		// Remove go.mod and go.sum to simulate invalid composer extension.
+		err = os.Remove(tempDir + "/test_custom/go.mod")
+		require.NoError(t, err)
+		err = os.Remove(tempDir + "/test_custom/go.sum")
+		require.NoError(t, err)
+
+		_, err = loadLocalManifests([]string{tempDir + "/test_custom"})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "failed to run 'go mod tidy'")
+	})
+
+	t.Run("valid composer path", func(t *testing.T) {
+		// Create a temporary directory and create an template composer plugin with
+		// createComposerHttpFilter.
+		tempDir := t.TempDir()
+		err := createComposerHttpFilter(tempDir, "test_valid")
+		require.NoError(t, err)
+
+		manifests, err := loadLocalManifests([]string{tempDir + "/test_valid"})
+		require.NoError(t, err)
+		require.Len(t, manifests, 1)
+		require.Equal(t, "test_valid", manifests[0].Name)
 	})
 }
 
