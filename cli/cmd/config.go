@@ -95,11 +95,11 @@ func (c *GenConfig) generateFilterConfig() (string, error) {
 	filters := make([]*hcmv3.HttpFilter, 0, len(c.extensions))
 	for _, ext := range c.extensions {
 		// TODO(nacx): support config
-		filterConfig, err := envoy.GenerateFilterConfig(ext, nil)
+		resources, err := envoy.GenerateFilterConfig(ext, nil)
 		if err != nil {
 			return "", fmt.Errorf("failed to generate filter config for extension %q: %w", ext.Name, err)
 		}
-		filters = append(filters, filterConfig)
+		filters = append(filters, resources.HTTPFilters...)
 	}
 
 	hcm := &hcmv3.HttpConnectionManager{

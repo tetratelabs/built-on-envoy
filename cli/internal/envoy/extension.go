@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 
+	clusterv3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	luav3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/lua/v3"
 	hcmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
@@ -22,7 +23,7 @@ type (
 	// ExtensionFilterGenerator defines an interface for generating filter configurations
 	ExtensionFilterGenerator interface {
 		// GenerateFilterConfig generates the filter configuration for the given extension manifest.
-		GenerateFilterConfig(manifest *extensions.Manifest, config any) (*hcmv3.HttpFilter, error)
+		GenerateFilterConfig(manifest *extensions.Manifest, config any) (*ExtensionResources, error)
 	}
 
 	// LuaFilterGenerator generates filter configuration for Lua extensions.
@@ -33,6 +34,13 @@ type (
 	DynamicModuleFilterGenerator struct{}
 	// ComposerFilterGenerator generates filter configuration for Composer extensions.
 	ComposerFilterGenerator struct{}
+
+	// ExtensionResources holds the resources created by an extension.
+	ExtensionResources struct {
+		HTTPFilters []*hcmv3.HttpFilter
+		Clusters    []*clusterv3.Cluster
+		// TODO(huabing): may need to add more resources
+	}
 )
 
 var (
@@ -45,7 +53,7 @@ var (
 )
 
 // GenerateFilterConfig generates the filter configuration for the given extension manifest.
-func GenerateFilterConfig(manifest *extensions.Manifest, config any) (*hcmv3.HttpFilter, error) {
+func GenerateFilterConfig(manifest *extensions.Manifest, config any) (*ExtensionResources, error) {
 	var generator ExtensionFilterGenerator
 
 	switch manifest.Type {
@@ -65,7 +73,7 @@ func GenerateFilterConfig(manifest *extensions.Manifest, config any) (*hcmv3.Htt
 }
 
 // GenerateFilterConfig generates the filter configuration for Lua extensions.
-func (l LuaFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, _ any) (*hcmv3.HttpFilter, error) {
+func (l LuaFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, _ any) (*ExtensionResources, error) {
 	var code string
 	if manifest.Lua.Path != "" {
 		absPath := path.Join(path.Dir(manifest.Path), manifest.Lua.Path)
@@ -90,25 +98,29 @@ func (l LuaFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, 
 		return nil, fmt.Errorf("failed to marshal Lua filter to Any: %w", err)
 	}
 
-	return &hcmv3.HttpFilter{
+	filter := &hcmv3.HttpFilter{
 		Name: manifest.Name,
 		ConfigType: &hcmv3.HttpFilter_TypedConfig{
 			TypedConfig: luaAny,
 		},
+	}
+
+	return &ExtensionResources{
+		HTTPFilters: []*hcmv3.HttpFilter{filter},
 	}, nil
 }
 
 // GenerateFilterConfig generates the filter configuration for Wasm extensions.
-func (w WasmFilterGenerator) GenerateFilterConfig(*extensions.Manifest, any) (*hcmv3.HttpFilter, error) {
+func (w WasmFilterGenerator) GenerateFilterConfig(*extensions.Manifest, any) (*ExtensionResources, error) {
 	return nil, fmt.Errorf("%w: wasm", ErrUnimplemented)
 }
 
 // GenerateFilterConfig generates the filter configuration for Dynamic Module extensions.
-func (d DynamicModuleFilterGenerator) GenerateFilterConfig(*extensions.Manifest, any) (*hcmv3.HttpFilter, error) {
+func (d DynamicModuleFilterGenerator) GenerateFilterConfig(*extensions.Manifest, any) (*ExtensionResources, error) {
 	return nil, fmt.Errorf("%w: dynamic module", ErrUnimplemented)
 }
 
 // GenerateFilterConfig generates the filter configuration for Composer extensions.
-func (c ComposerFilterGenerator) GenerateFilterConfig(*extensions.Manifest, any) (*hcmv3.HttpFilter, error) {
+func (c ComposerFilterGenerator) GenerateFilterConfig(*extensions.Manifest, any) (*ExtensionResources, error) {
 	return nil, fmt.Errorf("%w: composer", ErrUnimplemented)
 }

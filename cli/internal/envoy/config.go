@@ -41,15 +41,17 @@ type ConfigGenerationParams struct {
 // The ouyput is a YAML string that is passed to func-e to run Envoy.
 func RenderConfig(params ConfigGenerationParams) (string, error) {
 	filters := make([]*hcmv3.HttpFilter, 0, len(params.Extensions))
+	clusters := make([]*clusterv3.Cluster, 0)
 	for _, ext := range params.Extensions {
-		filterConfig, err := GenerateFilterConfig(ext, nil)
+		resources, err := GenerateFilterConfig(ext, nil)
 		if err != nil {
 			return "", fmt.Errorf("failed to generate filter config for extension %q: %w", ext.Name, err)
 		}
-		filters = append(filters, filterConfig)
+		filters = append(filters, resources.HTTPFilters...)
+		clusters = append(clusters, resources.Clusters...)
 	}
 
-	cfg, err := buildConfig(params.AdminPort, params.ListenerPort, filters)
+	cfg, err := buildConfig(params.AdminPort, params.ListenerPort, filters, clusters)
 	if err != nil {
 		return "", fmt.Errorf("failed to build config: %w", err)
 	}
@@ -68,7 +70,7 @@ func RenderConfig(params ConfigGenerationParams) (string, error) {
 // and allows us to use the proto marshalling functions. Otherwise, we would have to create a wrapper
 // proto on our own, or marshal the config manually.
 // TODO(nacx): Is there a wrapper for `admin` and `static_resources` we could use other than Bootstrap?
-func buildConfig(adminPort, listenerPort uint32, filters []*hcmv3.HttpFilter) (*bootstrapv3.Bootstrap, error) {
+func buildConfig(adminPort, listenerPort uint32, filters []*hcmv3.HttpFilter, clusters []*clusterv3.Cluster) (*bootstrapv3.Bootstrap, error) {
 	testupstreamCluster, err := buildTestUpstreamCluster("httpbin", "httpbin.org", 443)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build test upstream cluster: %w", err)
@@ -127,7 +129,7 @@ func buildConfig(adminPort, listenerPort uint32, filters []*hcmv3.HttpFilter) (*
 		Admin: admin,
 		StaticResources: &bootstrapv3.Bootstrap_StaticResources{
 			Listeners: []*listenerv3.Listener{listener},
-			Clusters:  []*clusterv3.Cluster{testupstreamCluster},
+			Clusters:  append([]*clusterv3.Cluster{testupstreamCluster}, clusters...),
 		},
 	}, nil
 }
