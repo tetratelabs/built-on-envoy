@@ -7,12 +7,14 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 
 	"github.com/alecthomas/kong"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
+	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 
 func TestParseCmdPushHelp(t *testing.T) {
@@ -31,18 +33,11 @@ func TestParseCmdPushHelp(t *testing.T) {
 
 	_, _ = parser.Parse([]string{"push", "--help"})
 
-	expected := `Usage: boe push <local extension> [flags]
+	expected := fmt.Sprintf(`Usage: boe push <local extension> [flags]
 
 Push an extension to an OCI registry
 
-The push command publishes a local extension to an OCI-compliant container
-registry. This allows you to share extensions with others or deploy them across
-different environments.
-
-The extension directory must contain a valid ` + "`manifest.yaml`" + ` file. The extension
-version from the manifest is used as the image tag. You can specify registry
-credentials via flags or environment variables for authenticated registries.
-
+%s
 Arguments:
   <local extension>    Path to a directory containing the extension to push.
 
@@ -58,7 +53,8 @@ Flags:
                            ($BOE_REGISTRY_USERNAME).
       --password=STRING    Password for the OCI registry
                            ($BOE_REGISTRY_PASSWORD).
-`
+`, internaltesting.WrapHelp(pushHelp))
+
 	require.Equal(t, expected, buf.String())
 }
 

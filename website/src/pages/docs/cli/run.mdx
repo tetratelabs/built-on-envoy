@@ -4,10 +4,7 @@ title: run
 description: Run Envoy with extensions
 ---
 
-import CLIName from '../../../components/CLIName.astro';
-import CodeBlock from '../../../components/CodeBlock.astro';
-
-# <CLIName/> run
+# boe run
 
 The run command starts an Envoy proxy with the specified extensions enabled.
 It automatically downloads the required Envoy binary if not already present, generates the necessary
@@ -17,13 +14,39 @@ You can enable multiple extensions using the `--extension` flag, and also load e
 local directories using `--local` for development and testing purposes. The command manages
 all runtime files, logs, and the Envoy admin interface automatically.
 
-## Usage
+## Examples
 
-<CodeBlock code={`{{CLI_NAME}} run [flags]`} />
+Run the `example-lua` extension from the default registry with `debug` logs enabled for Lua:
 
-To see all available options:
+    ```shell
+    boe run --extension example-lua --log-level lua:debug
+    ```
 
-<CodeBlock code={`{{CLI_NAME}} run --help`} />
+Run a specific version of the `example-lua` extension from a custom OCI registry. This is useful if you are hosting the
+extensions in a corporate OCI registry.
+
+    ```shell
+    export BOE_REGISTRY=acme.org/extensions
+    export BOE_REGISTRY_USERNAME=username
+    export BOE_REGISTRY_PASSWORD=password
+
+    boe run --extension example-lua:1.0.0 --log-level lua:debug
+    ```
+
+Run a local extension from a local directory. The directory must contain the extension `manifest.yaml`
+and all the files needed to execute the extension locally.
+
+    ```shell
+    boe run --local ~/src/built-on-envoy/extensions/example-lua
+    ```
+
+
+## Usage details
+
+```shell
+boe run [flags]
+boe run --help
+```
 
 
 

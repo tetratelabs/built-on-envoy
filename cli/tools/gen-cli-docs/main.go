@@ -28,6 +28,8 @@ import (
 //go:embed templates/*.tmpl
 var templateFS embed.FS
 
+const cliName = "boe"
+
 // Flag represents a CLI flag/option for documentation.
 type Flag struct {
 	Name        string
@@ -50,6 +52,7 @@ type Arg struct {
 
 // Command represents a CLI command for documentation.
 type Command struct {
+	CLIName     string
 	Name        string
 	Description string
 	Detail      string
@@ -105,7 +108,8 @@ func main() {
 
 	// Load templates
 	tmpl, err := template.New("").Funcs(template.FuncMap{
-		"join": strings.Join,
+		"cliName": func() string { return cliName },
+		"join":    strings.Join,
 	}).ParseFS(templateFS, "templates/*.tmpl")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to parse templates: %v\n", err)

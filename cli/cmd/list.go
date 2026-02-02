@@ -6,6 +6,7 @@
 package cmd
 
 import (
+	_ "embed"
 	"fmt"
 	"io"
 	"maps"
@@ -23,15 +24,11 @@ type List struct {
 	output io.Writer `kong:"-"` // Internal field for testing
 }
 
-// Help provides detailed help for the list command.
-func (l *List) Help() string {
-	return strings.ReplaceAll(`The list command displays all available Envoy extensions.
-It provides a quick overview of what extensions you can use when running Envoy or generating configurations,
-and the versions available for each extension.
+//go:embed list_help.md
+var listHelp string
 
-This command is useful for discovering which extensions are available before using them with the
-{BT}run{BT} or {BT}gen-config{BT} commands.`, "{BT}", "`")
-}
+// Help provides detailed help for the list command.
+func (l *List) Help() string { return listHelp }
 
 // Run executes the list command
 func (l *List) Run() error {

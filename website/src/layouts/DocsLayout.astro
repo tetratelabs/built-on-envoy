@@ -7,11 +7,18 @@ import Sidebar from '../components/Sidebar.astro';
 import '../styles/docs.css';
 
 interface Props {
-	title: string;
+	frontmatter?: {
+		title: string;
+		description?: string;
+	};
+	title?: string;
 	description?: string;
 }
 
-const { title, description } = Astro.props;
+// Support both direct props (from .astro files) and frontmatter (from .mdx files)
+const { frontmatter } = Astro.props;
+const title = frontmatter?.title ?? Astro.props.title;
+const description = frontmatter?.description ?? Astro.props.description;
 ---
 
 <!DOCTYPE html>

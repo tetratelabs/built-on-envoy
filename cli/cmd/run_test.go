@@ -8,12 +8,14 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/alecthomas/kong"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
+	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
@@ -33,20 +35,11 @@ func TestParseCmdRunHelp(t *testing.T) {
 
 	_, _ = parser.Parse([]string{"run", "--help"})
 
-	expected := `Usage: boe run [flags]
+	expected := fmt.Sprintf(`Usage: boe run [flags]
 
 Run Envoy with extensions
 
-The run command starts an Envoy proxy with the specified extensions enabled.
-It automatically downloads the required Envoy binary if not already present,
-generates the necessary configuration, and launches Envoy with the extensions
-configured in the HTTP filter chain.
-
-You can enable multiple extensions using the ` + "`--extension`" + ` flag, and also load
-extensions from local directories using ` + "`--local`" + ` for development and testing
-purposes. The command manages all runtime files, logs, and the Envoy admin
-interface automatically.
-
+%s
 Flags:
   -h, --help                       Show context-sensitive help.
 
@@ -72,7 +65,8 @@ Flags:
                                    ($BOE_REGISTRY_USERNAME).
       --password=STRING            Password for the OCI registry
                                    ($BOE_REGISTRY_PASSWORD).
-`
+`, internaltesting.WrapHelp(runHelp))
+
 	require.Equal(t, expected, buf.String())
 }
 

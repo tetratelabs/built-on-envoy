@@ -1,11 +1,3 @@
----
-layout: ../../../layouts/DocsLayout.astro
-title: list
-description: List available extensions
----
-
-# boe list
-
 The list command displays all available Envoy extensions.
 It provides a quick overview of what extensions you can use when running Envoy or generatingconfigurations, along with the versions available for each extension.
 
@@ -34,14 +26,3 @@ The output shows a table with the extension name, version, type, and a brief des
 - **VERSION**: The current version of the extension.
 - **TYPE**: The extension type (e.g., `lua`).
 - **DESCRIPTION**: A brief description of what the extension does.
-
-
-## Usage details
-
-```shell
-boe list [flags]
-boe list --help
-```
-
-
-

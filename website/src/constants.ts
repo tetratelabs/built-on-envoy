@@ -7,4 +7,6 @@ export const GITHUB_REPO = 'https://github.com/tetratelabs/built-on-envoy';
 export const GITHUB_REPO_RAW = 'tetratelabs/built-on-envoy';
 export const EXTENSIONS_PATH = 'extensions';
 
+export const WEBSITE = 'https://builtonenvoy.io';
+
 export const SLACK = 'https://tetr8.io/tetrate-community';

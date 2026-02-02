@@ -1,11 +1,3 @@
----
-layout: ../../../layouts/DocsLayout.astro
-title: gen-config
-description: Generate Envoy configuration with extensions
----
-
-# boe gen-config
-
 The gen-config command generates Envoy configuration YAML for the specified extensions.
 This is useful for inspecting the generated configuration, integrating with existing Envoy
 deployments, or using with external Envoy management tools.
@@ -52,28 +44,3 @@ Generate configuration from a specific version hosted in a custom OCI registry:
 
     boe gen-config --extension example-lua:1.0.0
     ```
-
-
-## Usage details
-
-```shell
-boe gen-config [flags]
-boe gen-config --help
-```
-
-
-
-## Flags
-
-| Name | Description | Type | Default | Env Var | Required |
-|------|-------------|------|---------|-----|----------|
-| `--only-filters` | Generate configuration with only extension filters. | `bool` | - | - | No |
-| `--listen-port` | Port for Envoy listener to accept incoming traffic. | `uint32` | `10000` | - | No |
-| `--admin-port` | Port for Envoy admin interface. | `uint32` | `9901` | - | No |
-| `--extension` | Extensions to enable (in the format: "name" or "name:version"). | `[]string` | - | - | No |
-| `--local` | Path to a directory containing a local Extension to enable. | `[]string` | - | - | No |
-| `--registry` | OCI registry URL to fetch the extension from. | `string` | `ghcr.io/tetratelabs/built-on-envoy` | `BOE_REGISTRY` | No |
-| `--insecure` | Allow fetching from an insecure (HTTP) registry. | `bool` | `false` | `BOE_REGISTRY_INSECURE` | No |
-| `--username` | Username for the OCI registry. | `string` | - | `BOE_REGISTRY_USERNAME` | No |
-| `--password` | Password for the OCI registry. | `string` | - | `BOE_REGISTRY_PASSWORD` | No |
-
