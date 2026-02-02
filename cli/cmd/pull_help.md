@@ -1,11 +1,3 @@
----
-layout: ../../../layouts/DocsLayout.astro
-title: pull
-description: Pull an extension from an OCI registry
----
-
-# boe pull
-
 The pull command downloads an extension from an OCI-compliant container registry.
 You can specify either a simple extension name (which uses the default registry) or a full
 OCI reference including registry, repository, and tag.
@@ -67,30 +59,3 @@ Once an extension is pulled, you can use it with the `run` or `gen-config` comma
     # Use with gen-config
     boe gen-config --local ~/extensions/example-lua
     ```
-
-
-## Usage details
-
-```shell
-boe pull <extension> [flags]
-boe pull --help
-```
-
-
-## Arguments
-
-| Name | Description | Type | Required |
-|------|-------------|------|----------|
-| `extension` | Extension name or OCI repository URL (e.g., cache or ghcr.io/tetratelabs/built-on-envoy/extension-cache:1.0.0) | `string` | Yes |
-
-
-## Flags
-
-| Name | Description | Type | Default | Env Var | Required |
-|------|-------------|------|---------|-----|----------|
-| `--path` | Destination path to extract the extension to. | `string` | - | - | No |
-| `--registry` | OCI registry URL to pull the extension from. | `string` | `ghcr.io/tetratelabs/built-on-envoy` | `BOE_REGISTRY` | No |
-| `--insecure` | Allow pulling from an insecure (HTTP) registry. | `bool` | `false` | `BOE_REGISTRY_INSECURE` | No |
-| `--username` | Username for the OCI registry. | `string` | - | `BOE_REGISTRY_USERNAME` | No |
-| `--password` | Password for the OCI registry. | `string` | - | `BOE_REGISTRY_PASSWORD` | No |
-

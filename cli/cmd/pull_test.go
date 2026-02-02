@@ -7,12 +7,14 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 
 	"github.com/alecthomas/kong"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
+	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 
 func TestParseCmdPullHelp(t *testing.T) {
@@ -31,18 +33,11 @@ func TestParseCmdPullHelp(t *testing.T) {
 
 	_, _ = parser.Parse([]string{"pull", "--help"})
 
-	expected := `Usage: boe pull <extension> [flags]
+	expected := fmt.Sprintf(`Usage: boe pull <extension> [flags]
 
 Pull an extension from an OCI registry
 
-The pull command downloads an extension from an OCI-compliant container
-registry. You can specify either a simple extension name (which uses the default
-registry) or a full OCI reference including registry, repository, and tag.
-
-The extension is extracted to a local directory and can then be used with the
-` + "`run` or `gen-config` commands via the `--local`" + ` flag. If no destination path is
-specified, the extension is saved to the default data directory.
-
+%s
 Arguments:
   <extension>    Extension name or OCI repository URL (e.g., cache or
                  ghcr.io/tetratelabs/built-on-envoy/extension-cache:1.0.0)
@@ -60,7 +55,8 @@ Flags:
                            ($BOE_REGISTRY_USERNAME).
       --password=STRING    Password for the OCI registry
                            ($BOE_REGISTRY_PASSWORD).
-`
+`, internaltesting.WrapHelp(pullHelp))
+
 	require.Equal(t, expected, buf.String())
 }
 

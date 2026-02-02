@@ -60,7 +60,7 @@ boe gen-config --extension rate-limiter > envoy.yaml
 1. Fork this repository
 2. Create a new directory under `extensions/` with your extension name
 3. Add a `manifest.yaml` file with the required metadata
-4. Add your extension code (Lua, Wasm, etc.)
+4. Add your extension code (Lua, etc.)
 5. Open a pull request!
 
 See the [Extension Guide](./extensions/) for more details.

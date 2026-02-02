@@ -7,8 +7,8 @@ package cmd
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
-	"strings"
 
 	"github.com/alecthomas/kong"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -31,15 +31,11 @@ type Push struct {
 	client    oci.RepositoryClient `kong:"-"` // Internal field: OCI client
 }
 
-// Help provides detailed help for the push command.
-func (p *Push) Help() string {
-	return strings.ReplaceAll(`The push command publishes a local extension to an OCI-compliant container registry.
-This allows you to share extensions with others or deploy them across different environments.
+//go:embed push_help.md
+var pushHelp string
 
-The extension directory must contain a valid {BT}manifest.yaml{BT} file. The extension version
-from the manifest is used as the image tag. You can specify registry credentials via flags
-or environment variables for authenticated registries.`, "{BT}", "`")
-}
+// Help provides detailed help for the push command.
+func (p *Push) Help() string { return pushHelp }
 
 // errInvalidManifest is returned when the extension manifest is invalid.
 var errInvalidManifest = fmt.Errorf("invalid extension manifest")

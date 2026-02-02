@@ -17,6 +17,9 @@ import (
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
+// CLIName is the name of the CLI binary.
+const CLIName = "boe"
+
 // CLI is the root command for the Built On Envoy CLI.
 type CLI struct {
 	List      List      `cmd:"" help:"List available extensions"`

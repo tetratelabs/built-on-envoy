@@ -4,25 +4,21 @@ title: Getting Started
 description: Get started with Built On Envoy CLI
 ---
 
-import CLIName from '../../components/CLIName.astro';
-import ProjectName from '../../components/ProjectName.astro';
-import CodeBlock from '../../components/CodeBlock.astro';
+# Getting started
 
-# Getting Started
-
-The <code><CLIName/></code> (<ProjectName/>) CLI provides a zero-friction developer experience for discovering, running, and building Envoy® Proxy extensions.
+The <code>boe</code> (Built On Envoy) CLI provides a zero-friction developer experience for discovering, running, and building Envoy® Proxy extensions.
 
 ## Installation
 
 Choose your preferred installation method:
 
-### Install Script
+### Install script
 
 ```bash
-curl -sL https://get.built-on-envoy.io | bash
+curl -sL https://builtonenvoy.io/install.sh | sh
 ```
 
-### Build from Source
+### Build from source
 
 ```bash
 git clone https://github.com/tetratelabs/built-on-envoy
@@ -30,35 +26,47 @@ cd built-on-envoy/cli
 make
 ```
 
-## Quick Start
+## Quick start
 
 Once installed, you can immediately start using extensions:
 
-### List Available Extensions
+### Discover available extensions
 
-<CodeBlock code="{{CLI_NAME}} list" />
+Discover all publicly available extensions:
 
-### Run an Extension
+```shell
+boe list
+```
 
-<CodeBlock code="{{CLI_NAME}} run --extension rate-limiter" />
+### Run extensions
 
-### Run Multiple Extensions
+Easily run any extension. The `boe` CLI will automatically download Envoy for your operating
+system and architecture, and start it preconfigured with the requested extensions and a test
+upstream:
 
-<CodeBlock code="{{CLI_NAME}} run --extension rate-limiter --extension cors" />
+```shell
+boe run --extension example-lua --extension cache
+```
 
-### Run a Local Extension
+Or run extensions directly from a local directory:
 
-<CodeBlock code="{{CLI_NAME}} run --local ./my-extension" />
+```shell
+boe run --local ./my-extension
+```
 
-### Generate Envoy Configuration
+### Generate Envoy configuration
 
-<CodeBlock code="{{CLI_NAME}} gen-config --extension rate-limiter > envoy.yaml" />
+Inspect the Envoy configuration so that you can replicate it in your environment:
 
-## Next Steps
+```shell
+boe gen-config --extension example-lua --local ./my-extension >envoy.yaml
+```
+
+## Next steps
 
 - Explore the CLI Commands:
-  - [<CLIName/> list](/docs/cli/list) - List available extensions
-  - [<CLIName/> run](/docs/cli/run) - Run Envoy with extensions
-  - [<CLIName/> gen-config](/docs/cli/gen-config) - Generate Envoy configuration
-- Browse the [Extensions Marketplace](/extensions) to find extensions for your use case
+  - [boe list](/docs/cli/list) - List available extensions
+  - [boe run](/docs/cli/run) - Run Envoy with extensions
+  - [boe gen-config](/docs/cli/gen-config) - Generate Envoy configuration
+- Browse the [Extensions Catalog](/extensions) to find extensions for your use case
 - Check the [Extension Manifest Reference](/docs/reference/manifest) to create your own extensions
