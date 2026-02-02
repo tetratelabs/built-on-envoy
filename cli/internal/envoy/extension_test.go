@@ -75,14 +75,16 @@ end
 		},
 		{
 			name: "lua_path.yaml",
-			want: &hcmv3.HttpFilter{
-				Name: "test-extension",
-				ConfigType: &hcmv3.HttpFilter_TypedConfig{
-					TypedConfig: func() *anypb.Any {
-						luaConfig := &luav3.Lua{
-							DefaultSourceCode: &corev3.DataSource{
-								Specifier: &corev3.DataSource_InlineString{
-									InlineString: `-- Copyright Built On Envoy
+			want: &ExtensionResources{
+				HTTPFilters: []*hcmv3.HttpFilter{
+					{
+						Name: "test-extension",
+						ConfigType: &hcmv3.HttpFilter_TypedConfig{
+							TypedConfig: func() *anypb.Any {
+								luaConfig := &luav3.Lua{
+									DefaultSourceCode: &corev3.DataSource{
+										Specifier: &corev3.DataSource_InlineString{
+											InlineString: `-- Copyright Built On Envoy
 -- SPDX-License-Identifier: Apache-2.0
 -- The full text of the Apache license is available in the LICENSE file at
 -- the root of the repo.
@@ -91,13 +93,15 @@ function envoy_on_request(request_handle)
   request_handle:logInfo("Hello, World!")
 end
 `,
-								},
-							},
-						}
-						cfg, err := anypb.New(luaConfig)
-						require.NoError(t, err)
-						return cfg
-					}(),
+										},
+									},
+								}
+								cfg, err := anypb.New(luaConfig)
+								require.NoError(t, err)
+								return cfg
+							}(),
+						},
+					},
 				},
 			},
 		},
