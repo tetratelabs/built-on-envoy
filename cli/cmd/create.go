@@ -20,6 +20,19 @@ type Create struct {
 	Path string `help:"Output directory for the extension. Defaults to the extension name." type:"path"`
 }
 
+func (c *Create) Help() string {
+	return `The create command generates a new extension template with the specified name and type.
+This is useful for getting started with developing a new extension for Built On Envoy.
+
+By default, it creates a 'composer' type extension, which is an HTTP filter extension.
+The generated template includes boilerplate code, a manifest file, and a Makefile
+to help you build and install the extension.
+
+You can specify the output directory using the --path flag. If not specified,
+it defaults to a directory named after the extension.
+`
+}
+
 // Run executes the create command.
 func (c *Create) Run() error {
 	if c.Path == "" {
