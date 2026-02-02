@@ -14,11 +14,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 
 func TestDefaultProxy(t *testing.T) {
-	proxyPort, adminPort := internaltesting.RunEnvoy(t, cliBin, nil, "run")
+	proxyPort, adminPort := internaltesting.RunEnvoy(t, cliBin)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	t.Cleanup(cancel)
@@ -28,7 +29,7 @@ func TestDefaultProxy(t *testing.T) {
 }
 
 func TestCustomPorts(t *testing.T) {
-	_, _ = internaltesting.RunEnvoy(t, cliBin, nil, "run", "--listen-port", "11000", "--admin-port", "12000")
+	_, _ = internaltesting.RunEnvoy(t, cliBin, "--listen-port", "11000", "--admin-port", "12000")
 
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	t.Cleanup(cancel)
@@ -38,15 +39,65 @@ func TestCustomPorts(t *testing.T) {
 }
 
 func TestLuaLocalExtension(t *testing.T) {
-	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin, nil,
-		"run",
+	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin,
 		"--log-level", "lua:info",
-		"--local", "testdata/lua",
+		"--local", "../../extensions/example-lua",
 	)
 
 	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
 	checkHeader := func(r *http.Response) bool {
-		return r.Header.Get("x-e2e-lua") == "lua-e2e-test"
+		return r.Header.Get("x-lua-response-processed") == "true"
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	t.Cleanup(cancel)
+
+	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
+}
+
+func TestExtensionPull(t *testing.T) {
+	t.Setenv("BOE_REGISTRY", registryAddr)
+	t.Setenv("BOE_REGISTRY_INSECURE", "true")
+
+	// Push the extension to the test registry
+	process := internaltesting.RunCLI(t, cliBin, "push", "../../extensions/example-lua")
+	status, err := process.Wait()
+	require.NoError(t, err)
+	require.Equal(t, 0, status.ExitCode())
+
+	// Pull the extension to a local directory
+	tmpDir := t.TempDir()
+	process = internaltesting.RunCLI(t, cliBin, "pull", "example-lua", "--path", tmpDir)
+	status, err = process.Wait()
+	require.NoError(t, err)
+	require.Equal(t, 0, status.ExitCode())
+
+	// Vefrify the extension has been downloaded
+	manifestFile := fmt.Sprintf("%s/extensions/example-lua/1.0.0/manifest.yaml", tmpDir)
+	maniefst, err := extensions.LoadLocalManifest(manifestFile)
+	require.NoError(t, err)
+	require.Equal(t, "example-lua", maniefst.Name)
+	require.Equal(t, "1.0.0", maniefst.Version)
+}
+
+func TestLuaRemoteExecution(t *testing.T) {
+	t.Setenv("BOE_REGISTRY", registryAddr)
+	t.Setenv("BOE_REGISTRY_INSECURE", "true")
+
+	// Push the extension to the test registry
+	process := internaltesting.RunCLI(t, cliBin, "push", "../../extensions/example-lua")
+	status, err := process.Wait()
+	require.NoError(t, err)
+	require.Equal(t, 0, status.ExitCode())
+
+	// Run the remote extension.
+	// This will resolve the latest tag of the extension, download it to
+	// the data directory, and execute it from there.
+	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin, "--log-level", "lua:info", "--extension", "example-lua")
+
+	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
+	checkHeader := func(r *http.Response) bool {
+		return r.Header.Get("x-lua-response-processed") == "true"
 	}
 
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)

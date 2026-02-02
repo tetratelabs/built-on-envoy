@@ -6,6 +6,7 @@
 package e2e
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"testing"
@@ -13,7 +14,10 @@ import (
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 
-var cliBin string
+var (
+	cliBin       string
+	registryAddr string
+)
 
 func TestMain(m *testing.M) {
 	var err error
@@ -23,7 +27,17 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
-	os.Exit(m.Run())
+	ctx := context.Background()
+	registryContainer, addr, err := internaltesting.StartOCIRegistry(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to start local OCI registry: %v\n", err)
+		os.Exit(1)
+	}
+	registryAddr = addr
+
+	code := m.Run()
+	_ = registryContainer.Terminate(ctx)
+	os.Exit(code)
 }
 
 // buildCLIOnDemand builds the CLI binary unless CLI_BIN is set.

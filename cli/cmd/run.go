@@ -8,14 +8,10 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"maps"
-	"slices"
-	"sort"
 	"strings"
 	"time"
-
-	"github.com/alecthomas/kong"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/envoy"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
@@ -32,12 +28,15 @@ type Run struct {
 	RunID        string   `name:"run-id" env:"BOE_RUN_ID" help:"Run identifier for this invocation. Defaults to timestamp-based ID or $BOE_RUN_ID. Use '0' for Docker/Kubernetes."`
 	ListenPort   uint32   `help:"Port for Envoy listener to accept incoming traffic." default:"10000"`
 	AdminPort    uint32   `help:"Port for Envoy admin interface." default:"9901"`
-	Extensions   []string `name:"extension" help:"Extensions to enable (in the format: \"name:version\")." sep:","`
+	Extensions   []string `name:"extension" help:"Extensions to enable (in the format: \"name\" or \"name:version\")." sep:","`
 	Local        []string `name:"local" help:"Path to a directory containing a local Extension to enable." type:"existingdir" sep:","`
+	Registry     string   `name:"registry" env:"BOE_REGISTRY" help:"OCI registry URL to fetch the extension from." default:"${default_registry}"`
+	Insecure     bool     `name:"insecure" env:"BOE_REGISTRY_INSECURE" help:"Allow fetching from an insecure (HTTP) registry." default:"false"`
+	Username     string   `name:"username" env:"BOE_REGISTRY_USERNAME" help:"Username for the OCI registry."`
+	Password     string   `name:"password" env:"BOE_REGISTRY_PASSWORD" help:"Password for the OCI registry." type:"password"`
 
-	defaultLogLevel   string                 `kong:"-"` // Internal field: parsed defaut log level
-	componentLogLevel string                 `kong:"-"` // Internal field: parsed component log levels
-	extensions        []*extensions.Manifest `kong:"-"` // Internal field: loaded extension manifests
+	defaultLogLevel   string `kong:"-"` // Internal field: parsed defaut log level
+	componentLogLevel string `kong:"-"` // Internal field: parsed component log levels
 }
 
 // Help provides detailed help for the run command.
@@ -52,7 +51,7 @@ all runtime files, logs, and the Envoy admin interface automatically.`, "{BT}", 
 }
 
 // BeforeApply is called by Kong before applying defaults to set computed default values.
-func (r *Run) BeforeApply(_ *kong.Context) error {
+func (r *Run) BeforeApply() error {
 	// Set RunID default if not provided
 	if r.RunID == "" {
 		r.RunID = generateRunID(time.Now())
@@ -63,21 +62,32 @@ func (r *Run) BeforeApply(_ *kong.Context) error {
 // Validate is called by Kong after parsing to validate the command arguments.
 func (r *Run) Validate() error {
 	var err error
-
 	r.defaultLogLevel, r.componentLogLevel, err = parseLogLevels(r.LogLevel)
 	if err != nil {
 		return err
 	}
-	r.extensions, err = validateExtensions(r.Extensions, r.Local)
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 
 // Run executes the run command
 func (r *Run) Run(ctx context.Context, dirs *xdg.Directories) error {
+	downloader := &extensions.Downloader{
+		Username: r.Username,
+		Password: r.Password,
+		Insecure: r.Insecure,
+		Dirs:     dirs,
+	}
+
+	downloaded, err := downloadExtensions(ctx, r.Registry, downloader, r.Extensions)
+	if err != nil {
+		return err
+	}
+
+	extensions, err := loadLocalManifests(append(downloaded, r.Local...))
+	if err != nil {
+		return err
+	}
+
 	runner := &envoy.Runner{
 		EnvoyVersion:      r.EnvoyVersion,
 		DefaultLogLevel:   r.defaultLogLevel,
@@ -86,10 +96,25 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories) error {
 		RunID:             r.RunID,
 		ListenPort:        r.ListenPort,
 		AdminPort:         r.AdminPort,
-		Extensions:        r.extensions,
+		Extensions:        extensions,
 	}
 
 	return runner.Run(ctx)
+}
+
+// downloadExtensions downloads the specified extensions using the provided downloader.
+func downloadExtensions(ctx context.Context, registry string, downloader *extensions.Downloader, refs []string) ([]string, error) {
+	downloaded := make([]string, 0, len(refs))
+	for _, ext := range refs {
+		name, tag := splitRef(ext)
+		repository := extensions.RepositoryName(registry, name)
+		downloadDir, _, err := downloader.Download(ctx, repository, tag, "")
+		if err != nil {
+			return nil, err
+		}
+		downloaded = append(downloaded, downloadDir)
+	}
+	return downloaded, nil
 }
 
 // generateRunID generates a unique run identifier based on the current time.
@@ -139,27 +164,25 @@ func parseLogLevels(logLevel string) (string, string, error) {
 	return baseLevel, strings.Join(componentLevels, ","), nil
 }
 
-// validateExtensions validates the provided extension names and loads local extension manifests.
-func validateExtensions(remote []string, local []string) ([]*extensions.Manifest, error) {
-	ext := make([]*extensions.Manifest, 0, len(remote)+len(local))
-	// Validate official extensions
-	for _, name := range remote {
-		if _, found := extensions.Manifests[name]; !found {
-			available := slices.Collect(maps.Keys(extensions.Manifests))
-			sort.Strings(available)
-			return nil, fmt.Errorf("unknown extension %q; available extensions: %s", name, strings.Join(available, ","))
-		}
-		ext = append(ext, extensions.Manifests[name])
-	}
+var errFailedToLoadLocalManifest = errors.New("failed to load local manifest")
 
-	// Load manifests from local extensions
-	for _, localPath := range local {
-		manifest, err := extensions.LoadLocalManifest(localPath + "/manifest.yaml")
+// loadLocalManifests loads extension manifests from the specified local paths.
+func loadLocalManifests(paths []string) ([]*extensions.Manifest, error) {
+	manifests := make([]*extensions.Manifest, 0, len(paths))
+	for _, path := range paths {
+		manifest, err := extensions.LoadLocalManifest(path + "/manifest.yaml")
 		if err != nil {
-			return nil, fmt.Errorf("failed to load local manifest from %s: %w", localPath, err)
+			return nil, fmt.Errorf("%w from %s: %w", errFailedToLoadLocalManifest, path, err)
 		}
-		ext = append(ext, manifest)
+		manifests = append(manifests, manifest)
 	}
+	return manifests, nil
+}
 
-	return ext, nil
+// extractTag extracts the tag from a full OCI reference.
+func splitRef(ref string) (repo string, tag string) {
+	if colonIdx := strings.LastIndex(ref, ":"); colonIdx != -1 {
+		return ref[:colonIdx], ref[colonIdx+1:]
+	}
+	return ref, "latest"
 }

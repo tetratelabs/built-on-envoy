@@ -38,7 +38,8 @@ To see all available options:
 | Name | Description | Type | Default | Env Var | Required |
 |------|-------------|------|---------|-----|----------|
 | `--path` | Destination path to extract the extension to. | `string` | - | - | No |
-| `--insecure` | Allow pulling from an insecure (HTTP) registry. | `bool` | `false` | - | No |
+| `--registry` | OCI registry URL to pull the extension from. | `string` | `ghcr.io/tetratelabs/built-on-envoy` | `BOE_REGISTRY` | No |
+| `--insecure` | Allow pulling from an insecure (HTTP) registry. | `bool` | `false` | `BOE_REGISTRY_INSECURE` | No |
 | `--username` | Username for the OCI registry. | `string` | - | `BOE_REGISTRY_USERNAME` | No |
 | `--password` | Password for the OCI registry. | `string` | - | `BOE_REGISTRY_PASSWORD` | No |
 

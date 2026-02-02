@@ -26,12 +26,9 @@ var (
 	defaultLogLevel = "all:debug"
 )
 
-// RunEnvoy starts the CLI as a subprocess with the given config file.
-func RunEnvoy(t *testing.T, cliBin string, env []string, args ...string) (listenPort int, adminPort int) {
-	// Wait up to 10 seconds for both ports to be free.
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
+// RunEnvoy executes the "run" command of the CLI binary to start Envoy with given args.
+// It waits until Envoy is ready to serve traffic and returns the listen port and admin port.
+func RunEnvoy(t *testing.T, cliBin string, args ...string) (listenPort int, adminPort int) {
 	proxyPort := defaultListenPort
 	hasLogLevel := false
 	for i, arg := range args {
@@ -45,6 +42,9 @@ func RunEnvoy(t *testing.T, cliBin string, env []string, args ...string) (listen
 		}
 	}
 
+	// Wait up to 10 seconds for both ports to be free.
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
 	for isPortInUse(ctx, proxyPort) {
 		select {
 		case <-ctx.Done():
@@ -59,11 +59,51 @@ func RunEnvoy(t *testing.T, cliBin string, env []string, args ...string) (listen
 	if !hasLogLevel {
 		args = append(args, "--log-level", defaultLogLevel)
 	}
+	args = append([]string{"run"}, args...)
 
+	// Run the command
+	process := RunCLI(t, cliBin, args...)
+
+	t.Cleanup(func() {
+		defer cancel()
+		// Don't use require.XXX inside cleanup functions as they call
+		// runtime.Goexit preventing further cleanup functions from running.
+
+		// Graceful shutdown, should kill the Envoy subprocess, too.
+		if err := process.Signal(os.Interrupt); err != nil {
+			t.Logf("Failed to send interrupt to boe process: %v", err)
+		}
+		// Wait for the process to exit gracefully, in worst case this is
+		// killed in 3 seconds by WaitDelay conigured int he command.
+		// In that case, you may have a zombie Envoy process left behind!
+		if _, err := process.Wait(); err != nil {
+			t.Logf("Failed to wait for boe process to exit: %v", err)
+		}
+		// Delete the hard-coded path to certs defined in Envoy AI Gateway
+		if err := os.RemoveAll("/tmp/envoy-gateway/certs"); err != nil {
+			t.Logf("Failed to delete envoy gateway certs: %v", err)
+		}
+	})
+
+	t.Log("Waiting for boe to start (Envoy admin endpoint)...")
+
+	adminClient, err := admin.NewAdminClient(t.Context(), process.Pid)
+	require.NoError(t, err)
+
+	err = adminClient.AwaitReady(t.Context(), time.Second)
+	require.NoError(t, err)
+
+	t.Log("boe CLI is ready")
+	return proxyPort, adminClient.Port()
+}
+
+// RunCLI starts the CLI as a subprocess with the given arguments.
+func RunCLI(t *testing.T, cliBin string, args ...string) *os.Process {
 	// Capture logs, only dump on failure.
 	buffers := DumpLogsOnFail(t, "boe Stdout", "boe Stderr")
 
 	t.Logf("Starting boe with args: %v", args)
+
 	// Note: do not pass t.Context() to CommandContext, as it's canceled
 	// *before* t.Cleanup functions are called.
 	//
@@ -73,47 +113,18 @@ func RunEnvoy(t *testing.T, cliBin string, env []string, args ...string) (listen
 	// That means the subprocess gets killed before we can send it an interrupt
 	// signal for graceful shutdown, which results in orphaned subprocesses.
 	cmdCtx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
 	cmd := exec.CommandContext(cmdCtx, cliBin, args...)
 	cmd.Stdout = buffers[0]
 	cmd.Stderr = buffers[1]
-	cmd.Env = append(os.Environ(), env...)
 	cmd.WaitDelay = 3 * time.Second // auto-kill after 3 seconds.
 
 	require.NoError(t, cmd.Start())
-	t.Cleanup(func() {
-		defer cancel()
-		// Don't use require.XXX inside cleanup functions as they call
-		// runtime.Goexit preventing further cleanup functions from running.
-
-		// Graceful shutdown, should kill the Envoy subprocess, too.
-		if err := cmd.Process.Signal(os.Interrupt); err != nil {
-			t.Logf("Failed to send interrupt to boe process: %v", err)
-		}
-		// Wait for the process to exit gracefully, in worst case this is
-		// killed in 3 seconds by WaitDelay above. In that case, you may
-		// have a zombie Envoy process left behind!
-		if _, err := cmd.Process.Wait(); err != nil {
-			t.Logf("Failed to wait for boe process to exit: %v", err)
-		}
-
-		// Delete the hard-coded path to certs defined in Envoy AI Gateway
-		if err := os.RemoveAll("/tmp/envoy-gateway/certs"); err != nil {
-			t.Logf("Failed to delete envoy gateway certs: %v", err)
-		}
-	})
 
 	t.Logf("boe process started with PID %d", cmd.Process.Pid)
 
-	t.Log("Waiting for boe to start (Envoy admin endpoint)...")
-
-	adminClient, err := admin.NewAdminClient(t.Context(), cmd.Process.Pid)
-	require.NoError(t, err)
-
-	err = adminClient.AwaitReady(t.Context(), time.Second)
-	require.NoError(t, err)
-
-	t.Log("boe CLI is ready")
-	return proxyPort, adminClient.Port()
+	return cmd.Process
 }
 
 // Function to check if a port is in use (returns true if listening).

@@ -284,13 +284,22 @@ func TestBuildOCIPackage(t *testing.T) {
 	require.NoError(t, err)
 
 	store := memory.New()
-	manifestDesc, err := BuildOCIPackage(ctx, store, data)
+	annotations := map[string]string{
+		ocispec.AnnotationTitle:       "test-extension",
+		ocispec.AnnotationVersion:     "1.0.0",
+		ocispec.AnnotationDescription: "A test extension",
+	}
+	manifestDesc, err := BuildOCIPackage(ctx, store, data, annotations)
 	require.NoError(t, err)
 
 	// Verify manifest descriptor
 	assert.Equal(t, ocispec.MediaTypeImageManifest, manifestDesc.MediaType)
 	assert.NotEmpty(t, manifestDesc.Digest)
 	assert.Positive(t, manifestDesc.Size)
+	assert.Equal(t, "test-extension", manifestDesc.Annotations[ocispec.AnnotationTitle])
+	assert.Equal(t, "1.0.0", manifestDesc.Annotations[ocispec.AnnotationVersion])
+	assert.Equal(t, "A test extension", manifestDesc.Annotations[ocispec.AnnotationDescription])
+	assert.NotEmpty(t, manifestDesc.Annotations[ocispec.AnnotationCreated])
 
 	// Fetch and verify manifest content
 	manifestContent, err := store.Fetch(ctx, manifestDesc)
@@ -334,7 +343,8 @@ func TestBuildOCIPackage_EmptyData(t *testing.T) {
 	require.NoError(t, err)
 
 	store := memory.New()
-	manifestDesc, err := BuildOCIPackage(ctx, store, data)
+	manifestDesc, err := BuildOCIPackage(ctx, store, data, nil)
 	require.NoError(t, err)
 	assert.NotEmpty(t, manifestDesc.Digest)
+	require.NotEmpty(t, manifestDesc.Annotations[ocispec.AnnotationCreated])
 }

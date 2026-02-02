@@ -1,0 +1,50 @@
+name: example-lua
+version: 1.0.0
+categories:
+  - Network
+  - Observability
+author: Tetrate
+featured: true
+description: Comprehensive example demonstrating Envoy Lua HTTP filter capabilities
+longDescription: |
+  This extension serves as a comprehensive reference implementation showcasing
+  most of the available methods in Envoy's Lua HTTP filter API.
+
+  ## Example features in the extension
+
+  * Request and response header manipulation (get, add, replace, remove, iterate)
+  * Multiple logging levels (trace, debug, info, warn, err, critical)
+  * Stream information access (protocol, route name, addresses, SNI)
+  * Dynamic metadata for inter-filter communication
+  * SSL/TLS connection inspection (certificates, cipher suites, TLS version)
+  * Route and virtual host metadata access
+  * Body handling (streaming with bodyChunks, buffered with body)
+  * HTTP calls to external services
+  * Direct response generation
+  * Cryptographic operations (signature verification)
+  * Utility functions (base64 encoding, timestamps)
+
+  This extension is intended as a learning resource and starting point for
+  developing custom Lua extensions. Most functionality is commented out by
+  default to prevent unintended behavior - uncomment sections as needed.
+tags:
+  - example
+  - reference
+  - headers
+  - logging
+  - metadata
+  - ssl
+  - body
+license: Apache-2.0
+type: lua
+lua:
+  path: plugin.lua
+examples:
+  - title: Basic Usage
+    description: Enable the example Lua extension to add request/response processing
+    code: |
+      boe run --extension example-lua
+  - title: With Logging Enabled
+    description: Run with debug logging to see all Lua filter output
+    code: |
+      boe run --extension example-lua --log-level lua:debug

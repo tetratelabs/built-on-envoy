@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/alecthomas/kong"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
@@ -21,13 +22,13 @@ import (
 type Push struct {
 	Local    string `arg:"" name:"local extension" help:"Path to a directory containing the extension to push." type:"existingdir"`
 	Registry string `name:"registry" env:"BOE_REGISTRY" help:"OCI registry URL to push the extension to." default:"${default_registry}"`
-	Insecure bool   `name:"insecure" help:"Allow pushing to an insecure (HTTP) registry." default:"false"`
+	Insecure bool   `name:"insecure" env:"BOE_REGISTRY_INSECURE" help:"Allow pushing to an insecure (HTTP) registry." default:"false"`
 	Username string `name:"username" env:"BOE_REGISTRY_USERNAME" help:"Username for the OCI registry."`
 	Password string `name:"password" env:"BOE_REGISTRY_PASSWORD" help:"Password for the OCI registry." type:"password"`
 
 	manifest  *extensions.Manifest `kong:"-"` // Internal field: loaded extension manifest
 	reference string               `kong:"-"` // Internal field: full OCI repository reference
-	client    oci.Client           `kong:"-"` // Internal field: OCI client
+	client    oci.RepositoryClient `kong:"-"` // Internal field: OCI client
 }
 
 // Help provides detailed help for the push command.
@@ -60,7 +61,7 @@ func (p *Push) Validate() error {
 func (p *Push) AfterApply(*kong.Context) error {
 	var err error
 	p.reference = extensions.RepositoryName(p.Registry, p.manifest.Name)
-	p.client, err = newOCIClient(p.reference, p.Username, p.Password, p.Insecure)
+	p.client, err = newOCIRepositoryClient(p.reference, p.Username, p.Password, p.Insecure)
 	return err
 }
 
@@ -69,7 +70,15 @@ func (p *Push) Run(ctx context.Context) error {
 	tag := p.manifest.Version
 	fmt.Printf("Pushing extension %q (%s)...\n", p.manifest.Name, tag)
 
-	digest, err := p.client.Push(ctx, p.Local, tag)
+	annotations := extensions.OCIAnnotationsForManifest(p.manifest)
+	// Add source annotation if pushing to default registry so that artifacts are
+	// linked to the repo.
+	// See: https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#pushing-container-images
+	if p.Registry == extensions.DefaultOCIRegistry {
+		annotations[ocispec.AnnotationSource] = extensions.DefaultOCISource
+	}
+
+	digest, err := p.client.Push(ctx, p.Local, tag, annotations)
 	if err != nil {
 		return fmt.Errorf("failed to push extension: %w", err)
 	}
@@ -83,9 +92,9 @@ func (p *Push) Run(ctx context.Context) error {
 	return nil
 }
 
-// newOCIClient creates and assigns a new OCI client to the Push command.
-func newOCIClient(repository, username, password string, insecure bool) (oci.Client, error) {
-	opts := &oci.RepositoryOptions{PlainHTTP: insecure}
+// newOCIRepositoryClient creates and assigns a new OCI client to the Push command.
+func newOCIRepositoryClient(repository, username, password string, insecure bool) (oci.RepositoryClient, error) {
+	opts := &oci.ClientOptions{PlainHTTP: insecure}
 	if username != "" || password != "" {
 		opts.Credentials = &oci.Credentials{
 			Username: username,
@@ -99,5 +108,5 @@ func newOCIClient(repository, username, password string, insecure bool) (oci.Cli
 		return nil, fmt.Errorf("failed to create repository: %w", err)
 	}
 
-	return oci.NewClient(repo), nil
+	return oci.NewRepositoryClient(repo), nil
 }
