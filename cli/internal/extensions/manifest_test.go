@@ -71,6 +71,157 @@ end
 	}
 }
 
+func TestSupportsEnvoyVersion(t *testing.T) {
+	tests := []struct {
+		name            string
+		minEnvoyVersion string
+		maxEnvoyVersion string
+		version         string
+		want            bool
+	}{
+		{
+			name:    "no constraints",
+			version: "1.30.0",
+			want:    true,
+		},
+		{
+			name:            "min only - version equal",
+			minEnvoyVersion: "1.30.0",
+			version:         "1.30.0",
+			want:            true,
+		},
+		{
+			name:            "min only - version above",
+			minEnvoyVersion: "1.30.0",
+			version:         "1.31.0",
+			want:            true,
+		},
+		{
+			name:            "min only - version below",
+			minEnvoyVersion: "1.30.0",
+			version:         "1.29.0",
+			want:            false,
+		},
+		{
+			name:            "max only - version equal",
+			maxEnvoyVersion: "1.30.0",
+			version:         "1.30.0",
+			want:            true,
+		},
+		{
+			name:            "max only - version below",
+			maxEnvoyVersion: "1.30.0",
+			version:         "1.29.0",
+			want:            true,
+		},
+		{
+			name:            "max only - version above",
+			maxEnvoyVersion: "1.30.0",
+			version:         "1.31.0",
+			want:            false,
+		},
+		{
+			name:            "range - version within",
+			minEnvoyVersion: "1.28.0",
+			maxEnvoyVersion: "1.32.0",
+			version:         "1.30.0",
+			want:            true,
+		},
+		{
+			name:            "range - version at min",
+			minEnvoyVersion: "1.28.0",
+			maxEnvoyVersion: "1.32.0",
+			version:         "1.28.0",
+			want:            true,
+		},
+		{
+			name:            "range - version at max",
+			minEnvoyVersion: "1.28.0",
+			maxEnvoyVersion: "1.32.0",
+			version:         "1.32.0",
+			want:            true,
+		},
+		{
+			name:            "range - version below min",
+			minEnvoyVersion: "1.28.0",
+			maxEnvoyVersion: "1.32.0",
+			version:         "1.27.0",
+			want:            false,
+		},
+		{
+			name:            "range - version above max",
+			minEnvoyVersion: "1.28.0",
+			maxEnvoyVersion: "1.32.0",
+			version:         "1.33.0",
+			want:            false,
+		},
+		{
+			name:            "patch version comparison",
+			minEnvoyVersion: "1.30.1",
+			version:         "1.30.0",
+			want:            false,
+		},
+		{
+			name:            "patch version comparison - above",
+			minEnvoyVersion: "1.30.1",
+			version:         "1.30.2",
+			want:            true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &Manifest{
+				MinEnvoyVersion: tt.minEnvoyVersion,
+				MaxEnvoyVersion: tt.maxEnvoyVersion,
+			}
+			got := m.SupportsEnvoyVersion(tt.version)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestEnvoyConstraints(t *testing.T) {
+	tests := []struct {
+		name            string
+		minEnvoyVersion string
+		maxEnvoyVersion string
+		want            string
+	}{
+		{
+			name: "no constraints",
+			want: "",
+		},
+		{
+			name:            "min only",
+			minEnvoyVersion: "1.30.0",
+			want:            ">= 1.30.0",
+		},
+		{
+			name:            "max only",
+			maxEnvoyVersion: "1.32.0",
+			want:            "<= 1.32.0",
+		},
+		{
+			name:            "both min and max",
+			minEnvoyVersion: "1.28.0",
+			maxEnvoyVersion: "1.32.0",
+			want:            ">= 1.28.0 && <= 1.32.0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &Manifest{
+				MinEnvoyVersion: tt.minEnvoyVersion,
+				MaxEnvoyVersion: tt.maxEnvoyVersion,
+			}
+			got := m.EnvoyConstraints()
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestLoadLocalManifest(t *testing.T) {
 	t.Run("valid-manifest", func(t *testing.T) {
 		manifestPath := filepath.Join("testdata", "valid_manifest.yaml")

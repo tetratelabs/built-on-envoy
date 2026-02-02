@@ -29,6 +29,16 @@
       "description": "Semantic version of the extension",
       "pattern": "^\\d+\\.\\d+\\.\\d+$"
     },
+    "minEnvoyVersion": {
+      "type": "string",
+      "description": "Minimum compatible Envoy version",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "maxEnvoyVersion": {
+      "type": "string",
+      "description": "Maximum compatible Envoy version",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
     "categories": {
       "type": "array",
       "description": "Functional categories of the extension",

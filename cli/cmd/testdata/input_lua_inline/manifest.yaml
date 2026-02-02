@@ -17,6 +17,10 @@ lua:
     function envoy_on_request(request_handle)
       request_handle:logInfo("Hello, World!")
     end
+
+# Used in run tests to verify Envoy version compatibility
+maxEnvoyVersion: 1.35.0
+
 tags:
   - test
 license: Apache-2.0

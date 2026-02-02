@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
+	"golang.org/x/mod/semver"
 	"gopkg.in/yaml.v3"
 )
 
@@ -35,6 +36,8 @@ type (
 		Tags            []string  `yaml:"tags" json:"tags"`
 		License         string    `yaml:"license" json:"license"`
 		Examples        []Example `yaml:"examples" json:"examples"`
+		MinEnvoyVersion string    `yaml:"minEnvoyVersion,omitempty" json:"minEnvoyVersion,omitempty"`
+		MaxEnvoyVersion string    `yaml:"maxEnvoyVersion,omitempty" json:"maxEnvoyVersion,omitempty"`
 
 		Lua *Lua `yaml:"lua,omitempty" json:"lua,omitempty"`
 
@@ -58,6 +61,33 @@ type (
 		Path   string `yaml:"path,omitempty" json:"path,omitempty"`
 	}
 )
+
+// SupportsEnvoyVersion checks if the extension supports the given Envoy version.
+func (m *Manifest) SupportsEnvoyVersion(version string) bool {
+	envoySemver := "v" + version
+	if m.MinEnvoyVersion != "" && semver.Compare(envoySemver, "v"+m.MinEnvoyVersion) < 0 {
+		return false
+	}
+	if m.MaxEnvoyVersion != "" && semver.Compare(envoySemver, "v"+m.MaxEnvoyVersion) > 0 {
+		return false
+	}
+	return true
+}
+
+// EnvoyConstraints returns a human-readable string of Envoy version constraints.
+func (m *Manifest) EnvoyConstraints() string {
+	constraints := ""
+	if m.MinEnvoyVersion != "" {
+		constraints += fmt.Sprintf(">= %s", m.MinEnvoyVersion)
+	}
+	if m.MaxEnvoyVersion != "" {
+		if constraints != "" {
+			constraints += " && "
+		}
+		constraints += fmt.Sprintf("<= %s", m.MaxEnvoyVersion)
+	}
+	return constraints
+}
 
 const (
 	// TypeLua represents a Lua extension.

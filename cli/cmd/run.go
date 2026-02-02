@@ -84,6 +84,14 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories) error {
 		return err
 	}
 
+	// TODO(nacx): Find a way to eagerly get from func-e the Envoy version that will
+	// be used when r.EnvoyVersion is empty, without starting the download or run.
+	if r.EnvoyVersion != "" {
+		if err := validateEnvoyCompat(r.EnvoyVersion, extensions); err != nil {
+			return err
+		}
+	}
+
 	runner := &envoy.Runner{
 		EnvoyVersion:      r.EnvoyVersion,
 		DefaultLogLevel:   r.defaultLogLevel,
@@ -181,4 +189,21 @@ func splitRef(ref string) (repo string, tag string) {
 		return ref[:colonIdx], ref[colonIdx+1:]
 	}
 	return ref, "latest"
+}
+
+// errInvalidManifest is returned when some extension is not compatible with the requested Envoy version.
+var errIncompatibleEnvoyVersion = errors.New("incompatible Envoy version")
+
+// validateEnvoyCompat checks if the given manifest is compatible with the specified Envoy version.
+func validateEnvoyCompat(envoyVersion string, extensions []*extensions.Manifest) error {
+	var errs []error
+
+	for _, ext := range extensions {
+		if !ext.SupportsEnvoyVersion(envoyVersion) {
+			errs = append(errs, fmt.Errorf("%w %s: extension %s (%s) requires Envoy %q",
+				errIncompatibleEnvoyVersion, envoyVersion, ext.Name, ext.Version, ext.EnvoyConstraints()))
+		}
+	}
+
+	return errors.Join(errs...)
 }
