@@ -24,12 +24,9 @@ var (
 
 // Pull is a command to pull an extension from an OCI registry.
 type Pull struct {
-	Extension string `arg:"" help:"Extension name or OCI repository URL (e.g., cache or ${default_registry}/extension-cache:1.0.0)"`
-	Path      string `name:"path" help:"Destination path to extract the extension to." type:"path"`
-	Registry  string `name:"registry" env:"BOE_REGISTRY" help:"OCI registry URL to pull the extension from." default:"${default_registry}"`
-	Insecure  bool   `name:"insecure" env:"BOE_REGISTRY_INSECURE" help:"Allow pulling from an insecure (HTTP) registry." default:"false"`
-	Username  string `name:"username" env:"BOE_REGISTRY_USERNAME" help:"Username for the OCI registry."`
-	Password  string `name:"password" env:"BOE_REGISTRY_PASSWORD" help:"Password for the OCI registry." type:"password"`
+	Extension string   `arg:"" help:"Extension name or OCI repository URL (e.g., cache or ${default_registry}/extension-cache:1.0.0)"`
+	Path      string   `name:"path" help:"Destination path to extract the extension to." type:"path"`
+	OCI       OCIFlags `embed:""`
 
 	repository string `kong:"-"` // Internal field: parsed repository URL
 	tag        string `kong:"-"` // Internal field: parsed tag
@@ -43,7 +40,7 @@ func (p *Pull) Help() string { return pullHelp }
 
 // Validate is called by Kong after parsing to validate the command arguments.
 func (p *Pull) Validate() error {
-	repo, tag, err := parseExtensionReference(p.Registry, p.Extension)
+	repo, tag, err := parseExtensionReference(p.OCI.Registry, p.Extension)
 	if err != nil {
 		return err
 	}
@@ -57,9 +54,9 @@ func (p *Pull) Run(ctx context.Context, dirs *xdg.Directories) error {
 	fmt.Printf("Pulling %s:%s...\n", p.repository, p.tag)
 
 	downloader := &extensions.Downloader{
-		Username: p.Username,
-		Password: p.Password,
-		Insecure: p.Insecure,
+		Username: p.OCI.Username,
+		Password: p.OCI.Password,
+		Insecure: p.OCI.Insecure,
 		Dirs:     dirs,
 	}
 

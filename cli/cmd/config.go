@@ -31,10 +31,7 @@ type GenConfig struct {
 	AdminPort  uint32   `help:"Port for Envoy admin interface." default:"9901"`
 	Extensions []string `name:"extension" help:"Extensions to enable (in the format: \"name\" or \"name:version\")." sep:","`
 	Local      []string `name:"local" help:"Path to a directory containing a local Extension to enable." type:"existingdir" sep:","`
-	Registry   string   `name:"registry" env:"BOE_REGISTRY" help:"OCI registry URL to fetch the extension from." default:"${default_registry}"`
-	Insecure   bool     `name:"insecure" env:"BOE_REGISTRY_INSECURE" help:"Allow fetching from an insecure (HTTP) registry." default:"false"`
-	Username   string   `name:"username" env:"BOE_REGISTRY_USERNAME" help:"Username for the OCI registry."`
-	Password   string   `name:"password" env:"BOE_REGISTRY_PASSWORD" help:"Password for the OCI registry." type:"password"`
+	OCI        OCIFlags `embed:""`
 
 	extensions []*extensions.Manifest `kong:"-"` // Internal field: loaded extension manifests
 	output     io.Writer              `kong:"-"` // Internal field for testing
@@ -54,13 +51,13 @@ func (c *GenConfig) Run(ctx context.Context, dirs *xdg.Directories) error {
 	}
 
 	downloader := &extensions.Downloader{
-		Username: c.Username,
-		Password: c.Password,
-		Insecure: c.Insecure,
+		Username: c.OCI.Username,
+		Password: c.OCI.Password,
+		Insecure: c.OCI.Insecure,
 		Dirs:     dirs,
 	}
 
-	downloaded, err := downloadExtensions(ctx, c.Registry, downloader, c.Extensions)
+	downloaded, err := downloadExtensions(ctx, c.OCI.Registry, downloader, c.Extensions)
 	if err != nil {
 		return err
 	}

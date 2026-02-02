@@ -28,9 +28,11 @@ func TestPushPull(t *testing.T) {
 
 	// Create Push command and execute
 	push := &Push{
-		Local:    extensionDir,
-		Registry: repo,
-		Insecure: true, // Local registry uses HTTP
+		Local: extensionDir,
+		OCI: OCIFlags{
+			Registry: repo,
+			Insecure: true, // Local registry uses HTTP
+		},
 	}
 	require.NoError(t, push.Validate())      // Validate loads and validates the manifest
 	require.NoError(t, push.AfterApply(nil)) // AfterApply creates the OCI client
@@ -45,7 +47,9 @@ func TestPushPull(t *testing.T) {
 	pull := &Pull{
 		Extension: repo + "/extension-push-pull:1.0.0",
 		Path:      pullDir,
-		Insecure:  true,
+		OCI: OCIFlags{
+			Insecure: true,
+		},
 	}
 	require.NoError(t, pull.Validate()) // Validate parses the extension reference
 

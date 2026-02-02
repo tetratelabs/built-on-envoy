@@ -53,9 +53,9 @@ Flags:
       --local=LOCAL                Path to a directory containing a local
                                    Extension to enable.
       --registry="ghcr.io/tetratelabs/built-on-envoy"
-                                   OCI registry URL to fetch the extension from
+                                   OCI registry URL for the extensions
                                    ($BOE_REGISTRY).
-      --insecure                   Allow fetching from an insecure (HTTP)
+      --insecure                   Allow connecting to an insecure (HTTP)
                                    registry ($BOE_REGISTRY_INSECURE).
       --username=STRING            Username for the OCI registry
                                    ($BOE_REGISTRY_USERNAME).

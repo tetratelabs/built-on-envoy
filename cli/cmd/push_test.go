@@ -45,9 +45,8 @@ Flags:
   -h, --help               Show context-sensitive help.
 
       --registry="ghcr.io/tetratelabs/built-on-envoy"
-                           OCI registry URL to push the extension to
-                           ($BOE_REGISTRY).
-      --insecure           Allow pushing to an insecure (HTTP) registry
+                           OCI registry URL for the extensions ($BOE_REGISTRY).
+      --insecure           Allow connecting to an insecure (HTTP) registry
                            ($BOE_REGISTRY_INSECURE).
       --username=STRING    Username for the OCI registry
                            ($BOE_REGISTRY_USERNAME).

@@ -57,9 +57,9 @@ Flags:
       --local=LOCAL                Path to a directory containing a local
                                    Extension to enable.
       --registry="ghcr.io/tetratelabs/built-on-envoy"
-                                   OCI registry URL to fetch the extension from
+                                   OCI registry URL for the extensions
                                    ($BOE_REGISTRY).
-      --insecure                   Allow fetching from an insecure (HTTP)
+      --insecure                   Allow connecting to an insecure (HTTP)
                                    registry ($BOE_REGISTRY_INSECURE).
       --username=STRING            Username for the OCI registry
                                    ($BOE_REGISTRY_USERNAME).
@@ -93,8 +93,8 @@ func TestParseCmdRunDefaults(t *testing.T) {
 	require.Equal(t, uint32(9901), cli.Run.AdminPort)
 	require.Empty(t, cli.Run.EnvoyVersion)
 	require.Empty(t, cli.Run.Extensions)
-	require.Equal(t, extensions.DefaultOCIRegistry, cli.Run.Registry)
-	require.False(t, cli.Run.Insecure)
+	require.Equal(t, extensions.DefaultOCIRegistry, cli.Run.OCI.Registry)
+	require.False(t, cli.Run.OCI.Insecure)
 
 	// Verify RunID is generated with expected format: YYYYMMDD_HHMMSS_UUU
 	require.NotEmpty(t, cli.Run.RunID)
@@ -136,8 +136,8 @@ func TestParseCmdRunCustomValues(t *testing.T) {
 	require.Equal(t, "1.31.0", cli.Run.EnvoyVersion)
 	require.Equal(t, "custom-run-id", cli.Run.RunID)
 	require.Equal(t, []string{"cors:1.0.0", "rate-limiter", "auth-jwt"}, cli.Run.Extensions)
-	require.Equal(t, "localhost:5000", cli.Run.Registry)
-	require.True(t, cli.Run.Insecure)
+	require.Equal(t, "localhost:5000", cli.Run.OCI.Registry)
+	require.True(t, cli.Run.OCI.Insecure)
 }
 
 func TestValidateLogLevel(t *testing.T) {

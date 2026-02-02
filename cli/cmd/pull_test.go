@@ -47,9 +47,8 @@ Flags:
 
       --path=STRING        Destination path to extract the extension to.
       --registry="ghcr.io/tetratelabs/built-on-envoy"
-                           OCI registry URL to pull the extension from
-                           ($BOE_REGISTRY).
-      --insecure           Allow pulling from an insecure (HTTP) registry
+                           OCI registry URL for the extensions ($BOE_REGISTRY).
+      --insecure           Allow connecting to an insecure (HTTP) registry
                            ($BOE_REGISTRY_INSECURE).
       --username=STRING    Username for the OCI registry
                            ($BOE_REGISTRY_USERNAME).
