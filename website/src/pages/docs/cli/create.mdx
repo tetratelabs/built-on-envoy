@@ -1,0 +1,45 @@
+---
+layout: ../../../layouts/DocsLayout.astro
+title: create
+description: Create a new extension template
+---
+
+import CLIName from '../../../components/CLIName.astro';
+import CodeBlock from '../../../components/CodeBlock.astro';
+
+# <CLIName/> create
+
+The create command generates a new extension template with the specified name and type.
+This is useful for getting started with developing a new extension for Built On Envoy.
+
+By default, it creates a 'composer' type extension, which is an HTTP filter extension.
+The generated template includes boilerplate code, a manifest file, and a Makefile
+to help you build and install the extension.
+
+You can specify the output directory using the --path flag. If not specified,
+it defaults to a directory named after the extension.
+
+
+## Usage
+
+<CodeBlock code={`{{CLI_NAME}} create <name> [flags]`} />
+
+To see all available options:
+
+<CodeBlock code={`{{CLI_NAME}} create --help`} />
+
+
+## Arguments
+
+| Name | Description | Type | Required |
+|------|-------------|------|----------|
+| `name` | Name of the extension. | `string` | Yes |
+
+
+## Flags
+
+| Name | Description | Type | Default | Env Var | Required |
+|------|-------------|------|---------|-----|----------|
+| `--type` | Type of the extension. Currently only 'composer' is supported. | `string` | `composer` | - | No |
+| `--path` | Output directory for the extension. Defaults to the extension name. | `string` | - | - | No |
+

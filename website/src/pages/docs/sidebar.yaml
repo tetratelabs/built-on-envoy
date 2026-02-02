@@ -9,6 +9,8 @@ sections:
 
   - title: CLI Commands
     items:
+      - title: create
+        href: /docs/cli/create
       - title: gen-config
         href: /docs/cli/gen-config
       - title: list

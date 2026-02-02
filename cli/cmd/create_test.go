@@ -96,11 +96,13 @@ func TestCreate_Run(t *testing.T) {
 	}
 
 	// verify manifest.yaml content
+	// #nosec G304
 	manifest, err := os.ReadFile(filepath.Join(repoPath, "manifest.yaml"))
 	require.NoError(t, err)
 	assert.Contains(t, string(manifest), "name: "+name)
 
 	// verify plugin.go content
+	// #nosec G304
 	plugin, err := os.ReadFile(filepath.Join(repoPath, "plugin.go"))
 	require.NoError(t, err)
 	assert.Contains(t, string(plugin), "x-"+name)

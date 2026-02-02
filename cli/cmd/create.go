@@ -20,6 +20,7 @@ type Create struct {
 	Path string `help:"Output directory for the extension. Defaults to the extension name." type:"path"`
 }
 
+// Help returns the help message for the create command.
 func (c *Create) Help() string {
 	return `The create command generates a new extension template with the specified name and type.
 This is useful for getting started with developing a new extension for Built On Envoy.
@@ -40,8 +41,8 @@ func (c *Create) Run() error {
 	}
 
 	repoPath := filepath.Join(c.Path, c.Name)
-
-	if err := os.MkdirAll(repoPath, 0755); err != nil {
+	err := os.MkdirAll(repoPath, 0o750)
+	if err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", repoPath, err)
 	}
 
@@ -58,11 +59,17 @@ func (c *Create) Run() error {
 
 	for name, tmpl := range files {
 		path := filepath.Join(repoPath, name)
+		// #nosec G304
 		f, err := os.Create(path)
 		if err != nil {
 			return fmt.Errorf("failed to create file %s: %w", path, err)
 		}
-		defer f.Close()
+		defer func() {
+			err = f.Close()
+			if err != nil {
+				fmt.Printf("Warning: failed to close file %s: %v\n", path, err)
+			}
+		}()
 
 		t, err := template.New(name).Parse(tmpl)
 		if err != nil {

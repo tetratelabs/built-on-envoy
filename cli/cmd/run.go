@@ -196,6 +196,7 @@ func loadLocalManifests(paths []string) ([]*extensions.Manifest, error) {
 			}
 
 			// Run make install to install local extension before running under the localPath.
+			// #nosec G204
 			cmd = exec.Command("make", "-C", localPath, "install")
 			output, err = cmd.CombinedOutput()
 			if err != nil {

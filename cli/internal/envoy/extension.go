@@ -122,9 +122,7 @@ func (w WasmFilterGenerator) GenerateFilterConfig(*extensions.Manifest, string, 
 }
 
 // GenerateFilterConfig generates the filter configuration for Dynamic Module extensions.
-func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest,
-	dataHome stirng, _ any) (*ExtensionResources, error) {
-
+func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, dataHome string, _ any) (*ExtensionResources, error) {
 	// TODO(wbpcode): For now, we only support Composer dynamic modules because all golang dynamic
 	// modules will be compiled into the same binary.
 	// Once we support other dynamic modules, we need to differentiate them here.
@@ -168,9 +166,7 @@ func getGoPluginPathFromManifest(dataHome string, manifest *extensions.Manifest)
 }
 
 // GenerateFilterConfig generates the filter configuration for Composer extensions.
-func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest,
-	dataHome string, _ any) (*hcmv3.HttpFilter, error) {
-
+func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, dataHome string, _ any) (*hcmv3.HttpFilter, error) {
 	cachedComposerPath := getComposerPath(dataHome, manifest.ComposerVersion)
 	if _, err := os.Stat(cachedComposerPath); os.IsNotExist(err) {
 		// TODO(wbpcode): Download the composer binary from the URL specified in the manifest.
