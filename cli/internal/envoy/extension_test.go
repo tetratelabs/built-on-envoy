@@ -150,8 +150,8 @@ func TestDynamicModuleFilterGenerator(t *testing.T) {
 
 	// Case 2: Composer binary exists
 	composerPath := filepath.Join(dataHome, "extensions", "dym", "composer", manifest.Version)
-	require.NoError(t, os.MkdirAll(composerPath, 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(composerPath, "libcomposer.so"), []byte("fake binary"), 0644))
+	require.NoError(t, os.MkdirAll(composerPath, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(composerPath, "libcomposer.so"), []byte("fake binary"), 0o600))
 
 	filter, err := GenerateFilterConfig(manifest, dataHome, nil)
 	require.NoError(t, err)
@@ -174,8 +174,8 @@ func TestComposerFilterGenerator(t *testing.T) {
 
 	// Create Composer binary
 	composerPath := filepath.Join(dataHome, "extensions", "dym", "composer", manifest.ComposerVersion)
-	require.NoError(t, os.MkdirAll(composerPath, 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(composerPath, "libcomposer.so"), []byte("fake binary"), 0644))
+	require.NoError(t, os.MkdirAll(composerPath, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(composerPath, "libcomposer.so"), []byte("fake binary"), 0o600))
 
 	// Case 2: Plugin binary missing
 	_, err = GenerateFilterConfig(manifest, dataHome, nil)
@@ -183,8 +183,8 @@ func TestComposerFilterGenerator(t *testing.T) {
 
 	// Create Plugin binary
 	pluginPath := filepath.Join(dataHome, "extensions", "goplugin", manifest.Name, manifest.Version)
-	require.NoError(t, os.MkdirAll(pluginPath, 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(pluginPath, "plugin.so"), []byte("fake binary"), 0644))
+	require.NoError(t, os.MkdirAll(pluginPath, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(pluginPath, "plugin.so"), []byte("fake binary"), 0o600))
 
 	// Case 3: Success
 	filter, err := GenerateFilterConfig(manifest, dataHome, nil)

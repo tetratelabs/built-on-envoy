@@ -356,9 +356,9 @@ func TestLoadLocalManifests(t *testing.T) {
 
 	t.Run("invalid composer path", func(t *testing.T) {
 		// Create a temporary directory and create an template composer plugin with
-		// createComposerHttpFilter.
+		// createComposerHTTPFilter.
 		tempDir := t.TempDir()
-		err := createComposerHttpFilter(tempDir, "test_custom")
+		err := createComposerHTTPFilter(tempDir, "test_custom")
 		require.NoError(t, err)
 
 		// Remove go.mod and go.sum to simulate invalid composer extension.
@@ -374,9 +374,9 @@ func TestLoadLocalManifests(t *testing.T) {
 
 	t.Run("valid composer path", func(t *testing.T) {
 		// Create a temporary directory and create an template composer plugin with
-		// createComposerHttpFilter.
+		// createComposerHTTPFilter.
 		tempDir := t.TempDir()
-		err := createComposerHttpFilter(tempDir, "test_valid")
+		err := createComposerHTTPFilter(tempDir, "test_valid")
 		require.NoError(t, err)
 
 		manifests, err := loadLocalManifests([]string{tempDir + "/test_valid"})

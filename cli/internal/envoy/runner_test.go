@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )

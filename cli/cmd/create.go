@@ -42,13 +42,13 @@ func (c *Create) Run() error {
 
 	switch c.Type {
 	case "composer":
-		return createComposerHttpFilter(c.Path, c.Name)
+		return createComposerHTTPFilter(c.Path, c.Name)
 	default:
 		return fmt.Errorf("unsupported extension type: %s", c.Type)
 	}
 }
 
-func createComposerHttpFilter(path, name string) error {
+func createComposerHTTPFilter(path, name string) error {
 	repoPath := filepath.Join(path, name)
 	err := os.MkdirAll(repoPath, 0o750)
 	if err != nil {
