@@ -68,6 +68,7 @@ test-integration: gen-code  ## Run the unit and integration tests
 
 .PHONY: test-e2e
 test-e2e: gen-code  ## Run the end-to-end tests
+	@$(MAKE) -C $(CLI_ROOT)/../extensions build_local_cache
 	@echo "Run e2e tests"
 	@go test $(GO_TEST_ARGS) ./e2e/...
 

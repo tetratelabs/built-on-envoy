@@ -17,8 +17,10 @@ import (
 	luav3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/lua/v3"
 	hcmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
@@ -216,8 +218,13 @@ func TestComposerFilterGenerator(t *testing.T) {
 							},
 							FilterName: "goplugin",
 							FilterConfig: func() *anypb.Any {
-								value := fmt.Sprintf(`{"name":"test-composer", "url":"file://%s/extensions/goplugin/test-composer/v0.0.1/plugin.so"}`, dataHome)
-								cfg, err := anypb.New(wrapperspb.String(value))
+								configStruct, _ := structpb.NewStruct(map[string]any{
+									"name": manifest.Name,
+									"url":  "file://" + fmt.Sprintf("%s/extensions/goplugin/%s/%s/plugin.so", dataHome, manifest.Name, manifest.Version),
+								})
+								configJSON, err := protojson.Marshal(configStruct)
+								require.NoError(t, err)
+								cfg, err := anypb.New(wrapperspb.String(string(configJSON)))
 								require.NoError(t, err)
 								return cfg
 							}(),
