@@ -283,13 +283,15 @@
 	top: 12px;
 	right: 12px;
 	background: rgba(255, 255, 255, 0.1);
-	border: 1px solid rgba(255, 255, 255, 0.2);
-	color: white;
-	padding: 6px 12px;
+	border: none;
+	color: #e0e0e0;
+	padding: 8px;
 	border-radius: 6px;
 	cursor: pointer;
-	font-size: 14px;
-	transition: all 0.2s;
+	transition: background 0.2s;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 }
 
 .copy-btn:hover {
