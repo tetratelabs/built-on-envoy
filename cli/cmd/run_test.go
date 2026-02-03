@@ -57,9 +57,9 @@ Flags:
                                    or "name:version").
       --local=LOCAL                Path to a directory containing a local
                                    Extension to enable.
-	  --config=CONFIG,...          Optional JSON config string for extensions.
-								   Applied in order to combined --extension and
-								   --local flags. Use empty string to skip.
+      --config=CONFIG,...          Optional JSON config string for extensions.
+                                   Applied in order to combined --extension and
+                                   --local flags. Use empty string to skip.
       --registry="ghcr.io/tetratelabs/built-on-envoy"
                                    OCI registry URL for the extensions
                                    ($BOE_REGISTRY).
