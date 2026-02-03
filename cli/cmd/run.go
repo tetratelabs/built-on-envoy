@@ -176,7 +176,7 @@ func parseLogLevels(logLevel string) (string, string, error) {
 
 var errFailedToLoadLocalManifest = errors.New("failed to load local manifest")
 
-var buildComposerLocally = func(path string) error {
+func buildComposerLocally(path string) error {
 	// Run go mod tidy in the local extension directory to ensure dependencies are up to date.
 	cmd := exec.Command("go", "mod", "tidy")
 	cmd.Dir = path

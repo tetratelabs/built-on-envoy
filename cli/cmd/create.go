@@ -118,6 +118,8 @@ func (f *customHttpFilter) OnRequestTrailers(trailers shared.HeaderMap) shared.T
 }
 
 func (f *customHttpFilter) OnResponseHeaders(headers shared.HeaderMap, endStream bool) shared.HeadersStatus {
+	// TODO: Implement your logic here.
+	headers.Set("x-{{ .Name }}", "example")
 	return shared.HeadersStatusContinue
 }
 

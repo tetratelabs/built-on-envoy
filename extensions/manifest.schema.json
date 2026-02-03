@@ -86,8 +86,8 @@
     },
     "composerVersion": {
       "type": "string",
-      "description": "Version of Built On Envoy Composer required",
-      "pattern": "(^\\d+\\.\\d+\\.\\d+$)|(^$)"
+      "description": "Version of Built On Envoy Composer",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
     },
     "tags": {
       "type": "array",
@@ -171,6 +171,21 @@
       "else": {
         "properties": {
           "lua": false
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": { "const": "composer" }
+        }
+      },
+      "then": {
+        "required": ["composerVersion"]
+      },
+      "else": {
+        "properties": {
+          "composerVersion": false
         }
       }
     }

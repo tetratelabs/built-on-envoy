@@ -36,6 +36,35 @@ func TestAllMAnifestsAreLoaded(t *testing.T) {
 	require.Len(t, Manifests, count)
 }
 
+func TestValidateComposerManifest(t *testing.T) {
+	tests := []struct {
+		name    string
+		want    string
+		wantErr bool
+	}{
+		{"composer_empty_version.yaml", "", true},
+		{"composer_invalid_version.yaml", "", true},
+		{"composer_missing_version.yaml", "", true},
+		{"composer_valid.yaml", "1.2.3", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			manifestPath := filepath.Join("testdata", tt.name)
+			localManifest, err := LoadLocalManifest(manifestPath)
+			require.NoError(t, err)
+
+			err = ValidateManifest(localManifest)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tt.want, localManifest.ComposerVersion)
+			}
+		})
+	}
+}
+
 func TestValidateLuaManifest(t *testing.T) {
 	wantInline := &Lua{Inline: `function envoy_on_request(request_handle)
   request_handle:logInfo("Hello, World!")

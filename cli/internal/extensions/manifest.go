@@ -41,7 +41,7 @@ type (
 
 		// ComposerVersion specifies the compatible Composer dynamic module version
 		// for Composer go plugins.
-		ComposerVersion string `yaml:"composerVersion" json:"composerVersion"`
+		ComposerVersion string `yaml:"composerVersion,omitempty" json:"composerVersion,omitempty"`
 		Lua             *Lua   `yaml:"lua,omitempty" json:"lua,omitempty"`
 
 		// Only used when loading manifests from a local path

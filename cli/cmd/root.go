@@ -25,6 +25,7 @@ type CLI struct {
 	List      List      `cmd:"" help:"List available extensions"`
 	Run       Run       `cmd:"" help:"Run Envoy with extensions"`
 	GenConfig GenConfig `cmd:"" help:"Generate Envoy configuration with extensions"`
+	Create    Create    `cmd:"" help:"Create a new extension template"`
 	Push      Push      `cmd:"" help:"Push an extension to an OCI registry"`
 	Pull      Pull      `cmd:"" help:"Pull an extension from an OCI registry"`
 

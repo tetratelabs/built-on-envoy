@@ -6,16 +6,20 @@
 package envoy
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	dymv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/dynamic_modules/v3"
+	dymhttpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/dynamic_modules/v3"
 	luav3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/lua/v3"
 	hcmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 )
@@ -118,20 +122,7 @@ end
 				return
 			}
 
-			require.Len(t, got.HTTPFilters, len(tt.want.HTTPFilters))
-
-			gotFilter := got.HTTPFilters[0]
-			wantFilter := tt.want.HTTPFilters[0]
-
-			// Check if protos are equal and if not, print their YAML representation
-			// for easier debugging.
-			if !proto.Equal(wantFilter, gotFilter) {
-				wantYaml, err := ProtoToYaml(wantFilter)
-				require.NoError(t, err)
-				gotYaml, err := ProtoToYaml(gotFilter)
-				require.NoError(t, err)
-				require.YAMLEq(t, string(wantYaml), string(gotYaml))
-			}
+			checkProtos(t, tt.want.HTTPFilters, got.HTTPFilters)
 		})
 	}
 }
@@ -153,10 +144,32 @@ func TestDynamicModuleFilterGenerator(t *testing.T) {
 	require.NoError(t, os.MkdirAll(composerPath, 0o750))
 	require.NoError(t, os.WriteFile(filepath.Join(composerPath, "libcomposer.so"), []byte("fake binary"), 0o600))
 
-	filter, err := GenerateFilterConfig(manifest, dataHome, nil)
+	got, err := GenerateFilterConfig(manifest, dataHome, nil)
 	require.NoError(t, err)
-	require.NotNil(t, filter)
-	require.Equal(t, manifest.Name, filter.Name)
+
+	want := &ExtensionResources{
+		HTTPFilters: []*hcmv3.HttpFilter{
+			{
+				Name: manifest.Name,
+				ConfigType: &hcmv3.HttpFilter_TypedConfig{
+					TypedConfig: func() *anypb.Any {
+						dymConfig := &dymhttpv3.DynamicModuleFilter{
+							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
+								Name:         "composer",
+								LoadGlobally: true,
+							},
+							FilterName: manifest.Name,
+						}
+						cfg, err := anypb.New(dymConfig)
+						require.NoError(t, err)
+						return cfg
+					}(),
+				},
+			},
+		},
+	}
+
+	checkProtos(t, want.HTTPFilters, got.HTTPFilters)
 }
 
 func TestComposerFilterGenerator(t *testing.T) {
@@ -187,8 +200,59 @@ func TestComposerFilterGenerator(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(pluginPath, "plugin.so"), []byte("fake binary"), 0o600))
 
 	// Case 3: Success
-	filter, err := GenerateFilterConfig(manifest, dataHome, nil)
+	got, err := GenerateFilterConfig(manifest, dataHome, nil)
 	require.NoError(t, err)
-	require.NotNil(t, filter)
-	require.Equal(t, manifest.Name, filter.Name)
+
+	want := &ExtensionResources{
+		HTTPFilters: []*hcmv3.HttpFilter{
+			{
+				Name: manifest.Name,
+				ConfigType: &hcmv3.HttpFilter_TypedConfig{
+					TypedConfig: func() *anypb.Any {
+						dymConfig := &dymhttpv3.DynamicModuleFilter{
+							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
+								Name:         "composer",
+								LoadGlobally: true,
+							},
+							FilterName: "goplugin",
+							FilterConfig: func() *anypb.Any {
+								value := fmt.Sprintf(`{"name":"test-composer", "url":"file://%s/extensions/goplugin/test-composer/v0.0.1/plugin.so"}`, dataHome)
+								cfg, err := anypb.New(wrapperspb.String(value))
+								require.NoError(t, err)
+								return cfg
+							}(),
+						}
+						cfg, err := anypb.New(dymConfig)
+						require.NoError(t, err)
+						return cfg
+					}(),
+				},
+			},
+		},
+	}
+
+	checkProtos(t, want.HTTPFilters, got.HTTPFilters)
+}
+
+// checkProtosList checks if two lists of proto messages are equal and if not, prints their YAML representation
+// for easier debugging.
+func checkProtos[T proto.Message](t *testing.T, want, got []T) {
+	require.Len(t, got, len(want))
+	for i := range got {
+		checkProto(t, want[i], got[i])
+	}
+}
+
+// checkProto checks if two proto messages are equal and if not, prints their YAML representation
+// for easier debugging.
+func checkProto[T proto.Message](t *testing.T, want, got T) {
+	if !proto.Equal(want, got) {
+		wantYaml, err := ProtoToYaml(want)
+		require.NoError(t, err)
+		gotYaml, err := ProtoToYaml(got)
+		require.NoError(t, err)
+		require.YAMLEq(t,
+			string(wantYaml), string(gotYaml),
+			"want:\n%s\ngot:\n%s", wantYaml, gotYaml)
+	}
 }

@@ -13,8 +13,8 @@ import (
 
 	clusterv3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
-	dym "github.com/envoyproxy/go-control-plane/envoy/extensions/dynamic_modules/v3"
-	dymhttp "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/dynamic_modules/v3"
+	dymv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/dynamic_modules/v3"
+	dymhttpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/dynamic_modules/v3"
 	luav3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/lua/v3"
 	hcmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -132,8 +132,8 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 		return nil, fmt.Errorf("composer binary not found at %s", cachedComposerPath)
 	}
 
-	protoConfig := &dymhttp.DynamicModuleFilter{
-		DynamicModuleConfig: &dym.DynamicModuleConfig{
+	protoConfig := &dymhttpv3.DynamicModuleFilter{
+		DynamicModuleConfig: &dymv3.DynamicModuleConfig{
 			Name:         "composer",
 			LoadGlobally: true,
 		},
@@ -145,10 +145,14 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 		return nil, fmt.Errorf("failed to marshal dynamic module filter to Any: %w", err)
 	}
 
-	return &hcmv3.HttpFilter{
-		Name: manifest.Name,
-		ConfigType: &hcmv3.HttpFilter_TypedConfig{
-			TypedConfig: composerAny,
+	return &ExtensionResources{
+		HTTPFilters: []*hcmv3.HttpFilter{
+			{
+				Name: manifest.Name,
+				ConfigType: &hcmv3.HttpFilter_TypedConfig{
+					TypedConfig: composerAny,
+				},
+			},
 		},
 	}, nil
 }
@@ -166,7 +170,7 @@ func getGoPluginPathFromManifest(dataHome string, manifest *extensions.Manifest)
 }
 
 // GenerateFilterConfig generates the filter configuration for Composer extensions.
-func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, dataHome string, _ any) (*hcmv3.HttpFilter, error) {
+func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, dataHome string, _ any) (*ExtensionResources, error) {
 	cachedComposerPath := getComposerPath(dataHome, manifest.ComposerVersion)
 	if _, err := os.Stat(cachedComposerPath); os.IsNotExist(err) {
 		// TODO(wbpcode): Download the composer binary from the URL specified in the manifest.
@@ -195,8 +199,8 @@ func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manif
 	// Covert the StringValue to Any.
 	config, _ := anypb.New(configStringValue)
 
-	protoConfig := &dymhttp.DynamicModuleFilter{
-		DynamicModuleConfig: &dym.DynamicModuleConfig{
+	protoConfig := &dymhttpv3.DynamicModuleFilter{
+		DynamicModuleConfig: &dymv3.DynamicModuleConfig{
 			Name:         "composer",
 			LoadGlobally: true,
 		},
@@ -208,10 +212,14 @@ func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manif
 		return nil, fmt.Errorf("failed to marshal Composer filter to Any: %w", err)
 	}
 
-	return &hcmv3.HttpFilter{
-		Name: manifest.Name,
-		ConfigType: &hcmv3.HttpFilter_TypedConfig{
-			TypedConfig: composerAny,
+	return &ExtensionResources{
+		HTTPFilters: []*hcmv3.HttpFilter{
+			{
+				Name: manifest.Name,
+				ConfigType: &hcmv3.HttpFilter_TypedConfig{
+					TypedConfig: composerAny,
+				},
+			},
 		},
 	}, nil
 }

@@ -85,7 +85,17 @@ func RunEnvoy(t *testing.T, cliBin string, args ...string) (listenPort int, admi
 		}
 	})
 
-	t.Log("Waiting for boe to start (Envoy admin endpoint)...")
+	t.Logf("Waiting for boe to start (Envoy listening on %d)...", proxyPort)
+
+	// Wait fist for the main Envoy listener.
+	// The func-e admin client relies on Envoy being the first child process ot be able to retrieve
+	// the admin port.
+	// This may not be the case when running local go extensions that execute commands to compile the plugin
+	// on the first run, so we wait first for Envoy to be listening on the proxy port, then cehck the admin server
+	// as we know there won't be other interfering child processes at that point.
+	require.Eventually(t, func() bool {
+		return isPortInUse(t.Context(), proxyPort)
+	}, 30*time.Second, 100*time.Millisecond, "Envoy did not start listening on port %d", proxyPort)
 
 	adminClient, err := admin.NewAdminClient(t.Context(), process.Pid)
 	require.NoError(t, err)

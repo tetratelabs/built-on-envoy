@@ -68,11 +68,6 @@ func (c *GenConfig) Run(ctx context.Context, dirs *xdg.Directories) error {
 	}
 
 	var config string
-
-	var (
-		config string
-		err    error
-	)
 	if c.Minimal {
 		config, err = c.generateMinimalConfig(dirs.DataHome)
 	} else {
@@ -129,6 +124,7 @@ func (c *GenConfig) generateMinimalConfig(dataHome string) (string, error) {
 	return string(cfgYaml), nil
 }
 
+// protoListToAny converts a list of proto messages to a list of interface{} by marshaling to JSON and unmarshaling back.
 func protoListToAny[T proto.Message](items []T) ([]any, error) {
 	marshaler := protojson.MarshalOptions{UseProtoNames: true}
 	out := make([]any, 0, len(items))
