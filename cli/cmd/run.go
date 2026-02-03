@@ -31,13 +31,18 @@ type Run struct {
 	AdminPort    uint32   `help:"Port for Envoy admin interface." default:"9901"`
 	Extensions   []string `name:"extension" help:"Extensions to enable (in the format: \"name\" or \"name:version\")." sep:","`
 	Local        []string `name:"local" help:"Path to a directory containing a local Extension to enable." type:"existingdir" sep:","`
-	Registry     string   `name:"registry" env:"BOE_REGISTRY" help:"OCI registry URL to fetch the extension from." default:"${default_registry}"`
-	Insecure     bool     `name:"insecure" env:"BOE_REGISTRY_INSECURE" help:"Allow fetching from an insecure (HTTP) registry." default:"false"`
-	Username     string   `name:"username" env:"BOE_REGISTRY_USERNAME" help:"Username for the OCI registry."`
-	Password     string   `name:"password" env:"BOE_REGISTRY_PASSWORD" help:"Password for the OCI registry." type:"password"`
+	OCI          OCIFlags `embed:""`
 
 	defaultLogLevel   string `kong:"-"` // Internal field: parsed defaut log level
 	componentLogLevel string `kong:"-"` // Internal field: parsed component log levels
+}
+
+// OCIFlags holds flags for OCI registry authentication and configuration.
+type OCIFlags struct {
+	Registry string `name:"registry" env:"BOE_REGISTRY" help:"OCI registry URL for the extensions." default:"${default_registry}"`
+	Insecure bool   `name:"insecure" env:"BOE_REGISTRY_INSECURE" help:"Allow connecting to an insecure (HTTP) registry." default:"false"`
+	Username string `name:"username" env:"BOE_REGISTRY_USERNAME" help:"Username for the OCI registry."`
+	Password string `name:"password" env:"BOE_REGISTRY_PASSWORD" help:"Password for the OCI registry." type:"password"`
 }
 
 //go:embed run_help.md
@@ -68,13 +73,13 @@ func (r *Run) Validate() error {
 // Run executes the run command
 func (r *Run) Run(ctx context.Context, dirs *xdg.Directories) error {
 	downloader := &extensions.Downloader{
-		Username: r.Username,
-		Password: r.Password,
-		Insecure: r.Insecure,
+		Username: r.OCI.Username,
+		Password: r.OCI.Password,
+		Insecure: r.OCI.Insecure,
 		Dirs:     dirs,
 	}
 
-	downloaded, err := downloadExtensions(ctx, r.Registry, downloader, r.Extensions)
+	downloaded, err := downloadExtensions(ctx, r.OCI.Registry, downloader, r.Extensions)
 	if err != nil {
 		return err
 	}

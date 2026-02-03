@@ -20,11 +20,8 @@ import (
 
 // Push is a command to push an extension to an OCI registry.
 type Push struct {
-	Local    string `arg:"" name:"local extension" help:"Path to a directory containing the extension to push." type:"existingdir"`
-	Registry string `name:"registry" env:"BOE_REGISTRY" help:"OCI registry URL to push the extension to." default:"${default_registry}"`
-	Insecure bool   `name:"insecure" env:"BOE_REGISTRY_INSECURE" help:"Allow pushing to an insecure (HTTP) registry." default:"false"`
-	Username string `name:"username" env:"BOE_REGISTRY_USERNAME" help:"Username for the OCI registry."`
-	Password string `name:"password" env:"BOE_REGISTRY_PASSWORD" help:"Password for the OCI registry." type:"password"`
+	Local string   `arg:"" name:"local extension" help:"Path to a directory containing the extension to push." type:"existingdir"`
+	OCI   OCIFlags `embed:""`
 
 	manifest  *extensions.Manifest `kong:"-"` // Internal field: loaded extension manifest
 	reference string               `kong:"-"` // Internal field: full OCI repository reference
@@ -56,8 +53,8 @@ func (p *Push) Validate() error {
 // AfterApply is called by Kong after applying defaults to set computed default values.
 func (p *Push) AfterApply(*kong.Context) error {
 	var err error
-	p.reference = extensions.RepositoryName(p.Registry, p.manifest.Name)
-	p.client, err = newOCIRepositoryClient(p.reference, p.Username, p.Password, p.Insecure)
+	p.reference = extensions.RepositoryName(p.OCI.Registry, p.manifest.Name)
+	p.client, err = newOCIRepositoryClient(p.reference, p.OCI.Username, p.OCI.Password, p.OCI.Insecure)
 	return err
 }
 
@@ -70,7 +67,7 @@ func (p *Push) Run(ctx context.Context) error {
 	// Add source annotation if pushing to default registry so that artifacts are
 	// linked to the repo.
 	// See: https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#pushing-container-images
-	if p.Registry == extensions.DefaultOCIRegistry {
+	if p.OCI.Registry == extensions.DefaultOCIRegistry {
 		annotations[ocispec.AnnotationSource] = extensions.DefaultOCISource
 	}
 
