@@ -3,7 +3,7 @@
 /* Hero Section */
 .extension-hero {
 	background: linear-gradient(135deg, rgba(124, 58, 237, 0.05) 0%, rgba(6, 182, 212, 0.05) 100%);
-	padding: 40px 0 60px;
+	padding: 40px 0;
 	border-bottom: 1px solid var(--border);
 }
 
@@ -31,15 +31,13 @@
 }
 
 .extension-header {
-	margin-bottom: 32px;
+	display: flex;
+	gap: 64px;
+	align-items: flex-start;
 }
 
-.extension-title-group {
-	display: flex;
-	align-items: center;
-	gap: 16px;
-	margin-bottom: 16px;
-	flex-wrap: wrap;
+.extension-header-left {
+	flex-shrink: 0;
 }
 
 .extension-hero h1 {
@@ -47,13 +45,14 @@
 	font-weight: 700;
 	color: var(--primary-dark);
 	font-family: 'Monaco', 'Menlo', monospace;
-	margin: 0;
+	margin: 0 0 24px 0;
 }
 
 .extension-description {
 	font-size: 20px;
 	color: var(--text-muted);
 	line-height: 1.6;
+	max-width: 480px;
 }
 
 /* Metadata */
@@ -407,12 +406,18 @@
 }
 
 @media (max-width: 768px) {
+	.extension-header {
+		flex-direction: column;
+		gap: 24px;
+	}
+
 	.extension-hero h1 {
 		font-size: 32px;
 	}
 
 	.extension-description {
 		font-size: 18px;
+		max-width: none;
 	}
 
 	.content-section h2 {

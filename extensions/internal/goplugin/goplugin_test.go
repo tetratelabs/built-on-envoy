@@ -1,3 +1,8 @@
+// Copyright Built On Envoy
+// SPDX-License-Identifier: Apache-2.0
+// The full text of the Apache license is available in the LICENSE file at
+// the root of the repo.
+
 package goplugin_test
 
 import (
@@ -7,8 +12,9 @@ import (
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
-	"github.com/tetratelabs/built-on-envoy/extensions/goplugin"
 	"go.uber.org/mock/gomock"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/internal/goplugin"
 )
 
 func Test_Create(t *testing.T) {
@@ -20,11 +26,11 @@ func Test_Create(t *testing.T) {
 
 	mockFactory := mocks.NewMockHttpFilterConfigFactory(ctrl)
 
-	loadPluginNoError := func(name, url string) (shared.HttpFilterConfigFactory, error) {
+	loadPluginNoError := func(_, _ string) (shared.HttpFilterConfigFactory, error) {
 		return mockFactory, nil
 	}
 
-	loadPluginWithError := func(name, url string) (shared.HttpFilterConfigFactory, error) {
+	loadPluginWithError := func(_, _ string) (shared.HttpFilterConfigFactory, error) {
 		return nil, fmt.Errorf("error")
 	}
 
@@ -47,8 +53,8 @@ func Test_Create(t *testing.T) {
 			LoadPlugin: loadPluginNoError,
 		}
 
-		noNameOrUrlConfig := []byte(`{"name": "", "url": ""}`)
-		_, err := configFactory.Create(configHandle, noNameOrUrlConfig)
+		noNameOrURLConfig := []byte(`{"name": "", "url": ""}`)
+		_, err := configFactory.Create(configHandle, noNameOrURLConfig)
 		if !strings.Contains(err.Error(), "plugin name or url is empty") {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -92,11 +98,11 @@ func Test_CreatePerRoute(t *testing.T) {
 
 	mockFactory := mocks.NewMockHttpFilterConfigFactory(ctrl)
 
-	loadPluginNoError := func(name, url string) (shared.HttpFilterConfigFactory, error) {
+	loadPluginNoError := func(_, _ string) (shared.HttpFilterConfigFactory, error) {
 		return mockFactory, nil
 	}
 
-	loadPluginWithError := func(name, url string) (shared.HttpFilterConfigFactory, error) {
+	loadPluginWithError := func(_, _ string) (shared.HttpFilterConfigFactory, error) {
 		return nil, fmt.Errorf("error")
 	}
 
@@ -119,8 +125,8 @@ func Test_CreatePerRoute(t *testing.T) {
 			LoadPlugin: loadPluginNoError,
 		}
 
-		noNameOrUrlConfig := []byte(`{"name": "", "url": ""}`)
-		_, err := configFactory.CreatePerRoute(noNameOrUrlConfig)
+		noNameOrURLConfig := []byte(`{"name": "", "url": ""}`)
+		_, err := configFactory.CreatePerRoute(noNameOrURLConfig)
 		if !strings.Contains(err.Error(), "plugin name or url is empty") {
 			t.Errorf("unexpected error: %v", err)
 		}

@@ -3,32 +3,17 @@ import { PROJECT_NAME, CLI_NAME, GITHUB_REPO, EXTENSIONS_PATH } from '../../cons
 import Head from '../../components/Head.astro';
 import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
-import { parse } from 'yaml';
+import { loadExtensions } from '../../utils/extensions';
 import { marked } from 'marked';
-import fs from 'fs';
-import path from 'path';
 import '../../styles/extension-detail.css';
 
 export async function getStaticPaths() {
-	const extensionsDir = path.join(process.cwd(), '../extensions');
-	const extensionFolders = fs.readdirSync(extensionsDir)
-		.filter(item => {
-			const itemPath = path.join(extensionsDir, item);
-			return fs.statSync(itemPath).isDirectory();
-		});
+	const extensions = loadExtensions();
 
-	return extensionFolders.map(folder => {
-		const manifestPath = path.join(extensionsDir, folder, 'manifest.yaml');
-		if (!fs.existsSync(manifestPath)) return null;
-
-		const manifestContent = fs.readFileSync(manifestPath, 'utf-8');
-		const manifest = parse(manifestContent);
-
-		return {
-			params: { name: manifest.name },
-			props: { extension: manifest }
-		};
-	}).filter(Boolean);
+	return extensions.map(extension => ({
+		params: { name: extension.name },
+		props: { extension }
+	}));
 }
 
 interface Example {
@@ -83,26 +68,28 @@ function formatTypeName(type: string): string {
 					</nav>
 
 					<div class="extension-header">
-						<div class="extension-title-group">
+						<div class="extension-header-left">
 							<h1>{extension.name}</h1>
-							<span class={`extension-badge extension-badge--${extension.type}`}>{formatTypeName(extension.type)}</span>
+							<div class="extension-meta">
+								<div class="meta-item">
+									<span class="meta-label">Type</span>
+									<span class={`extension-badge extension-badge--${extension.type}`}>{formatTypeName(extension.type)}</span>
+								</div>
+								<div class="meta-item">
+									<span class="meta-label">Version</span>
+									<span class="meta-value">{extension.version}</span>
+								</div>
+								<div class="meta-item">
+									<span class="meta-label">Author</span>
+									<span class="meta-value">{extension.author}</span>
+								</div>
+								<div class="meta-item">
+									<span class="meta-label">License</span>
+									<span class="meta-value">{extension.license}</span>
+								</div>
+							</div>
 						</div>
 						<p class="extension-description">{extension.description}</p>
-					</div>
-
-					<div class="extension-meta">
-						<div class="meta-item">
-							<span class="meta-label">Version</span>
-							<span class="meta-value">{extension.version}</span>
-						</div>
-						<div class="meta-item">
-							<span class="meta-label">Author</span>
-							<span class="meta-value">{extension.author}</span>
-						</div>
-						<div class="meta-item">
-							<span class="meta-label">License</span>
-							<span class="meta-value">{extension.license}</span>
-						</div>
 					</div>
 				</div>
 			</section>

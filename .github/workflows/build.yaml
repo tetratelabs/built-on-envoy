@@ -44,16 +44,14 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./cli
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
-      - run: make check
+      - run: make -C extensions/internal format
+      - run: make -C cli check
 
   build:
     needs: changes
@@ -74,9 +72,6 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./cli
     env:
       TEST_OPTS: -race
     steps:
@@ -85,7 +80,8 @@ jobs:
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
-      - run: make test-integration
+      - run: make -C cli test-integration
+      - run: make -C extensions/internal test
 
   coverage:
     needs: changes
@@ -124,16 +120,14 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./cli
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
-      - run: make lint
+      - run: make -C cli lint
+      - run: make -C extensions/internal lint
 
   website:
     needs: changes

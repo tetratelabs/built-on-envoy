@@ -1,10 +1,15 @@
+// Copyright Built On Envoy
+// SPDX-License-Identifier: Apache-2.0
+// The full text of the Apache license is available in the LICENSE file at
+// the root of the repo.
+
 syntax = "proto3";
 
+package composer.dym.plugins.goplugin;
+
+import "google/api/annotations.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/wrappers.proto";
-import "google/api/annotations.proto";
-
-package composer.dym.plugins.goplugin;
 
 option go_package = "github.com/tetrateio/extensibility/composer/dym/plugins/goplugin";
 

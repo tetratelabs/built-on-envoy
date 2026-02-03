@@ -116,9 +116,12 @@ func TestLocalGoExtension(t *testing.T) {
 	require.Equal(t, 0, status.ExitCode())
 
 	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin,
-		"--local", dataDir+"/go-e2e"+","+dataDir+"/go-e2e",
+		"--local", dataDir+"/go-e2e",
+		"--local", dataDir+"/go-e2e",
 		"--config", "{}",
 		"--config", `{"header_value":"configured-value"}`, // test config for second local extension
+		"--log-level", "dynamic_modules:debug",
+		"--local", dataDir+"/go-e2e",
 	)
 
 	// For the response, the execution order of the extensions is in reverse order of the

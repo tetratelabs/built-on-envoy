@@ -1,40 +1,8 @@
 ---
 import ExtensionCard from './ExtensionCard.astro';
-import { parse } from 'yaml';
-import fs from 'fs';
-import path from 'path';
+import { loadExtensions } from '../utils/extensions';
 
-// Read all extension manifests
-const extensionsDir = path.join(process.cwd(), '../extensions');
-const extensionFolders = fs.readdirSync(extensionsDir)
-	.filter(item => {
-		const itemPath = path.join(extensionsDir, item);
-		return fs.statSync(itemPath).isDirectory();
-	});
-
-interface Extension {
-	name: string;
-	version: string;
-	type: string;
-	author: string;
-	featured?: boolean;
-	description: string;
-	longDescription: string;
-	tags: string[];
-	license: string;
-}
-
-const featuredExtensions: Extension[] = extensionFolders
-	.map(folder => {
-		const manifestPath = path.join(extensionsDir, folder, 'manifest.yaml');
-		if (!fs.existsSync(manifestPath)) return null;
-
-		const manifestContent = fs.readFileSync(manifestPath, 'utf-8');
-		const manifest = parse(manifestContent) as Extension;
-		return manifest;
-	})
-	.filter((ext): ext is Extension => ext !== null && ext.featured === true)
-	.sort((a, b) => a.name.localeCompare(b.name));
+const featuredExtensions = loadExtensions().filter(ext => ext.featured === true);
 ---
 
 <section class="extensions" id="extensions">
