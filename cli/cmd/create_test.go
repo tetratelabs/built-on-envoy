@@ -83,9 +83,7 @@ func TestCreate_Run(t *testing.T) {
 		// Attempt to differentiate network error from logic error if possible,
 		// but for now we'll just fail the test if the command fails.
 		// Use t.Log to provide context on failure.
-		t.Logf("Create.Run failed: %v", err)
-	}
-	require.NoError(t, err)
+	require.NoErrorf(t, err," Create.Run failed: %v", err)
 
 	repoPath := filepath.Join(tmpDir, name)
 	require.DirExists(t, repoPath)
