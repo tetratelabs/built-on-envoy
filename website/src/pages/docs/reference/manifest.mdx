@@ -36,6 +36,19 @@ Functional categories of the extension
 
 
 
+## composerVersion
+
+Version of Built On Envoy Composer
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+| **Pattern** | `^\d+\.\d+\.\d+$` |
+| **Required when** | `type` is `composer` |
+
+
+
 ## description
 
 Short single-line description of the extension
@@ -57,7 +70,7 @@ Usage examples for the extension
 |---|---|
 | **Type** | `[]object` |
 | **Required** | Yes |
-| **Min items** | 1 |
+| **Min items** | 0 |
 
 
 
@@ -201,7 +214,7 @@ Unique identifier for the extension
 | **Type** | `string` |
 | **Required** | Yes |
 | **Min length** | 1 |
-| **Pattern** | `^[a-z][a-z0-9-]*$` |
+| **Pattern** | `^[a-z][a-z0-9-_]*$` |
 
 
 

@@ -39,7 +39,10 @@ type (
 		MinEnvoyVersion string    `yaml:"minEnvoyVersion,omitempty" json:"minEnvoyVersion,omitempty"`
 		MaxEnvoyVersion string    `yaml:"maxEnvoyVersion,omitempty" json:"maxEnvoyVersion,omitempty"`
 
-		Lua *Lua `yaml:"lua,omitempty" json:"lua,omitempty"`
+		// ComposerVersion specifies the compatible Composer dynamic module version
+		// for Composer go plugins.
+		ComposerVersion string `yaml:"composerVersion,omitempty" json:"composerVersion,omitempty"`
+		Lua             *Lua   `yaml:"lua,omitempty" json:"lua,omitempty"`
 
 		// Only used when loading manifests from a local path
 		Path string `yaml:"-" json:"-"`

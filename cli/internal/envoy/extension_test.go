@@ -6,34 +6,39 @@
 package envoy
 
 import (
+	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	dymv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/dynamic_modules/v3"
+	dymhttpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/dynamic_modules/v3"
 	luav3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/lua/v3"
 	hcmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 )
 
 func TestGenerateFilterConfigUnsupportedType(t *testing.T) {
 	manifest := extensions.Manifest{Type: "unsupported_type"}
-	_, err := GenerateFilterConfig(&manifest, nil)
+	_, err := GenerateFilterConfig(&manifest, "", nil)
 	require.ErrorIs(t, err, ErrUnsupportedExtensionType)
 }
 
 func TestGenerateFilterConfigUnimplemented(t *testing.T) {
 	for _, et := range []extensions.Type{
 		extensions.TypeWasm,
-		extensions.TypeDynamicModule,
-		extensions.TypeComposer,
 	} {
 		t.Run(string(et), func(t *testing.T) {
 			manifest := extensions.Manifest{Type: et}
-			_, err := GenerateFilterConfig(&manifest, nil)
+			_, err := GenerateFilterConfig(&manifest, "", nil)
 			require.ErrorIs(t, err, ErrUnimplemented)
 		})
 	}
@@ -113,26 +118,148 @@ end
 			localManifest, err := extensions.LoadLocalManifest(manifestPath)
 			require.NoError(t, err)
 
-			got, err := GenerateFilterConfig(localManifest, nil)
+			got, err := GenerateFilterConfig(localManifest, "", nil)
 			require.ErrorIs(t, err, tt.wantErr)
 			if tt.wantErr != nil {
 				return
 			}
 
-			require.Len(t, got.HTTPFilters, len(tt.want.HTTPFilters))
-
-			gotFilter := got.HTTPFilters[0]
-			wantFilter := tt.want.HTTPFilters[0]
-
-			// Check if protos are equal and if not, print their YAML representation
-			// for easier debugging.
-			if !proto.Equal(wantFilter, gotFilter) {
-				wantYaml, err := ProtoToYaml(wantFilter)
-				require.NoError(t, err)
-				gotYaml, err := ProtoToYaml(gotFilter)
-				require.NoError(t, err)
-				require.YAMLEq(t, string(wantYaml), string(gotYaml))
-			}
+			checkProtos(t, tt.want.HTTPFilters, got.HTTPFilters)
 		})
+	}
+}
+
+func TestDynamicModuleFilterGenerator(t *testing.T) {
+	dataHome := t.TempDir()
+	manifest := &extensions.Manifest{
+		Name:    "test-dynamic-module",
+		Type:    extensions.TypeDynamicModule,
+		Version: "v1.0.0",
+	}
+
+	// Case 1: Composer binary missing
+	_, err := GenerateFilterConfig(manifest, dataHome, nil)
+	require.ErrorContains(t, err, "composer binary not found")
+
+	// Case 2: Composer binary exists
+	composerPath := filepath.Join(dataHome, "extensions", "dym", "composer", manifest.Version)
+	require.NoError(t, os.MkdirAll(composerPath, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(composerPath, "libcomposer.so"), []byte("fake binary"), 0o600))
+
+	got, err := GenerateFilterConfig(manifest, dataHome, nil)
+	require.NoError(t, err)
+
+	want := &ExtensionResources{
+		HTTPFilters: []*hcmv3.HttpFilter{
+			{
+				Name: manifest.Name,
+				ConfigType: &hcmv3.HttpFilter_TypedConfig{
+					TypedConfig: func() *anypb.Any {
+						dymConfig := &dymhttpv3.DynamicModuleFilter{
+							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
+								Name:         "composer",
+								LoadGlobally: true,
+							},
+							FilterName: manifest.Name,
+						}
+						cfg, err := anypb.New(dymConfig)
+						require.NoError(t, err)
+						return cfg
+					}(),
+				},
+			},
+		},
+	}
+
+	checkProtos(t, want.HTTPFilters, got.HTTPFilters)
+}
+
+func TestComposerFilterGenerator(t *testing.T) {
+	dataHome := t.TempDir()
+	manifest := &extensions.Manifest{
+		Name:            "test-composer",
+		Type:            extensions.TypeComposer,
+		Version:         "v0.0.1",
+		ComposerVersion: "v1.0.0",
+	}
+
+	// Case 1: Composer binary missing
+	_, err := GenerateFilterConfig(manifest, dataHome, nil)
+	require.ErrorContains(t, err, "composer binary not found")
+
+	// Create Composer binary
+	composerPath := filepath.Join(dataHome, "extensions", "dym", "composer", manifest.ComposerVersion)
+	require.NoError(t, os.MkdirAll(composerPath, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(composerPath, "libcomposer.so"), []byte("fake binary"), 0o600))
+
+	// Case 2: Plugin binary missing
+	_, err = GenerateFilterConfig(manifest, dataHome, nil)
+	require.ErrorContains(t, err, "go plugin binary not found")
+
+	// Create Plugin binary
+	pluginPath := filepath.Join(dataHome, "extensions", "goplugin", manifest.Name, manifest.Version)
+	require.NoError(t, os.MkdirAll(pluginPath, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(pluginPath, "plugin.so"), []byte("fake binary"), 0o600))
+
+	// Case 3: Success
+	got, err := GenerateFilterConfig(manifest, dataHome, nil)
+	require.NoError(t, err)
+
+	want := &ExtensionResources{
+		HTTPFilters: []*hcmv3.HttpFilter{
+			{
+				Name: manifest.Name,
+				ConfigType: &hcmv3.HttpFilter_TypedConfig{
+					TypedConfig: func() *anypb.Any {
+						dymConfig := &dymhttpv3.DynamicModuleFilter{
+							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
+								Name:         "composer",
+								LoadGlobally: true,
+							},
+							FilterName: "goplugin",
+							FilterConfig: func() *anypb.Any {
+								configStruct, _ := structpb.NewStruct(map[string]any{
+									"name": manifest.Name,
+									"url":  "file://" + fmt.Sprintf("%s/extensions/goplugin/%s/%s/plugin.so", dataHome, manifest.Name, manifest.Version),
+								})
+								configJSON, err := protojson.Marshal(configStruct)
+								require.NoError(t, err)
+								cfg, err := anypb.New(wrapperspb.String(string(configJSON)))
+								require.NoError(t, err)
+								return cfg
+							}(),
+						}
+						cfg, err := anypb.New(dymConfig)
+						require.NoError(t, err)
+						return cfg
+					}(),
+				},
+			},
+		},
+	}
+
+	checkProtos(t, want.HTTPFilters, got.HTTPFilters)
+}
+
+// checkProtosList checks if two lists of proto messages are equal and if not, prints their YAML representation
+// for easier debugging.
+func checkProtos[T proto.Message](t *testing.T, want, got []T) {
+	require.Len(t, got, len(want))
+	for i := range got {
+		checkProto(t, want[i], got[i])
+	}
+}
+
+// checkProto checks if two proto messages are equal and if not, prints their YAML representation
+// for easier debugging.
+func checkProto[T proto.Message](t *testing.T, want, got T) {
+	if !proto.Equal(want, got) {
+		wantYaml, err := ProtoToYaml(want)
+		require.NoError(t, err)
+		gotYaml, err := ProtoToYaml(got)
+		require.NoError(t, err)
+		require.YAMLEq(t,
+			string(wantYaml), string(gotYaml),
+			"want:\n%s\ngot:\n%s", wantYaml, gotYaml)
 	}
 }

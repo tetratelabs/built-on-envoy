@@ -1,0 +1,21 @@
+name: goplugin_example
+version: 0.2.1
+categories:
+  - Network
+author: Tetrate
+featured: true
+description: Example go plugin for HTTP filters which could be loaded by the `composer.http.goplugin` dynamically.
+longDescription: |
+  Same with `composer.http.example_plugin` except this will be compiled as a Go plugin with `-buildmode=plugin` flag.
+type: composer
+composerVersion: "0.2.1"
+tags:
+  - go
+  - http
+  - filter
+license: Apache-2.0
+examples:
+  - title: Basic example go plugin
+    description: Load the example go plugin as an HTTP filter
+    code: |
+      boe run --extension goplugin_example

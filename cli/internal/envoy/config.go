@@ -33,6 +33,8 @@ type ConfigGenerationParams struct {
 	AdminPort uint32
 	// ListenerPort is the port where Envoy listens for incoming traffic.
 	ListenerPort uint32
+	// DataHome is the base directory for data files (extensions, cache, etc.).
+	DataHome string
 	// Extensions to generate the config for
 	Extensions []*extensions.Manifest
 }
@@ -43,7 +45,7 @@ func RenderConfig(params ConfigGenerationParams) (string, error) {
 	filters := make([]*hcmv3.HttpFilter, 0, len(params.Extensions))
 	clusters := make([]*clusterv3.Cluster, 0)
 	for _, ext := range params.Extensions {
-		resources, err := GenerateFilterConfig(ext, nil)
+		resources, err := GenerateFilterConfig(ext, params.DataHome, nil)
 		if err != nil {
 			return "", fmt.Errorf("failed to generate filter config for extension %q: %w", ext.Name, err)
 		}

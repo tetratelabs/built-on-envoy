@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/wrappers.proto";
+import "google/api/annotations.proto";
+
+package composer.dym.plugins.goplugin;
+
+option go_package = "github.com/tetrateio/extensibility/composer/dym/plugins/goplugin";
+
+message GoPlugin {
+  // Name of the dynamic module plugin
+  string name = 1;
+
+  // Plugin configuration
+  google.protobuf.Struct config = 2;
+
+  // URL to fetch the plugin if it is a custom plugin
+  string url = 3;
+}

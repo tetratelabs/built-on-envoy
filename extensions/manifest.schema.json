@@ -22,7 +22,7 @@
       "type": "string",
       "description": "Unique identifier for the extension",
       "minLength": 1,
-      "pattern": "^[a-z][a-z0-9-]*$"
+      "pattern": "^[a-z][a-z0-9-_]*$"
     },
     "version": {
       "type": "string",
@@ -84,6 +84,11 @@
         "composer"
       ]
     },
+    "composerVersion": {
+      "type": "string",
+      "description": "Version of Built On Envoy Composer",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
     "tags": {
       "type": "array",
       "description": "Searchable tags for categorization",
@@ -103,7 +108,7 @@
     "examples": {
       "type": "array",
       "description": "Usage examples for the extension",
-      "minItems": 1,
+      "minItems": 0,
       "items": {
         "type": "object",
         "required": [
@@ -166,6 +171,21 @@
       "else": {
         "properties": {
           "lua": false
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": { "const": "composer" }
+        }
+      },
+      "then": {
+        "required": ["composerVersion"]
+      },
+      "else": {
+        "properties": {
+          "composerVersion": false
         }
       }
     }

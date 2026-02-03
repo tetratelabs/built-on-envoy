@@ -9,12 +9,18 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 
 	clusterv3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	dymv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/dynamic_modules/v3"
+	dymhttpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/dynamic_modules/v3"
 	luav3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/lua/v3"
 	hcmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 )
@@ -23,7 +29,7 @@ type (
 	// ExtensionFilterGenerator defines an interface for generating filter configurations
 	ExtensionFilterGenerator interface {
 		// GenerateFilterConfig generates the filter configuration for the given extension manifest.
-		GenerateFilterConfig(manifest *extensions.Manifest, config any) (*ExtensionResources, error)
+		GenerateFilterConfig(manifest *extensions.Manifest, dataHome string, config any) (*ExtensionResources, error)
 	}
 
 	// LuaFilterGenerator generates filter configuration for Lua extensions.
@@ -53,7 +59,7 @@ var (
 )
 
 // GenerateFilterConfig generates the filter configuration for the given extension manifest.
-func GenerateFilterConfig(manifest *extensions.Manifest, config any) (*ExtensionResources, error) {
+func GenerateFilterConfig(manifest *extensions.Manifest, dataHome string, config any) (*ExtensionResources, error) {
 	var generator ExtensionFilterGenerator
 
 	switch manifest.Type {
@@ -69,11 +75,11 @@ func GenerateFilterConfig(manifest *extensions.Manifest, config any) (*Extension
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedExtensionType, manifest.Type)
 	}
 
-	return generator.GenerateFilterConfig(manifest, config)
+	return generator.GenerateFilterConfig(manifest, dataHome, config)
 }
 
 // GenerateFilterConfig generates the filter configuration for Lua extensions.
-func (l LuaFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, _ any) (*ExtensionResources, error) {
+func (l LuaFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, _ string, _ any) (*ExtensionResources, error) {
 	var code string
 	if manifest.Lua.Path != "" {
 		absPath := path.Join(path.Dir(manifest.Path), manifest.Lua.Path)
@@ -111,16 +117,109 @@ func (l LuaFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, 
 }
 
 // GenerateFilterConfig generates the filter configuration for Wasm extensions.
-func (w WasmFilterGenerator) GenerateFilterConfig(*extensions.Manifest, any) (*ExtensionResources, error) {
+func (w WasmFilterGenerator) GenerateFilterConfig(*extensions.Manifest, string, any) (*ExtensionResources, error) {
 	return nil, fmt.Errorf("%w: wasm", ErrUnimplemented)
 }
 
 // GenerateFilterConfig generates the filter configuration for Dynamic Module extensions.
-func (d DynamicModuleFilterGenerator) GenerateFilterConfig(*extensions.Manifest, any) (*ExtensionResources, error) {
-	return nil, fmt.Errorf("%w: dynamic module", ErrUnimplemented)
+func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, dataHome string, _ any) (*ExtensionResources, error) {
+	// TODO(wbpcode): For now, we only support Composer dynamic modules because all golang dynamic
+	// modules will be compiled into the same binary.
+	// Once we support other dynamic modules, we need to differentiate them here.
+	cachedComposerPath := getComposerPath(dataHome, manifest.Version)
+	if _, err := os.Stat(cachedComposerPath); os.IsNotExist(err) {
+		// TODO(wbpcode): Download the composer binary from the URL specified in the manifest.
+		return nil, fmt.Errorf("composer binary not found at %s", cachedComposerPath)
+	}
+
+	protoConfig := &dymhttpv3.DynamicModuleFilter{
+		DynamicModuleConfig: &dymv3.DynamicModuleConfig{
+			Name:         "composer",
+			LoadGlobally: true,
+		},
+		FilterName:   manifest.Name,
+		FilterConfig: nil, // TODO(wbpcode): Support passing filter config to composer extensions.
+	}
+	composerAny, err := anypb.New(protoConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal dynamic module filter to Any: %w", err)
+	}
+
+	return &ExtensionResources{
+		HTTPFilters: []*hcmv3.HttpFilter{
+			{
+				Name: manifest.Name,
+				ConfigType: &hcmv3.HttpFilter_TypedConfig{
+					TypedConfig: composerAny,
+				},
+			},
+		},
+	}, nil
+}
+
+func getComposerPath(dataHome, composerVersion string) string {
+	// Build the path: $DATA_HOME/extensions/dym/composer/$version/libcomposer.so
+	return filepath.Join(dataHome, "extensions", "dym", "composer",
+		composerVersion, "libcomposer.so")
+}
+
+func getGoPluginPathFromManifest(dataHome string, manifest *extensions.Manifest) string {
+	// Build the path: $DATA_HOME/extensions/goplugin/$name/$version/plugin.so
+	return filepath.Join(dataHome, "extensions", "goplugin", manifest.Name,
+		manifest.Version, "plugin.so")
 }
 
 // GenerateFilterConfig generates the filter configuration for Composer extensions.
-func (c ComposerFilterGenerator) GenerateFilterConfig(*extensions.Manifest, any) (*ExtensionResources, error) {
-	return nil, fmt.Errorf("%w: composer", ErrUnimplemented)
+func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, dataHome string, _ any) (*ExtensionResources, error) {
+	cachedComposerPath := getComposerPath(dataHome, manifest.ComposerVersion)
+	if _, err := os.Stat(cachedComposerPath); os.IsNotExist(err) {
+		// TODO(wbpcode): Download the composer binary from the URL specified in the manifest.
+		return nil, fmt.Errorf("composer binary not found at %s", cachedComposerPath)
+	}
+
+	cachedPluginPath := getGoPluginPathFromManifest(dataHome, manifest)
+	if _, err := os.Stat(cachedPluginPath); os.IsNotExist(err) {
+		// TODO(wbpcode): Download the plugin binary from the URL specified in the manifest.
+		return nil, fmt.Errorf("go plugin binary not found at %s", cachedPluginPath)
+	}
+
+	// TODO(wbpcode): Support passing filter config to composer extensions.
+	// Create New proto struct for Composer go plugin filter.
+	configStruct, _ := structpb.NewStruct(map[string]any{
+		"name": manifest.Name,
+		"url":  "file://" + cachedPluginPath,
+	})
+
+	// Covert to JSON string.
+	configJSON, _ := protojson.Marshal(configStruct)
+
+	// Convert JSON string to StringValue.
+	configStringValue := wrapperspb.String(string(configJSON))
+
+	// Covert the StringValue to Any.
+	config, _ := anypb.New(configStringValue)
+
+	protoConfig := &dymhttpv3.DynamicModuleFilter{
+		DynamicModuleConfig: &dymv3.DynamicModuleConfig{
+			Name:         "composer",
+			LoadGlobally: true,
+		},
+		FilterName:   "goplugin",
+		FilterConfig: config,
+	}
+	composerAny, err := anypb.New(protoConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal Composer filter to Any: %w", err)
+	}
+
+	return &ExtensionResources{
+		HTTPFilters: []*hcmv3.HttpFilter{
+			{
+				Name: manifest.Name,
+				ConfigType: &hcmv3.HttpFilter_TypedConfig{
+					TypedConfig: composerAny,
+				},
+			},
+		},
+	}, nil
 }
