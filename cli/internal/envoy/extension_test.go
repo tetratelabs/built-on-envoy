@@ -162,8 +162,8 @@ func TestDynamicModuleFilterGenerator(t *testing.T) {
 							},
 							FilterName: manifest.Name,
 						}
-						cfg, err := anypb.New(dymConfig)
-						require.NoError(t, err)
+						cfg, anypbErr := anypb.New(dymConfig)
+						require.NoError(t, anypbErr)
 						return cfg
 					}(),
 				},
@@ -259,15 +259,15 @@ func TestComposerFilterGenerator(t *testing.T) {
 										"config": structpb.NewNullValue(),
 									},
 								}
-								configJSON, err := protojson.Marshal(configStruct)
-								require.NoError(t, err)
-								cfg, err := anypb.New(wrapperspb.String(string(configJSON)))
-								require.NoError(t, err)
+								marshaledJSON, marshalErr := protojson.Marshal(configStruct)
+								require.NoError(t, marshalErr)
+								cfg, anypbErr := anypb.New(wrapperspb.String(string(marshaledJSON)))
+								require.NoError(t, anypbErr)
 								return cfg
 							}(),
 						}
-						cfg, err := anypb.New(dymConfig)
-						require.NoError(t, err)
+						cfg, anypbErr := anypb.New(dymConfig)
+						require.NoError(t, anypbErr)
 						return cfg
 					}(),
 				},
@@ -289,8 +289,8 @@ func TestComposerFilterGenerator(t *testing.T) {
 				ConfigType: &hcmv3.HttpFilter_TypedConfig{
 					TypedConfig: func() *anypb.Any {
 						innerStruct := &structpb.Struct{}
-						err := protojson.Unmarshal([]byte(configJSON), innerStruct)
-						require.NoError(t, err)
+						unmarshalErr := protojson.Unmarshal([]byte(configJSON), innerStruct)
+						require.NoError(t, unmarshalErr)
 
 						dymConfig := &dymhttpv3.DynamicModuleFilter{
 							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
@@ -306,15 +306,15 @@ func TestComposerFilterGenerator(t *testing.T) {
 										"config": structpb.NewStructValue(innerStruct),
 									},
 								}
-								configJSON, err := protojson.Marshal(configStruct)
-								require.NoError(t, err, "marshal config struct to JSON failed")
-								cfg, err := anypb.New(wrapperspb.String(string(configJSON)))
-								require.NoError(t, err, "marshal StringValue to Any failed")
+								marshaledJSON, marshalErr := protojson.Marshal(configStruct)
+								require.NoError(t, marshalErr, "marshal config struct to JSON failed")
+								cfg, anypbErr := anypb.New(wrapperspb.String(string(marshaledJSON)))
+								require.NoError(t, anypbErr, "marshal StringValue to Any failed")
 								return cfg
 							}(),
 						}
-						cfg, err := anypb.New(dymConfig)
-						require.NoError(t, err, "marshal DynamicModuleFilter to Any failed")
+						cfg, anypbErr := anypb.New(dymConfig)
+						require.NoError(t, anypbErr, "marshal DynamicModuleFilter to Any failed")
 						return cfg
 					}(),
 				},

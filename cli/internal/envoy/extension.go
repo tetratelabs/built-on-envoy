@@ -139,7 +139,7 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 		// Ideally we suggest that `config` should be JSON string. But Envoy's DynamicModuleFilter
 		// take a string value anyway. And it's possible that a user wants to pass a non-JSON string.
 		// We pass the string as-is to Envoy anyway and let the dynamic module handle the content.
-		configStringValue := wrapperspb.String(string(config))
+		configStringValue := wrapperspb.String(config)
 		// Covert the StringValue to Any.
 		anyConfig, _ = anypb.New(configStringValue)
 	}
