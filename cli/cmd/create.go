@@ -101,6 +101,7 @@ import (
 // This is the implementation of the HTTP filter.
 type customHttpFilter struct {
 	shared.EmptyHttpFilter
+	handle shared.HttpFilterHandle
 }
 
 func (f *customHttpFilter) OnRequestHeaders(headers shared.HeaderMap, endStream bool) shared.HeadersStatus {
@@ -120,6 +121,7 @@ func (f *customHttpFilter) OnRequestTrailers(trailers shared.HeaderMap) shared.T
 func (f *customHttpFilter) OnResponseHeaders(headers shared.HeaderMap, endStream bool) shared.HeadersStatus {
 	// TODO: Implement your logic here.
 	headers.Set("x-{{ .Name }}", "example")
+	f.handle.Log(shared.LogLevelInfo, "{{ .Name }}: OnRequestHeaders called")
 	return shared.HeadersStatusContinue
 }
 
@@ -136,7 +138,7 @@ type customHttpFilterFactory struct {
 }
 
 func (f *customHttpFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
-	return &customHttpFilter{}
+	return &customHttpFilter{handle: handle}
 }
 
 // This is the configuration factory for the HTTP filter.
