@@ -353,3 +353,72 @@ func TestLoadLocalManifests(t *testing.T) {
 		require.ErrorIs(t, err, errFailedToLoadLocalManifest)
 	})
 }
+
+func TestValidateEnvoyCompat(t *testing.T) {
+	tests := []struct {
+		name         string
+		envoyVersion string
+		extensions   []*extensions.Manifest
+		errContains  []string
+	}{
+		{
+			name:         "empty extensions list",
+			envoyVersion: "1.31.0",
+			extensions:   []*extensions.Manifest{},
+		},
+		{
+			name:         "nil extensions list",
+			envoyVersion: "1.31.0",
+			extensions:   nil,
+		},
+		{
+			name:         "compatible",
+			envoyVersion: "1.31.0",
+			extensions: []*extensions.Manifest{
+				{Name: "ext-1", Version: "1.0.0", MinEnvoyVersion: "1.30.0"},
+				{Name: "ext-2", Version: "2.0.0", MaxEnvoyVersion: "1.32.0"},
+				{Name: "ext-3", Version: "3.0.0", MinEnvoyVersion: "1.29.0", MaxEnvoyVersion: "1.33.0"},
+				{Name: "ext-4", Version: "4.0.0"},
+			},
+		},
+		{
+			name:         "incompatible",
+			envoyVersion: "1.31.0",
+			extensions: []*extensions.Manifest{
+				{Name: "ext-1", Version: "1.0.0", MinEnvoyVersion: "1.32.0"},
+				{Name: "ext-2", Version: "2.0.0", MaxEnvoyVersion: "1.30.0"},
+				{Name: "ext-3", Version: "2.0.0", MinEnvoyVersion: "1.31.1", MaxEnvoyVersion: "1.32.0"},
+				{Name: "ext-4", Version: "2.0.0", MinEnvoyVersion: "1.31.0", MaxEnvoyVersion: "1.32.0"},
+			},
+			errContains: []string{
+				`incompatible Envoy version 1.31.0: extension ext-1 (1.0.0) requires Envoy ">= 1.32.0"`,
+				`incompatible Envoy version 1.31.0: extension ext-2 (2.0.0) requires Envoy "<= 1.30.0"`,
+				`incompatible Envoy version 1.31.0: extension ext-3 (2.0.0) requires Envoy ">= 1.31.1 && <= 1.32.0"`,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateEnvoyCompat(tt.envoyVersion, tt.extensions)
+			if len(tt.errContains) == 0 {
+				require.NoError(t, err)
+			} else {
+				errs := err.(interface{ Unwrap() []error }).Unwrap()
+				require.Len(t, errs, len(tt.errContains))
+				for i := range errs {
+					require.EqualError(t, errs[i], tt.errContains[i])
+				}
+			}
+		})
+	}
+}
+
+func TestRunIncomaptibleEnvoyVersion(t *testing.T) {
+	r := &Run{
+		EnvoyVersion: "1.37.0",
+		Local:        []string{"./testdata/input_lua_inline"},
+	}
+	err := r.Run(t.Context(), nil)
+	require.ErrorIs(t, err, errIncompatibleEnvoyVersion)
+}
