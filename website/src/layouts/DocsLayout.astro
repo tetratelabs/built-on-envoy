@@ -31,7 +31,10 @@ const description = frontmatter?.description ?? Astro.props.description;
 		<Header />
 
 		<div class="docs-container">
-			<Sidebar yamlPath="src/pages/docs/sidebar.yaml" />
+			<Sidebar yamlPaths={[
+				"src/pages/docs/sidebar-static.yaml",
+				"src/pages/docs/sidebar-cli.yaml"
+			]} />
 
 			<main class="docs-main">
 				<article class="prose">

@@ -1,21 +1,30 @@
 ---
 import SidebarSection from './SidebarSection.astro';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { parse } from 'yaml';
 
 interface Props {
-	yamlPath: string;
+	yamlPaths: string[];
 }
 
-const { yamlPath } = Astro.props;
+const { yamlPaths } = Astro.props;
 
-const sidebarYaml = readFileSync(yamlPath, 'utf-8');
-const sidebarData = parse(sidebarYaml);
+// Read and merge sections from all YAML files
+const allSections: any[] = [];
+for (const yamlPath of yamlPaths) {
+	if (existsSync(yamlPath)) {
+		const sidebarYaml = readFileSync(yamlPath, 'utf-8');
+		const sidebarData = parse(sidebarYaml);
+		if (sidebarData?.sections) {
+			allSections.push(...sidebarData.sections);
+		}
+	}
+}
 ---
 
 <aside class="docs-sidebar">
 	<nav>
-		{sidebarData.sections.map((section: any) => (
+		{allSections.map((section: any) => (
 			<SidebarSection title={section.title} items={section.items} />
 		))}
 	</nav>

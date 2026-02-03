@@ -1,0 +1,10 @@
+# Static sidebar sections
+# Add guides and other manually maintained sections here
+
+sections:
+  - title: Guides
+    items:
+      - title: Getting Started
+        href: /docs/getting-started
+      - title: Writing Go Extensions
+        href: /docs/writing-go-extensions

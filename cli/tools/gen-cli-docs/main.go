@@ -89,7 +89,7 @@ func main() {
 	var (
 		commandsDir = filepath.Join(docsDir, "cli")
 		envVarsFile = filepath.Join(docsDir, "reference", "environment-variables.mdx")
-		sidebarFile = filepath.Join(docsDir, "sidebar.yaml")
+		sidebarFile = filepath.Join(docsDir, "sidebar-cli.yaml")
 	)
 
 	// Ensure output directories exist
@@ -148,7 +148,7 @@ func main() {
 	}
 
 	// Generate sidebar file
-	if err := render(tmpl, "sidebar.yaml.tmpl", sidebarItems, sidebarFile); err != nil {
+	if err := render(tmpl, "sidebar-cli.yaml.tmpl", sidebarItems, sidebarFile); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to generate sidebar: %v\n", err)
 		os.Exit(1)
 	}
