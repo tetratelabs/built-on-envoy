@@ -39,7 +39,6 @@ func TestParseCmdGenConfigHelp(t *testing.T) {
 Generate Envoy configuration with specified extensions
 
 %s
-
 Flags:
   -h, --help                       Show context-sensitive help.
 

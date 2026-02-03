@@ -7,8 +7,8 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -128,10 +128,6 @@ func (c *GenConfig) generateMinimalConfig() (string, error) {
 }
 
 func protoListToAny[T proto.Message](items []T) ([]any, error) {
-	if len(items) == 0 {
-		return nil, nil
-	}
-
 	marshaler := protojson.MarshalOptions{UseProtoNames: true}
 	out := make([]any, 0, len(items))
 	for _, item := range items {
