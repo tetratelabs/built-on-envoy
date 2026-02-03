@@ -7,6 +7,7 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
+	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 
 func TestParseCmdListHelp(t *testing.T) {
@@ -31,20 +33,15 @@ func TestParseCmdListHelp(t *testing.T) {
 
 	_, _ = parser.Parse([]string{"list", "--help"})
 
-	expected := `Usage: boe list
+	expected := fmt.Sprintf(`Usage: boe list
 
 List available extensions
 
-The list command displays all available Envoy extensions. It provides a quick
-overview of what extensions you can use when running Envoy or generating
-configurations, and the versions available for each extension.
-
-This command is useful for discovering which extensions are available before
-using them with the ` + "`run`" + ` or ` + "`gen-config`" + ` commands.
-
+%s
 Flags:
   -h, --help    Show context-sensitive help.
-`
+`, internaltesting.WrapHelp(listHelp))
+
 	require.Equal(t, expected, buf.String())
 }
 

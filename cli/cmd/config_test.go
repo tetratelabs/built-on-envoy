@@ -7,12 +7,14 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"testing"
 
 	"github.com/alecthomas/kong"
 	"github.com/stretchr/testify/require"
 
+	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
@@ -32,18 +34,11 @@ func TestParseCmdGenConfigHelp(t *testing.T) {
 
 	_, _ = parser.Parse([]string{"gen-config", "--help"})
 
-	expected := `Usage: boe gen-config [flags]
+	expected := fmt.Sprintf(`Usage: boe gen-config [flags]
 
 Generate Envoy configuration with specified extensions
 
-The gen-config command generates Envoy configuration YAML for the specified
-extensions. This is useful for inspecting the generated configuration,
-integrating with existing Envoy deployments, or using with external Envoy
-management tools.
-
-By default, it outputs a complete Envoy bootstrap configuration. Use the
-` + "`--minimal`" + ` flag to generate only the extension-generated resources (HTTP
-filters and clusters).
+%s
 
 Flags:
   -h, --help                       Show context-sensitive help.
@@ -67,7 +62,8 @@ Flags:
                                    ($BOE_REGISTRY_USERNAME).
       --password=STRING            Password for the OCI registry
                                    ($BOE_REGISTRY_PASSWORD).
-`
+`, internaltesting.WrapHelp(configHelp))
+
 	require.Equal(t, expected, buf.String())
 }
 

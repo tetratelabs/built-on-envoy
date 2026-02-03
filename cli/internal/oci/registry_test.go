@@ -19,6 +19,8 @@ type registryClientTest struct {
 	newRegistryClient func(t *testing.T) RegistryClient
 }
 
+var testRepos = []string{"repo1", "repo2"}
+
 var registryClientTests = []registryClientTest{
 	{
 		name: "in-memory store",

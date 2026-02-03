@@ -4,20 +4,16 @@ title: {{.Name}}
 description: {{.Description}}
 ---
 
-import CLIName from '../../../components/CLIName.astro';
-import CodeBlock from '../../../components/CodeBlock.astro';
-
-# <CLIName/> {{.Name}}
+# {{cliName}} {{.Name}}
 
 {{.Detail}}
 
-## Usage
+## Usage details
 
-<CodeBlock code={`{{"{{"}}CLI_NAME{{"}}"}} {{.Name}}{{range .Args}} <{{.Name}}>{{end}} [flags]`} />
-
-To see all available options:
-
-<CodeBlock code={`{{"{{"}}CLI_NAME{{"}}"}} {{.Name}} --help`} />
+```shell
+{{cliName}} {{.Name}}{{range .Args}} <{{.Name}}>{{end}} [flags]
+{{cliName}} {{.Name}} --help
+```
 
 {{if .Args}}
 ## Arguments

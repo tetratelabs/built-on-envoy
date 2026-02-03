@@ -8,10 +8,10 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	_ "embed"
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	clusterv3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	hcmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
@@ -40,15 +40,11 @@ type GenConfig struct {
 	output     io.Writer              `kong:"-"` // Internal field for testing
 }
 
-// Help provides detailed help for the gen-config command.
-func (c *GenConfig) Help() string {
-	return strings.ReplaceAll(`The gen-config command generates Envoy configuration YAML for the specified extensions.
-This is useful for inspecting the generated configuration, integrating with existing Envoy deployments,
-or using with external Envoy management tools.
+//go:embed config_help.md
+var configHelp string
 
-By default, it outputs a complete Envoy bootstrap configuration. Use the {BT}--minimal{BT} flag
-to generate only the extension-generated resources (HTTP filters and clusters).`, "{BT}", "`")
-}
+// Help provides detailed help for the config command.
+func (c *GenConfig) Help() string { return configHelp }
 
 // Run executes the GenConfig command.
 func (c *GenConfig) Run(ctx context.Context, dirs *xdg.Directories) error {

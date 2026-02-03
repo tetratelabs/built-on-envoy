@@ -14,8 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var testRepos = []string{"repo1", "repo2"}
-
 func init() {
 	registryClientTests = append(registryClientTests, registryClientTest{
 		name:              "docker registry",

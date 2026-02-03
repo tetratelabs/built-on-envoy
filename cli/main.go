@@ -30,7 +30,7 @@ func main() {
 	}()
 
 	kongCtx := kong.Parse(&cmd.CLI{},
-		kong.Name("boe"),
+		kong.Name(cmd.CLIName),
 		kong.Description("Built On Envoy CLI - Discover, run, and build custom filters with zero friction"),
 		kong.UsageOnError(),
 		kong.BindTo(ctx, (*context.Context)(nil)), // Bind it so it can be injected into commands

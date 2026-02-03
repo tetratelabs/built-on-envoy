@@ -7,6 +7,7 @@ package cmd
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"fmt"
 	"strings"
@@ -34,16 +35,11 @@ type Pull struct {
 	tag        string `kong:"-"` // Internal field: parsed tag
 }
 
-// Help provides detailed help for the pull command.
-func (p *Pull) Help() string {
-	return strings.ReplaceAll(`The pull command downloads an extension from an OCI-compliant container registry.
-You can specify either a simple extension name (which uses the default registry) or a full
-OCI reference including registry, repository, and tag.
+//go:embed pull_help.md
+var pullHelp string
 
-The extension is extracted to a local directory and can then be used with the {BT}run{BT} or
-{BT}gen-config{BT} commands via the {BT}--local{BT} flag. If no destination path is specified,
-the extension is saved to the default data directory.`, "{BT}", "`")
-}
+// Help provides detailed help for the pull command.
+func (p *Pull) Help() string { return pullHelp }
 
 // Validate is called by Kong after parsing to validate the command arguments.
 func (p *Pull) Validate() error {
