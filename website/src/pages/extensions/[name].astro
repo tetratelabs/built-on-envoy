@@ -33,6 +33,7 @@ interface Extension {
 	tags: string[];
 	license: string;
 	examples?: Example[];
+	path: string;
 }
 
 const { extension } = Astro.props as { extension: Extension };
@@ -154,7 +155,7 @@ function formatTypeName(type: string): string {
 								<h3>Resources</h3>
 								<ul class="resource-links">
 									<li>
-										<a href={`${GITHUB_REPO}/tree/main/${EXTENSIONS_PATH}/${extension.name}`} target="_blank" rel="noopener noreferrer">
+										<a href={`${GITHUB_REPO}/tree/main/${EXTENSIONS_PATH}/${extension.path}`} target="_blank" rel="noopener noreferrer">
 											View on GitHub →
 										</a>
 									</li>

@@ -14,14 +14,21 @@ export interface Extension {
 	repository: string;
 	license: string;
 	featured?: boolean;
+	/** Relative path from the extensions directory to the extension folder */
+	path: string;
+}
+
+interface ManifestInfo {
+	filePath: string;
+	relativePath: string;
 }
 
 /**
  * Recursively find all manifest.yaml files in the directory
  */
-function findManifests(dir: string): string[] {
-	const manifests: string[] = [];
-	
+function findManifests(dir: string, baseDir: string = dir): ManifestInfo[] {
+	const manifests: ManifestInfo[] = [];
+
 	if (!fs.existsSync(dir)) {
 		return manifests;
 	}
@@ -33,9 +40,10 @@ function findManifests(dir: string): string[] {
 		const stat = fs.statSync(itemPath);
 
 		if (stat.isDirectory()) {
-			manifests.push(...findManifests(itemPath));
+			manifests.push(...findManifests(itemPath, baseDir));
 		} else if (item === 'manifest.yaml') {
-			manifests.push(itemPath);
+			const relativePath = path.relative(baseDir, path.dirname(itemPath));
+			manifests.push({ filePath: itemPath, relativePath });
 		}
 	}
 
@@ -49,13 +57,13 @@ function findManifests(dir: string): string[] {
  */
 export function loadExtensions(): Extension[] {
 	const manifestsDir = path.join(process.cwd(), 'manifests');
-	const manifestPaths = findManifests(manifestsDir);
+	const manifestInfos = findManifests(manifestsDir);
 
-	return manifestPaths
-		.map(manifestPath => {
-			const manifestContent = fs.readFileSync(manifestPath, 'utf-8');
-			const manifest = parse(manifestContent) as Extension;
-			return manifest;
+	return manifestInfos
+		.map(({ filePath, relativePath }) => {
+			const manifestContent = fs.readFileSync(filePath, 'utf-8');
+			const manifest = parse(manifestContent) as Omit<Extension, 'path'>;
+			return { ...manifest, path: relativePath };
 		})
 		.filter((ext): ext is Extension => ext !== null)
 		.sort((a, b) => a.name.localeCompare(b.name));
