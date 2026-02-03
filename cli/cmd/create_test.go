@@ -16,6 +16,7 @@ import (
 	"github.com/alecthomas/kong"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 
