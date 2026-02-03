@@ -31,3 +31,10 @@ and all the files needed to execute the extension locally.
     ```shell
     boe run --local ~/src/built-on-envoy/extensions/example-lua
     ```
+
+Run extensions with custom JSON configuration strings. Configs are applied in order to the
+combined list of `--extension` and `--local` flags. Use an empty string `''` to skip an extension:
+
+    ```shell
+    boe run --extension ext1 --extension ext2 --config '{"key":"value"}' --config ''
+    ```

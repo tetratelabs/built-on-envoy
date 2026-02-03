@@ -29,7 +29,7 @@ type (
 	// ExtensionFilterGenerator defines an interface for generating filter configurations
 	ExtensionFilterGenerator interface {
 		// GenerateFilterConfig generates the filter configuration for the given extension manifest.
-		GenerateFilterConfig(manifest *extensions.Manifest, dataHome string, config any) (*ExtensionResources, error)
+		GenerateFilterConfig(manifest *extensions.Manifest, dataHome string, config string) (*ExtensionResources, error)
 	}
 
 	// LuaFilterGenerator generates filter configuration for Lua extensions.
@@ -59,7 +59,7 @@ var (
 )
 
 // GenerateFilterConfig generates the filter configuration for the given extension manifest.
-func GenerateFilterConfig(manifest *extensions.Manifest, dataHome string, config any) (*ExtensionResources, error) {
+func GenerateFilterConfig(manifest *extensions.Manifest, dataHome string, config string) (*ExtensionResources, error) {
 	var generator ExtensionFilterGenerator
 
 	switch manifest.Type {
@@ -79,7 +79,7 @@ func GenerateFilterConfig(manifest *extensions.Manifest, dataHome string, config
 }
 
 // GenerateFilterConfig generates the filter configuration for Lua extensions.
-func (l LuaFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, _ string, _ any) (*ExtensionResources, error) {
+func (l LuaFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, _ string, _ string) (*ExtensionResources, error) {
 	var code string
 	if manifest.Lua.Path != "" {
 		absPath := path.Join(path.Dir(manifest.Path), manifest.Lua.Path)
@@ -117,12 +117,12 @@ func (l LuaFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, 
 }
 
 // GenerateFilterConfig generates the filter configuration for Wasm extensions.
-func (w WasmFilterGenerator) GenerateFilterConfig(*extensions.Manifest, string, any) (*ExtensionResources, error) {
+func (w WasmFilterGenerator) GenerateFilterConfig(*extensions.Manifest, string, string) (*ExtensionResources, error) {
 	return nil, fmt.Errorf("%w: wasm", ErrUnimplemented)
 }
 
 // GenerateFilterConfig generates the filter configuration for Dynamic Module extensions.
-func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, dataHome string, _ any) (*ExtensionResources, error) {
+func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, dataHome string, config string) (*ExtensionResources, error) {
 	// TODO(wbpcode): For now, we only support Composer dynamic modules because all golang dynamic
 	// modules will be compiled into the same binary.
 	// Once we support other dynamic modules, we need to differentiate them here.
@@ -132,13 +132,25 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 		return nil, fmt.Errorf("composer binary not found at %s", cachedComposerPath)
 	}
 
+	var anyConfig *anypb.Any
+
+	if config != "" {
+		// Convert JSON string to StringValue.
+		// Ideally we suggest that `config` should be JSON string. But Envoy's DynamicModuleFilter
+		// take a string value anyway. And it's possible that a user wants to pass a non-JSON string.
+		// We pass the string as-is to Envoy anyway and let the dynamic module handle the content.
+		configStringValue := wrapperspb.String(string(config))
+		// Covert the StringValue to Any.
+		anyConfig, _ = anypb.New(configStringValue)
+	}
+
 	protoConfig := &dymhttpv3.DynamicModuleFilter{
 		DynamicModuleConfig: &dymv3.DynamicModuleConfig{
 			Name:         "composer",
 			LoadGlobally: true,
 		},
 		FilterName:   manifest.Name,
-		FilterConfig: nil, // TODO(wbpcode): Support passing filter config to composer extensions.
+		FilterConfig: anyConfig,
 	}
 	composerAny, err := anypb.New(protoConfig)
 	if err != nil {
@@ -170,7 +182,7 @@ func getGoPluginPathFromManifest(dataHome string, manifest *extensions.Manifest)
 }
 
 // GenerateFilterConfig generates the filter configuration for Composer extensions.
-func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, dataHome string, _ any) (*ExtensionResources, error) {
+func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, dataHome string, config string) (*ExtensionResources, error) {
 	cachedComposerPath := getComposerPath(dataHome, manifest.ComposerVersion)
 	if _, err := os.Stat(cachedComposerPath); os.IsNotExist(err) {
 		// TODO(wbpcode): Download the composer binary from the URL specified in the manifest.
@@ -183,12 +195,28 @@ func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manif
 		return nil, fmt.Errorf("go plugin binary not found at %s", cachedPluginPath)
 	}
 
-	// TODO(wbpcode): Support passing filter config to composer extensions.
+	// Covert the config to struct first. For go plugin/composer extensions, we ensure the
+	// config is always a valid JSON string (could be converted to google.protobuf.Struct).
+	var configValue *structpb.Value
+	if config != "" {
+		innerStruct := &structpb.Struct{}
+		err := protojson.Unmarshal([]byte(config), innerStruct)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal config JSON string to Struct: %w", err)
+		}
+		configValue = structpb.NewStructValue(innerStruct)
+	} else {
+		configValue = structpb.NewNullValue()
+	}
+
 	// Create New proto struct for Composer go plugin filter.
-	configStruct, _ := structpb.NewStruct(map[string]any{
-		"name": manifest.Name,
-		"url":  "file://" + cachedPluginPath,
-	})
+	configStruct := &structpb.Struct{
+		Fields: map[string]*structpb.Value{
+			"name":   structpb.NewStringValue(manifest.Name),
+			"url":    structpb.NewStringValue("file://" + cachedPluginPath),
+			"config": configValue,
+		},
+	}
 
 	// Covert to JSON string.
 	configJSON, _ := protojson.Marshal(configStruct)
@@ -197,7 +225,7 @@ func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manif
 	configStringValue := wrapperspb.String(string(configJSON))
 
 	// Covert the StringValue to Any.
-	config, _ := anypb.New(configStringValue)
+	anyConfig, _ := anypb.New(configStringValue)
 
 	protoConfig := &dymhttpv3.DynamicModuleFilter{
 		DynamicModuleConfig: &dymv3.DynamicModuleConfig{
@@ -205,7 +233,7 @@ func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manif
 			LoadGlobally: true,
 		},
 		FilterName:   "goplugin",
-		FilterConfig: config,
+		FilterConfig: anyConfig,
 	}
 	composerAny, err := anypb.New(protoConfig)
 	if err != nil {

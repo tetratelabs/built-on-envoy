@@ -129,3 +129,28 @@ func TestLocalGoExtension(t *testing.T) {
 
 	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
 }
+
+func TestLocalGoExtensionWithConfiguration(t *testing.T) {
+	dataDir := t.TempDir()
+
+	// Create a brand new extension
+	process := internaltesting.RunCLI(t, cliBin, "create", "go-e2e-config", "--path", dataDir)
+	status, err := process.Wait()
+	require.NoError(t, err)
+	require.Equal(t, 0, status.ExitCode())
+
+	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin,
+		"--local", dataDir+"/go-e2e-config",
+		"--config", `{"header_value":"configured-value"}`,
+	)
+
+	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
+	checkHeader := func(r *http.Response) bool {
+		return r.Header.Get("x-go-e2e-config") == "configured-value"
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	t.Cleanup(cancel)
+
+	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
+}

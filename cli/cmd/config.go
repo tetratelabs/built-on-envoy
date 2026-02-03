@@ -31,6 +31,7 @@ type GenConfig struct {
 	AdminPort  uint32   `help:"Port for Envoy admin interface." default:"9901"`
 	Extensions []string `name:"extension" help:"Extensions to enable (in the format: \"name\" or \"name:version\")." sep:","`
 	Local      []string `name:"local" help:"Path to a directory containing a local Extension to enable." type:"existingdir" sep:","`
+	Configs    []string `name:"config" help:"Optional JSON config string for extensions. Applied in order to combined --extension and --local flags. Use empty string to skip."`
 	OCI        OCIFlags `embed:""`
 
 	extensions []*extensions.Manifest `kong:"-"` // Internal field: loaded extension manifests
@@ -76,6 +77,7 @@ func (c *GenConfig) Run(ctx context.Context, dirs *xdg.Directories) error {
 			ListenerPort: c.ListenPort,
 			DataHome:     dirs.DataHome,
 			Extensions:   c.extensions,
+			Configs:      c.Configs,
 		})
 	}
 	if err != nil {
@@ -91,9 +93,12 @@ func (c *GenConfig) Run(ctx context.Context, dirs *xdg.Directories) error {
 func (c *GenConfig) generateMinimalConfig(dataHome string) (string, error) {
 	filters := make([]*hcmv3.HttpFilter, 0, len(c.extensions))
 	clusters := make([]*clusterv3.Cluster, 0)
-	for _, ext := range c.extensions {
-		// TODO(nacx): support config
-		resources, err := envoy.GenerateFilterConfig(ext, dataHome, nil)
+	for i, ext := range c.extensions {
+		var cfg string
+		if i < len(c.Configs) {
+			cfg = c.Configs[i]
+		}
+		resources, err := envoy.GenerateFilterConfig(ext, dataHome, cfg)
 		if err != nil {
 			return "", fmt.Errorf("failed to generate filter config for extension %q: %w", ext.Name, err)
 		}

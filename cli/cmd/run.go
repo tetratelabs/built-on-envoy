@@ -32,6 +32,7 @@ type Run struct {
 	AdminPort    uint32   `help:"Port for Envoy admin interface." default:"9901"`
 	Extensions   []string `name:"extension" help:"Extensions to enable (in the format: \"name\" or \"name:version\")." sep:","`
 	Local        []string `name:"local" help:"Path to a directory containing a local Extension to enable." type:"existingdir" sep:","`
+	Configs      []string `name:"config" help:"Optional JSON config string for extensions. Applied in order to combined --extension and --local flags. Use empty string to skip."`
 	OCI          OCIFlags `embed:""`
 
 	defaultLogLevel   string `kong:"-"` // Internal field: parsed defaut log level
@@ -107,6 +108,7 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories) error {
 		ListenPort:        r.ListenPort,
 		AdminPort:         r.AdminPort,
 		Extensions:        extensions,
+		Configs:           r.Configs,
 	}
 
 	return runner.Run(ctx)

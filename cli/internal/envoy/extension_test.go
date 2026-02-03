@@ -28,7 +28,7 @@ import (
 
 func TestGenerateFilterConfigUnsupportedType(t *testing.T) {
 	manifest := extensions.Manifest{Type: "unsupported_type"}
-	_, err := GenerateFilterConfig(&manifest, "", nil)
+	_, err := GenerateFilterConfig(&manifest, "", "")
 	require.ErrorIs(t, err, ErrUnsupportedExtensionType)
 }
 
@@ -38,7 +38,7 @@ func TestGenerateFilterConfigUnimplemented(t *testing.T) {
 	} {
 		t.Run(string(et), func(t *testing.T) {
 			manifest := extensions.Manifest{Type: et}
-			_, err := GenerateFilterConfig(&manifest, "", nil)
+			_, err := GenerateFilterConfig(&manifest, "", "")
 			require.ErrorIs(t, err, ErrUnimplemented)
 		})
 	}
@@ -118,7 +118,7 @@ end
 			localManifest, err := extensions.LoadLocalManifest(manifestPath)
 			require.NoError(t, err)
 
-			got, err := GenerateFilterConfig(localManifest, "", nil)
+			got, err := GenerateFilterConfig(localManifest, "", "")
 			require.ErrorIs(t, err, tt.wantErr)
 			if tt.wantErr != nil {
 				return
@@ -138,7 +138,7 @@ func TestDynamicModuleFilterGenerator(t *testing.T) {
 	}
 
 	// Case 1: Composer binary missing
-	_, err := GenerateFilterConfig(manifest, dataHome, nil)
+	_, err := GenerateFilterConfig(manifest, dataHome, "")
 	require.ErrorContains(t, err, "composer binary not found")
 
 	// Case 2: Composer binary exists
@@ -146,7 +146,7 @@ func TestDynamicModuleFilterGenerator(t *testing.T) {
 	require.NoError(t, os.MkdirAll(composerPath, 0o750))
 	require.NoError(t, os.WriteFile(filepath.Join(composerPath, "libcomposer.so"), []byte("fake binary"), 0o600))
 
-	got, err := GenerateFilterConfig(manifest, dataHome, nil)
+	got, err := GenerateFilterConfig(manifest, dataHome, "")
 	require.NoError(t, err)
 
 	want := &ExtensionResources{
@@ -172,6 +172,40 @@ func TestDynamicModuleFilterGenerator(t *testing.T) {
 	}
 
 	checkProtos(t, want.HTTPFilters, got.HTTPFilters)
+
+	// Case 3: Success with config
+	configJSON := `{"key":"value","nested":{"foo":"bar"}}`
+	got, err = GenerateFilterConfig(manifest, dataHome, configJSON)
+	require.NoError(t, err, "GenerateFilterConfig with config failed")
+
+	wantWithConfig := &ExtensionResources{
+		HTTPFilters: []*hcmv3.HttpFilter{
+			{
+				Name: manifest.Name,
+				ConfigType: &hcmv3.HttpFilter_TypedConfig{
+					TypedConfig: func() *anypb.Any {
+						dymConfig := &dymhttpv3.DynamicModuleFilter{
+							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
+								Name:         "composer",
+								LoadGlobally: true,
+							},
+							FilterName: manifest.Name,
+							FilterConfig: func() *anypb.Any {
+								cfg, err := anypb.New(wrapperspb.String(configJSON))
+								require.NoError(t, err, "marshal StringValue to Any failed")
+								return cfg
+							}(),
+						}
+						cfg, err := anypb.New(dymConfig)
+						require.NoError(t, err, "marshal DynamicModuleFilter to Any failed")
+						return cfg
+					}(),
+				},
+			},
+		},
+	}
+
+	checkProtos(t, wantWithConfig.HTTPFilters, got.HTTPFilters)
 }
 
 func TestComposerFilterGenerator(t *testing.T) {
@@ -184,7 +218,7 @@ func TestComposerFilterGenerator(t *testing.T) {
 	}
 
 	// Case 1: Composer binary missing
-	_, err := GenerateFilterConfig(manifest, dataHome, nil)
+	_, err := GenerateFilterConfig(manifest, dataHome, "")
 	require.ErrorContains(t, err, "composer binary not found")
 
 	// Create Composer binary
@@ -193,7 +227,7 @@ func TestComposerFilterGenerator(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(composerPath, "libcomposer.so"), []byte("fake binary"), 0o600))
 
 	// Case 2: Plugin binary missing
-	_, err = GenerateFilterConfig(manifest, dataHome, nil)
+	_, err = GenerateFilterConfig(manifest, dataHome, "")
 	require.ErrorContains(t, err, "go plugin binary not found")
 
 	// Create Plugin binary
@@ -201,8 +235,8 @@ func TestComposerFilterGenerator(t *testing.T) {
 	require.NoError(t, os.MkdirAll(pluginPath, 0o750))
 	require.NoError(t, os.WriteFile(filepath.Join(pluginPath, "plugin.so"), []byte("fake binary"), 0o600))
 
-	// Case 3: Success
-	got, err := GenerateFilterConfig(manifest, dataHome, nil)
+	// Case 3: Success without config
+	got, err := GenerateFilterConfig(manifest, dataHome, "")
 	require.NoError(t, err)
 
 	want := &ExtensionResources{
@@ -218,10 +252,13 @@ func TestComposerFilterGenerator(t *testing.T) {
 							},
 							FilterName: "goplugin",
 							FilterConfig: func() *anypb.Any {
-								configStruct, _ := structpb.NewStruct(map[string]any{
-									"name": manifest.Name,
-									"url":  "file://" + fmt.Sprintf("%s/extensions/goplugin/%s/%s/plugin.so", dataHome, manifest.Name, manifest.Version),
-								})
+								configStruct := &structpb.Struct{
+									Fields: map[string]*structpb.Value{
+										"name":   structpb.NewStringValue(manifest.Name),
+										"url":    structpb.NewStringValue("file://" + fmt.Sprintf("%s/extensions/goplugin/%s/%s/plugin.so", dataHome, manifest.Name, manifest.Version)),
+										"config": structpb.NewNullValue(),
+									},
+								}
 								configJSON, err := protojson.Marshal(configStruct)
 								require.NoError(t, err)
 								cfg, err := anypb.New(wrapperspb.String(string(configJSON)))
@@ -239,6 +276,53 @@ func TestComposerFilterGenerator(t *testing.T) {
 	}
 
 	checkProtos(t, want.HTTPFilters, got.HTTPFilters)
+
+	// Case 4: Success with config
+	configJSON := `{"key":"value","nested":{"foo":"bar"}}`
+	got, err = GenerateFilterConfig(manifest, dataHome, configJSON)
+	require.NoError(t, err, "GenerateFilterConfig with config failed")
+
+	wantWithConfig := &ExtensionResources{
+		HTTPFilters: []*hcmv3.HttpFilter{
+			{
+				Name: manifest.Name,
+				ConfigType: &hcmv3.HttpFilter_TypedConfig{
+					TypedConfig: func() *anypb.Any {
+						innerStruct := &structpb.Struct{}
+						err := protojson.Unmarshal([]byte(configJSON), innerStruct)
+						require.NoError(t, err)
+
+						dymConfig := &dymhttpv3.DynamicModuleFilter{
+							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
+								Name:         "composer",
+								LoadGlobally: true,
+							},
+							FilterName: "goplugin",
+							FilterConfig: func() *anypb.Any {
+								configStruct := &structpb.Struct{
+									Fields: map[string]*structpb.Value{
+										"name":   structpb.NewStringValue(manifest.Name),
+										"url":    structpb.NewStringValue("file://" + fmt.Sprintf("%s/extensions/goplugin/%s/%s/plugin.so", dataHome, manifest.Name, manifest.Version)),
+										"config": structpb.NewStructValue(innerStruct),
+									},
+								}
+								configJSON, err := protojson.Marshal(configStruct)
+								require.NoError(t, err, "marshal config struct to JSON failed")
+								cfg, err := anypb.New(wrapperspb.String(string(configJSON)))
+								require.NoError(t, err, "marshal StringValue to Any failed")
+								return cfg
+							}(),
+						}
+						cfg, err := anypb.New(dymConfig)
+						require.NoError(t, err, "marshal DynamicModuleFilter to Any failed")
+						return cfg
+					}(),
+				},
+			},
+		},
+	}
+
+	checkProtos(t, wantWithConfig.HTTPFilters, got.HTTPFilters)
 }
 
 // checkProtosList checks if two lists of proto messages are equal and if not, prints their YAML representation
