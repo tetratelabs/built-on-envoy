@@ -3,8 +3,8 @@ This is useful for inspecting the generated configuration, integrating with exis
 deployments, or using with external Envoy management tools.
 
 By default, it outputs a complete Envoy bootstrap configuration ready to use with Envoy.
-Use the `--only-filters` flag to generate just the HTTP filter chain configuration,
-which can be embedded into an existing `HttpConnectionManager` configuration.
+Use the `--minimal` flag to generate only the extension-generated resources (useful for
+embedding in existing configs).
 
 You can enable multiple extensions using the `--extension` flag, and also load extensions
 from local directories using `--local` for development and testing purposes.
@@ -17,10 +17,10 @@ Generate a complete Envoy configuration with the `example-lua` extension:
     boe gen-config --extension example-lua
     ```
 
-Generate only the HTTP filter chain (useful for embedding in existing configs):
+Generate minimal configuration with only extension-generated resources (useful for embedding in existing configs):
 
     ```shell
-    boe gen-config --extension example-lua --only-filters
+    boe gen-config --extension example-lua --minimal
     ```
 
 Generate configuration using a local extension during development:
