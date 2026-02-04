@@ -116,12 +116,19 @@ func TestLocalGoExtension(t *testing.T) {
 	require.Equal(t, 0, status.ExitCode())
 
 	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin,
-		"--local", dataDir+"/go-e2e",
+		"--local", dataDir+"/go-e2e"+","+dataDir+"/go-e2e",
+		"--config", "{}",
+		"--config", `{"header_value":"configured-value"}`, // test config for second local extension
 	)
 
+	// For the response, the execution order of the extensions is in reverse order of the
+	// declaration order, so the header from the second extension should come first.
 	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
 	checkHeader := func(r *http.Response) bool {
-		return r.Header.Get("x-go-e2e") == "example"
+		headerValues, ok := r.Header[http.CanonicalHeaderKey("x-go-e2e")]
+		return ok && len(headerValues) == 2 &&
+			headerValues[0] == "configured-value" &&
+			headerValues[1] == "example"
 	}
 
 	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)

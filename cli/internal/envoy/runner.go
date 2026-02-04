@@ -40,6 +40,8 @@ type Runner struct {
 	AdminPort uint32
 	// Extensions specifies the extensions to enable.
 	Extensions []*extensions.Manifest
+	// Configs specifies optional JSON config strings for each extension (by index).
+	Configs []string
 }
 
 // Run starts Envoy using func-e as a library
@@ -49,6 +51,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		ListenerPort: r.ListenPort,
 		DataHome:     r.Dirs.DataHome,
 		Extensions:   r.Extensions,
+		Configs:      r.Configs,
 	})
 	if err != nil {
 		return err
