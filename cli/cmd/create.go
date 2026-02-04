@@ -114,7 +114,7 @@ type customHttpFilter struct {
 
 func (f *customHttpFilter) OnRequestHeaders(headers shared.HeaderMap, endStream bool) shared.HeadersStatus {
 	// TODO: To implement your own custom logic here.
-	headers.Set("x-{{ .Name }}", f.config.HeaderValue)
+	headers.Add("x-{{ .Name }}", f.config.HeaderValue)
 	return shared.HeadersStatusContinue
 }
 
@@ -128,7 +128,7 @@ func (f *customHttpFilter) OnRequestTrailers(trailers shared.HeaderMap) shared.T
 
 func (f *customHttpFilter) OnResponseHeaders(headers shared.HeaderMap, endStream bool) shared.HeadersStatus {
 	// TODO: To implement your own custom logic here.
-	headers.Set("x-{{ .Name }}", f.config.HeaderValue)
+	headers.Add("x-{{ .Name }}", f.config.HeaderValue)
 	f.handle.Log(shared.LogLevelInfo, "{{ .Name }}: OnResponseHeaders called")
 	return shared.HeadersStatusContinue
 }

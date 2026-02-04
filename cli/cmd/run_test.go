@@ -59,7 +59,7 @@ Flags:
                                    Extension to enable.
       --config=CONFIG,...          Optional JSON config string for extensions.
                                    Applied in order to combined --extension and
-                                   --local flags. Use empty string to skip.
+                                   --local flags.
       --registry="ghcr.io/tetratelabs/built-on-envoy"
                                    OCI registry URL for the extensions
                                    ($BOE_REGISTRY).
