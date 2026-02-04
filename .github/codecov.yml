@@ -6,7 +6,7 @@
 # This file must be in sync with .testcoverage.yaml that can be used locally.
 
 codecov:
-  # we build and upload only a single coverage file, so we don't need to wait for other CI
+  # We build and upload only a single coverage file, so we don't need to wait for other CI
   # jobs to complete for us to see the coverage results
   require_ci_to_pass: false
 
@@ -22,10 +22,11 @@ coverage:
         only_pulls: true
         threshold: 5%
 
-comment:
-  layout: "diff,files"
+# Do not add comments on PRs. The CI checks already link to the codecov reports
+# and comments qre just noise.
+comment: false
 
-# not interested in inline PR comments via github checks
+# Not interested in inline PR comments via github checks
 github_checks:
   annotations: false
 

@@ -4,7 +4,7 @@
 # the root of the repo.
 
 # Pre-download Envoy for using func-e. This reduces latency and avoids
-# nboeding to declare a volume for the Envoy binary, which is tricky in Docker
+# needing to declare a volume for the Envoy binary, which is tricky in Docker
 # Compose v2 because volumes end up owned by root.
 FROM golang:1.25 AS envoy-downloader
 ARG TARGETOS

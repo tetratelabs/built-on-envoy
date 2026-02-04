@@ -52,7 +52,7 @@ jobs:
       - uses: anchore/scan-action@v6
         id: scan
         with:
-          image: local/built-on-envoy-cli:scan-amd64
+          image: local/built-on-envoy-cli:scan
       - run: |
           cat ${{ steps.scan.outputs.sarif }}
           {
