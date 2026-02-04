@@ -441,7 +441,7 @@ nav a:focus {
 .extension-header {
 	display: flex;
 	justify-content: space-between;
-	align-items: center;
+	align-items: flex-start;
 	margin-bottom: 12px;
 }
 
@@ -459,6 +459,7 @@ nav a:focus {
 	font-weight: 600;
 	text-transform: uppercase;
 	background: var(--primary);
+	white-space: nowrap;
 }
 
 /* Extension type color variants (purple/pink palette) */

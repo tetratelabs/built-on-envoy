@@ -1,3 +1,8 @@
+// This go.mod is used to build the Composer dynamic module (libcomposer.so).
+// All embedded Go plugins must use this same go.mod to ensure Go runtime and
+// dependency version compatibility. Do not create separate go.mod files for
+// embedded plugins; they should be part of this module.
+
 module github.com/tetratelabs/built-on-envoy/extensions
 
 go 1.25.6

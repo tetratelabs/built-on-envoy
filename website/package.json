@@ -4,8 +4,9 @@
   "version": "1.0.0",
   "description": "Official website for Built On Envoy - Extensions marketplace for Envoy Proxy",
   "scripts": {
-    "dev": "astro dev",
-    "build": "astro build",
+    "copy-manifests": "node scripts/copy-manifests.js",
+    "dev": "npm run copy-manifests && astro dev",
+    "build": "npm run copy-manifests && astro build",
     "preview": "astro preview",
     "astro": "astro"
   },
