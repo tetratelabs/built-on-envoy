@@ -151,30 +151,35 @@ See the [version compatibility](#version-compatibility) section for more details
 
 The filter receives callbacks at each stage of request/response processing:
 
+```mermaid
+flowchart LR
+    subgraph "Request Flow"
+        direction LR
+        OnRequestHeaders --> OnRequestBody --> OnRequestTrailers
+    end
 ```
-Request flow:
-  OnRequestHeaders  →  OnRequestBody  →  OnRequestTrailers
-                              
-Response flow:
-  OnResponseHeaders ←  OnResponseBody ←  OnResponseTrailers
+
+```mermaid
+flowchart LR
+    subgraph "Response Flow"
+        direction LR
+        OnResponseHeaders --> OnResponseBody --> OnResponseTrailers
+    end
 ```
 
-### Return Values
+### Callback Return Values
 
-Each callback returns a status that controls processing:
+Each callback returns a status that controls processing. The following table shows the most commonly
+used return values. For more details about the different return values, refer to the
+[Dynamic Modules Go SDK](https://github.com/envoyproxy/envoy/tree/main/source/extensions/dynamic_modules/sdk/go).
 
-**Header callbacks:**
-- `HeadersStatusContinue` - Continue to the next filter in the chain
-- `HeadersStatusStop` - Stop processing headers and continue processing the request (body, trailers, etc).
-
-**Body callbacks:**
-- `BodyStatusContinue` - Continue to the next filter in the chain
-- `BodyStatusStopAndBuffer` - Stop processing the body and buffer the data
-
-**Trailer callbacks:**
-- `TrailersStatusContinue` - Continue to the next filter in the chain
-
-For more details about the different return values, refer to the [Dynamic Modules Go SDK](https://github.com/envoyproxy/envoy/tree/main/source/extensions/dynamic_modules/sdk/go).
+| Return Value | Description |
+| ------------ | ----------- |
+| `HeadersStatusContinue` | Continue to the next filter in the chain |
+| `HeadersStatusStop` | Stop processing headers and continue processing the request (body, trailers, etc) |
+| `BodyStatusContinue` | Continue to the next filter in the chain |
+| `BodyStatusStopAndBuffer` | Stop processing the body and buffer the data |
+| `TrailersStatusContinue` | Continue to the next filter in the chain |
 
 ## Common Operations
 
