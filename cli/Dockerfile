@@ -19,7 +19,7 @@ RUN go install github.com/tetratelabs/func-e/cmd/func-e@latest && \
     && chown -R 65532:65532 /home/nonroot \
     && chmod -R 755 /home/nonroot
 
-FROM gcr.io/distroless/base-nossl-debian12:nonroot
+FROM gcr.io/distroless/base-nossl-debian13:nonroot
 ARG TARGETOS
 ARG TARGETARCH
 

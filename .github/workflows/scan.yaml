@@ -49,6 +49,7 @@ jobs:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
       - run: make docker
+      
       - uses: anchore/scan-action@v6
         id: scan
         with:
@@ -62,9 +63,10 @@ jobs:
           } >>$GITHUB_OUTPUT
         id: print-report
         if: always()  # Always print the report to the stdout.
+
       - uses: slackapi/slack-github-action@v2.0.0
         id: slack-notify
-        if: ${{ failure() }}  # Only send notifications for failures scheduled runs.
+        if: ${{ failure() && github.event_name == 'schedule' }}  # Only send notifications for failures scheduled runs.
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
