@@ -6,6 +6,8 @@
 package extensions
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -15,4 +17,16 @@ import (
 func TestLibComposerVersion(t *testing.T) {
 	require.Truef(t, semver.IsValid("v"+LibComposerVersion),
 		"ComposerVersion %q is not a valid semver", LibComposerVersion)
+}
+
+func TestCheckOrBuildLibComposer(t *testing.T) {
+	fakeDataHome := t.TempDir()
+	err := CheckOrBuildLibComposer(fakeDataHome)
+	require.NoError(t, err, "CheckOrBuildLibComposer failed")
+
+	// Ensure the libcomposer.so is created.
+	composerPath := filepath.Join(fakeDataHome, "extensions", "dym", "composer",
+		LibComposerVersion, "libcomposer.so")
+	_, err = os.Stat(composerPath)
+	require.NoErrorf(t, err, "libcomposer.so not found at %s", composerPath)
 }
