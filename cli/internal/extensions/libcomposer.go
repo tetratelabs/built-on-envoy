@@ -27,8 +27,10 @@ import (
 var LibComposerVersion string
 
 //go:embed extensions.tar
-var ComposerExtenionsBytes []byte
+var composerExtenionsBytes []byte
 
+// CheckOrBuildLibComposer checks if the libcomposer.so exists in the dataHome directory.
+// If not, it builds the libcomposer from source.
 func CheckOrBuildLibComposer(dataHome string) error {
 	composerPath := filepath.Join(dataHome, "extensions", "dym", "composer",
 		LibComposerVersion, "libcomposer.so")
@@ -43,11 +45,16 @@ func CheckOrBuildLibComposer(dataHome string) error {
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		err = os.RemoveAll(tempDir)
+		if err != nil {
+			fmt.Printf("warning: failed to remove temp dir %s: %v\n", tempDir, err)
+		}
+	}()
 
 	// Write the embedded tar to a temporary file
 	tarPath := filepath.Join(tempDir, "extensions.tar")
-	err = os.WriteFile(tarPath, ComposerExtenionsBytes, 0o640)
+	err = os.WriteFile(tarPath, composerExtenionsBytes, 0o600)
 	if err != nil {
 		return err
 	}
@@ -64,7 +71,7 @@ func CheckOrBuildLibComposer(dataHome string) error {
 		return err
 	}
 
-	return BuildLibComposer(dataHome, composerSrcPath)
+	return buildLibComposer(dataHome, composerSrcPath)
 }
 
 func extractTar(tarPath, destDir string) error {
@@ -78,7 +85,7 @@ func extractTar(tarPath, destDir string) error {
 	return nil
 }
 
-func BuildLibComposer(dataHome string, composerSrcPath string) error {
+func buildLibComposer(dataHome string, composerSrcPath string) error {
 	// Build the libcomposer from source.
 
 	// #nosec G204
