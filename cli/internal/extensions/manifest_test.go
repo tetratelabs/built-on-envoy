@@ -22,11 +22,11 @@ func TestAllManifestsAreValid(t *testing.T) {
 
 func TestAllMAnifestsAreLoaded(t *testing.T) {
 	count := 0
-	err := fs.WalkDir(manifestFS, "manifests", func(_ string, d fs.DirEntry, err error) error {
+	err := fs.WalkDir(manifestFS, "manifests", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if !d.IsDir() {
+		if !d.IsDir() && filepath.Base(path) == "manifest.yaml" {
 			count++
 		}
 		return nil

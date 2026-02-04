@@ -170,13 +170,13 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 }
 
 func getComposerPath(dataHome, composerVersion string) string {
-	// Build the path: $DATA_HOME/extensions/dym/composer/$version/libcomposer.so
+	// Build the path: $BOE_DATA_HOME/extensions/dym/composer/$version/libcomposer.so
 	return filepath.Join(dataHome, "extensions", "dym", "composer",
 		composerVersion, "libcomposer.so")
 }
 
 func getGoPluginPathFromManifest(dataHome string, manifest *extensions.Manifest) string {
-	// Build the path: $DATA_HOME/extensions/goplugin/$name/$version/plugin.so
+	// Build the path: $BOE_DATA_HOME/extensions/goplugin/$name/$version/plugin.so
 	return filepath.Join(dataHome, "extensions", "goplugin", manifest.Name,
 		manifest.Version, "plugin.so")
 }

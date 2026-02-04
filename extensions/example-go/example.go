@@ -1,6 +1,9 @@
-//go:build !no_example
+// Copyright Built On Envoy
+// SPDX-License-Identifier: Apache-2.0
+// The full text of the Apache license is available in the LICENSE file at
+// the root of the repo.
 
-package example
+package impl
 
 import (
 	"fmt"
@@ -288,12 +291,4 @@ func (f *ExamplePluginConfigFactory) Create(handle shared.HttpFilterConfigHandle
 	}
 
 	return &ExamplePluginFactory{statsCollector: stats}, nil
-}
-
-var wellKnownHttpFilterConfigFactories = map[string]shared.HttpFilterConfigFactory{
-	"example": &ExamplePluginConfigFactory{},
-}
-
-func WellKnownHttpFilterConfigFactories() map[string]shared.HttpFilterConfigFactory {
-	return wellKnownHttpFilterConfigFactories
 }

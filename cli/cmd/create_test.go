@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
+	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
 func TestParseCmdCreateHelp(t *testing.T) {
@@ -71,7 +72,7 @@ func TestCreate_Run(t *testing.T) {
 
 	// This might fail if network is not available due to `go mod tidy`
 	// failing to fetch dependencies.
-	err := c.Run()
+	err := c.Run(&xdg.Directories{})
 	if err != nil {
 		// Attempt to differentiate network error from logic error if possible,
 		// but for now we'll just fail the test if the command fails.

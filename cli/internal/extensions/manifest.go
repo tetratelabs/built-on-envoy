@@ -106,7 +106,7 @@ const (
 )
 
 var (
-	//go:embed manifests/**/*.yaml
+	//go:embed manifests
 	manifestFS embed.FS
 
 	//go:embed manifests/manifest.schema.json

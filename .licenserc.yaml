@@ -3,11 +3,6 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-# Copyright Envoy AI Gateway Authors
-# SPDX-License-Identifier: Apache-2.0
-# The full text of the Apache license is available in the LICENSE file at
-# the root of the repo.
-
 header:
   license:
     spdx-id: Apache-2.0
@@ -19,12 +14,17 @@ header:
       the root of the repo.
   paths-ignore:
     - out/
-    # Ignore the code-generated extension manifests
+    # Ignore the CLI generated code
     - internal/extensions/manifests/
     - "**/go.mod"
     - "**/go.sum"
     - "**/*.md"
     - "**/*.tmpl"
     - "**/.gitignore"
+    - "**/*.lock"
+    - "**/*.pb.go"
+    - "**/*.txt"
+    - "**/Dockerfile.godym"
+    - "**/Dockerfile.plugin"
     - .editorconfig
     - LICENSE

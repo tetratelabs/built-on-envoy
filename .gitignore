@@ -30,3 +30,6 @@ Thumbs.db
 
 # Local development
 *.local
+
+# Compiled extensions
+*.so

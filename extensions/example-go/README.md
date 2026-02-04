@@ -1,0 +1,92 @@
+# Example Go Plugin
+
+This directory contains an example Go plugin for Envoy HTTP filters using the Composer Dynamic Module system. The same plugin implementation can be packaged in two different ways, each with its own trade-offs.
+
+## Directory Structure
+
+```
+example-go/
+├── example.go           # Core plugin implementation
+├── embedded/            # Embedded packaging (compiled into Composer)
+│   ├── host.go
+│   └── manifest.yaml
+└── standalone/          # Standalone packaging (loaded at runtime)
+    ├── plugin.go
+    └── manifest.yaml
+```
+
+## Plugin Implementation
+
+The core plugin logic is in [example.go](example.go). It implements an HTTP filter that demonstrates:
+
+- Reading and modifying request/response headers
+- Accessing request attributes and metadata
+- Modifying request and response bodies
+- Sending local replies
+- Working with Envoy metrics (counters, gauges, histograms)
+
+## Packaging Approaches
+
+### 1. Standalone Plugin (`standalone/`)
+
+The plugin is compiled as a separate Go plugin binary (`.so` file) and loaded at runtime.
+
+**How it works:**
+- [plugin/plugin.go](plugin/plugin.go) exports `WellKnownHttpFilterConfigFactories()` as the entry point
+- The Composer's [goplugin loader](../internal/goplugin/goplugin.go) loads the `.so` file at runtime
+- Before loading, the loader validates that the plugin was built with the same Go version and matching dependency versions
+
+**Advantages:**
+- Plugins can be updated independently of the Composer module
+- Supports dynamic plugin discovery and loading
+
+**Disadvantages:**
+- **Critical constraint:** The plugin must be compiled with the exact same Go runtime version as the Composer
+- All shared dependencies must have matching versions and checksums
+
+**Usage:**
+```bash
+boe run --extension example-go
+```
+
+### 2. Embedded in Composer (`embedded/`)
+
+The plugin is compiled directly into the Composer dynamic module binary.
+
+**How it works:**
+- [embedded/host.go](embedded/host.go) imports the plugin package and registers it with the SDK during initialization
+- The Composer's [main.go](../internal/libcomposer/main.go) imports the embedded package, including it in the final binary
+- The plugin is registered under the name `example-go-embedded` (as defined in the plugin's factory map)
+
+**Advantages:**
+- Guaranteed Go runtime compatibility (plugin and host are compiled together)
+- No version mismatch issues between dependencies
+- Simpler deployment (single binary)
+
+**Disadvantages:**
+- Requires rebuilding the entire Composer module to update the plugin
+- All plugins must be known at compile time
+
+**Usage:**
+```bash
+boe run --extension example-go-embedded
+```
+
+## Go Runtime Compatibility
+
+When loading external plugins, the Go plugin system requires:
+
+1. **Same Go version:** Plugin and host must be compiled with identical Go versions
+2. **Same dependency versions:** All shared packages must have matching versions and checksums
+
+The embedded approach eliminates these constraints by compiling everything together, making it the recommended choice when version management is a concern.
+
+## Choosing an Approach
+
+| Consideration | Embedded | Standalone |
+|--------------|----------|------------|
+| Version compatibility | Guaranteed | Must be managed |
+| Update flexibility | Rebuild required | Independent updates |
+| Build time | Longer (full rebuild) | Shorter (plugin only) |
+
+For production environments where stability is critical, the **embedded** approach is recommended. The **standalone** approach is useful during development or when plugins need to be distributed and updated independently.

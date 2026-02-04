@@ -4,43 +4,10 @@ import Head from '../components/Head.astro';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 import ExtensionCard from '../components/ExtensionCard.astro';
-import { parse } from 'yaml';
-import fs from 'fs';
-import path from 'path';
+import { loadExtensions } from '../utils/extensions';
 import '../styles/extensions.css';
 
-// Read all extension manifests
-const extensionsDir = path.join(process.cwd(), '../extensions');
-const extensionFolders = fs.readdirSync(extensionsDir)
-	.filter(item => {
-		const itemPath = path.join(extensionsDir, item);
-		return fs.statSync(itemPath).isDirectory();
-	});
-
-interface Extension {
-	name: string;
-	version: string;
-	type: string;
-	categories: string[];
-	author: string;
-	description: string;
-	longDescription: string;
-	tags: string[];
-	repository: string;
-	license: string;
-}
-
-const extensions: Extension[] = extensionFolders
-	.map(folder => {
-		const manifestPath = path.join(extensionsDir, folder, 'manifest.yaml');
-		if (!fs.existsSync(manifestPath)) return null;
-
-		const manifestContent = fs.readFileSync(manifestPath, 'utf-8');
-		const manifest = parse(manifestContent) as Extension;
-		return manifest;
-	})
-	.filter((ext): ext is Extension => ext !== null)
-	.sort((a, b) => a.name.localeCompare(b.name));
+const extensions = loadExtensions();
 
 // Collect unique types from extensions and sort alphabetically
 const sortedTypes = [...new Set(extensions.map(ext => ext.type))]

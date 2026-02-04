@@ -12,8 +12,10 @@
 
 set -e
 
-CLI_ROOT="$(go list -m -f '{{.Dir}}')"
-MANIFESTS_TARGET_DIR="${CLI_ROOT}/internal/extensions/manifests"
+ROOT="$(git rev-parse --show-toplevel)"
+MANIFESTS_TARGET_DIR="${ROOT}/cli/internal/extensions/manifests"
+LIBCOMPOSER_VERSION_SRC="${ROOT}/extensions/internal/libcomposer/Makefile"
+
 
 echo "Synchronizing extension manifests to ${MANIFESTS_TARGET_DIR}..."
 
@@ -24,4 +26,14 @@ rsync -amq --include=*/ \
     --include=manifest.yaml \
     --include=manifest.schema.json \
     --exclude=* \
-    "${CLI_ROOT}/../extensions/" "${MANIFESTS_TARGET_DIR}/"
+    "${ROOT}/extensions/" "${MANIFESTS_TARGET_DIR}/"
+
+# Extract libcomposer version from its Makefile, cleaning up whitespaces, etc.
+echo "Extracting libcomposer version..."
+
+grep -E "^VERSION[[:space:]]*[:?]?=" "${LIBCOMPOSER_VERSION_SRC}" | sed 's/.*=[[:space:]]*//' | tr -d '\n' > "${MANIFESTS_TARGET_DIR}/libcomposer-version.txt"
+
+if [ ! -s "${MANIFESTS_TARGET_DIR}/libcomposer-version.txt" ]; then
+    echo "Failed to extract libcomposer version from ${LIBCOMPOSER_VERSION_SRC}"
+    exit 1
+fi

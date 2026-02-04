@@ -1,4 +1,11 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
 GODYM_IMG ?= builtonenvoy/composer-godym:latest
+
+VERSION ?= 0.2.1
 
 PLUGIN_NAME ?= goplugin_example
 PLUGIN_IMG ?= builtonenvoy/composer-plugin-${PLUGIN_NAME}:latest
@@ -43,20 +50,21 @@ plugin_so: build_plugin
 	docker cp temp-container:/plugin.so ./plugin.so
 	docker rm temp-container
 
-DATA_HOME ?= $(HOME)/.local/share/boe
-ALL_GOPLUGINS := goplugin_example
+BOE_DATA_HOME ?= $(HOME)/.local/share/boe
+ALL_GOPLUGINS := example-go/standalone
 
 .PHONY: build_local_cache
 build_local_cache:
 	@echo "Installing composer...";
-	@version=$$(grep "version:" goplugin/manifest.yaml | awk '{print $$2}'); \
-	mkdir -p $(DATA_HOME)/extensions/dym/composer/$$version; \
-	go build -buildmode=c-shared -o libcomposer.so main.go; \
-	mv libcomposer.so $(DATA_HOME)/extensions/dym/composer/$$version/libcomposer.so;
+	@mkdir -p $(BOE_DATA_HOME)/extensions/dym/composer/$(VERSION); \
+		go build -buildmode=c-shared -o libcomposer.so main.go; \
+		mv libcomposer.so $(BOE_DATA_HOME)/extensions/dym/composer/$(VERSION)/libcomposer.so;
 	@for plugin in $(ALL_GOPLUGINS); do \
 		echo "Installing $$plugin..."; \
-		go build -buildmode=plugin -o $$plugin.so ./$$plugin; \
-		plugin_version=$$(grep "version:" $$plugin/manifest.yaml | awk '{print $$2}'); \
-		mkdir -p $(DATA_HOME)/extensions/goplugin/$$plugin/$$plugin_version; \
-		mv $$plugin.so $(DATA_HOME)/extensions/goplugin/$$plugin/$$plugin_version/plugin.so; \
+		cd ../../$$plugin; \
+		plugin_version=$$(grep "version:" manifest.yaml | awk '{print $$2}'); \
+		plugin_name=$$(grep "name:" manifest.yaml | awk '{print $$2}'); \
+		go build -buildmode=plugin -o $$plugin_name.so .; \
+		mkdir -p $(BOE_DATA_HOME)/extensions/goplugin/$$plugin_name/$$plugin_version; \
+		mv $$plugin_name.so $(BOE_DATA_HOME)/extensions/goplugin/$$plugin_name/$$plugin_version/plugin.so; \
 	done

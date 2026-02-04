@@ -25,8 +25,8 @@ GO_TEST_ARGS ?=
 
 # Use a specific go tool invocation that uses the tools module for linters and other tools so that
 # the main go.mod is not polluted with tool dependencies.
-CLI_ROOT := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
-GO_TOOL := go tool -modfile=$(CLI_ROOT)/tools/go.mod
+ROOT     := $(shell git rev-parse --show-toplevel)
+GO_TOOL  := go tool -modfile=$(ROOT)/cli/tools/go.mod
 
 ##@ Build
 
@@ -68,7 +68,7 @@ test-integration: gen-code  ## Run the unit and integration tests
 
 .PHONY: test-e2e
 test-e2e: gen-code  ## Run the end-to-end tests
-	@$(MAKE) -C $(CLI_ROOT)/../extensions build_local_cache
+	@$(MAKE) -C $(ROOT)/extensions/internal/libcomposer build_local_cache
 	@echo "Run e2e tests"
 	@go test $(GO_TEST_ARGS) ./e2e/...
 
@@ -151,7 +151,7 @@ format:  ## Format code.
 	@echo "format => *.go"
 	@$(GO_TOOL) golangci-lint fmt $(GO_FILES)
 	@echo "licenses => **"
-	@$(GO_TOOL) license-eye header fix
+	@$(GO_TOOL) license-eye -c $(ROOT)/.licenserc.yaml header fix
 
 .PHONY: tidy
 tidy:  ## Run go mod tidy.
