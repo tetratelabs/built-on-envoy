@@ -365,34 +365,48 @@
 
 .resource-links {
 	list-style: none;
-	padding: 0;
+	padding: 0 8px;
 	margin: 0;
+	display: flex;
+	flex-direction: row;
+	gap: 12px;
 }
 
 .resource-links li {
-	margin-bottom: 12px;
-}
-
-.resource-links li:last-child {
-	margin-bottom: 0;
+	flex: 1;
 }
 
 .resource-links a {
-	color: var(--primary);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	padding: 12px 16px;
+	border-radius: 8px;
 	text-decoration: none;
 	font-weight: 500;
-	transition: color 0.2s;
+	font-size: 14px;
+	transition: all 0.2s;
+	width: 100%;
 }
 
-.resource-links a:hover {
-	color: var(--primary-light);
-	text-decoration: underline;
+.resource-links a[href*="github"],
+.resource-links a[href="/extensions"] {
+	background: var(--bg);
+	color: var(--primary);
+	border: 1px solid var(--primary);
+}
+
+.resource-links a[href*="github"]:hover,
+.resource-links a[href="/extensions"]:hover {
+	background: var(--primary-ultra-light);
+	color: var(--primary-dark);
+	border-color: var(--primary-dark);
 }
 
 .resource-links a:focus {
 	outline: none;
 	box-shadow: var(--focus-ring);
-	border-radius: 4px;
 }
 
 /* Responsive Styles */
