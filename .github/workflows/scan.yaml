@@ -64,7 +64,7 @@ jobs:
         if: always()  # Always print the report to the stdout.
       - uses: slackapi/slack-github-action@v2.0.0
         id: slack-notify
-        if: ${{ failure() && github.event_name == 'schedule' }}  # Only send notifications for failures scheduled runs.
+        if: ${{ failure() }}  # Only send notifications for failures scheduled runs.
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
