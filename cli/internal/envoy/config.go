@@ -37,6 +37,8 @@ type ConfigGenerationParams struct {
 	DataHome string
 	// Extensions to generate the config for
 	Extensions []*extensions.Manifest
+	// Configs specifies optional JSON config strings for each extension (by index).
+	Configs []string
 }
 
 // RenderConfig renders the Envoy configuration with the given parameters.
@@ -44,8 +46,12 @@ type ConfigGenerationParams struct {
 func RenderConfig(params ConfigGenerationParams) (string, error) {
 	filters := make([]*hcmv3.HttpFilter, 0, len(params.Extensions))
 	clusters := make([]*clusterv3.Cluster, 0)
-	for _, ext := range params.Extensions {
-		resources, err := GenerateFilterConfig(ext, params.DataHome, nil)
+	for i, ext := range params.Extensions {
+		var config string
+		if i < len(params.Configs) {
+			config = params.Configs[i]
+		}
+		resources, err := GenerateFilterConfig(ext, params.DataHome, config)
 		if err != nil {
 			return "", fmt.Errorf("failed to generate filter config for extension %q: %w", ext.Name, err)
 		}
