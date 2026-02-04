@@ -1,0 +1,82 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: Scan
+
+on:
+  # Run scans on all commits and PRs to verify new codes does not introduce new vulnerabilities.
+  push:
+    branches:
+      - main
+      - release-**
+    tags: [ 'v[0-9]+.[0-9]+.[0-9]+**' ]  # Ex. v0.2.0, v0.2.1-rc2
+  pull_request:
+    branches:
+      - main
+      - release-**
+    paths-ignore:
+      - "**/*.md"
+      - "CODEOWNERS"
+  # Run nightly scans to upload any new CVEs to the security advisories
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch: {}
+
+env:
+  GOPROXY: https://proxy.golang.org
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./cli
+    env:
+      TAG: scan
+      OCI_REGISTRY: local
+      GOOS_LIST: linux
+      GOARCH_LIST: amd64
+    steps:
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: amd64
+      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+      - run: make docker
+      - uses: anchore/scan-action@v6
+        id: scan
+        with:
+          image: local/built-on-envoy-cli:scan-amd64
+      - run: |
+          cat ${{ steps.scan.outputs.sarif }}
+          {
+              echo 'REPORT<<EOF'
+              jq -r '"* \(.runs[].tool.driver.rules[]?.shortDescription?.text?)\n"' ${{ steps.scan.outputs.sarif }}
+              echo EOF
+          } >>$GITHUB_OUTPUT
+        id: print-report
+        if: always()  # Always print the report to the stdout.
+      - uses: slackapi/slack-github-action@v2.0.0
+        id: slack-notify
+        if: ${{ failure() && github.event_name == 'schedule' }}  # Only send notifications for failures scheduled runs.
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          payload: |
+            channel: ${{ secrets.SLACK_CHANNEL_ID }}
+            text: ":warning: Vulnerabilities reported by the <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|scan job>:\n```${{ steps.print-report.outputs.REPORT }}```"
+
+      # Do not upload the security advisories on every commit or pull request.
+      # Upload the security advisories only for the nightly scans.
+# Disabled because we don't have Advanced Security in the repository.
+# Enable when teh repo is made public
+#      - uses: github/codeql-action/upload-sarif@v3
+#        if: ${{ always() && github.event_name == 'schedule' }}
+#        with:
+#          sarif_file: ${{ steps.scan.outputs.sarif }}
