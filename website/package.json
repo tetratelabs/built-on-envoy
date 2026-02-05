@@ -20,5 +20,8 @@
   },
   "devDependencies": {
     "@types/node": "^25.0.9"
+  },
+  "overrides": {
+    "lodash-es": "^4.17.23"
   }
 }
