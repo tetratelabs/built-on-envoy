@@ -49,7 +49,7 @@ function formatTypeName(type: string): string {
 							<input
 								type="text"
 								id="search-input"
-								placeholder="Search extensions..."
+								placeholder="Search by name, description, or tags..."
 								aria-label="Search extensions"
 							/>
 						</div>
@@ -85,6 +85,7 @@ function formatTypeName(type: string): string {
 											type={ext.type}
 											description={ext.description}
 											href={`/extensions/${ext.name}`}
+											tags={ext.tags}
 										/>
 									</div>
 								))}
@@ -128,11 +129,13 @@ function formatTypeName(type: string): string {
 					const name = card?.querySelector('h3')?.textContent?.toLowerCase() || '';
 					const description = card?.querySelector('p')?.textContent?.toLowerCase() || '';
 					const type = (card as HTMLElement)?.dataset.type || '';
+					const tags = (card as HTMLElement)?.dataset.tags?.toLowerCase() || '';
 					const categories = (wrapper as HTMLElement).dataset.categories?.split(',') || [];
 
 					const matchesSearch = searchTerm === '' ||
 						name.includes(searchTerm) ||
-						description.includes(searchTerm);
+						description.includes(searchTerm) ||
+						tags.includes(searchTerm);
 					const matchesType = selectedType === '' || type === selectedType;
 					const matchesCategory = selectedCategory === '' || categories.includes(selectedCategory);
 
@@ -163,4 +166,3 @@ function formatTypeName(type: string): string {
 		</script>
 	</body>
 </html>
-
