@@ -15,6 +15,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -178,7 +179,9 @@ func isInsideDir(target, dest string) bool {
 	if err != nil {
 		return false
 	}
-	return !filepath.IsAbs(rel) && len(rel) >= 1 && rel[0] != '.'
+	// Rel returns "." if target equals dest, which is valid.
+	// We only want to block paths traversing up the tree ("..").
+	return !filepath.IsAbs(rel) && !strings.HasPrefix(rel, "..")
 }
 
 // PathTraversalError is returned when an archive contains a path that would
