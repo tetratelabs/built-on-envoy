@@ -14,6 +14,15 @@ HUB ?= ${OCI_REGISTRY}/built-on-envoy
 
 LOADER_IMG ?= ${HUB}/composer-loader:v${VERSION}${IMAGE_NONCE}
 
+# Option to build lite version of the loader.
+LOADER_LITE ?= false
+ifeq ($(strip ${LOADER_LITE}),true)
+LOADER_IMG := ${HUB}/composer-loader-lite:v${VERSION}${IMAGE_NONCE}
+LOADER_BUILD_TAG := "lite"
+else
+LOADER_BUILD_TAG := ""
+endif
+
 PLUGIN_NAME ?= example-go/standalone
 SANITIZED_NAME := $(subst /,-,${PLUGIN_NAME})
 PLUGIN_VERSION ?= $(shell grep "version:" ../../${PLUGIN_NAME}/manifest.yaml | awk '{print $$2}')
@@ -22,13 +31,14 @@ PLUGIN_IMG ?= ${HUB}/composer-plugin:$(SANITIZED_NAME)-v${VERSION}-${PLUGIN_VERS
 # For local development only.
 .PHONY: build_loader
 build_loader:
-	docker build --build-context composer=../.. \
+	docker build --build-context composer=../.. --build-arg BUILD_TAG=${LOADER_BUILD_TAG} \
 	--progress=plain --load -t ${LOADER_IMG} -f ./Dockerfile.loader .
 
 PLATFORMS ?= linux/arm64,linux/amd64
 .PHONY: buildx_loader
 buildx_loader: ## Build and push docker image for the server for cross-platform support
 	docker buildx build --build-context composer=../.. --push --platform=$(PLATFORMS) \
+	  --build-arg BUILD_TAG=${LOADER_BUILD_TAG} \
 	  --tag ${LOADER_IMG} -f ./Dockerfile.loader .
 
 .PHONY: loader_so
