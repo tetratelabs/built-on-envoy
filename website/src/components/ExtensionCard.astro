@@ -1,14 +1,13 @@
 ---
-import { CLI_NAME } from '../constants';
-
 interface Props {
 	name: string;
 	type: string;
 	description: string;
 	href: string;
+	tags?: string[];
 }
 
-const { name, type, description, href } = Astro.props;
+const { name, type, description, href, tags = [] } = Astro.props;
 
 // Helper function to format type names (snake_case to Title Case)
 function formatTypeName(t: string): string {
@@ -20,14 +19,18 @@ function formatTypeName(t: string): string {
 ---
 
 <a href={href} class="extension-card-link">
-	<div class="extension-card" data-type={type}>
+	<div class="extension-card" data-type={type} data-tags={tags.join(',')}>
 		<div class="extension-header">
 			<h3>{name}</h3>
 			<span class={`extension-badge extension-badge--${type}`}>{formatTypeName(type)}</span>
 		</div>
 		<p>{description}</p>
-		<div class="extension-footer">
-			<code>{CLI_NAME} run --extension {name}</code>
-		</div>
+		{tags.length > 0 && (
+			<div class="extension-tags">
+				{tags.map(tag => (
+					<span class="extension-tag">{tag}</span>
+				))}
+			</div>
+		)}
 	</div>
 </a>
