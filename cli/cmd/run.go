@@ -81,6 +81,13 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories) error {
 		Dirs:     dirs,
 	}
 
+	if dirs != nil {
+		// Ensure libcomposer is built before running any extensions that may depend on it.
+		if err := extensions.CheckOrBuildLibComposer(dirs.DataHome); err != nil {
+			return err
+		}
+	}
+
 	downloaded, err := downloadExtensions(ctx, r.OCI.Registry, downloader, r.Extensions)
 	if err != nil {
 		return err
