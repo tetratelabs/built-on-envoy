@@ -13,7 +13,7 @@ ROOT="$(git rev-parse --show-toplevel)"
 
 EXTENSIONS_DIR="${ROOT}/extensions"
 OUTPUT_DIR="${ROOT}/cli/internal/extensions"
-OUTPUT_FILE="${OUTPUT_DIR}/extensions.tar"
+OUTPUT_FILE="${OUTPUT_DIR}/extensions.tar.gz"
 
 echo "Compressing extensions from ${EXTENSIONS_DIR}..."
 
@@ -22,7 +22,7 @@ rm -f "${OUTPUT_FILE}"
 
 # Create tar.gz archive of all extensions
 # Exclude unnecessary files like .git, build artifacts, etc.
-tar -cf "${OUTPUT_FILE}" \
+tar -czf "${OUTPUT_FILE}" \
     -C "${EXTENSIONS_DIR}" \
     --exclude='*.so' \
     --exclude='*.o' \

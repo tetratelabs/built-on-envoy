@@ -6,4 +6,4 @@ out/
 internal/extensions/manifests
 
 # Packaged extensions.
-internal/extensions/extensions.tar
+internal/extensions/extensions.tar.gz

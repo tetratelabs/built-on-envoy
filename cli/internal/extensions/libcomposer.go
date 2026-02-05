@@ -11,11 +11,14 @@
 package extensions
 
 import (
+	"bytes"
 	_ "embed"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/tetratelabs/built-on-envoy/cli/internal/oci"
 )
 
 // LibComposerVersion is the version of the composer extension used in the current build.
@@ -26,7 +29,7 @@ import (
 //go:embed manifests/libcomposer-version.txt
 var LibComposerVersion string
 
-//go:embed extensions.tar
+//go:embed extensions.tar.gz
 var composerExtenionsBytes []byte
 
 // CheckOrBuildLibComposer checks if the libcomposer.so exists in the dataHome directory.
@@ -46,14 +49,11 @@ func CheckOrBuildLibComposer(dataHome string) error {
 		return err
 	}
 	defer func() {
-		err = os.RemoveAll(tempDir)
-		if err != nil {
-			fmt.Printf("warning: failed to remove temp dir %s: %v\n", tempDir, err)
-		}
+		_ = os.RemoveAll(tempDir)
 	}()
 
 	// Write the embedded tar to a temporary file
-	tarPath := filepath.Join(tempDir, "extensions.tar")
+	tarPath := filepath.Join(tempDir, "extensions.tar.gz")
 	err = os.WriteFile(tarPath, composerExtenionsBytes, 0o600)
 	if err != nil {
 		return err
@@ -61,28 +61,14 @@ func CheckOrBuildLibComposer(dataHome string) error {
 
 	composerSrcPath := filepath.Join(tempDir, "extensions")
 
-	// Extract the tar to the temporary directory
-	err = os.MkdirAll(composerSrcPath, 0o750)
-	if err != nil {
-		return err
-	}
-	err = extractTar(tarPath, composerSrcPath)
+	// Create reader from the byte slice
+	dataReader := bytes.NewReader(composerExtenionsBytes)
+	err = oci.ExtractPackage(dataReader, composerSrcPath)
 	if err != nil {
 		return err
 	}
 
 	return buildLibComposer(dataHome, composerSrcPath)
-}
-
-func extractTar(tarPath, destDir string) error {
-	// #nosec G204
-	cmd := exec.Command("tar", "-xf", tarPath, "-C", destDir)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to extract tar %s to %s: %w\nOutput: %s",
-			tarPath, destDir, err, string(output))
-	}
-	return nil
 }
 
 func buildLibComposer(dataHome string, composerSrcPath string) error {
