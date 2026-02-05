@@ -317,7 +317,7 @@ nav a:focus {
 	background: var(--bg);
 	padding: 32px;
 	border-radius: 16px;
-	border: 1px solid var(--border);
+	border: 1px solid var(--border-muted);
 	position: relative;
 	overflow: hidden;
 	transition: all 0.3s ease;
@@ -426,10 +426,13 @@ nav a:focus {
 
 .extension-card {
 	background: var(--bg);
-	border: 1px solid var(--border);
+	border: 1px solid var(--border-muted);
 	border-radius: 12px;
 	padding: 24px;
 	transition: transform 0.2s, box-shadow 0.2s;
+	display: flex;
+	flex-direction: column;
+	height: 100%;
 }
 
 .extension-card:hover {
@@ -486,13 +489,20 @@ nav a:focus {
 	min-height: 40px;
 }
 
-.extension-footer code {
+.extension-tags {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: auto;
+}
+
+.extension-tag {
 	background: var(--bg-muted);
-	padding: 8px 12px;
-	border-radius: 6px;
-	font-size: 12px;
-	display: block;
-	color: var(--text);
+	color: var(--text-muted);
+	font-size: 11px;
+	padding: 3px 8px;
+	border-radius: 4px;
+	font-weight: 500;
 }
 
 .extension-card-link {
@@ -610,7 +620,7 @@ nav a:focus {
 	align-items: center;
 	margin-bottom: 32px;
 	background: var(--bg);
-	border: 1px solid var(--border);
+	border: 1px solid var(--border-muted);
 	border-radius: 16px;
 	padding: 32px;
 }

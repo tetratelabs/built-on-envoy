@@ -159,19 +159,16 @@ function formatTypeName(type: string): string {
 								</div>
 							</div>
 
-							<div class="sidebar-section">
-								<h3>Resources</h3>
-								<ul class="resource-links">
-									<li>
-										<a href={`${GITHUB_REPO}/tree/main/${EXTENSIONS_PATH}/${extension.path}`} target="_blank" rel="noopener noreferrer">
-											View on GitHub →
-										</a>
-									</li>
-									<li>
-										<a href="/extensions">← Back to Catalog</a>
-									</li>
-								</ul>
-							</div>
+							<ul class="resource-links">
+								<li>
+									<a href="/extensions">← Catalog</a>
+								</li>
+								<li>
+									<a href={`${GITHUB_REPO}/tree/main/${EXTENSIONS_PATH}/${extension.path}`} target="_blank" rel="noopener noreferrer">
+										GitHub →
+									</a>
+								</li>
+							</ul>
 						</aside>
 					</div>
 				</div>
