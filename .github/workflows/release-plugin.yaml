@@ -6,9 +6,6 @@
 name: Release Composer Plugin
 
 on:
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       nonce:
@@ -21,7 +18,7 @@ on:
         type: string
 
 env:
-  OCI_REGISTRY: ghcr.io
+  OCI_REGISTRY: ghcr.io/tetratelabs
 
 jobs:
   release-plugin:

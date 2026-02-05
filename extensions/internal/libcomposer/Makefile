@@ -28,11 +28,8 @@ build_loader:
 PLATFORMS ?= linux/arm64,linux/amd64
 .PHONY: buildx_loader
 buildx_loader: ## Build and push docker image for the server for cross-platform support
-	- docker buildx create --name composer-builder --driver-opt network=host
-	- docker buildx use composer-builder
-	- docker buildx build --build-context composer=../.. --push --platform=$(PLATFORMS) \
+	docker buildx build --build-context composer=../.. --push --platform=$(PLATFORMS) \
 	  --tag ${LOADER_IMG} -f ./Dockerfile.loader .
-	- docker buildx rm composer-builder
 
 .PHONY: loader_so
 loader_so: build_loader
@@ -48,12 +45,9 @@ build_plugin:
 
 .PHONY: buildx_plugin
 buildx_plugin: ## Build and push docker image for the plugin for cross-platform support
-	- docker buildx create --name composer-builder --driver-opt network=host
-	- docker buildx use composer-builder
-	- docker buildx build --build-context composer=../.. --push --platform=$(PLATFORMS) \
+	docker buildx build --build-context composer=../.. --push --platform=$(PLATFORMS) \
 	  --tag ${PLUGIN_IMG} -f ./Dockerfile.plugin \
 	  --build-arg PLUGIN_NAME=${PLUGIN_NAME} .
-	- docker buildx rm composer-builder
 
 .PHONY: plugin_so
 plugin_so: build_plugin
