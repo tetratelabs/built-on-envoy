@@ -3,43 +3,54 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-GODYM_IMG ?= builtonenvoy/composer-godym:latest
-
+# This IMAGE_NONCE will be appended to the final image tag if set.
+# It is intended to be used in CI environments to ensure that each image
+# built gets a unique tag.
+IMAGE_NONCE ?= ""
 VERSION ?= 0.2.1
 
-PLUGIN_NAME ?= goplugin_example
-PLUGIN_IMG ?= builtonenvoy/composer-plugin-${PLUGIN_NAME}:latest
+OCI_REGISTRY ?= docker.io/tetratelabs
+HUB ?= ${OCI_REGISTRY}/built-on-envoy
+
+LOADER_IMG ?= ${HUB}/composer-loader:v${VERSION}${IMAGE_NONCE}
+
+PLUGIN_NAME ?= example-go/standalone
+SANITIZED_NAME := $(subst /,-,${PLUGIN_NAME})
+PLUGIN_VERSION ?= $(shell grep "version:" ../../${PLUGIN_NAME}/manifest.yaml | awk '{print $$2}')
+PLUGIN_IMG ?= ${HUB}/composer-plugin:$(SANITIZED_NAME)-v${VERSION}-${PLUGIN_VERSION}${IMAGE_NONCE}
 
 # For local development only.
-.PHONY: build_godym
-build_godym:
-	docker build --progress=plain --load -t ${GODYM_IMG} -f ./Dockerfile.godym .
+.PHONY: build_loader
+build_loader:
+	docker build --build-context composer=../.. \
+	--progress=plain --load -t ${LOADER_IMG} -f ./Dockerfile.loader .
 
 PLATFORMS ?= linux/arm64,linux/amd64
-.PHONY: buildx_godym
-buildx_godym: ## Build and push docker image for the server for cross-platform support
+.PHONY: buildx_loader
+buildx_loader: ## Build and push docker image for the server for cross-platform support
 	- docker buildx create --name composer-builder --driver-opt network=host
 	- docker buildx use composer-builder
-	- docker buildx build --push --platform=$(PLATFORMS) \
-	  --tag ${GODYM_IMG} -f ./Dockerfile.godym .
+	- docker buildx build --build-context composer=../.. --push --platform=$(PLATFORMS) \
+	  --tag ${LOADER_IMG} -f ./Dockerfile.loader .
 	- docker buildx rm composer-builder
 
-.PHONY: godym_so
-godym_so: build_godym
-	docker create --name temp-container ${GODYM_IMG} true
+.PHONY: loader_so
+loader_so: build_loader
+	docker create --name temp-container ${LOADER_IMG} true
 	docker cp temp-container:/libcomposer.so ./libcomposer.so
 	docker rm temp-container
 
 .PHONY: build_plugin
 build_plugin:
-	docker build --progress=plain --load -t ${PLUGIN_IMG} -f ./Dockerfile.plugin \
-		--build-arg PLUGIN_NAME=${PLUGIN_NAME} .
+	docker build --build-context composer=../.. \
+	--progress=plain --load -t ${PLUGIN_IMG} -f ./Dockerfile.plugin \
+	--build-arg PLUGIN_NAME=${PLUGIN_NAME} .
 
 .PHONY: buildx_plugin
 buildx_plugin: ## Build and push docker image for the plugin for cross-platform support
 	- docker buildx create --name composer-builder --driver-opt network=host
 	- docker buildx use composer-builder
-	- docker buildx build --push --platform=$(PLATFORMS) \
+	- docker buildx build --build-context composer=../.. --push --platform=$(PLATFORMS) \
 	  --tag ${PLUGIN_IMG} -f ./Dockerfile.plugin \
 	  --build-arg PLUGIN_NAME=${PLUGIN_NAME} .
 	- docker buildx rm composer-builder
@@ -57,14 +68,14 @@ ALL_GOPLUGINS := example-go/standalone
 build_local_cache:
 	@echo "Installing composer...";
 	@mkdir -p $(BOE_DATA_HOME)/extensions/dym/composer/$(VERSION); \
-		go build -buildmode=c-shared -o libcomposer.so main.go; \
+		CGO_ENABLED=1 go build -buildmode=c-shared -o libcomposer.so main.go; \
 		mv libcomposer.so $(BOE_DATA_HOME)/extensions/dym/composer/$(VERSION)/libcomposer.so;
 	@for plugin in $(ALL_GOPLUGINS); do \
 		echo "Installing $$plugin..."; \
 		cd ../../$$plugin; \
 		plugin_version=$$(grep "version:" manifest.yaml | awk '{print $$2}'); \
 		plugin_name=$$(grep "name:" manifest.yaml | awk '{print $$2}'); \
-		go build -buildmode=plugin -o $$plugin_name.so .; \
+		CGO_ENABLED=1 go build -buildmode=plugin -o $$plugin_name.so .; \
 		mkdir -p $(BOE_DATA_HOME)/extensions/goplugin/$$plugin_name/$$plugin_version; \
 		mv $$plugin_name.so $(BOE_DATA_HOME)/extensions/goplugin/$$plugin_name/$$plugin_version/plugin.so; \
 	done
