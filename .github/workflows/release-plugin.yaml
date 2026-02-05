@@ -6,9 +6,6 @@
 name: Release Composer Plugin
 
 on:
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       nonce:
