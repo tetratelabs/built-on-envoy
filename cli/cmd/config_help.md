@@ -9,6 +9,17 @@ embedding in existing configs).
 You can enable multiple extensions using the `--extension` flag, and also load extensions
 from local directories using `--local` for development and testing purposes.
 
+## Output Flavors
+
+The `--flavor` flag allows you to generate different output formats:
+
+- **Default** (no flag): Complete Envoy bootstrap configuration
+- **eg**: EnvoyPatchPolicy CRD for Envoy Gateway
+
+When using `--flavor=eg`, the command generates a Kubernetes EnvoyPatchPolicy CRD that can be
+applied to an Envoy Gateway deployment. This is useful for integrating extensions with existing
+Envoy Gateway installations.
+
 ## Examples
 
 Generate a complete Envoy configuration with the `example-lua` extension:
@@ -21,6 +32,12 @@ Generate minimal configuration with only extension-generated resources (useful f
 
     ```shell
     boe gen-config --extension example-lua --minimal
+    ```
+
+Generate an EnvoyPatchPolicy CRD for Envoy Gateway:
+
+    ```shell
+    boe gen-config --extension example-lua --flavor=eg
     ```
 
 Generate configuration using a local extension during development:

@@ -45,6 +45,8 @@ Flags:
       --minimal                    Generate configuration with only
                                    extension-generated resources (HTTP filters
                                    and clusters).
+      --flavor=""                  Output flavor (eg: EnvoyGateway
+                                   EnvoyPatchPolicy CRD).
       --listen-port=10000          Port for Envoy listener to accept incoming
                                    traffic.
       --admin-port=9901            Port for Envoy admin interface.
@@ -73,6 +75,7 @@ func TestGenConfig(t *testing.T) {
 	tests := []struct {
 		name     string
 		minimal  bool
+		flavor   string
 		local    []string
 		wantFile string
 	}{
@@ -88,6 +91,12 @@ func TestGenConfig(t *testing.T) {
 			local:    []string{"testdata/input_lua_inline"},
 			wantFile: "testdata/output_full_config.yaml",
 		},
+		{
+			name:     "envoy gateway patch policy",
+			flavor:   "eg",
+			local:    []string{"testdata/input_lua_inline"},
+			wantFile: "testdata/output_envoy_gateway.yaml",
+		},
 	}
 
 	for _, tt := range tests {
@@ -95,6 +104,7 @@ func TestGenConfig(t *testing.T) {
 			var buf bytes.Buffer
 			cmd := &GenConfig{
 				Minimal:    tt.minimal,
+				Flavor:     tt.flavor,
 				AdminPort:  9901,
 				ListenPort: 10000,
 				Local:      tt.local,
