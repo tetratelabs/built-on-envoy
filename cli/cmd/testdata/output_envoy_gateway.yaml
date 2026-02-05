@@ -5,6 +5,7 @@
 #   - POLICY_NAME_PLACEHOLDER: Choose a name for this policy
 #   - GATEWAY_NAME_PLACEHOLDER: The name of your Gateway resource
 #   - LISTENER_NAME_PLACEHOLDER: The listener name (typically in format: namespace/gateway-name/listener-name)
+#   - BOOTSTRAP_CONFIG_PLACEHOLDER: The bootstrap config name (if clusters are present, typically "envoy-gateway-system")
 #
 # For more information about EnvoyPatchPolicy, see:
 #   - https://gateway.envoyproxy.io/docs/tasks/extensibility/envoy-patch-policy/

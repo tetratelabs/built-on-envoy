@@ -27,7 +27,7 @@ import (
 // GenConfig is a command to generate Envoy configuration with specified extensions.
 type GenConfig struct {
 	Minimal    bool     `kong:"help='Generate configuration with only extension-generated resources (HTTP filters and clusters).'"`
-	Flavor     string   `help:"Output flavor (eg: EnvoyGateway EnvoyPatchPolicy CRD)." enum:"eg," default:""`
+	Flavor     string   `help:"Output flavor (use \"eg\" for EnvoyGateway EnvoyPatchPolicy CRD)." enum:"eg," default:""`
 	ListenPort uint32   `help:"Port for Envoy listener to accept incoming traffic." default:"10000"`
 	AdminPort  uint32   `help:"Port for Envoy admin interface." default:"9901"`
 	Extensions []string `name:"extension" help:"Extensions to enable (in the format: \"name\" or \"name:version\")." sep:","`
@@ -198,12 +198,15 @@ func (c *GenConfig) generateEnvoyGatewayConfig(dataHome string) (string, error) 
 	}
 
 	// Add patches for clusters
+	// Note: For clusters, we patch the bootstrap config to add to static_resources
 	for _, cluster := range clusterConfigs {
 		patch := map[string]any{
-			"type": "type.googleapis.com/envoy.config.cluster.v3.Cluster",
-			"name": cluster,
+			"type": "type.googleapis.com/envoy.config.bootstrap.v3.Bootstrap",
+			"name": "BOOTSTRAP_CONFIG_PLACEHOLDER",
 			"operation": map[string]any{
-				"op": "add",
+				"op":    "add",
+				"path":  "/static_resources/clusters/-",
+				"value": cluster,
 			},
 		}
 		jsonPatches = append(jsonPatches, patch)
@@ -243,6 +246,7 @@ func (c *GenConfig) generateEnvoyGatewayConfig(dataHome string) (string, error) 
 #   - POLICY_NAME_PLACEHOLDER: Choose a name for this policy
 #   - GATEWAY_NAME_PLACEHOLDER: The name of your Gateway resource
 #   - LISTENER_NAME_PLACEHOLDER: The listener name (typically in format: namespace/gateway-name/listener-name)
+#   - BOOTSTRAP_CONFIG_PLACEHOLDER: The bootstrap config name (if clusters are present, typically "envoy-gateway-system")
 #
 # For more information about EnvoyPatchPolicy, see:
 #   - https://gateway.envoyproxy.io/docs/tasks/extensibility/envoy-patch-policy/

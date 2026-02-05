@@ -45,7 +45,7 @@ Flags:
       --minimal                    Generate configuration with only
                                    extension-generated resources (HTTP filters
                                    and clusters).
-      --flavor=""                  Output flavor (eg: EnvoyGateway
+      --flavor=""                  Output flavor (use "eg" for EnvoyGateway
                                    EnvoyPatchPolicy CRD).
       --listen-port=10000          Port for Envoy listener to accept incoming
                                    traffic.
