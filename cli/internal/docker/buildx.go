@@ -204,7 +204,7 @@ func buildxBuildAndPush(ctx context.Context, opts *BuildAndPushOptions, builderN
 		"--platform", platformsStr,
 		"--build-arg", "PLUGIN_NAME=" + opts.PluginName,
 		"--tag", opts.ImageRef,
-		"--file", "Dockerfile.plugin",
+		"--file", opts.Dockerfile,
 		"--output", "type=registry,oci-mediatypes=true",
 		"--provenance=false",
 	}
