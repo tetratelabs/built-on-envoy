@@ -90,7 +90,7 @@ func parseExtensionReference(defaultRegistry string, ref string) (repository, ta
 	// If no "/" present, it's a simple extension name
 	if !strings.Contains(ref, "/") {
 		name, version := splitRef(ref)
-		repository = extensions.RepositoryName(defaultRegistry, name)
+		repository = extensions.SourceRepositoryName(defaultRegistry, name)
 		return repository, version, nil
 	}
 

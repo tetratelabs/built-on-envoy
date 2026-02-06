@@ -19,6 +19,8 @@ import (
 	"github.com/docker/docker/client"
 )
 
+var multiPlatformEnvoyBuilder = "built-on-envoy-multi-platform-builder"
+
 // BuildAndPushOptions contains options for building and pushing Docker images.
 type BuildAndPushOptions struct {
 	Context         string   // Extension directory path
@@ -51,6 +53,17 @@ func BuildAndPushImage(ctx context.Context, opts *BuildAndPushOptions) error {
 		}
 	}
 
+	// Deduplicate platforms
+	platformSet := make(map[string]bool)
+	var uniquePlatforms []string
+	for _, p := range opts.Platforms {
+		if !platformSet[p] {
+			platformSet[p] = true
+			uniquePlatforms = append(uniquePlatforms, p)
+		}
+	}
+	opts.Platforms = uniquePlatforms
+
 	// Login to registry if credentials provided
 	if opts.Username != "" || opts.Password != "" {
 		if err := dockerLogin(ctx, opts); err != nil {
@@ -58,34 +71,17 @@ func BuildAndPushImage(ctx context.Context, opts *BuildAndPushOptions) error {
 		}
 	}
 
-	// Create a one-time builder with unique name
-	builderName := generateBuilderName()
-
-	// Create builder
-	if err := createBuilder(ctx, builderName); err != nil {
+	// Create builder if necessary (idempotent)
+	if err := checkOrCreateBuilder(ctx, multiPlatformEnvoyBuilder); err != nil {
 		return fmt.Errorf("failed to create builder: %w", err)
 	}
 
-	// Ensure cleanup happens even on error
-	defer func() {
-		cleanupCtx := context.Background() // Use fresh context for cleanup
-		if err := removeBuilder(cleanupCtx, builderName); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to cleanup builder %s: %v\n", builderName, err)
-		}
-	}()
-
 	// Build and push with buildx
-	if err := buildxBuildAndPush(ctx, opts, builderName); err != nil {
+	if err := buildxBuildAndPush(ctx, opts, multiPlatformEnvoyBuilder); err != nil {
 		return fmt.Errorf("failed to build and push: %w", err)
 	}
 
 	return nil
-}
-
-// generateBuilderName creates a unique builder name.
-func generateBuilderName() string {
-	timestamp := time.Now().Unix()
-	return fmt.Sprintf("boe-builder-%d", timestamp)
 }
 
 // CheckDockerBuildx checks if Docker daemon and buildx are available.
@@ -149,15 +145,22 @@ func dockerLogin(ctx context.Context, opts *BuildAndPushOptions) error {
 	return nil
 }
 
-// createBuilder creates a new buildx builder instance.
-func createBuilder(ctx context.Context, name string) error {
+// checkOrCreateBuilder creates a new buildx builder instance.
+func checkOrCreateBuilder(ctx context.Context, name string) error {
+	// Check if builder already exist and skip creation if it does to avoid
+	// unnecessary overhead.
+	cmd := exec.CommandContext(ctx, "docker", "buildx", "inspect", name)
+	if err := cmd.Run(); err == nil {
+		fmt.Printf("Builder already exists: %s\n", name)
+		return nil // Builder exists, no need to create
+	}
+
 	fmt.Printf("Creating builder: %s\n", name)
 
-	cmd := exec.CommandContext(ctx, "docker", "buildx", "create",
+	cmd = exec.CommandContext(ctx, "docker", "buildx", "create",
 		"--name", name,
 		"--driver", "docker-container",
 		"--bootstrap",
-		"--use",
 	)
 
 	// Suppress output for cleaner logs
@@ -212,31 +215,39 @@ func buildxBuildAndPush(ctx context.Context, opts *BuildAndPushOptions, builderN
 	// Detect git information if available for annotations.
 	gitInfo, _ := DetectGitInfo(ctx, opts.Context)
 
+	annotationPrefix := ""
+	// For multi-platform images, annotations should be prefixed to apply to the index.
+	// For single-platform images, annotations can be applied directly to the manifest.
+	if len(opts.Platforms) > 1 {
+		annotationPrefix = "index,manifest:"
+	}
+
 	// Add OCI annotations
 	timestamp := time.Now().UTC().Format(time.RFC3339)
 	annotations := map[string]string{
-		"org.opencontainers.image.licenses":            opts.License,
-		"org.opencontainers.image.title":               opts.PluginName,
-		"org.opencontainers.image.version":             opts.Version,
-		"org.opencontainers.image.description":         opts.Description,
-		"org.opencontainers.image.created":             timestamp,
-		"org.opencontainers.image.authors":             opts.Author,
-		"io.tetratelabs.built-on-envoy.extension.type": opts.ExtensionType,
+		annotationPrefix + "org.opencontainers.image.licenses":                opts.License,
+		annotationPrefix + "org.opencontainers.image.title":                   opts.PluginName,
+		annotationPrefix + "org.opencontainers.image.version":                 opts.Version,
+		annotationPrefix + "org.opencontainers.image.description":             opts.Description,
+		annotationPrefix + "org.opencontainers.image.created":                 timestamp,
+		annotationPrefix + "org.opencontainers.image.authors":                 opts.Author,
+		annotationPrefix + "io.tetratelabs.built-on-envoy.extension.type":     opts.ExtensionType,
+		annotationPrefix + "io.tetratelabs.built-on-envoy.extension.artifact": "binary",
+	}
+
+	// Add composer version if available
+	if opts.ComposerVersion != "" {
+		annotations[annotationPrefix+"io.tetratelabs.built-on-envoy.extension.composer_version"] = opts.ComposerVersion
 	}
 
 	// Add git information if available
 	if gitInfo != nil {
 		if gitInfo.RemoteURL != "" {
-			annotations["org.opencontainers.image.source"] = gitInfo.RemoteURL
+			annotations[annotationPrefix+"org.opencontainers.image.source"] = gitInfo.RemoteURL
 		}
 		if gitInfo.CommitSHA != "" {
-			annotations["org.opencontainers.image.revision"] = gitInfo.CommitSHA
+			annotations[annotationPrefix+"org.opencontainers.image.revision"] = gitInfo.CommitSHA
 		}
-	}
-
-	// Add composer version if available
-	if opts.ComposerVersion != "" {
-		annotations["io.tetratelabs.built-on-envoy.extension.composer_version"] = opts.ComposerVersion
 	}
 
 	// Add annotation flags
@@ -248,6 +259,8 @@ func buildxBuildAndPush(ctx context.Context, opts *BuildAndPushOptions, builderN
 
 	// Add build context as the last argument
 	args = append(args, opts.Context)
+
+	fmt.Printf("Running buildx with arguments: %s\n", strings.Join(args, " "))
 
 	// #nosec G204
 	cmd := exec.CommandContext(ctx, "docker", args...)

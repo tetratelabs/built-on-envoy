@@ -28,6 +28,8 @@ func RepositoryName(registry string, name string) string {
 	return registry + "/extension-" + name
 }
 
+// SourceRepositoryName constructs the repository name for an extension source code based
+// on the registry and name.
 func SourceRepositoryName(registry string, name string) string {
 	return registry + "/extension-src-" + name
 }

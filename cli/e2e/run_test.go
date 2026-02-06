@@ -67,13 +67,13 @@ func TestExtensionPull(t *testing.T) {
 
 	// Pull the extension to a local directory
 	tmpDir := t.TempDir()
-	process = internaltesting.RunCLI(t, cliBin, "pull", "src-example-lua", "--path", tmpDir)
+	process = internaltesting.RunCLI(t, cliBin, "pull", "example-lua", "--path", tmpDir)
 	status, err = process.Wait()
 	require.NoError(t, err)
 	require.Equal(t, 0, status.ExitCode())
 
 	// Vefrify the extension has been downloaded
-	manifestFile := fmt.Sprintf("%s/extensions/src-example-lua/1.0.0/manifest.yaml", tmpDir)
+	manifestFile := fmt.Sprintf("%s/extensions/example-lua/1.0.0/manifest.yaml", tmpDir)
 	maniefst, err := extensions.LoadLocalManifest(manifestFile)
 	require.NoError(t, err)
 	require.Equal(t, "example-lua", maniefst.Name)

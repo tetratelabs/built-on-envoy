@@ -71,20 +71,20 @@ func TestParseExtensionReference(t *testing.T) {
 		{
 			name:           "simple extension name",
 			input:          "cors",
-			wantRepository: extensions.DefaultOCIRegistry + "/extension-cors",
+			wantRepository: extensions.DefaultOCIRegistry + "/extension-src-cors",
 			wantTag:        "latest",
 		},
 		{
 			name:            "simple extension name with custom default registry",
 			input:           "cors",
 			defaultRegistry: "localhost:5000",
-			wantRepository:  "localhost:5000/extension-cors",
+			wantRepository:  "localhost:5000/extension-src-cors",
 			wantTag:         "latest",
 		},
 		{
 			name:           "simple extension name with hyphen",
 			input:          "request-logger",
-			wantRepository: extensions.DefaultOCIRegistry + "/extension-request-logger",
+			wantRepository: extensions.DefaultOCIRegistry + "/extension-src-request-logger",
 			wantTag:        "latest",
 		},
 		{

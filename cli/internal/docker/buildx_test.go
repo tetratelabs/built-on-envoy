@@ -7,7 +7,6 @@ package docker
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -151,20 +150,6 @@ func TestValidatePlatform(t *testing.T) {
 	}
 }
 
-func TestGenerateBuilderName(t *testing.T) {
-	name1 := generateBuilderName()
-	name2 := generateBuilderName()
-
-	// Check format
-	require.True(t, strings.HasPrefix(name1, "boe-builder-"))
-	require.True(t, strings.HasPrefix(name2, "boe-builder-"))
-
-	// Names should be different (unless generated in same second, unlikely)
-	// But we can't assert they're different due to timing
-	require.NotEmpty(t, name1)
-	require.NotEmpty(t, name2)
-}
-
 func TestCheckDockerAvailable(t *testing.T) {
 	ctx := context.Background()
 
@@ -240,7 +225,7 @@ func TestCreateAndRemoveBuilder(t *testing.T) {
 	testBuilderName := "boe-test-builder-" + t.Name()
 
 	// Create builder
-	err := createBuilder(ctx, testBuilderName)
+	err := checkOrCreateBuilder(ctx, testBuilderName)
 	require.NoError(t, err)
 
 	// Cleanup
