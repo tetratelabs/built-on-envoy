@@ -28,15 +28,19 @@ func RepositoryName(registry string, name string) string {
 	return registry + "/extension-" + name
 }
 
-// NameFromRepository extracts the extension name from the repository URL.
-func NameFromRepository(repository string) string {
+func SourceRepositoryName(registry string, name string) string {
+	return registry + "/extension-src-" + name
+}
+
+// NameFromSourceRepository extracts the extension name from the repository URL.
+func NameFromSourceRepository(repository string) string {
 	// repository is like ghcr.io/tetratelabs/built-on-envoy/extension-cors
 	parts := strings.Split(repository, "/")
 	if len(parts) == 0 {
 		return repository
 	}
 	lastPart := parts[len(parts)-1]
-	return strings.TrimPrefix(lastPart, "extension-")
+	return strings.TrimPrefix(lastPart, "extension-src-")
 }
 
 // OCIAnnotationsForManifest generates standard OCI image annotations

@@ -26,7 +26,7 @@ func TestNameFromRepository(t *testing.T) {
 	}{
 		{
 			name:       "full repository URL with extension prefix",
-			repository: "ghcr.io/tetratelabs/built-on-envoy/extension-cors",
+			repository: "ghcr.io/tetratelabs/built-on-envoy/extension-src-cors",
 			want:       "cors",
 		},
 		{
@@ -36,7 +36,7 @@ func TestNameFromRepository(t *testing.T) {
 		},
 		{
 			name:       "simple name with extension prefix",
-			repository: "extension-sample",
+			repository: "extension-src-sample",
 			want:       "sample",
 		},
 		{
@@ -53,7 +53,7 @@ func TestNameFromRepository(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			require.Equal(t, tt.want, NameFromRepository(tt.repository))
+			require.Equal(t, tt.want, NameFromSourceRepository(tt.repository))
 		})
 	}
 }

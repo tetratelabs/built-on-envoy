@@ -126,7 +126,7 @@ func downloadExtensions(ctx context.Context, registry string, downloader *extens
 	downloaded := make([]string, 0, len(refs))
 	for _, ext := range refs {
 		name, tag := splitRef(ext)
-		repository := extensions.RepositoryName(registry, name)
+		repository := extensions.SourceRepositoryName(registry, name)
 		downloadDir, _, err := downloader.Download(ctx, repository, tag, "")
 		if err != nil {
 			return nil, err

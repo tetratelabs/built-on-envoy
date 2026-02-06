@@ -55,6 +55,6 @@ func TestPushPull(t *testing.T) {
 
 	// Pull the extension
 	require.NoError(t, pull.Run(ctx, &xdg.Directories{}))
-	require.FileExists(t, pullDir+"/extensions/src-push-pull/1.0.0/manifest.yaml")
-	require.FileExists(t, pullDir+"/extensions/src-push-pull/1.0.0/plugin/test.lua")
+	require.FileExists(t, pullDir+"/extensions/push-pull/1.0.0/manifest.yaml")
+	require.FileExists(t, pullDir+"/extensions/push-pull/1.0.0/plugin/test.lua")
 }

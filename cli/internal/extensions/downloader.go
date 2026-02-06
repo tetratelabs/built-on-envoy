@@ -43,7 +43,7 @@ func (d *Downloader) Download(ctx context.Context, repository, version, path str
 		}
 	}
 
-	downloadDir := downloadDirectory(path, d.Dirs, NameFromRepository(repository), version)
+	downloadDir := downloadDirectory(path, d.Dirs, NameFromSourceRepository(repository), version)
 	_, digest, err := client.Pull(ctx, version, downloadDir)
 	return downloadDir, digest, err
 }

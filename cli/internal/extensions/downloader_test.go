@@ -170,7 +170,7 @@ func TestDownload(t *testing.T) {
 				},
 			}
 
-			dir, digest, err := d.Download(t.Context(), "ghcr.io/example/extension-myext", tt.version, tt.path)
+			dir, digest, err := d.Download(t.Context(), "ghcr.io/example/extension-src-myext", tt.version, tt.path)
 			require.ErrorIs(t, err, tt.wantErr)
 			require.Equal(t, tt.wantDir, dir)
 			require.Equal(t, tt.wantDigest, digest)

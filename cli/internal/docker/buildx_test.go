@@ -76,9 +76,9 @@ func TestExtractRegistry(t *testing.T) {
 			expected: "docker.io",
 		},
 		{
-			name:     "docker hub org",
+			name:     "unusual registry name without dot or port",
 			imageRef: "myorg/repo:tag",
-			expected: "docker.io",
+			expected: "myorg",
 		},
 		{
 			name:     "custom registry",

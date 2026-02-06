@@ -69,7 +69,7 @@ func (p *Push) Validate() error {
 // AfterApply is called by Kong after applying defaults to set computed default values.
 func (p *Push) AfterApply(*kong.Context) error {
 	// Source code repository: src-<name>
-	p.srcReference = extensions.RepositoryName(p.OCI.Registry, "src-"+p.manifest.Name)
+	p.srcReference = extensions.SourceRepositoryName(p.OCI.Registry, p.manifest.Name)
 
 	// Binary repository: <name> (only if building)
 	if p.Build {
