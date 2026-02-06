@@ -9,11 +9,6 @@ FROM golang:1.25.6 AS builder
 WORKDIR /workspace
 COPY --from=composer . .
 
-# Install necessary tools for cgo
-RUN apt-get update
-RUN apt-get install -y --no-install-recommends \
-    ca-certificates wget git ssh netcat-openbsd gcc build-essential binutils binutils-gold
-
 RUN go mod download all
 ARG NAME
 # Build go plugin
