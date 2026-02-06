@@ -32,7 +32,7 @@ endif
 HUB := ${OCI_REGISTRY}/built-on-envoy
 IMAGE := ${HUB}/${NAME}:v${VERSION}${IMAGE_NONCE}
 
-OS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
+OS := linux
 ARCH := $(shell uname -m)
 ifeq ($(ARCH),x86_64)
   ARCH := amd64
