@@ -52,6 +52,11 @@ Flags:
                            ($BOE_REGISTRY_USERNAME).
       --password=STRING    Password for the OCI registry
                            ($BOE_REGISTRY_PASSWORD).
+      --build              Build and push Docker image with pre-compiled
+                           plugin.so using Docker buildx.
+      --platforms="linux/amd64,linux/arm64"
+                           Target platforms (comma-separated). Supported:
+                           linux/amd64, linux/arm64
 `, internaltesting.WrapHelp(pushHelp))
 
 	require.Equal(t, expected, buf.String())
@@ -61,6 +66,7 @@ func TestPushValidate(t *testing.T) {
 	tests := []struct {
 		name    string
 		local   string
+		build   bool
 		wantErr error
 	}{
 		{
@@ -82,22 +88,36 @@ func TestPushValidate(t *testing.T) {
 			local:   "testdata/invalid_manifest",
 			wantErr: errInvalidManifest,
 		},
+		{
+			name:  "lua extension without build flag",
+			local: "testdata",
+			build: false,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := &Push{Local: tt.local}
+			p := &Push{Local: tt.local, Build: tt.build}
 			err := p.Validate()
 
-			require.ErrorIs(t, err, tt.wantErr)
-
-			if tt.wantErr == nil {
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+			} else {
+				require.NoError(t, err)
 				require.NotNil(t, p.manifest)
 				require.NotEmpty(t, p.manifest.Name)
 				require.NotEmpty(t, p.manifest.Version)
 			}
 		})
 	}
+}
+
+func TestPushValidate_BuildFlagOnlyForComposer(t *testing.T) {
+	// Test that build flag returns error for non-composer types
+	p := &Push{Local: "testdata", Build: true}
+	err := p.Validate()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "--build flag only supported for composer type")
 }
 
 func TestNewOCIClient(t *testing.T) {
