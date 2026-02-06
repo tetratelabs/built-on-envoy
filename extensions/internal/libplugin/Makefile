@@ -64,7 +64,7 @@ buildx: ## Build and push docker image for the plugin for cross-platform support
 		--annotation "index,manifest:org.opencontainers.image.created=${TIMESTAMP}" \
 		--annotation "index,manifest:org.opencontainers.image.revision=${COMMIT_SHA}" \
 		--annotation "index,manifest:org.opencontainers.image.authors=${AUTHOR}" \
-		--annotation "index,manifest:org.opencontainers.image.type=composer" \
+		--annotation "index,manifest:io.tetratelabs.built-on-envoy.extension.type=composer" \
 		--annotation "index,manifest:io.tetratelabs.built-on-envoy.extension.composer_version=${COMPOSER_VERSION}" \
 		--tag ${IMAGE} \
 		--build-arg NAME=${NAME} \

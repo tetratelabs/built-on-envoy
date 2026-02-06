@@ -54,7 +54,7 @@ build:
 	--annotation "org.opencontainers.image.created=${TIMESTAMP}" \
 	--annotation "org.opencontainers.image.revision=${COMMIT_SHA}" \
 	--annotation "org.opencontainers.image.authors=${AUTHOR}" \
-	--annotation "io.tetratelabs.built-on-envoy.extension.type=composer" \
+	--annotation "io.tetratelabs.built-on-envoy.extension.type=dynamic_module" \
 	--annotation "io.tetratelabs.built-on-envoy.extension.composer_version=${COMPOSER_VERSION}" \
 	--progress=plain \
 	-t ${IMAGE}-${OS}-${ARCH} \
@@ -76,7 +76,7 @@ buildx: ## Build and push docker image for the server for cross-platform support
 	  --annotation "index,manifest:org.opencontainers.image.created=${TIMESTAMP}" \
 	  --annotation "index,manifest:org.opencontainers.image.revision=${COMMIT_SHA}" \
 	  --annotation "index,manifest:org.opencontainers.image.authors=${AUTHOR}" \
-	  --annotation "index,manifest:org.opencontainers.image.type=composer" \
+	  --annotation "index,manifest:io.tetratelabs.built-on-envoy.extension.type=dynamic_module" \
 	  --annotation "index,manifest:io.tetratelabs.built-on-envoy.extension.composer_version=${COMPOSER_VERSION}" \
 	  --tag ${IMAGE} \
 	  --build-arg BUILD_TAG=${COMPOSER_BUILD_TAG} \
