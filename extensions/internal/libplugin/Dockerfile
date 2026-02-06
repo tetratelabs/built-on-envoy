@@ -15,9 +15,9 @@ RUN apt-get install -y --no-install-recommends \
     ca-certificates wget git ssh netcat-openbsd gcc build-essential binutils binutils-gold
 
 RUN go mod download all
-ARG PLUGIN_NAME
+ARG NAME
 # Build go plugin
-RUN CGO_ENABLED=1 go build -buildmode=plugin -o plugin.so ./${PLUGIN_NAME}
+RUN CGO_ENABLED=1 go build -buildmode=plugin -o plugin.so ./${NAME}
 
 FROM scratch AS final
 

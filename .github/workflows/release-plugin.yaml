@@ -37,9 +37,8 @@ jobs:
           registry: ${{ env.OCI_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Build and Push Plugin
-        run: |          
-          make -C extensions/internal/libcomposer buildx_plugin \
-            PLUGIN_NAME=${{ inputs.plugin_name }} \
+        run: |
+          make -C extensions/internal/libplugin buildx \
+            NAME=${{ inputs.plugin_name }} \
             IMAGE_NONCE="${{ inputs.nonce }}"

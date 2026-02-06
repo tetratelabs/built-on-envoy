@@ -36,10 +36,10 @@ jobs:
 
       - name: Build and Push Composer
         run: |          
-          make -C extensions/internal/libcomposer buildx_loader \
+          make -C extensions/internal/libcomposer buildx \
             IMAGE_NONCE="${{ github.event.inputs.nonce}}"
       - name: Build and Push Lite Composer
         run: |          
-          make -C extensions/internal/libcomposer buildx_loader \
-            LOADER_LITE=true \
+          make -C extensions/internal/libcomposer buildx \
+            COMPOSER_LITE=true \
             IMAGE_NONCE="${{ github.event.inputs.nonce}}"
