@@ -320,13 +320,6 @@ var supportedPlatforms = map[string]bool{
 	"linux/arm64": true,
 }
 
-// ValidatePlatform validates that the platform is supported.
-func ValidatePlatform(platform string) error {
-	platform = strings.TrimSpace(platform)
-
-	return nil
-}
-
 // CheckDockerAvailable checks if Docker daemon is available.
 func CheckDockerAvailable(ctx context.Context) error {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
@@ -345,10 +338,10 @@ func CheckDockerAvailable(ctx context.Context) error {
 	return nil
 }
 
-// ParsePlatforms parses comma-separated platform string.
+// ParseAndValidatePlatforms parses comma-separated platform string.
 func ParseAndValidatePlatforms(platformStr string) ([]string, error) {
 	platforms := strings.Split(platformStr, ",")
-	var resultMap = make(map[string]bool)
+	resultMap := make(map[string]bool)
 	for _, p := range platforms {
 		p = strings.TrimSpace(p)
 		if p == "" {

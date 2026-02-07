@@ -146,8 +146,8 @@ func (p *Push) buildAndPushImage(ctx context.Context, tag string) error {
 
 	// Write the Dockerfile to the temporary directory
 	dockerfilePath := tempDir + "/Dockerfile"
-	if err := os.WriteFile(dockerfilePath, []byte(goPluginBuildDockerfile), 0o600); err != nil {
-		return fmt.Errorf("failed to write Dockerfile: %w", err)
+	if writeDockerFileError := os.WriteFile(dockerfilePath, []byte(goPluginBuildDockerfile), 0o600); writeDockerFileError != nil {
+		return fmt.Errorf("failed to write Dockerfile: %w", writeDockerFileError)
 	}
 
 	// Build and push
