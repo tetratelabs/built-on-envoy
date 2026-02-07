@@ -8,14 +8,21 @@ package docker
 import (
 	"context"
 	"flag"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/go-git/go-git/v6"
+	"github.com/go-git/go-git/v6/config"
+	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/stretchr/testify/require"
+
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 
@@ -202,6 +209,7 @@ func TestCheckOrCreateBuilder(t *testing.T) {
 	require.NoError(t, err)
 
 	// Print the builder context for debugging
+	// #nosec G204
 	cmd := exec.CommandContext(ctx, "docker", "builder", "inspect", testBuilderName)
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err)
@@ -233,7 +241,7 @@ func TestCheckOrCreateBuilder_WithCustomConfig(t *testing.T) {
 [registry."registry.local:5000"]
   http = true
   insecure = true
-`), 0o644)
+`), 0o600)
 	require.NoError(t, err)
 
 	// Create a test builder
@@ -244,6 +252,7 @@ func TestCheckOrCreateBuilder_WithCustomConfig(t *testing.T) {
 	require.NoError(t, err)
 
 	// Print the builder context for debugging
+	// #nosec G204
 	cmd := exec.CommandContext(ctx, "docker", "builder", "inspect", testBuilderName)
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err)
@@ -284,43 +293,51 @@ func TestCheckOrCreateBuilder_Idempotent(t *testing.T) {
 }
 
 func TestGitInfo(t *testing.T) {
-	// Check if `git` command is available
-	_, err := exec.LookPath("git")
-	if err != nil {
-		t.Skip("git command not available, skipping TestGitInfo")
-	}
-	ctx := context.Background()
-
 	tempDir1 := t.TempDir()
-	gitInfo := detectGitInfo(ctx, tempDir1)
+	gitInfo := detectGitInfo(tempDir1)
 
 	require.NotNil(t, gitInfo)
 	require.Empty(t, gitInfo.RemoteURL)
 	require.Empty(t, gitInfo.CommitSHA)
 
 	// Initialize a git repository and make a commit
-	err = exec.Command("git", "init").Run()
+	r, err := git.PlainInit(tempDir1, false)
 	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(tempDir1, "file.txt"), []byte("test"), 0o644)
+
+	w, err := r.Worktree()
 	require.NoError(t, err)
-	err = exec.Command("git", "add", "file.txt").Run()
+
+	err = os.WriteFile(filepath.Join(tempDir1, "file.txt"), []byte("test"), 0o600)
 	require.NoError(t, err)
-	err = exec.Command("git", "commit", "-m", "test commit").Run()
+
+	_, err = w.Add("file.txt")
+	require.NoError(t, err)
+
+	_, err = w.Commit("test commit", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "John Doe",
+			Email: "john@doe.org",
+			When:  time.Now(),
+		},
+	})
 	require.NoError(t, err)
 
 	// Detect git info again
-	gitInfo = detectGitInfo(ctx, tempDir1)
+	gitInfo = detectGitInfo(tempDir1)
 	require.NotNil(t, gitInfo)
 	require.Empty(t, gitInfo.RemoteURL)
 
 	require.NotEmpty(t, gitInfo.CommitSHA)
 
 	// Add a remote and detect again
-	err = exec.Command("git", "remote", "add", "origin", "https://github.com/example/repo.git").Run()
+	_, err = r.CreateRemote(&config.RemoteConfig{
+		Name: "origin",
+		URLs: []string{"https://github.com/example/repo.git"},
+	})
 	require.NoError(t, err)
 
 	// Detect git info again
-	gitInfo = detectGitInfo(ctx, tempDir1)
+	gitInfo = detectGitInfo(tempDir1)
 	require.NotNil(t, gitInfo)
 	require.Equal(t, "https://github.com/example/repo.git", gitInfo.RemoteURL)
 	require.NotEmpty(t, gitInfo.CommitSHA)
@@ -369,8 +386,8 @@ func TestDockerLogin(t *testing.T) {
 	t.Cleanup(func() { _ = container.Terminate(ctx) })
 
 	// Skip if Docker not available
-	if err := CheckDockerAvailable(ctx); err != nil {
-		t.Skipf("Docker not available: %v", err)
+	if checkDockerErr := CheckDockerAvailable(ctx); checkDockerErr != nil {
+		t.Skipf("Docker not available: %v", checkDockerErr)
 	}
 
 	// Test with invalid credentials to trigger error path
@@ -416,18 +433,28 @@ func TestBuildAndPushImage(t *testing.T) {
 COPY plugin.so /plugin.so
 `
 	dockerfilePath := filepath.Join(tmpDir, "Dockerfile")
-	require.NoError(t, os.WriteFile(dockerfilePath, []byte(dockerfile), 0o644), "failed to write Dockerfile")
+	require.NoError(t, os.WriteFile(dockerfilePath, []byte(dockerfile), 0o600), "failed to write Dockerfile")
+
+	// Check host architecture to speed up the test by skipping unsupported architectures
+	var platforms string
+	switch runtime.GOARCH {
+	case "amd64":
+		platforms = "linux/amd64"
+	default:
+		platforms = "linux/arm64"
+	}
 
 	// Create a dummy plugin.so file
 	pluginPath := filepath.Join(tmpDir, "plugin.so")
-	require.NoError(t, os.WriteFile(pluginPath, []byte("dummy"), 0o644), "failed to write dummy plugin.so")
+	require.NoError(t, os.WriteFile(pluginPath, []byte("dummy"), 0o600), "failed to write dummy plugin.so")
 
 	opts := &BuildAndPushOptions{
 		Context:    tmpDir,
 		PluginName: "test-plugin",
 		// Use a local registry or skip push
 		ImageRef:      buildkitRegistry + "/test-plugin:test",
-		Platforms:     []string{"linux/amd64"}, // Single platform to speed up
+		Insecure:      true,
+		Platforms:     []string{platforms}, // Single platform to speed up
 		Dockerfile:    dockerfilePath,
 		Version:       "1.0.0-test",
 		Description:   "Test plugin",
@@ -436,34 +463,22 @@ COPY plugin.so /plugin.so
 		ExtensionType: "wasm",
 	}
 
-	// Create a builder with randome name to make sure it's unique.
-	builderName := "boe-test-builder-" + t.Name() + "-" + time.Now().Format("20060102150405")
-	configPath := filepath.Join(tmpDir, "buildkitd.toml")
-	err = os.WriteFile(configPath, []byte(`
-[registry."`+buildkitRegistry+`"]
-  http = true
-  insecure = true
-`), 0o644)
-	require.NoError(t, err)
-	err = checkOrCreateBuilder(ctx, builderName, configPath)
-	require.NoError(t, err, "failed to create builder with custom config")
-	defer func() {
-		_ = removeBuilder(ctx, builderName)
-	}()
-
-	ctxWithBuilder := context.WithValue(ctx, customBuilderNameKey, builderName)
-
 	// Note: This will fail without a local registry, but tests the code path
-	err = BuildAndPushImage(ctxWithBuilder, opts)
-	require.NoError(t, err, "BuildAndPushImage failed")
+	buildAndPushErr := BuildAndPushImage(ctx, opts)
+	require.NoError(t, buildAndPushErr, "BuildAndPushImage failed")
 
 	// Check if the image was pushed to the registry by inspecting the registry
-	cmd := exec.CommandContext(ctx, "curl", "-H", "Accept: application/vnd.oci.image.manifest.v1+json",
-		"-s", registry+"/v2/test-plugin/manifests/test")
-	output, err := cmd.CombinedOutput()
-	t.Logf("Registry response for pushed image: %s", string(output))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+registry+"/v2/test-plugin/manifests/test", nil)
+	require.NoError(t, err)
+	req.Header.Set("Accept", "application/vnd.oci.image.manifest.v1+json")
 
+	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err, "failed to query registry for pushed image")
+	defer resp.Body.Close()
+
+	output, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	t.Logf("Registry response for pushed image: %s", string(output))
 	// Check if the response contains the expected image reference
 	require.Contains(t, string(output), `"org.opencontainers.image.description": "Test plugin"`)
 }

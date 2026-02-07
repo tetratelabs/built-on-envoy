@@ -13,13 +13,14 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
 	"github.com/docker/docker/client"
+	"github.com/go-git/go-git/v6"
 )
-
-var customBuilderNameKey = "customMultiPlatformBuilderName"
 
 // BuildAndPushOptions contains options for building and pushing Docker images.
 type BuildAndPushOptions struct {
@@ -74,7 +75,18 @@ func BuildAndPushImage(ctx context.Context, opts *BuildAndPushOptions) error {
 	}
 
 	// Build and push with buildx
-	if err := buildxBuildAndPush(ctx, opts, getCustomBuilderName(ctx)); err != nil {
+	builderName, err := getCustomBuilderName(ctx, opts)
+	if err != nil {
+		return fmt.Errorf("failed to get custom builder name: %w", err)
+	}
+	if builderName != "" {
+		// Ensure builder is removed after use.
+		defer func() {
+			_ = removeBuilder(ctx, builderName)
+		}()
+	}
+
+	if err := buildxBuildAndPush(ctx, opts, builderName); err != nil {
 		return fmt.Errorf("failed to build and push: %w", err)
 	}
 
@@ -189,17 +201,39 @@ func removeBuilder(ctx context.Context, name string) error {
 	return nil
 }
 
-// Get custom builder name from context for testing purposes.
-// In production, we use a default builder and default configuration from host.
-func getCustomBuilderName(ctx context.Context) string {
+// Create a custom one time builder is insecure is set to ensure the buildkit
+// daemon is configured to allow related insecure registries.
+// TODO(wbpcode): maybe we should reuse developers' docker configuration and
+// only create custom builders for testing?
+func getCustomBuilderName(ctx context.Context, opts *BuildAndPushOptions) (string, error) {
 	builderName := ""
 	// Check for custom builder name in context (used for testing)
-	if ctx != nil {
-		if v := ctx.Value(customBuilderNameKey); v != nil {
-			builderName = v.(string)
+	if opts.Insecure {
+		builderName = "boe-insecure-builder-" + time.Now().Format("20060102150405")
+		tmpDir, err := os.MkdirTemp("/tmp", "boe-builder-config")
+		if err != nil {
+			return "", fmt.Errorf("failed to create temporary directory for builder config: %w", err)
+		}
+		defer func() {
+			_ = os.RemoveAll(tmpDir)
+		}()
+
+		// Configure buildkitd to allow insecure registry access
+		registry := extractRegistry(opts.ImageRef)
+		configPath := filepath.Join(tmpDir, "buildkitd.toml")
+		writeFileError := os.WriteFile(configPath, []byte(`
+[registry."`+registry+`"]
+  http = true
+  insecure = true
+`), 0o600)
+		if writeFileError != nil {
+			return "", fmt.Errorf("failed to write buildkit config: %w", writeFileError)
+		}
+		if err := checkOrCreateBuilder(ctx, builderName, configPath); err != nil {
+			return "", err
 		}
 	}
-	return builderName
+	return builderName, nil
 }
 
 // buildxBuildAndPush builds and pushes image using docker buildx.
@@ -221,6 +255,10 @@ func buildxBuildAndPush(ctx context.Context, opts *BuildAndPushOptions, builderN
 		"--output", "type=registry,oci-mediatypes=true",
 		"--provenance=false",
 	}
+	if runtime.GOOS == "linux" {
+		args = append(args, "--add-host", "host.docker.internal:host-gateway")
+	}
+
 	// If builderName is provided (e.g., in tests), use it. Otherwise, rely on default builder
 	// which should be pre-configured on host.
 	if builderName != "" {
@@ -228,7 +266,7 @@ func buildxBuildAndPush(ctx context.Context, opts *BuildAndPushOptions, builderN
 	}
 
 	// Detect git information if available for annotations.
-	gitInfo := detectGitInfo(ctx, opts.Context)
+	gitInfo := detectGitInfo(opts.Context)
 
 	// Get the appropriate annotation prefix based on platform count
 	annotationPrefix := AnnotationPrefix(len(opts.Platforms))
@@ -348,19 +386,26 @@ type GitInfo struct {
 }
 
 // detectGitInfo attempts to detect git repository information from the given directory.
-func detectGitInfo(ctx context.Context, dir string) GitInfo {
+func detectGitInfo(dir string) GitInfo {
 	info := GitInfo{}
 
+	r, err := git.PlainOpenWithOptions(dir, &git.PlainOpenOptions{
+		DetectDotGit: true,
+	})
+	if err != nil {
+		return info
+	}
+
 	// Get remote URL
-	remoteCmd := exec.CommandContext(ctx, "git", "-C", dir, "config", "--get", "remote.origin.url")
-	if output, err := remoteCmd.Output(); err == nil {
-		info.RemoteURL = strings.TrimSpace(string(output))
+	if remote, err := r.Remote("origin"); err == nil {
+		if urls := remote.Config().URLs; len(urls) > 0 {
+			info.RemoteURL = urls[0]
+		}
 	}
 
 	// Get commit SHA
-	commitCmd := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "HEAD")
-	if output, err := commitCmd.Output(); err == nil {
-		info.CommitSHA = strings.TrimSpace(string(output))
+	if head, err := r.Head(); err == nil {
+		info.CommitSHA = head.Hash().String()
 	}
 
 	// Return info even if partially populated

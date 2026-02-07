@@ -86,12 +86,13 @@ func (p *Push) AfterApply(*kong.Context) error {
 func (p *Push) Run(ctx context.Context) error {
 	tag := p.manifest.Version
 
-	// Step 1: Push source code (always)
-	fmt.Printf("Pushing source extension %q (%s)...\n", "src-"+p.manifest.Name, tag)
-	if err := p.pushSource(ctx, tag); err != nil {
-		return err
+	// Step 1: Push source code (always unless --build is set)
+	if !p.Build {
+		fmt.Printf("Pushing source extension %q (%s)...\n", "src-"+p.manifest.Name, tag)
+		if err := p.pushSource(ctx, tag); err != nil {
+			return err
+		}
 	}
-
 	// Step 2: Build and push Docker image (if --build flag set)
 	if p.Build {
 		fmt.Printf("\nBuilding and pushing pre-compiled extension %q (%s)...\n", p.manifest.Name, tag)
