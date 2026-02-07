@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -46,24 +47,6 @@ func BuildAndPushImage(ctx context.Context, opts *BuildAndPushOptions) error {
 	if err := CheckDockerBuildx(ctx); err != nil {
 		return err
 	}
-
-	// Validate platforms
-	for _, platform := range opts.Platforms {
-		if err := ValidatePlatform(platform); err != nil {
-			return err
-		}
-	}
-
-	// Deduplicate platforms
-	platformSet := make(map[string]bool)
-	var uniquePlatforms []string
-	for _, p := range opts.Platforms {
-		if !platformSet[p] {
-			platformSet[p] = true
-			uniquePlatforms = append(uniquePlatforms, p)
-		}
-	}
-	opts.Platforms = uniquePlatforms
 
 	// Login to registry if credentials provided
 	// TODO(wbpcode): do we need to do this? Ideally we should resuse existing docker credentials
@@ -341,10 +324,6 @@ var supportedPlatforms = map[string]bool{
 func ValidatePlatform(platform string) error {
 	platform = strings.TrimSpace(platform)
 
-	if !supportedPlatforms[platform] {
-		return fmt.Errorf("unsupported platform: %s (supported: linux/amd64, linux/arm64)", platform)
-	}
-
 	return nil
 }
 
@@ -367,16 +346,26 @@ func CheckDockerAvailable(ctx context.Context) error {
 }
 
 // ParsePlatforms parses comma-separated platform string.
-func ParsePlatforms(platformStr string) []string {
+func ParseAndValidatePlatforms(platformStr string) ([]string, error) {
 	platforms := strings.Split(platformStr, ",")
-	var result []string
+	var resultMap = make(map[string]bool)
 	for _, p := range platforms {
 		p = strings.TrimSpace(p)
-		if p != "" {
-			result = append(result, p)
+		if p == "" {
+			continue
 		}
+		if !supportedPlatforms[p] {
+			return nil, fmt.Errorf("unsupported platform: %s (supported: linux/amd64, linux/arm64)", p)
+		}
+		resultMap[p] = true
 	}
-	return result
+	var result []string
+	for p := range resultMap {
+		result = append(result, p)
+	}
+	// Sort the result for consistency
+	sort.Strings(result)
+	return result, nil
 }
 
 // GitInfo contains git repository information.

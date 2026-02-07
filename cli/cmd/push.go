@@ -152,7 +152,10 @@ func (p *Push) buildAndPushImage(ctx context.Context, tag string) error {
 
 	// Build and push
 	imageRef := p.reference + ":" + tag
-	platforms := docker.ParsePlatforms(p.Platforms)
+	platforms, err := docker.ParseAndValidatePlatforms(p.Platforms)
+	if err != nil {
+		return fmt.Errorf("invalid platforms: %w", err)
+	}
 
 	opts := &docker.BuildAndPushOptions{
 		Context:         p.Local,

@@ -26,11 +26,12 @@ import (
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 
-func TestParsePlatforms(t *testing.T) {
+func TestParseAndValidatePlatforms(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
 		expected []string
+		error    bool
 	}{
 		{
 			name:     "single platform",
@@ -62,12 +63,27 @@ func TestParsePlatforms(t *testing.T) {
 			input:    "linux/amd64,linux/arm64,linux/amd64",
 			expected: []string{"linux/amd64", "linux/arm64"},
 		},
+		{
+			name:  "invalid platform",
+			input: "linux/amd64,windows/amd64",
+			error: true,
+		},
+		{
+			name:  "all invalid platforms",
+			input: "windows/amd64,darwin/arm64",
+			error: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ParsePlatforms(tt.input)
-			require.Equal(t, tt.expected, result)
+			result, err := ParseAndValidatePlatforms(tt.input)
+			if tt.error {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tt.expected, result)
+			}
 		})
 	}
 }
@@ -109,62 +125,6 @@ func TestExtractRegistry(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := extractRegistry(tt.imageRef)
 			require.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestValidatePlatform(t *testing.T) {
-	tests := []struct {
-		name     string
-		platform string
-		wantErr  bool
-	}{
-		{
-			name:     "valid linux/amd64",
-			platform: "linux/amd64",
-			wantErr:  false,
-		},
-		{
-			name:     "valid linux/arm64",
-			platform: "linux/arm64",
-			wantErr:  false,
-		},
-		{
-			name:     "invalid - linux/arm/v7 not supported",
-			platform: "linux/arm/v7",
-			wantErr:  true,
-		},
-		{
-			name:     "invalid - linux/386",
-			platform: "linux/386",
-			wantErr:  true,
-		},
-		{
-			name:     "invalid - windows/amd64",
-			platform: "windows/amd64",
-			wantErr:  true,
-		},
-		{
-			name:     "invalid - empty",
-			platform: "",
-			wantErr:  true,
-		},
-		{
-			name:     "valid with whitespace",
-			platform: " linux/amd64 ",
-			wantErr:  false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := ValidatePlatform(tt.platform)
-			if tt.wantErr {
-				require.Error(t, err)
-				require.Contains(t, err.Error(), "unsupported platform")
-			} else {
-				require.NoError(t, err)
-			}
 		})
 	}
 }
@@ -341,28 +301,6 @@ func TestGitInfo(t *testing.T) {
 	require.NotNil(t, gitInfo)
 	require.Equal(t, "https://github.com/example/repo.git", gitInfo.RemoteURL)
 	require.NotEmpty(t, gitInfo.CommitSHA)
-}
-
-// Test platform validation in BuildAndPushImage context
-func TestBuildAndPushImage_InvalidPlatform(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test in short mode")
-	}
-
-	ctx := context.Background()
-
-	opts := &BuildAndPushOptions{
-		Context:    ".",
-		PluginName: "test",
-		ImageRef:   "test:v1",
-		Platforms:  []string{"invalid/platform"},
-		Dockerfile: "Dockerfile",
-		Version:    "1.0.0",
-	}
-
-	err := BuildAndPushImage(ctx, opts)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "unsupported platform")
 }
 
 // Test supportedPlatforms map
