@@ -7,14 +7,18 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"runtime"
 	"testing"
 
 	"github.com/alecthomas/kong"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tetratelabs/built-on-envoy/cli/internal/docker"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
+	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
 func TestParseCmdPushHelp(t *testing.T) {
@@ -214,4 +218,53 @@ func TestPushAfterApply_WithBuild(t *testing.T) {
 	// Should fail validation because testdata is not composer type
 	err := p.Validate()
 	require.Error(t, err)
+}
+
+func TestPushLocalGoExtension(t *testing.T) {
+	dataDir := t.TempDir()
+
+	ctx := t.Context()
+
+	checkDockerBuildxErr := docker.CheckDockerBuildx(ctx)
+	if checkDockerBuildxErr != nil {
+		t.Skipf("Skipping test because Docker Buildx is not available: %v", checkDockerBuildxErr)
+	}
+
+	// Create a brand new extension
+	c := &Create{
+		Name: "go-e2e",
+		Path: dataDir,
+		Type: string(extensions.TypeComposer),
+	}
+	require.NoError(t, c.Run(&xdg.Directories{DataHome: dataDir}), "failed to create extension")
+
+	// Start a local OCI registry
+	container, registry, err := internaltesting.StartOCIRegistry(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = container.Terminate(ctx) })
+
+	// Check host architecture to speed up the test to avoid qemu overhead
+	// for unsupported architectures
+	var platforms string
+	switch runtime.GOARCH {
+	case "amd64":
+		platforms = "linux/amd64"
+	default:
+		platforms = "linux/arm64"
+	}
+
+	p := &Push{
+		Local: dataDir + "/go-e2e",
+		Build: true,
+		OCI: OCIFlags{
+			Registry: registry + "/test",
+			Insecure: true,
+		},
+		Platforms: platforms,
+	}
+	_ = p.Validate()
+	_ = p.AfterApply(nil)
+
+	ctxWithDryRun := context.WithValue(ctx, docker.ExtensionBuildxDryRun{}, true)
+	_ = p.Run(ctxWithDryRun)
 }

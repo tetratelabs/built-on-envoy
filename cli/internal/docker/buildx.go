@@ -22,6 +22,9 @@ import (
 	"github.com/go-git/go-git/v6"
 )
 
+// ExtensionBuildxDryRun for testing to skip actual buildx execution to avoid take long time.
+type ExtensionBuildxDryRun struct{}
+
 // BuildAndPushOptions contains options for building and pushing Docker images.
 type BuildAndPushOptions struct {
 	Context         string   // Extension directory path
@@ -291,8 +294,10 @@ func buildxBuildAndPush(ctx context.Context, opts *BuildAndPushOptions, builderN
 	// Set working directory to context
 	cmd.Dir = opts.Context
 
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("buildx build failed: %w", err)
+	if ctx.Value(ExtensionBuildxDryRun{}) == nil {
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("buildx build failed: %w", err)
+		}
 	}
 
 	fmt.Printf("\n✓ Successfully pushed multi-platform image: %s\n", opts.ImageRef)
