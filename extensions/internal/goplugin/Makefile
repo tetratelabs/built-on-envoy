@@ -3,43 +3,32 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-BUF      := github.com/bufbuild/buf/cmd/buf@v1.31.0
+BUF      := github.com/bufbuild/buf/cmd/buf@v1.65.0
 SHELL    := /bin/bash
 repo_dir := $(shell git rev-parse --show-toplevel)
 
-########################
-# Setup
-########################
-
 .PHONY: all
-all: gen
+all: lint gen test
+
+.PHONY: lint
+lint:
+	@echo "Linting protos..."
+	@go run $(BUF) lint
 
 .PHONY: gen
-gen: buf
-
-#####################
-# proto generation
-#####################
-
-# This is a warning we want to ignore and silently drop from the output. It appears when running buf
-# on some paths but not all of them, and warns about missing dependencies that are not actually missing.
-dep_warning := "is not found in your local files or direct dependencies, but is found in the transitive dependency"
-
-.PHONY: buf
-buf:
+gen:
 	@echo "Building protos..."
 	@go run $(BUF) build
 
 	@echo "Generating Go code..."
 	@go run $(BUF) generate --template buf.gen.go.yaml
 
-#####################
-# Cleanup
-#####################
+.PHONY: test
+test:
+	@echo "Running tests..."
+	@go test ./...
 
 .PHONY: clean
 clean:
 	@echo "Cleaning generated code..."
-	@find . -name '*.gen.go' -delete
-	@find . -name '*.gen.json' -delete
-	@find . -name '*.pb.*' -delete
+	@rm -f *.pb.*

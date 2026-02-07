@@ -11,6 +11,7 @@ COPY --from=composer . .
 
 RUN go mod download all
 ARG EXTENSION_PATH=""
+
 # Build go plugin
 RUN CGO_ENABLED=1 go build -buildmode=plugin -o plugin.so ./${EXTENSION_PATH}
 

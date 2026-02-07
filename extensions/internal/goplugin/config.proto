@@ -5,21 +5,18 @@
 
 syntax = "proto3";
 
-package composer.dym.plugins.goplugin;
+package builtonenvoy.extensions.goplugin;
 
-import "google/api/annotations.proto";
 import "google/protobuf/struct.proto";
-import "google/protobuf/wrappers.proto";
 
-option go_package = "github.com/tetrateio/extensibility/composer/dym/plugins/goplugin";
+option go_package = "github.com/tetratelabs/built-on-envoy/extensions/goplugin";
 
+// Configuration for the Go plugin loader.
 message GoPlugin {
   // Name of the dynamic module plugin
   string name = 1;
-
   // Plugin configuration
   google.protobuf.Struct config = 2;
-
   // URL to fetch the plugin if it is a custom plugin
   string url = 3;
 }

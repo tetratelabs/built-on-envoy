@@ -7,7 +7,7 @@
 # It is intended to be used in CI environments to ensure that each image
 # built gets a unique tag.
 IMAGE_NONCE ?= ""
-OCI_REGISTRY ?= docker.io/tetratelabs
+OCI_REGISTRY ?= ghcr.io/tetratelabs
 ifndef EXTENSION_PATH
 $(error The EXTENSION_PATH variable should be set)
 endif
@@ -24,6 +24,22 @@ COMPOSER_VERSION := $(shell grep "^composerVersion:" ../../${EXTENSION_PATH}/man
 HUB := ${OCI_REGISTRY}/built-on-envoy
 IMAGE := ${HUB}/extension-${NAME}:${VERSION}${IMAGE_NONCE}
 
+OCI_METADATA := \
+	"org.opencontainers.image.source=https://$(subst ghcr.io.,github.com,$(HUB))" \
+	"org.opencontainers.image.licenses=Apache-2.0" \
+	"org.opencontainers.image.title=${NAME}" \
+	"org.opencontainers.image.version=${VERSION}" \
+	"org.opencontainers.image.description=${DESCRIPTION}" \
+	"org.opencontainers.image.created=${TIMESTAMP}" \
+	"org.opencontainers.image.revision=${COMMIT_SHA}" \
+	"org.opencontainers.image.authors=${AUTHOR}" \
+	"io.tetratelabs.built-on-envoy.extension.type=composer" \
+	"io.tetratelabs.built-on-envoy.extension.composer_version=${COMPOSER_VERSION}"
+
+BUILD_ANNOTATIONS        := $(subst "org.,--annotation "org.,$(subst "io.,--annotation "io.,$(OCI_METADATA)))
+BUILDX_ANNOTATION_PREFIX := index,manifest:
+BUILDX_ANNOTATIONS       := $(subst --annotation ",--annotation "$(BUILDX_ANNOTATION_PREFIX),$(BUILD_ANNOTATIONS))
+
 OS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 ARCH := $(shell uname -m)
 ifeq ($(ARCH),x86_64)
@@ -38,16 +54,8 @@ build:
 	docker buildx build --build-context composer=../.. \
 		--output type=registry,oci-mediatypes=true \
 		--provenance=false \
-		--annotation "org.opencontainers.image.source=https://github.com/tetratelabs/built-on-envoy" \
-		--annotation "org.opencontainers.image.licenses=Apache-2.0" \
-		--annotation "org.opencontainers.image.title=${NAME}" \
-		--annotation "org.opencontainers.image.version=${VERSION}" \
-		--annotation "org.opencontainers.image.description=${DESCRIPTION}" \
-		--annotation "org.opencontainers.image.created=${TIMESTAMP}" \
-		--annotation "org.opencontainers.image.revision=${COMMIT_SHA}" \
-		--annotation "org.opencontainers.image.authors=${AUTHOR}" \
-		--annotation "io.tetratelabs.built-on-envoy.extension.type=composer" \
-		--annotation "io.tetratelabs.built-on-envoy.extension.composer_version=${COMPOSER_VERSION}" \
+		$(BUILD_ANNOTATIONS) \
+		--progress=plain \
 		-t ${IMAGE}-${OS}-${ARCH} \
 		--build-arg EXTENSION_PATH=${EXTENSION_PATH} \
 		-f ./Dockerfile .
@@ -59,18 +67,9 @@ buildx: ## Build and push docker image for the plugin for cross-platform support
 	docker buildx build --build-context composer=../.. --platform=$(PLATFORMS) \
 		--output type=registry,oci-mediatypes=true \
 		--provenance=false \
-		--annotation "index,manifest:org.opencontainers.image.source=https://github.com/tetratelabs/built-on-envoy" \
-		--annotation "index,manifest:org.opencontainers.image.licenses=Apache-2.0" \
-		--annotation "index,manifest:org.opencontainers.image.title=${NAME}" \
-		--annotation "index,manifest:org.opencontainers.image.version=${VERSION}" \
-		--annotation "index,manifest:org.opencontainers.image.description=${DESCRIPTION}" \
-		--annotation "index,manifest:org.opencontainers.image.created=${TIMESTAMP}" \
-		--annotation "index,manifest:org.opencontainers.image.revision=${COMMIT_SHA}" \
-		--annotation "index,manifest:org.opencontainers.image.authors=${AUTHOR}" \
-		--annotation "index,manifest:io.tetratelabs.built-on-envoy.extension.type=composer" \
-		--annotation "index,manifest:io.tetratelabs.built-on-envoy.extension.composer_version=${COMPOSER_VERSION}" \
+		$(BUILDX_ANNOTATIONS) \
 		--tag ${IMAGE} \
-		--build-arg NAME=${NAME} \
+		--build-arg EXTENSION_PATH=${EXTENSION_PATH} \
 		-f ./Dockerfile .
 
 .PHONY: lib_so
