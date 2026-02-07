@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -238,6 +239,9 @@ func buildxBuildAndPush(ctx context.Context, opts *BuildAndPushOptions, builderN
 		"--output", "type=registry,oci-mediatypes=true",
 		"--provenance=false",
 	}
+
+	log.Printf("Running command under platforms: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+
 	if runtime.GOOS == "linux" {
 		// TODO(wbpcode): may use host-gateway in the future when it's more widely supported.
 		args = append(args, "--add-host", "host.docker.internal:172.17.0.1")
