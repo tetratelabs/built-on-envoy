@@ -474,7 +474,7 @@ COPY plugin.so /plugin.so
 
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err, "failed to query registry for pushed image")
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	output, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)

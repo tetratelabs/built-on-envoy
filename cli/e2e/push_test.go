@@ -69,10 +69,10 @@ func TestPushLocalGoExtension(t *testing.T) {
 
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err, "failed to query registry for pushed image")
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	output, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
+	require.NoError(t, err, "failed to read registry response for pushed image")
 	t.Logf("Registry response for pushed image: %s", string(output))
 	// Check if the response contains the expected image reference
 	require.Contains(t, string(output), `"org.opencontainers.image.description": "A custom Go extension."`)
