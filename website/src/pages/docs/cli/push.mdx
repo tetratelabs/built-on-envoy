@@ -24,13 +24,13 @@ package at `extension-<name>:<version>`.
 
 ## Examples
 
-Push a local extension to the default registry:
+Push source code of a local extension to the default registry:
 
     ```shell
     boe push ~/src/my-extension
     ```
 
-Push to a custom OCI registry:
+Push source code to a custom OCI registry:
 
     ```shell
     export BOE_REGISTRY=acme.org/extensions
@@ -46,7 +46,7 @@ Push to a local insecure (HTTP) registry for development:
     boe push ~/src/my-extension --registry localhost:5000 --insecure
     ```
 
-Build and push Docker image with pre-compiled plugin (composer extensions only):
+Build and push Docker image with pre-compiled plugin (composer extensions only and the source code will not be pushed if --build is set):
 
     ```shell
     boe push ~/src/my-plugin --build
@@ -58,55 +58,25 @@ Build for multiple platforms:
     boe push ~/src/my-plugin --build --platforms linux/amd64,linux/arm64
     ```
 
+It's also possible to push pre-compiled images to local unsecured registries, but to ensure buildkit can access the local registry, you may need to replace `localhost` with the host's IP address or `host.docker.internal`:
+
+    ```shell
+    boe push ~/src/my-plugin --build --registry host.docker.internal:5000 --insecure
+    ```
+
 ## Prerequisites for --build
 
 - Docker installed and running
 - Docker Buildx plugin installed (included by default in Docker Desktop and modern Docker Engine)
-- `Dockerfile.plugin` in the extension directory
 
 **Supported Platforms**: Only `linux/amd64` and `linux/arm64` are supported.
-
-The `Dockerfile.plugin` should build the Go plugin. See `extensions/internal/libcomposer/Dockerfile.plugin`
-for a reference implementation.
 
 **OCI Annotations**: Built images include standard OCI annotations with extension metadata:
 - Standard annotations: name, version, description, author, license, creation timestamp
 - Git information: source repository URL and commit SHA (automatically detected if in a git repository)
-- Built-on-Envoy annotations: extension type, composer version
+- Built-on-Envoy annotations: extension type, composer version and so on
 
 Images are created with OCI media types for maximum compatibility.
-
-**Note**: A temporary buildx builder instance is created for each build and automatically cleaned up
-afterward, ensuring no leftover build infrastructure.
-
-## Authentication
-
-Registry credentials can be provided via flags or environment variables:
-
-    ```shell
-    # Using flags (credentials passed securely via stdin)
-    boe push ~/src/my-plugin --build \
-      --username "$REGISTRY_USER" \
-      --password "$REGISTRY_TOKEN"
-    
-    # Using environment variables
-    export BOE_REGISTRY_USERNAME=myuser
-    export BOE_REGISTRY_PASSWORD=mytoken
-    boe push ~/src/my-plugin --build
-    ```
-
-For enhanced security, use Docker credential helpers:
-
-    ```shell
-    # One-time setup (stores credentials in system keychain)
-    docker login ghcr.io
-    
-    # Subsequent pushes use stored credentials automatically
-    boe push ~/src/my-plugin --build
-    ```
-
-**Security Note**: Passwords are passed via stdin using `--password-stdin`, which prevents them from
-appearing in process listings or command history.
 
 
 ## Usage details
