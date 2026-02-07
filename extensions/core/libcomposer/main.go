@@ -22,7 +22,7 @@ import (
 	// Register built-in plugins into the binary. Because only one golang shared library
 	// can be loaded into a process, we need to register all built-in plugins here and
 	// build them into the same binary.
-	_ "github.com/tetratelabs/built-on-envoy/extensions/internal/goplugin"
+	_ "github.com/tetratelabs/built-on-envoy/extensions/core/goplugin"
 )
 
 func main() {} // main is required to build as a C shared library.

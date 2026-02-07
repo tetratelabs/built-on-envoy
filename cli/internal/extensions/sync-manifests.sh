@@ -14,7 +14,7 @@ set -e
 
 ROOT="$(git rev-parse --show-toplevel)"
 MANIFESTS_TARGET_DIR="${ROOT}/cli/internal/extensions/manifests"
-LIBCOMPOSER_VERSION_SRC="${ROOT}/extensions/internal/libcomposer/Makefile"
+LIBCOMPOSER_VERSION_SRC="${ROOT}/extensions/core/libcomposer/Makefile"
 
 
 echo "Synchronizing extension manifests to ${MANIFESTS_TARGET_DIR}..."

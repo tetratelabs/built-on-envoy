@@ -50,7 +50,7 @@ jobs:
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
-      - run: make -C extensions/internal format
+      - run: make -C extensions/core format
       - run: make -C cli check
 
   build:
@@ -81,7 +81,7 @@ jobs:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
       - run: make -C cli test-integration
-      - run: make -C extensions/internal test
+      - run: make -C extensions/core test
 
   coverage:
     needs: changes
@@ -127,7 +127,7 @@ jobs:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
       - run: make -C cli lint
-      - run: make -C extensions/internal lint
+      - run: make -C extensions/core lint
 
   website:
     needs: changes

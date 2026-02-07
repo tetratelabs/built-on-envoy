@@ -92,8 +92,8 @@ lib_so: build
 BOE_DATA_HOME     ?= $(HOME)/.local/share/boe
 ALL_GOPLUGIN_PATH := example-go/standalone
 
-.PHONY: build_local_cache
-build_local_cache:
+.PHONY: install
+install:
 	@echo "Installing composer...";
 	@mkdir -p $(BOE_DATA_HOME)/extensions/dym/composer/$(VERSION); \
 		CGO_ENABLED=1 go build -buildmode=c-shared -o libcomposer.so .; \

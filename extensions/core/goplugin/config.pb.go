@@ -95,12 +95,12 @@ var File_config_proto protoreflect.FileDescriptor
 
 const file_config_proto_rawDesc = "" +
 	"\n" +
-	"\fconfig.proto\x12 builtonenvoy.extensions.goplugin\x1a\x1cgoogle/protobuf/struct.proto\"a\n" +
+	"\fconfig.proto\x12%builtonenvoy.extensions.core.goplugin\x1a\x1cgoogle/protobuf/struct.proto\"a\n" +
 	"\bGoPlugin\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12/\n" +
 	"\x06config\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06config\x12\x10\n" +
-	"\x03url\x18\x03 \x01(\tR\x03urlB\x90\x02\n" +
-	"$com.builtonenvoy.extensions.gopluginB\vConfigProtoP\x01Z9github.com/tetratelabs/built-on-envoy/extensions/goplugin\xa2\x02\x03BEG\xaa\x02 Builtonenvoy.Extensions.Goplugin\xca\x02 Builtonenvoy\\Extensions\\Goplugin\xe2\x02,Builtonenvoy\\Extensions\\Goplugin\\GPBMetadata\xea\x02\"Builtonenvoy::Extensions::Gopluginb\x06proto3"
+	"\x03url\x18\x03 \x01(\tR\x03urlB\xb0\x02\n" +
+	")com.builtonenvoy.extensions.core.gopluginB\vConfigProtoP\x01Z>github.com/tetratelabs/built-on-envoy/extensions/core/goplugin\xa2\x02\x04BECG\xaa\x02%Builtonenvoy.Extensions.Core.Goplugin\xca\x02%Builtonenvoy\\Extensions\\Core\\Goplugin\xe2\x021Builtonenvoy\\Extensions\\Core\\Goplugin\\GPBMetadata\xea\x02(Builtonenvoy::Extensions::Core::Gopluginb\x06proto3"
 
 var (
 	file_config_proto_rawDescOnce sync.Once
@@ -116,11 +116,11 @@ func file_config_proto_rawDescGZIP() []byte {
 
 var file_config_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_config_proto_goTypes = []any{
-	(*GoPlugin)(nil),        // 0: builtonenvoy.extensions.goplugin.GoPlugin
+	(*GoPlugin)(nil),        // 0: builtonenvoy.extensions.core.goplugin.GoPlugin
 	(*structpb.Struct)(nil), // 1: google.protobuf.Struct
 }
 var file_config_proto_depIdxs = []int32{
-	1, // 0: builtonenvoy.extensions.goplugin.GoPlugin.config:type_name -> google.protobuf.Struct
+	1, // 0: builtonenvoy.extensions.core.goplugin.GoPlugin.config:type_name -> google.protobuf.Struct
 	1, // [1:1] is the sub-list for method output_type
 	1, // [1:1] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
