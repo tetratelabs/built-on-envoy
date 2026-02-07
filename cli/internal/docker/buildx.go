@@ -14,7 +14,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -154,6 +153,8 @@ func checkOrCreateBuilder(ctx context.Context, name, configPath string) error {
 		"--driver", "docker-container",
 		"--bootstrap",
 		"--config", configPath,
+		"--driver-opt", "network=host",
+		"--buildkitd-flags", "--allow-insecure-entitlement network.host",
 	)
 
 	// Suppress output for cleaner logs
@@ -237,10 +238,6 @@ func buildxBuildAndPush(ctx context.Context, opts *BuildAndPushOptions, builderN
 		"--file", opts.Dockerfile,
 		"--output", "type=registry,oci-mediatypes=true",
 		"--provenance=false",
-	}
-
-	if runtime.GOOS == "linux" {
-		args = append(args, "--add-host", "host.docker.internal:host-gateway")
 	}
 
 	// If builderName is provided (e.g., in tests), use it. Otherwise, rely on default builder
