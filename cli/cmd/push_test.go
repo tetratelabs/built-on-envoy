@@ -176,3 +176,42 @@ func TestNewOCIClient(t *testing.T) {
 		})
 	}
 }
+
+func TestPushAfterApply(t *testing.T) {
+	// Test AfterApply method
+	p := &Push{
+		Local: "testdata",
+		OCI: OCIFlags{
+			Registry: "ghcr.io/test",
+			Username: "user",
+			Password: "pass",
+		},
+	}
+
+	// Need to validate first to load manifest
+	err := p.Validate()
+	require.NoError(t, err)
+
+	// Test AfterApply
+	err = p.AfterApply(nil)
+	require.NoError(t, err)
+
+	// Verify srcReference is set
+	require.Contains(t, p.srcReference, "src-")
+	require.NotNil(t, p.client)
+}
+
+func TestPushAfterApply_WithBuild(t *testing.T) {
+	// Test AfterApply with build flag (should fail validation for non-composer)
+	p := &Push{
+		Local: "testdata",
+		Build: true,
+		OCI: OCIFlags{
+			Registry: "ghcr.io/test",
+		},
+	}
+
+	// Should fail validation because testdata is not composer type
+	err := p.Validate()
+	require.Error(t, err)
+}

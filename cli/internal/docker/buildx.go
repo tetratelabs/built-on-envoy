@@ -19,7 +19,7 @@ import (
 	"github.com/docker/docker/client"
 )
 
-var multiPlatformEnvoyBuilder = "built-on-envoy-multi-platform-builder"
+var customBuilderNameKey = "customMultiPlatformBuilderName"
 
 // BuildAndPushOptions contains options for building and pushing Docker images.
 type BuildAndPushOptions struct {
@@ -65,45 +65,17 @@ func BuildAndPushImage(ctx context.Context, opts *BuildAndPushOptions) error {
 	opts.Platforms = uniquePlatforms
 
 	// Login to registry if credentials provided
+	// TODO(wbpcode): do we need to do this? Ideally we should resuse existing docker credentials
+	// and let docker handle authentication automatically.
 	if opts.Username != "" || opts.Password != "" {
 		if err := dockerLogin(ctx, opts); err != nil {
 			return fmt.Errorf("failed to login to registry: %w", err)
 		}
 	}
 
-	// Create builder if necessary (idempotent)
-	if err := checkOrCreateBuilder(ctx, multiPlatformEnvoyBuilder); err != nil {
-		return fmt.Errorf("failed to create builder: %w", err)
-	}
-
 	// Build and push with buildx
-	if err := buildxBuildAndPush(ctx, opts, multiPlatformEnvoyBuilder); err != nil {
+	if err := buildxBuildAndPush(ctx, opts, getCustomBuilderName(ctx)); err != nil {
 		return fmt.Errorf("failed to build and push: %w", err)
-	}
-
-	return nil
-}
-
-// CheckDockerBuildx checks if Docker daemon and buildx are available.
-func CheckDockerBuildx(ctx context.Context) error {
-	// Check docker daemon
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-	if err != nil {
-		return fmt.Errorf("failed to create Docker client: %w", err)
-	}
-	defer func() {
-		_ = cli.Close()
-	}()
-
-	_, err = cli.Ping(ctx)
-	if err != nil {
-		return fmt.Errorf("docker daemon not available: %w", err)
-	}
-
-	// Check buildx command
-	cmd := exec.CommandContext(ctx, "docker", "buildx", "version")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("docker buildx not available: %w (ensure docker buildx plugin is installed)", err)
 	}
 
 	return nil
@@ -145,8 +117,33 @@ func dockerLogin(ctx context.Context, opts *BuildAndPushOptions) error {
 	return nil
 }
 
+// CheckDockerBuildx checks if Docker daemon and buildx are available.
+func CheckDockerBuildx(ctx context.Context) error {
+	// Check docker daemon
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return fmt.Errorf("failed to create Docker client: %w", err)
+	}
+	defer func() {
+		_ = cli.Close()
+	}()
+
+	_, err = cli.Ping(ctx)
+	if err != nil {
+		return fmt.Errorf("docker daemon not available: %w", err)
+	}
+
+	// Check buildx command
+	cmd := exec.CommandContext(ctx, "docker", "buildx", "version")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("docker buildx not available: %w (ensure docker buildx plugin is installed)", err)
+	}
+
+	return nil
+}
+
 // checkOrCreateBuilder creates a new buildx builder instance.
-func checkOrCreateBuilder(ctx context.Context, name string) error {
+func checkOrCreateBuilder(ctx context.Context, name, configPath string) error {
 	// Check if builder already exist and skip creation if it does to avoid
 	// unnecessary overhead.
 	cmd := exec.CommandContext(ctx, "docker", "buildx", "inspect", name)
@@ -161,6 +158,7 @@ func checkOrCreateBuilder(ctx context.Context, name string) error {
 		"--name", name,
 		"--driver", "docker-container",
 		"--bootstrap",
+		"--config", configPath,
 	)
 
 	// Suppress output for cleaner logs
@@ -191,6 +189,19 @@ func removeBuilder(ctx context.Context, name string) error {
 	return nil
 }
 
+// Get custom builder name from context for testing purposes.
+// In production, we use a default builder and default configuration from host.
+func getCustomBuilderName(ctx context.Context) string {
+	builderName := ""
+	// Check for custom builder name in context (used for testing)
+	if ctx != nil {
+		if v := ctx.Value(customBuilderNameKey); v != nil {
+			builderName = v.(string)
+		}
+	}
+	return builderName
+}
+
 // buildxBuildAndPush builds and pushes image using docker buildx.
 func buildxBuildAndPush(ctx context.Context, opts *BuildAndPushOptions, builderName string) error {
 	platformsStr := strings.Join(opts.Platforms, ",")
@@ -203,7 +214,6 @@ func buildxBuildAndPush(ctx context.Context, opts *BuildAndPushOptions, builderN
 	// Build command arguments
 	args := []string{
 		"buildx", "build",
-		"--builder", builderName,
 		"--platform", platformsStr,
 		"--build-arg", "PLUGIN_NAME=" + opts.PluginName,
 		"--tag", opts.ImageRef,
@@ -211,9 +221,14 @@ func buildxBuildAndPush(ctx context.Context, opts *BuildAndPushOptions, builderN
 		"--output", "type=registry,oci-mediatypes=true",
 		"--provenance=false",
 	}
+	// If builderName is provided (e.g., in tests), use it. Otherwise, rely on default builder
+	// which should be pre-configured on host.
+	if builderName != "" {
+		args = append(args, "--builder", builderName)
+	}
 
 	// Detect git information if available for annotations.
-	gitInfo, _ := DetectGitInfo(ctx, opts.Context)
+	gitInfo := detectGitInfo(ctx, opts.Context)
 
 	// Get the appropriate annotation prefix based on platform count
 	annotationPrefix := AnnotationPrefix(len(opts.Platforms))
@@ -229,21 +244,13 @@ func buildxBuildAndPush(ctx context.Context, opts *BuildAndPushOptions, builderN
 		annotationPrefix + AnnotationAuthors:           opts.Author,
 		annotationPrefix + AnnotationExtensionType:     opts.ExtensionType,
 		annotationPrefix + AnnotationExtensionArtifact: AnnotationExtensionArtifactBinary,
+		annotationPrefix + AnnotationSource:            gitInfo.RemoteURL,
+		annotationPrefix + AnnotationRevision:          gitInfo.CommitSHA,
 	}
 
 	// Add composer version if available
 	if opts.ComposerVersion != "" {
 		annotations[annotationPrefix+AnnotationExtensionComposerVersion] = opts.ComposerVersion
-	}
-
-	// Add git information if available
-	if gitInfo != nil {
-		if gitInfo.RemoteURL != "" {
-			annotations[annotationPrefix+AnnotationSource] = gitInfo.RemoteURL
-		}
-		if gitInfo.CommitSHA != "" {
-			annotations[annotationPrefix+AnnotationRevision] = gitInfo.CommitSHA
-		}
 	}
 
 	// Add annotation flags
@@ -255,8 +262,6 @@ func buildxBuildAndPush(ctx context.Context, opts *BuildAndPushOptions, builderN
 
 	// Add build context as the last argument
 	args = append(args, opts.Context)
-
-	fmt.Printf("Running buildx with arguments: %s\n", strings.Join(args, " "))
 
 	// #nosec G204
 	cmd := exec.CommandContext(ctx, "docker", args...)
@@ -342,9 +347,9 @@ type GitInfo struct {
 	CommitSHA string // Current commit SHA
 }
 
-// DetectGitInfo attempts to detect git repository information from the given directory.
-func DetectGitInfo(ctx context.Context, dir string) (*GitInfo, error) {
-	info := &GitInfo{}
+// detectGitInfo attempts to detect git repository information from the given directory.
+func detectGitInfo(ctx context.Context, dir string) GitInfo {
+	info := GitInfo{}
 
 	// Get remote URL
 	remoteCmd := exec.CommandContext(ctx, "git", "-C", dir, "config", "--get", "remote.origin.url")
@@ -359,10 +364,5 @@ func DetectGitInfo(ctx context.Context, dir string) (*GitInfo, error) {
 	}
 
 	// Return info even if partially populated
-	return info, nil
-}
-
-// RemoveBuilder removes a buildx builder instance (exported for testing).
-func RemoveBuilder(ctx context.Context, name string) error {
-	return removeBuilder(ctx, name)
+	return info
 }
