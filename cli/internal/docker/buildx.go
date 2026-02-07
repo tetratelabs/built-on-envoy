@@ -215,38 +215,34 @@ func buildxBuildAndPush(ctx context.Context, opts *BuildAndPushOptions, builderN
 	// Detect git information if available for annotations.
 	gitInfo, _ := DetectGitInfo(ctx, opts.Context)
 
-	annotationPrefix := ""
-	// For multi-platform images, annotations should be prefixed to apply to the index.
-	// For single-platform images, annotations can be applied directly to the manifest.
-	if len(opts.Platforms) > 1 {
-		annotationPrefix = "index,manifest:"
-	}
+	// Get the appropriate annotation prefix based on platform count
+	annotationPrefix := AnnotationPrefix(len(opts.Platforms))
 
 	// Add OCI annotations
 	timestamp := time.Now().UTC().Format(time.RFC3339)
 	annotations := map[string]string{
-		annotationPrefix + "org.opencontainers.image.licenses":                opts.License,
-		annotationPrefix + "org.opencontainers.image.title":                   opts.PluginName,
-		annotationPrefix + "org.opencontainers.image.version":                 opts.Version,
-		annotationPrefix + "org.opencontainers.image.description":             opts.Description,
-		annotationPrefix + "org.opencontainers.image.created":                 timestamp,
-		annotationPrefix + "org.opencontainers.image.authors":                 opts.Author,
-		annotationPrefix + "io.tetratelabs.built-on-envoy.extension.type":     opts.ExtensionType,
-		annotationPrefix + "io.tetratelabs.built-on-envoy.extension.artifact": "binary",
+		annotationPrefix + AnnotationLicenses:          opts.License,
+		annotationPrefix + AnnotationTitle:             opts.PluginName,
+		annotationPrefix + AnnotationVersion:           opts.Version,
+		annotationPrefix + AnnotationDescription:       opts.Description,
+		annotationPrefix + AnnotationCreated:           timestamp,
+		annotationPrefix + AnnotationAuthors:           opts.Author,
+		annotationPrefix + AnnotationExtensionType:     opts.ExtensionType,
+		annotationPrefix + AnnotationExtensionArtifact: AnnotationExtensionArtifactBinary,
 	}
 
 	// Add composer version if available
 	if opts.ComposerVersion != "" {
-		annotations[annotationPrefix+"io.tetratelabs.built-on-envoy.extension.composer_version"] = opts.ComposerVersion
+		annotations[annotationPrefix+AnnotationExtensionComposerVersion] = opts.ComposerVersion
 	}
 
 	// Add git information if available
 	if gitInfo != nil {
 		if gitInfo.RemoteURL != "" {
-			annotations[annotationPrefix+"org.opencontainers.image.source"] = gitInfo.RemoteURL
+			annotations[annotationPrefix+AnnotationSource] = gitInfo.RemoteURL
 		}
 		if gitInfo.CommitSHA != "" {
-			annotations[annotationPrefix+"org.opencontainers.image.revision"] = gitInfo.CommitSHA
+			annotations[annotationPrefix+AnnotationRevision] = gitInfo.CommitSHA
 		}
 	}
 
