@@ -8,7 +8,9 @@
 # built gets a unique tag.
 IMAGE_NONCE ?= ""
 OCI_REGISTRY ?= docker.io/tetratelabs
-NAME ?= example-go/standalone
+ifndef NAME
+$(error The NAME variable should be set)
+endif
 
 # Labels for this plugin image.
 VERSION := $(shell grep "^version:" ../../${NAME}/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
