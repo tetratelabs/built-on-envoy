@@ -14,7 +14,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 	"time"
 
@@ -359,10 +358,6 @@ func TestBuildAndPushImage(t *testing.T) {
 	require.NoError(t, err, "failed to start local OCI registry")
 	t.Cleanup(func() { _ = container.Terminate(ctx) })
 
-	// Get port from registry address (e.g. localhost:5000) and replace localhost with
-	// host.docker.internal for buildkit to access the registry
-	buildkitRegistry := strings.Replace(registry, "localhost", "host.docker.internal", 1)
-
 	// Create a temporary directory with a minimal test setup
 	tmpDir := t.TempDir()
 
@@ -390,7 +385,7 @@ COPY plugin.so /plugin.so
 		Context:    tmpDir,
 		PluginName: "test-plugin",
 		// Use a local registry or skip push
-		ImageRef:      buildkitRegistry + "/test-plugin:test",
+		ImageRef:      registry + "/test-plugin:test",
 		Insecure:      true,
 		Platforms:     []string{platforms}, // Single platform to speed up
 		Dockerfile:    dockerfilePath,

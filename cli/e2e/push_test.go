@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -39,8 +38,6 @@ func TestPushLocalGoExtension(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = container.Terminate(ctx) })
 
-	buildkitRegistry := strings.Replace(registry, "localhost", "host.docker.internal", 1)
-
 	// Check host architecture to speed up the test to avoid qemu overhead
 	// for unsupported architectures
 	var platforms string
@@ -54,7 +51,7 @@ func TestPushLocalGoExtension(t *testing.T) {
 	// Push the extension to the local registry
 	process = internaltesting.RunCLI(t, cliBin, "push", dataDir+"/go-e2e",
 		"--build",
-		"--registry", buildkitRegistry+"/test",
+		"--registry", registry+"/test",
 		"--insecure",
 		"--platforms", platforms,
 	)

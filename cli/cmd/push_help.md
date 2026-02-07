@@ -50,12 +50,6 @@ Build for multiple platforms:
     boe push ~/src/my-plugin --build --platforms linux/amd64,linux/arm64
     ```
 
-It's also possible to push pre-compiled images to local unsecured registries, but to ensure buildkit can access the local registry, you may need to replace `localhost` with the host's IP address or `host.docker.internal`:
-
-    ```shell
-    boe push ~/src/my-plugin --build --registry host.docker.internal:5000 --insecure
-    ```
-
 ## Prerequisites for --build
 
 - Docker installed and running
