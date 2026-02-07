@@ -12,8 +12,8 @@ on:
         description: 'Optional nonce to append to the image tag for uniqueness.'
         required: false
         type: string
-      plugin_name:
-        description: 'Name of the plugin (relative path under extensions/, e.g. example-go/standalone)'
+      extension_path:
+        description: 'relative path under extensions/, e.g. example-go/standalone.'
         required: true
         type: string
 
@@ -40,5 +40,5 @@ jobs:
       - name: Build and Push Plugin
         run: |
           make -C extensions/internal/libplugin buildx \
-            NAME=${{ inputs.plugin_name }} \
+            EXTENSION_PATH=${{ inputs.extension_path }} \
             IMAGE_NONCE="${{ inputs.nonce }}"

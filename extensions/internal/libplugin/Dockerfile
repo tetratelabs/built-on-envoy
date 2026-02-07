@@ -10,9 +10,9 @@ WORKDIR /workspace
 COPY --from=composer . .
 
 RUN go mod download all
-ARG NAME
+ARG EXTENSION_PATH=""
 # Build go plugin
-RUN CGO_ENABLED=1 go build -buildmode=plugin -o plugin.so ./${NAME}
+RUN CGO_ENABLED=1 go build -buildmode=plugin -o plugin.so ./${EXTENSION_PATH}
 
 FROM scratch AS final
 

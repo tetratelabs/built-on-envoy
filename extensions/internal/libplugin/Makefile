@@ -8,20 +8,21 @@
 # built gets a unique tag.
 IMAGE_NONCE ?= ""
 OCI_REGISTRY ?= docker.io/tetratelabs
-ifndef NAME
-$(error The NAME variable should be set)
+ifndef EXTENSION_PATH
+$(error The EXTENSION_PATH variable should be set)
 endif
 
 # Labels for this plugin image.
-VERSION := $(shell grep "^version:" ../../${NAME}/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-DESCRIPTION := $(shell grep "^description:" ../../${NAME}/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+NAME := $(shell grep "^name:" ../../${EXTENSION_PATH}/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+VERSION := $(shell grep "^version:" ../../${EXTENSION_PATH}/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+DESCRIPTION := $(shell grep "^description:" ../../${EXTENSION_PATH}/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
 TIMESTAMP := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 COMMIT_SHA := $(shell git rev-parse HEAD)
-AUTHOR := $(shell grep "^author:" ../../${NAME}/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-COMPOSER_VERSION := $(shell grep "^composerVersion:" ../../${NAME}/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+AUTHOR := $(shell grep "^author:" ../../${EXTENSION_PATH}/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+COMPOSER_VERSION := $(shell grep "^composerVersion:" ../../${EXTENSION_PATH}/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
 
 HUB := ${OCI_REGISTRY}/built-on-envoy
-IMAGE := ${HUB}/extension-${NAME}:v${VERSION}${IMAGE_NONCE}
+IMAGE := ${HUB}/extension-${NAME}:${VERSION}${IMAGE_NONCE}
 
 OS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 ARCH := $(shell uname -m)
@@ -48,7 +49,7 @@ build:
 		--annotation "io.tetratelabs.built-on-envoy.extension.type=composer" \
 		--annotation "io.tetratelabs.built-on-envoy.extension.composer_version=${COMPOSER_VERSION}" \
 		-t ${IMAGE}-${OS}-${ARCH} \
-		--build-arg NAME=${NAME} \
+		--build-arg EXTENSION_PATH=${EXTENSION_PATH} \
 		-f ./Dockerfile .
 
 # For buildx, we default it would be multiple architectures image on Linux.

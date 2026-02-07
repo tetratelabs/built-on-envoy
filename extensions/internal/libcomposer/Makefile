@@ -30,7 +30,7 @@ else
 endif
 
 HUB := ${OCI_REGISTRY}/built-on-envoy
-IMAGE := ${HUB}/${NAME}:v${VERSION}${IMAGE_NONCE}
+IMAGE := ${HUB}/${NAME}:${VERSION}${IMAGE_NONCE}
 
 OS := linux
 ARCH := $(shell uname -m)
@@ -89,20 +89,19 @@ lib_so: build
 	docker rm temp-container
 
 BOE_DATA_HOME ?= $(HOME)/.local/share/boe
-ALL_GOPLUGINS := example-go/standalone
+ALL_GOPLUGIN_PATH := example-go/standalone
 
 .PHONY: build_local_cache
 build_local_cache:
 	@echo "Installing composer...";
 	@mkdir -p $(BOE_DATA_HOME)/extensions/dym/composer/$(VERSION); \
-		CGO_ENABLED=1 go build -buildmode=c-shared -o libcomposer.so main.go; \
+		CGO_ENABLED=1 go build -buildmode=c-shared -o libcomposer.so .; \
 		mv libcomposer.so $(BOE_DATA_HOME)/extensions/dym/composer/$(VERSION)/libcomposer.so;
-	@for plugin in $(ALL_GOPLUGINS); do \
-		echo "Installing $$plugin..."; \
-		cd ../../$$plugin; \
-		plugin_version=$$(grep "version:" manifest.yaml | awk '{print $$2}'); \
-		plugin_name=$$(grep "name:" manifest.yaml | awk '{print $$2}'); \
-		CGO_ENABLED=1 go build -buildmode=plugin -o $$plugin_name.so .; \
+	@for plugin_path in $(ALL_GOPLUGIN_PATH); do \
+		plugin_version=$$(grep "^version:" ../../$$plugin_path/manifest.yaml | awk '{print $$2}'); \
+		plugin_name=$$(grep "^name:" ../../$$plugin_path/manifest.yaml | awk '{print $$2}'); \
+		echo "Installing $$plugin_name: $$plugin_version..."; \
+		CGO_ENABLED=1 go build -buildmode=plugin -o $$plugin_name.so ../../$$plugin_path; \
 		mkdir -p $(BOE_DATA_HOME)/extensions/goplugin/$$plugin_name/$$plugin_version; \
 		mv $$plugin_name.so $(BOE_DATA_HOME)/extensions/goplugin/$$plugin_name/$$plugin_version/plugin.so; \
 	done
