@@ -35,11 +35,12 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and Push Composer
-        run: |          
-          make -C extensions/internal/libcomposer buildx \
-            IMAGE_NONCE="${{ github.event.inputs.nonce}}"
+        env:
+          IMAGE_NONCE: ${{ inputs.nonce }}
+        run: make -C extensions/internal/libcomposer push
+      
       - name: Build and Push Lite Composer
-        run: |          
-          make -C extensions/internal/libcomposer buildx \
-            COMPOSER_LITE=true \
-            IMAGE_NONCE="${{ github.event.inputs.nonce}}"
+        env:
+          COMPOSER_LITE: true
+          IMAGE_NONCE: ${{ inputs.nonce }}
+        run: make -C extensions/internal/libcomposer push
