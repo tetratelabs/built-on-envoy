@@ -154,7 +154,6 @@ func checkOrCreateBuilder(ctx context.Context, name, configPath string) error {
 		"--bootstrap",
 		"--config", configPath,
 		"--driver-opt", "network=host",
-		"--buildkitd-flags", "--allow-insecure-entitlement network.host",
 	)
 
 	// Suppress output for cleaner logs
