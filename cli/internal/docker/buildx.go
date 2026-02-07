@@ -239,7 +239,8 @@ func buildxBuildAndPush(ctx context.Context, opts *BuildAndPushOptions, builderN
 		"--provenance=false",
 	}
 	if runtime.GOOS == "linux" {
-		args = append(args, "--add-host", "host.docker.internal:host-gateway")
+		// TODO(wbpcode): may use host-gateway in the future when it's more widely supported.
+		args = append(args, "--add-host", "host.docker.internal:172.17.0.1")
 	}
 
 	// If builderName is provided (e.g., in tests), use it. Otherwise, rely on default builder
