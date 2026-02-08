@@ -44,7 +44,7 @@ jobs:
         with:
           go-version-file: extensions/go.mod
           cache-dependency-path: extensions/go.sum
-      - run: make -C extensions/core/gplugin all
+      - run: make -C extensions/core/goplugin all
 
   libcomposer:
     needs: changes

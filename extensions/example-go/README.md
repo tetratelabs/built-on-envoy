@@ -55,7 +55,7 @@ The plugin is compiled directly into the Composer dynamic module binary.
 
 **How it works:**
 - [embedded/host.go](embedded/host.go) imports the plugin package and registers it with the SDK during initialization
-- The Composer's [main.go](../internal/libcomposer/main.go) imports the embedded package, including it in the final binary
+- The Composer's [main.go](../core/libcomposer/main.go) imports the embedded package, including it in the final binary
 - The plugin is registered under the name `example-go-embedded` (as defined in the plugin's factory map)
 
 **Advantages:**

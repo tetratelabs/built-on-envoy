@@ -76,7 +76,7 @@ func buildLibComposer(dataHome string, composerSrcPath string) error {
 
 	// #nosec G204
 	cmd := exec.Command("make", "-C",
-		"internal/libcomposer",
+		"core/libcomposer",
 		"install",
 		"BOE_DATA_HOME="+dataHome,
 	)
