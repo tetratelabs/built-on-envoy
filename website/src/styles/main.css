@@ -4,6 +4,10 @@
 	box-sizing: border-box;
 }
 
+html {
+	scroll-padding-top: 110px;
+}
+
 :root {
 	/* Primary palette - Envoy-inspired purple/indigo */
 	--primary: #5b21b6;
