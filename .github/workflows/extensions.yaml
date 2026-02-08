@@ -38,61 +38,51 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.extensions == 'true' }}
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./extensions
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: extensions/go.mod
           cache-dependency-path: extensions/go.sum
-      - run: make -C core/gplugin all
+      - run: make -C extensions/core/gplugin all
 
   libcomposer:
     needs: changes
     if: ${{ needs.changes.outputs.extensions == 'true' }}
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./extensions
     steps:
       - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
       - uses: actions/setup-go@v5
         with:
           go-version-file: extensions/go.mod
           cache-dependency-path: extensions/go.sum
-      - run: make -C core/libcomposer lib_so
+      - run: make -C extensions/core/libcomposer lib_so
 
   libplugin:
     needs: changes
     if: ${{ needs.changes.outputs.extensions == 'true' }}
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./extensions
     steps:
       - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
       - uses: actions/setup-go@v5
         with:
           go-version-file: extensions/go.mod
           cache-dependency-path: extensions/go.sum
-      - run: make -C core/libplugin lib_so
+      - run: make -C extensions/core/libplugin lib_so
 
   lint:
     needs: changes
     if: ${{ needs.changes.outputs.extensions == 'true' }}
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./extensions
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: extensions/go.mod
           cache-dependency-path: extensions/go.sum
-      - run: make -C core format lint
+      - run: make -C extensions/core format lint
 
   # Aggregate all the required jobs and make it easier to customize CI required jobs
   extensions-checks:
