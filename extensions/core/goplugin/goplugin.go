@@ -90,7 +90,7 @@ func createFactory[T any](binaryPath string, symbolName string, pluginName strin
 	if err != nil {
 		return goPluginModule, fmt.Errorf("failed to read go plugin build info")
 	}
-	if err := checkVersionCompatibility(pluginBuildInfo, "plugin"); err != nil {
+	if err = checkVersionCompatibility(pluginBuildInfo, "plugin"); err != nil {
 		return goPluginModule, err
 	}
 

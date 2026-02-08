@@ -38,7 +38,7 @@ endif
 .PHONY: build
 build:
 	docker buildx build --build-context composer=../.. \
-		--output type=image,oci-mediatypes=true \
+		--output type=docker,oci-mediatypes=true \
 		--provenance=false \
 		--annotation "org.opencontainers.image.source=$(SOURCE)" \
 		--annotation "org.opencontainers.image.licenses=$(LICENSE)" \
