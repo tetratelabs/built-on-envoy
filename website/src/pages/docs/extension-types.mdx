@@ -73,7 +73,7 @@ Go extensions are compiled HTTP filters that run inside Envoy through the
 They offer full access to the Dynamic Modules Go SDK and support advanced operations such as metrics,
 body modification, metadata, and local replies.
 
-> ❗️ There are some limitations in how the Go runtime is used inside Envoy. To overcome these, a
+> There are some limitations in how the Go runtime is used inside Envoy. To overcome these, a
 > [special dynamic module](https://github.com/tetratelabs/built-on-envoy/tree/main/extensions/internal/goplugin)
 > is used to load the Go extensions at runtime.
 
