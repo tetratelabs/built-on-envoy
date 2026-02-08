@@ -34,14 +34,15 @@ transformer  1.2.0    lua</span>
 
 			<div class="feature-card">
 				<h3><span class="feature-icon">⤴</span>&nbsp;&nbsp;Build & Share</h3>
-				<p>Build and publish your extension to the ecosystem.</p>
+				<p>Create your extension and share it with the ecosystem.</p>
 				<div class="code-example">
-					<code>{CLI_NAME} push ./my-extension</code>
+					<code>{CLI_NAME} create my-extension</code>
 				</div>
 				<div class="code-output">
-					<span class="output-success">✓</span> Extension validated<br/>
-					<span class="output-info">→</span> Opening pull request...<br/>
-					<span class="output-link">github.com/{GITHUB_REPO_RAW}/pulls/42</span>
+					<span class="output-info">→</span> Scaffolding "my-extension"...<br/>
+					<span class="output-muted">./my-extension/Makefile</span>
+					<span class="output-muted">./my-extension/manifest.yaml</span>
+					<span class="output-muted">./my-extension/plugin.go</span>
 				</div>
 			</div>
 		</div>
