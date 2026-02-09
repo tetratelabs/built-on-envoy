@@ -1,0 +1,23 @@
+name: composer
+version: 0.2.1
+extensionSet: true
+extensions:
+  - composer.http.ai_router
+  - composer.http.auth
+  - composer.http.mutation
+  # - composer.http.goplugin Still hide the goplugin extension.
+categories:
+  - Misc
+author: Tetrate
+description: A list of extensions based on golang dynamic modules.
+longDescription: |
+  This extension set includes a collection of extensions built using Go dynamic modules. 
+  It serves as a reference implementation for building and integrating Go-based extensions into the Envoy ecosystem.
+  The extensions in this set cover various functionalities such as AI routing, authentication, mutation, and custom plugin capabilities, demonstrating the versatility and power of Go dynamic modules in extending Envoy's capabilities.
+type: dynamic_module
+tags:
+  - go
+  - http
+  - filter
+license: Apache-2.0
+examples: []
