@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 

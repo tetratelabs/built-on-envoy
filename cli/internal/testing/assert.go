@@ -13,7 +13,7 @@ import (
 	"testing"
 )
 
-// SkipIfRegistryNotConfigured skips the test if the TEST_BOE_REGISTRY environment variable is not set.
+// SkipIfTestRegistryNotConfigured skips the test if the TEST_BOE_REGISTRY environment variable is not set.
 func SkipIfTestRegistryNotConfigured(t *testing.T) {
 	if os.Getenv("TEST_BOE_REGISTRY") == "" {
 		t.Skip("TEST_BOE_REGISTRY environment variable not set, skipping test that requires registry")
