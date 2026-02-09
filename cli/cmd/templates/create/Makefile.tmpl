@@ -5,11 +5,11 @@
 # This IMAGE_NONCE will be appended to the final image tag if set.
 # It is intended to be used in CI environments to ensure that each image
 # built gets a unique tag.
-IMAGE_NONCE  ?= ""
+IMAGE_NONCE  ?=
 OCI_REGISTRY ?= ghcr.io/tetratelabs
 INSECURE_REGISTRY ?= false
 
-registry_output := ""
+registry_output :=
 ifeq ($(INSECURE_REGISTRY),true)
   registry_output := ",registry.insecure=true"
 endif
