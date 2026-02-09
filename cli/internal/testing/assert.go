@@ -9,7 +9,27 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"testing"
 )
+
+// SkipIfTestRegistryNotConfigured skips the test if the TEST_BOE_REGISTRY environment variable is not set.
+func SkipIfTestRegistryNotConfigured(t *testing.T) {
+	if os.Getenv("TEST_BOE_REGISTRY") == "" {
+		t.Skip("TEST_BOE_REGISTRY environment variable not set, skipping test that requires registry")
+	}
+	t.Setenv("BOE_REGISTRY", os.Getenv("TEST_BOE_REGISTRY"))
+
+	if insecure := os.Getenv("TEST_BOE_REGISTRY_INSECURE"); insecure != "" {
+		t.Setenv("BOE_REGISTRY_INSECURE", insecure)
+	}
+	if username := os.Getenv("TEST_BOE_REGISTRY_USERNAME"); username != "" {
+		t.Setenv("BOE_REGISTRY_USERNAME", username)
+	}
+	if password := os.Getenv("TEST_BOE_REGISTRY_PASSWORD"); password != "" {
+		t.Setenv("BOE_REGISTRY_PASSWORD", password)
+	}
+}
 
 // EqualStatus returns a condition function that checks if the response status code matches the given code.
 func EqualStatus(code int) func(r *http.Response) bool {

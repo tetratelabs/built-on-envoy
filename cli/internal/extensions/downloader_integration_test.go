@@ -5,13 +5,15 @@
 
 //go:build integration
 
-package oci
+package extensions
 
 import (
 	"context"
 	"fmt"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
@@ -30,4 +32,21 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 	_ = registryContainer.Terminate(ctx)
 	os.Exit(code)
+}
+
+func TestNewOCIRepositoryClient(t *testing.T) {
+	t.Run("missing repo", func(t *testing.T) {
+		client, err := newOCIRepositoryClient(registryAddr, "", "", true)
+		require.Error(t, err)
+		require.Nil(t, client)
+	})
+
+	t.Run("can connect", func(t *testing.T) {
+		client, err := newOCIRepositoryClient(registryAddr+"/repo", "", "", true)
+		require.NoError(t, err)
+		// We just want to test connectivity here so we expect a failure saying that
+		// the repo does not exist, but this is good enough for this test.
+		_, err = client.Tags(t.Context())
+		require.ErrorContains(t, err, "repository name not known")
+	})
 }

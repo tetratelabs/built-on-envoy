@@ -109,6 +109,10 @@ jobs:
     defaults:
       run:
         working-directory: ./cli
+    env:
+      TEST_BOE_REGISTRY: ghcr.io/tetratelabs/built-on-envoy
+      TEST_BOE_REGISTRY_USERNAME: ${{ github.actor }}
+      TEST_BOE_REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
