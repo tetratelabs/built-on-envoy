@@ -35,10 +35,6 @@ func (c *Create) Help() string { return createHelp }
 
 // Run executes the create command.
 func (c *Create) Run(dirs *xdg.Directories) error {
-	if c.Path == "" {
-		c.Path = c.Name
-	}
-
 	switch c.Type {
 	case "composer":
 		return createComposerHTTPFilter(dirs, c.Path, c.Name)
