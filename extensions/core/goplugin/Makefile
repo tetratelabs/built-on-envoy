@@ -8,7 +8,7 @@ SHELL    := /bin/bash
 repo_dir := $(shell git rev-parse --show-toplevel)
 
 .PHONY: all
-all: lint gen test
+all: lint gen test check
 
 .PHONY: lint
 lint:
@@ -32,3 +32,12 @@ test:
 clean:
 	@echo "Cleaning generated code..."
 	@rm -f *.pb.*
+
+.PHONY: check
+check:  ## Run all necessary steps to prepare for a commit and check for any differences in the codebase
+	@if [ ! -z "`git status -s`" ]; then \
+		echo "The following differences will fail CI until committed:"; \
+		git status; \
+		echo "Please ensure you have run 'make check' and committed the changes."; \
+		exit 1; \
+	fi

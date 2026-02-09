@@ -5,11 +5,11 @@
 
 syntax = "proto3";
 
-package builtonenvoy.extensions.goplugin;
+package builtonenvoy.extensions.core.goplugin;
 
 import "google/protobuf/struct.proto";
 
-option go_package = "github.com/tetratelabs/built-on-envoy/extensions/goplugin";
+option go_package = "github.com/tetratelabs/built-on-envoy/extensions/core/goplugin";
 
 // Configuration for the Go plugin loader.
 message GoPlugin {

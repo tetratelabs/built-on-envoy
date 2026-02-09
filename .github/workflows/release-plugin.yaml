@@ -41,4 +41,4 @@ jobs:
         env:
           IMAGE_NONCE: ${{ inputs.nonce }}
           EXTENSION_PATH: ${{ inputs.extension_path }}
-        run: make -C extensions/internal/libplugin push
+        run: make -C extensions/core/libplugin push
