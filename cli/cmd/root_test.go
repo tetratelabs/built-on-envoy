@@ -143,12 +143,6 @@ Commands:
   create <name> [flags]
     Create a new extension template
 
-  push <local extension> [flags]
-    Push an extension to an OCI registry
-
-  pull <extension> [flags]
-    Pull an extension from an OCI registry
-
 Run "boe <command> --help" for more information on a command.
 `
 	require.Equal(t, expected, buf.String())

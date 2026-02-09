@@ -40,18 +40,18 @@ func init() {
 	}
 }
 
-func createPluginConfigFactory(pluginName string, binaryPath string,
-	pluginBuildInfo *buildinfo.BuildInfo,
-) (shared.HttpFilterFactory, error) {
+// checkVersionCompatibility checks if the plugin is compatible with the host by comparing their Go versions,
+// build modes, and dependencies.
+func checkVersionCompatibility(pluginBuildInfo *buildinfo.BuildInfo, buildMode string) error {
 	// Check if the Go version of the plugin matches the host Go version.
 	if pluginBuildInfo.GoVersion != hostBuildInfo.GoVersion {
-		return nil, fmt.Errorf("plugin Go version is different from host Go version")
+		return fmt.Errorf("plugin Go version is different from host Go version")
 	}
 
 	// Check if the buildmode of the plugin is "plugin".
 	for _, setting := range pluginBuildInfo.Settings {
-		if setting.Key == "-buildmode" && setting.Value != "plugin" {
-			return nil, fmt.Errorf("plugin buildmode is not 'plugin'")
+		if setting.Key == "-buildmode" && setting.Value != buildMode {
+			return fmt.Errorf("plugin buildmode is not %q", buildMode)
 		}
 	}
 
@@ -62,128 +62,61 @@ func createPluginConfigFactory(pluginName string, binaryPath string,
 		}
 		hostDep, ok := hostDependencies[pluginDep.Path]
 		if !ok {
-			return nil, fmt.Errorf("plugin dependency is not found in host dependencies")
+			return fmt.Errorf("plugin dependency is not found in host dependencies")
 		}
 		if hostDep.Version != pluginDep.Version {
-			return nil, fmt.Errorf("plugin dependency: %v has different versions %v/%v",
+			return fmt.Errorf("plugin dependency: %v has different versions %v/%v",
 				pluginDep.Path, pluginDep.Version, hostDep.Version)
 		}
 		if hostDep.Sum != pluginDep.Sum {
-			return nil, fmt.Errorf("plugin dependency: %v has different sums %v/%v",
+			return fmt.Errorf("plugin dependency: %v has different sums %v/%v",
 				pluginDep.Path, pluginDep.Sum, hostDep.Sum)
 		}
 	}
 
-	// Now, try to load the plugin.
-	plugin, err := plugin.Open(binaryPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open plugin as Go plugin module: %w", err)
-	}
-	sym, err := plugin.Lookup("WellKnownPluginConfigFactories")
-	if err != nil {
-		return nil, fmt.Errorf("failed to lookup WellKnownPluginConfigFactories: %w", err)
-	}
-	factories, ok := sym.(func() map[string]shared.HttpFilterFactory)
-	if !ok {
-		return nil, fmt.Errorf("unexpected 'WellKnownPluginConfigFactories' type: %w", err)
-	}
-	goPluginModule := factories()[pluginName]
-	if goPluginModule == nil {
-		return nil, fmt.Errorf("failed to get config factory from plugin: %w", err)
-	}
-
-	// Successfully loaded as a Go plugin module.
-	return goPluginModule, nil
+	return nil
 }
 
-// CreatePluginConfigFactory creates a PluginConfigFactory for the given plugin name.
-func CreatePluginConfigFactory(pluginName string,
-	binaryPath string,
-) (shared.HttpFilterFactory, error) {
+// createFactory creates a factory of type T by loading the Go plugin from the given binary path and looking up the symbol.
+func createFactory[T any](binaryPath string, symbolName string, pluginName string) (T, error) {
+	var goPluginModule T
+
 	if _, err := os.Stat(binaryPath); err != nil {
-		return nil, fmt.Errorf("failed to find a plugin implementation at %v",
+		return goPluginModule, fmt.Errorf("failed to find a plugin implementation at %v",
 			binaryPath)
 	}
 
 	pluginBuildInfo, err := buildinfo.ReadFile(binaryPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read go plugin build info")
+		return goPluginModule, fmt.Errorf("failed to read go plugin build info")
+	}
+	if err = checkVersionCompatibility(pluginBuildInfo, "plugin"); err != nil {
+		return goPluginModule, err
 	}
 
-	return createPluginConfigFactory(pluginName, binaryPath, pluginBuildInfo)
-}
-
-func createStreamPluginConfigFactory(pluginName string, binaryPath string,
-	pluginBuildInfo *buildinfo.BuildInfo,
-) (shared.HttpFilterConfigFactory, error) {
-	// Check if the Go version of the plugin matches the host Go version.
-	if pluginBuildInfo.GoVersion != hostBuildInfo.GoVersion {
-		return nil, fmt.Errorf("plugin Go version is different from host Go version")
-	}
-
-	// Check if the buildmode of the plugin is "plugin".
-	for _, setting := range pluginBuildInfo.Settings {
-		if setting.Key == "-buildmode" && setting.Value != "plugin" {
-			return nil, fmt.Errorf("plugin buildmode is not 'plugin'")
-		}
-	}
-
-	// Check if the dependencies of the plugin match the host dependencies.
-	for _, pluginDep := range pluginBuildInfo.Deps {
-		if pluginDep.Replace != nil {
-			pluginDep = pluginDep.Replace
-		}
-		hostDep, ok := hostDependencies[pluginDep.Path]
-		if !ok {
-			return nil, fmt.Errorf("plugin dependency is not found in host dependencies")
-		}
-		if hostDep.Version != pluginDep.Version {
-			return nil, fmt.Errorf("plugin dependency: %v has different versions %v/%v",
-				pluginDep.Path, pluginDep.Version, hostDep.Version)
-		}
-		if hostDep.Sum != pluginDep.Sum {
-			return nil, fmt.Errorf("plugin dependency: %v has different sums %v/%v",
-				pluginDep.Path, pluginDep.Sum, hostDep.Sum)
-		}
-	}
-
-	// Now, try to load the plugin.
 	plugin, err := plugin.Open(binaryPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open plugin as Go plugin module: %w", err)
+		return goPluginModule, fmt.Errorf("failed to open plugin as Go plugin module: %w", err)
 	}
-	sym, err := plugin.Lookup("WellKnownHttpFilterConfigFactories")
+	sym, err := plugin.Lookup(symbolName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to lookup WellKnownHttpFilterConfigFactories: %w", err)
+		return goPluginModule, fmt.Errorf("failed to lookup %q: %w", symbolName, err)
 	}
-	factories, ok := sym.(func() map[string]shared.HttpFilterConfigFactory)
+	factories, ok := sym.(func() map[string]T)
 	if !ok {
-		return nil, fmt.Errorf("unexpected 'WellKnownHttpFilterConfigFactories' type: %w", err)
+		return goPluginModule, fmt.Errorf("unexpected %q type: %w", symbolName, err)
 	}
-	goPluginModule := factories()[pluginName]
-	if goPluginModule == nil {
-		return nil, fmt.Errorf("failed to get config factory from plugin: %w", err)
+	goPluginModule, ok = factories()[pluginName]
+	if !ok {
+		return goPluginModule, fmt.Errorf("failed to get config factory from plugin: %w", err)
 	}
-
 	// Successfully loaded as a Go plugin module.
 	return goPluginModule, nil
 }
 
 // CreateStreamPluginConfigFactory creates a PluginConfigFactory for the given plugin name.
-func CreateStreamPluginConfigFactory(pluginName string,
-	binaryPath string,
-) (shared.HttpFilterConfigFactory, error) {
-	if _, err := os.Stat(binaryPath); err != nil {
-		return nil, fmt.Errorf("failed to find a plugin implementation at %v",
-			binaryPath)
-	}
-
-	pluginBuildInfo, err := buildinfo.ReadFile(binaryPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read go plugin build info")
-	}
-
-	return createStreamPluginConfigFactory(pluginName, binaryPath, pluginBuildInfo)
+func CreateStreamPluginConfigFactory(pluginName string, binaryPath string) (shared.HttpFilterConfigFactory, error) {
+	return createFactory[shared.HttpFilterConfigFactory](binaryPath, "WellKnownHttpFilterConfigFactories", pluginName)
 }
 
 func loadGoPlugin(moduleConfig []byte) (name string,
