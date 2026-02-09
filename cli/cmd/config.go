@@ -35,7 +35,7 @@ type GenConfig struct {
 	// JSON config values contain commas (e.g. {"a":"1","b":"2"}) which would otherwise
 	// be split into separate invalid fragments, causing protobuf unmarshal failures.
 	Configs []string `name:"config" sep:"none" help:"Optional JSON config string for extensions. Applied in order to combined --extension and --local flags."`
-	OCI        OCIFlags `embed:""`
+	OCI     OCIFlags `embed:""`
 
 	extensions []*extensions.Manifest `kong:"-"` // Internal field: loaded extension manifests
 	output     io.Writer              `kong:"-"` // Internal field for testing
