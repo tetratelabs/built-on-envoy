@@ -62,7 +62,7 @@ func checkVersionCompatibility(pluginBuildInfo *buildinfo.BuildInfo, buildMode s
 		}
 		hostDep, ok := hostDependencies[pluginDep.Path]
 		if !ok {
-			return fmt.Errorf("plugin dependency is not found in host dependencies")
+			return fmt.Errorf("plugin dependency %q is not found in host dependencies", pluginDep.Path)
 		}
 		if hostDep.Version != pluginDep.Version {
 			return fmt.Errorf("plugin dependency: %v has different versions %v/%v",

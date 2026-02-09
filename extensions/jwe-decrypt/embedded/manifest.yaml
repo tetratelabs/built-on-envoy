@@ -1,0 +1,21 @@
+name: jwe-decrypt-embedded
+version: 0.0.1
+categories:
+  - jwt
+  - authentication
+author: chirauki
+description: Decrypt JWE tokens in HTTP requests and add the decrypted payload to headers or metadata.
+longDescription: |
+  The jwe-decrypt filter is an HTTP filter that intercepts incoming HTTP requests,
+  extracts JWE tokens from a specified header, decrypts them using a provided key,
+  and adds the decrypted payload to either a new header or the request metadata.
+  This allows downstream services to access the decrypted information without needing
+  to handle JWE decryption themselves.
+type: composer
+composerVersion: 0.2.1
+tags:
+  - go
+  - jwe
+  - decrypt
+license: Apache-2.0
+examples: []

@@ -1,6 +1,7 @@
 PLUGIN_NAME := jwe-decrypt
+
 # Default data home layout for boe
-BOE_DATA_HOME ?= /Users/chirauki/.local/share/boe
+BOE_DATA_HOME ?= $(HOME)/.local/share/boe
 
 .PHONY: build
 build:

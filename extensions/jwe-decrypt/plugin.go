@@ -1,4 +1,4 @@
-package main
+package impl
 
 import (
 	"encoding/json"
@@ -117,11 +117,11 @@ func (f *jweDecryptHttpFilterFactory) Create(handle shared.HttpFilterHandle) sha
 }
 
 // This is the configuration factory for the HTTP filter.
-type jweDecryptHttpFilterConfigFactory struct {
+type JWEDecryptHttpFilterConfigFactory struct {
 	shared.EmptyHttpFilterConfigFactory
 }
 
-func (f *jweDecryptHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
+func (f *JWEDecryptHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
 	// Parse JSON configuration
 	// TODO: To implement your own configuration parsing and validation logic here.
 	if len(config) == 0 {
@@ -136,10 +136,4 @@ func (f *jweDecryptHttpFilterConfigFactory) Create(handle shared.HttpFilterConfi
 	}
 
 	return &jweDecryptHttpFilterFactory{config: &cfg}, nil
-}
-
-func WellKnownHttpFilterConfigFactories() map[string]shared.HttpFilterConfigFactory {
-	return map[string]shared.HttpFilterConfigFactory{
-		"jwe-decrypt": &jweDecryptHttpFilterConfigFactory{},
-	}
 }
