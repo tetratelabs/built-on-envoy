@@ -58,11 +58,13 @@ func createComposerHTTPFilter(dirs *xdg.Directories, path, name string) error {
 	}
 
 	files := map[string]string{
-		"plugin.go":     pluginGoTmpl,
-		"manifest.yaml": manifestYamlTmpl,
-		"Makefile":      makefileTmpl,
-		"go.mod":        goModTmpl,
-		"Dockerfile":    dockerfileTmpl,
+		"plugin.go":       pluginGoTmpl,
+		"manifest.yaml":   manifestYamlTmpl,
+		"Makefile":        makefileTmpl,
+		"go.mod":          goModTmpl,
+		"Dockerfile":      dockerfileTmpl,
+		"Dockerfile.code": dockerfileCodeTmpl,
+		".dockerignore":   dockerignoreTmpl,
 	}
 
 	for name, tmpl := range files {
@@ -231,70 +233,93 @@ HUB    := $(OCI_REGISTRY)/built-on-envoy
 IMAGE  := $(HUB)/extension-$(NAME):$(VERSION)$(IMAGE_NONCE)
 SOURCE := https://$(subst ghcr.io.,github.com,$(HUB))
 
-OS   ?= $(shell uname -s | tr '[:upper:]' '[:lower:]')
-ARCH ?= $(shell uname -m)
+ARCH := $(shell uname -m)
 ifeq ($(ARCH),x86_64)
   ARCH := amd64
 else ifeq ($(ARCH),aarch64)
   ARCH := arm64
 endif
 
+# Base OCI image annotations (shared by all image types)
+BASE_OCI_ANNOTATIONS := \
+	--annotation "org.opencontainers.image.source=$(SOURCE)" \
+	--annotation "org.opencontainers.image.licenses=$(LICENSE)" \
+	--annotation "org.opencontainers.image.title=$(NAME)" \
+	--annotation "org.opencontainers.image.version=$(VERSION)" \
+	--annotation "org.opencontainers.image.description=$(DESCRIPTION)" \
+	--annotation "org.opencontainers.image.created=$(TIMESTAMP)" \
+	--annotation "org.opencontainers.image.revision=$(COMMIT_SHA)" \
+	--annotation "org.opencontainers.image.authors=$(AUTHOR)" \
+	--annotation "io.tetratelabs.built-on-envoy.extension.type=composer" \
+	--annotation "io.tetratelabs.built-on-envoy.extension.composer_version=$(COMPOSER_VERSION)"
+
+# Artifact type annotations
+BINARY_ARTIFACT := --annotation "io.tetratelabs.built-on-envoy.extension.artifact=binary"
+SOURCE_ARTIFACT := --annotation "io.tetratelabs.built-on-envoy.extension.artifact=source"
+
+# Multi-platform OCI annotations (with index,manifest prefix, for binary artifacts)
+MULTI_OCI_ANNOTATIONS := \
+	--annotation "index,manifest:org.opencontainers.image.source=$(SOURCE)" \
+	--annotation "index,manifest:org.opencontainers.image.licenses=$(LICENSE)" \
+	--annotation "index,manifest:org.opencontainers.image.title=$(NAME)" \
+	--annotation "index,manifest:org.opencontainers.image.version=$(VERSION)" \
+	--annotation "index,manifest:org.opencontainers.image.description=$(DESCRIPTION)" \
+	--annotation "index,manifest:org.opencontainers.image.created=$(TIMESTAMP)" \
+	--annotation "index,manifest:org.opencontainers.image.revision=$(COMMIT_SHA)" \
+	--annotation "index,manifest:org.opencontainers.image.authors=$(AUTHOR)" \
+	--annotation "index,manifest:io.tetratelabs.built-on-envoy.extension.type=composer" \
+	--annotation "index,manifest:io.tetratelabs.built-on-envoy.extension.composer_version=$(COMPOSER_VERSION)" \
+	--annotation "index,manifest:io.tetratelabs.built-on-envoy.extension.artifact=binary"
+
 .PHONY: build
 build:
-	go build -buildmode=plugin -o $(PLUGIN_NAME).so .
+	go build -buildmode=plugin -o plugin.so .
 
 .PHONY: install
 install: build
 	@echo "Installing $(PLUGIN_NAME)..."
 	@version=$$(grep "version:" manifest.yaml | awk '{print $$2}'); \
 	mkdir -p $(BOE_DATA_HOME)/extensions/goplugin/$(PLUGIN_NAME)/$$version; \
-	cp $(PLUGIN_NAME).so $(BOE_DATA_HOME)/extensions/goplugin/$(PLUGIN_NAME)/$$version/plugin.so;
+	cp plugin.so $(BOE_DATA_HOME)/extensions/goplugin/$(PLUGIN_NAME)/$$version/plugin.so;
 	@echo "Installed to $(BOE_DATA_HOME)/extensions/goplugin/$(PLUGIN_NAME)"
 
 # For single local platform build, we will add the OS and ARCH to the image tag to avoid confusion.
-.PHONY: image
-image:
+# And we will not push it to the registry by default.
+.PHONY: build_image
+build_image:
 	docker buildx build \
-		--output type=image,oci-mediatypes=true \
+		--output type=image,oci-mediatypes=true --load \
 		--provenance=false \
-		--annotation "org.opencontainers.image.source=$(SOURCE)" \
-		--annotation "org.opencontainers.image.licenses=$(LICENSE)" \
-		--annotation "org.opencontainers.image.title=$(NAME)" \
-		--annotation "org.opencontainers.image.version=$(VERSION)" \
-		--annotation "org.opencontainers.image.description=$(DESCRIPTION)" \
-		--annotation "org.opencontainers.image.created=$(TIMESTAMP)" \
-		--annotation "org.opencontainers.image.revision=$(COMMIT_SHA)" \
-		--annotation "org.opencontainers.image.authors=$(AUTHOR)" \
-		--annotation "io.tetratelabs.built-on-envoy.extension.type=composer" \
-		--annotation "io.tetratelabs.built-on-envoy.extension.composer_version=$(COMPOSER_VERSION)" \
-		-t $(IMAGE)-$(OS)-$(ARCH) \
+		$(BASE_OCI_ANNOTATIONS) \
+		$(BINARY_ARTIFACT) \
+		-t $(IMAGE)-linux-$(ARCH) \
 		-f ./Dockerfile .
 
-# For push, we default it would be multiple architectures image on Linux.
+# For default push operation, we will also prefer to build a multi-platform image to support
+# both amd64 and arm64 architectures, and push it to the registry.
 PLATFORMS ?= linux/arm64,linux/amd64
-BUILDER_NAME := $(NAME)-builder-$(shell date +%s)
-.PHONY: push
-push: ## Build and push docker image for the plugin for cross-platform support
-	@echo "Creating new builder: $(BUILDER_NAME)"
-	docker buildx create --name $(BUILDER_NAME) --use
+.PHONY: push_image
+push_image: ## Build and push docker image for the plugin for cross-platform support
 	@echo "Building and pushing image..."
 	docker buildx build --platform=$(PLATFORMS) \
 		--output type=registry,oci-mediatypes=true \
 		--provenance=false \
-		--annotation "index,manifest:org.opencontainers.image.source=$(SOURCE)" \
-		--annotation "index,manifest:org.opencontainers.image.licenses=$(LICENSE)" \
-		--annotation "index,manifest:org.opencontainers.image.title=$(NAME)" \
-		--annotation "index,manifest:org.opencontainers.image.version=$(VERSION)" \
-		--annotation "index,manifest:org.opencontainers.image.description=$(DESCRIPTION)" \
-		--annotation "index,manifest:org.opencontainers.image.created=$(TIMESTAMP)" \
-		--annotation "index,manifest:org.opencontainers.image.revision=$(COMMIT_SHA)" \
-		--annotation "index,manifest:org.opencontainers.image.authors=$(AUTHOR)" \
-		--annotation "index,manifest:io.tetratelabs.built-on-envoy.extension.type=composer" \
-		--annotation "index,manifest:io.tetratelabs.built-on-envoy.extension.composer_version=$(COMPOSER_VERSION)" \
+		$(MULTI_OCI_ANNOTATIONS) \
 		--tag $(IMAGE) \
 		-f ./Dockerfile .
-	@echo "Removing builder: $(BUILDER_NAME)"
-	docker buildx rm $(BUILDER_NAME)
+
+# Package source code into an image and push it to the registry.
+CODE_IMAGE := $(HUB)/extension-src-$(NAME):$(VERSION)$(IMAGE_NONCE)
+.PHONY: push_code
+push_code: ## Build and push source code image
+	@echo "Building and pushing source code image..."
+	docker buildx build \
+		--output type=registry,oci-mediatypes=true \
+		--provenance=false \
+		$(BASE_OCI_ANNOTATIONS) \
+		$(SOURCE_ARTIFACT) \
+		--tag $(CODE_IMAGE) \
+		-f ./Dockerfile.code .
 
 .PHONY: clean
 clean:
@@ -334,4 +359,61 @@ RUN CGO_ENABLED=1 go build -buildmode=plugin -o plugin.so .
 FROM scratch AS final
 
 COPY --from=builder /workspace/plugin.so /
+`
+
+const dockerfileCodeTmpl = `# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# WARNING: This Dockerfile is auto-generated. Do not modify it directly.
+# If you need to customize the build process, consider creating a separate
+# Dockerfile (e.g., Dockerfile.code.custom) instead of editing this file.
+
+# Package source code into a scratch-based image
+FROM scratch
+
+# Copy all source files
+COPY . /src/
+
+# Set working directory metadata
+WORKDIR /src
+`
+
+const dockerignoreTmpl = `# Git directory and files
+.git/
+.gitignore
+.gitattributes
+
+# Build artifacts
+*.so
+*.o
+*.a
+*.dylib
+*.dll
+*.exe
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# CI/CD files
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Test and coverage files
+*.test
+coverage.out
+*.cover
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.log
 `
