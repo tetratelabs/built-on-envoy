@@ -14,7 +14,6 @@ ifeq ($(INSECURE_REGISTRY),true)
   registry_output := ",registry.insecure=true"
 endif
 
-PLUGIN_NAME := {{ .Name }}
 # Default data home layout for boe
 BOE_DATA_HOME ?= {{ .DataHome }}
 
@@ -68,11 +67,10 @@ build:
 
 .PHONY: install
 install: build
-	@echo "Installing $(PLUGIN_NAME)..."
-	@version=$$(grep "version:" manifest.yaml | awk '{print $$2}'); \
-	mkdir -p $(BOE_DATA_HOME)/extensions/goplugin/$(PLUGIN_NAME)/$$version; \
-	cp plugin.so $(BOE_DATA_HOME)/extensions/goplugin/$(PLUGIN_NAME)/$$version/plugin.so;
-	@echo "Installed to $(BOE_DATA_HOME)/extensions/goplugin/$(PLUGIN_NAME)"
+	@echo "Installing $(NAME)..."
+	mkdir -p $(BOE_DATA_HOME)/extensions/goplugin/$(NAME)/$(VERSION); \
+	cp plugin.so $(BOE_DATA_HOME)/extensions/goplugin/$(NAME)/$(VERSION)/plugin.so;
+	@echo "Installed to $(BOE_DATA_HOME)/extensions/goplugin/$(NAME)"
 
 # For single local platform build, we will add the OS and ARCH to the image tag to avoid confusion.
 # And we will not push it to the registry by default.
@@ -114,4 +112,4 @@ push_code: ## Build and push source code image
 
 .PHONY: clean
 clean:
-	rm -f $(PLUGIN_NAME).so
+	rm -f plugin.so
