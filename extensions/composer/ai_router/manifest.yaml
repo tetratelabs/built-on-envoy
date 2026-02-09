@@ -1,0 +1,15 @@
+name: composer.http.ai_router
+parent: composer # No version field here but will be inherited from the parent extension set.
+categories:
+  - Misc
+author: Tetrate
+description: A custom Go extension.
+longDescription: |
+  A custom Go extension.
+type: composer
+tags:
+  - go
+  - http
+  - filter
+license: Apache-2.0
+examples: []
