@@ -7,6 +7,8 @@ package e2e
 
 import (
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -33,22 +35,12 @@ func TestCreateWithDockerSupport(t *testing.T) {
 		}
 	}()
 
-	// Wirte a custom buildkit.toml to the temp directory to ensure local registry is used
-	buildkitConfig := fmt.Sprintf(`
-[registry."%s"]
-  http = true
-  insecure = true
-`, registry)
-	err = os.WriteFile(filepath.Join(tmpDir, "buildkit.toml"), []byte(buildkitConfig), 0o600)
-	require.NoError(t, err, "failed to write buildkit.toml")
-
 	// Create a new builder instance that uses the custom buildkit configuration and host network.
 	builderName := fmt.Sprintf("test-builder-%d", time.Now().Unix())
 	// #nosec G204
 	createBuilderCmd := exec.CommandContext(ctx, "docker", "buildx", "create",
 		"--name", builderName,
 		"--use",
-		"--config", filepath.Join(tmpDir, "buildkit.toml"),
 		"--driver-opt", "network=host",
 	)
 	output, err := createBuilderCmd.CombinedOutput()
@@ -133,48 +125,53 @@ func TestCreateWithDockerSupport(t *testing.T) {
 		require.NoError(t, err, "Should be able to push image to local registry")
 
 		// Pull the image manifest and check annotations
-		// #nosec G204
-		manifestCmd := exec.CommandContext(ctx, "docker", "buildx", "imagetools", "inspect",
-			fmt.Sprintf("%s/built-on-envoy/extension-test-docker:0.0.1-linux-%s", registry, runtime.GOARCH),
-			"--raw")
-		output, err = manifestCmd.CombinedOutput()
-		t.Logf("docker buildx imagetools inspect output: %s", string(output))
-		require.NoError(t, err, "Should be able to inspect image with buildx imagetools")
+		fetchManifest(t, registry, "built-on-envoy/extension-test-docker", fmt.Sprintf("0.0.1-linux-%s", runtime.GOARCH))
 	})
 
 	t.Run("makefile_push_target", func(t *testing.T) {
 		// #nosec G204
 		makeCmd := exec.CommandContext(ctx, "make", "push_image",
-			fmt.Sprintf("OCI_REGISTRY=%s", registry))
+			fmt.Sprintf("OCI_REGISTRY=%s", registry), "INSECURE_REGISTRY=true")
 		makeCmd.Dir = extensionDir
 		output, err := makeCmd.CombinedOutput()
 		t.Logf("make push_image output: %s", string(output))
 		require.NoError(t, err, "Makefile push_image target should be valid")
 
 		// Pull the image manifest and check annotations
-		// #nosec G204
-		manifestCmd := exec.CommandContext(ctx, "docker", "buildx", "imagetools", "inspect",
-			fmt.Sprintf("%s/built-on-envoy/extension-test-docker:0.0.1", registry), "--raw")
-		output, err = manifestCmd.CombinedOutput()
-		t.Logf("docker buildx imagetools inspect output: %s", string(output))
-		require.NoError(t, err, "Should be able to inspect image with buildx imagetools after push")
+		fetchManifest(t, registry, "built-on-envoy/extension-test-docker", "0.0.1")
 	})
 
 	t.Run("makefile_code_target", func(t *testing.T) {
 		// #nosec G204
 		makeCmd := exec.CommandContext(ctx, "make", "push_code",
-			fmt.Sprintf("OCI_REGISTRY=%s", registry))
+			fmt.Sprintf("OCI_REGISTRY=%s", registry), "INSECURE_REGISTRY=true")
 		makeCmd.Dir = extensionDir
 		output, err := makeCmd.CombinedOutput()
 		t.Logf("make push_code output: %s", string(output))
 		require.NoError(t, err, "Makefile push_code target should be valid")
 
 		// Pull the image manifest and check annotations
-		// #nosec G204
-		manifestCmd := exec.CommandContext(ctx, "docker", "buildx", "imagetools", "inspect",
-			fmt.Sprintf("%s/built-on-envoy/extension-src-test-docker:0.0.1", registry), "--raw")
-		output, err = manifestCmd.CombinedOutput()
-		t.Logf("docker buildx imagetools inspect output for code image: %s", string(output))
-		require.NoError(t, err, "Should be able to inspect code image with buildx imagetools after push")
+		fetchManifest(t, registry, "built-on-envoy/extension-src-test-docker", "0.0.1")
 	})
+}
+
+func fetchManifest(t *testing.T, registry, repository, reference string) {
+	url := fmt.Sprintf("http://%s/v2/%s/manifests/%s", registry, repository, reference)
+	// Set Accept header to request OCI media types to ensure the manifest is in OCI format
+	req, err := http.NewRequest("GET", url, nil)
+	require.NoError(t, err, "failed to create HTTP request for manifest")
+	req.Header.Set("Accept", "application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.v2+json")
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	require.NoError(t, err, "failed to get manifest from %s", url)
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("unexpected status code %d fetching manifest from %s: %s", resp.StatusCode, url, string(body))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err, "failed to read manifest body")
+	t.Logf("Manifest for %s:%s: %s", repository, reference, string(body))
 }
