@@ -52,7 +52,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		DataHome:     r.Dirs.DataHome,
 		Extensions:   r.Extensions,
 		Configs:      r.Configs,
-	})
+	}, FullConfigRenderer)
 	if err != nil {
 		return err
 	}

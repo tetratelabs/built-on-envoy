@@ -52,7 +52,7 @@ Flags:
                                    or "name:version").
       --local=LOCAL                Path to a directory containing a local
                                    Extension to enable.
-      --config=CONFIG,...          Optional JSON config string for extensions.
+      --config=CONFIG              Optional JSON config string for extensions.
                                    Applied in order to combined --extension and
                                    --local flags.
       --registry="ghcr.io/tetratelabs/built-on-envoy"
@@ -64,7 +64,7 @@ Flags:
                                    ($BOE_REGISTRY_USERNAME).
       --password=STRING            Password for the OCI registry
                                    ($BOE_REGISTRY_PASSWORD).
-`, internaltesting.WrapHelp(configHelp))
+`, internaltesting.WrapHelp(genConfigHelp))
 
 	require.Equal(t, expected, buf.String())
 }
@@ -109,4 +109,26 @@ func TestGenConfig(t *testing.T) {
 			require.YAMLEq(t, string(want), buf.String())
 		})
 	}
+}
+
+func TestGenConfigMultipleConfigArgsWithCommas(t *testing.T) {
+	config1 := `{"header":"value1","header2":"value2"}`
+	config2 := `{"another_config":"value3","yet_another_config":"value4"}`
+
+	var cli struct {
+		GenConfig GenConfig `cmd:"" help:"Generate Envoy configuration with specified extensions"`
+	}
+
+	var buf bytes.Buffer
+	parser, err := kong.New(&cli,
+		kong.Name("boe"),
+		kong.Writers(&buf, &buf),
+		kong.Exit(func(int) {}),
+		Vars,
+	)
+	require.NoError(t, err)
+
+	_, err = parser.Parse([]string{"gen-config", "--config", config1, "--config", config2})
+	require.NoError(t, err)
+	require.Equal(t, []string{config1, config2}, cli.GenConfig.Configs)
 }

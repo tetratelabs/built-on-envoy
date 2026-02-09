@@ -21,7 +21,7 @@ func TestRenderDefaultConfig(t *testing.T) {
 	cfg, err := RenderConfig(ConfigGenerationParams{
 		AdminPort:    9901,
 		ListenerPort: 10000,
-	})
+	}, FullConfigRenderer)
 	require.NoError(t, err)
 	require.YAMLEq(t, string(want), cfg)
 }
@@ -38,7 +38,25 @@ func TestRenderConfigWithExtensions(t *testing.T) {
 		AdminPort:    9901,
 		ListenerPort: 10000,
 		Extensions:   extensionManifests,
-	})
+	}, FullConfigRenderer)
+
+	require.NoError(t, err)
+	require.YAMLEq(t, string(want), cfg)
+}
+
+func TestRenderMinimalConfigWithExtensions(t *testing.T) {
+	want, err := os.ReadFile("testdata/output_config_only_filters.yaml")
+	require.NoError(t, err)
+
+	extensionManifests := []*extensions.Manifest{
+		mustReadManifest(t, "testdata/input_lua_inline.yaml"),
+	}
+
+	cfg, err := RenderConfig(ConfigGenerationParams{
+		AdminPort:    9901,
+		ListenerPort: 10000,
+		Extensions:   extensionManifests,
+	}, MinimalConfigRenderer)
 
 	require.NoError(t, err)
 	require.YAMLEq(t, string(want), cfg)
