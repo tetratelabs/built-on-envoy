@@ -62,6 +62,7 @@ func createComposerHTTPFilter(dirs *xdg.Directories, path, name string) error {
 		"manifest.yaml": manifestYamlTmpl,
 		"Makefile":      makefileTmpl,
 		"go.mod":        goModTmpl,
+		"Dockerfile":    dockerfileTmpl,
 	}
 
 	for name, tmpl := range files {
@@ -202,9 +203,41 @@ license: Apache-2.0
 examples: []
 `
 
-const makefileTmpl = `PLUGIN_NAME := {{ .Name }}
+const makefileTmpl = `# WARNING: This Makefile is auto-generated. Do not modify it directly.
+# If you need to customize the build process, consider using environment variables
+# or wrapper scripts instead of editing this file.
+
+# This IMAGE_NONCE will be appended to the final image tag if set.
+# It is intended to be used in CI environments to ensure that each image
+# built gets a unique tag.
+IMAGE_NONCE  ?= ""
+OCI_REGISTRY ?= ghcr.io/tetratelabs
+
+PLUGIN_NAME := {{ .Name }}
 # Default data home layout for boe
 BOE_DATA_HOME ?= {{ .DataHome }}
+
+# Labels for this plugin image.
+NAME             := $(shell grep "^name:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+VERSION          := $(shell grep "^version:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+DESCRIPTION      := $(shell grep "^description:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+TIMESTAMP        := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+COMMIT_SHA       := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
+AUTHOR           := $(shell grep "^author:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+COMPOSER_VERSION := $(shell grep "^composerVersion:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+LICENSE          := Apache-2.0
+
+HUB    := $(OCI_REGISTRY)/built-on-envoy
+IMAGE  := $(HUB)/extension-$(NAME):$(VERSION)$(IMAGE_NONCE)
+SOURCE := https://$(subst ghcr.io.,github.com,$(HUB))
+
+OS   ?= $(shell uname -s | tr '[:upper:]' '[:lower:]')
+ARCH ?= $(shell uname -m)
+ifeq ($(ARCH),x86_64)
+  ARCH := amd64
+else ifeq ($(ARCH),aarch64)
+  ARCH := arm64
+endif
 
 .PHONY: build
 build:
@@ -217,6 +250,51 @@ install: build
 	mkdir -p $(BOE_DATA_HOME)/extensions/goplugin/$(PLUGIN_NAME)/$$version; \
 	cp $(PLUGIN_NAME).so $(BOE_DATA_HOME)/extensions/goplugin/$(PLUGIN_NAME)/$$version/plugin.so;
 	@echo "Installed to $(BOE_DATA_HOME)/extensions/goplugin/$(PLUGIN_NAME)"
+
+# For single local platform build, we will add the OS and ARCH to the image tag to avoid confusion.
+.PHONY: image
+image:
+	docker buildx build \
+		--output type=image,oci-mediatypes=true \
+		--provenance=false \
+		--annotation "org.opencontainers.image.source=$(SOURCE)" \
+		--annotation "org.opencontainers.image.licenses=$(LICENSE)" \
+		--annotation "org.opencontainers.image.title=$(NAME)" \
+		--annotation "org.opencontainers.image.version=$(VERSION)" \
+		--annotation "org.opencontainers.image.description=$(DESCRIPTION)" \
+		--annotation "org.opencontainers.image.created=$(TIMESTAMP)" \
+		--annotation "org.opencontainers.image.revision=$(COMMIT_SHA)" \
+		--annotation "org.opencontainers.image.authors=$(AUTHOR)" \
+		--annotation "io.tetratelabs.built-on-envoy.extension.type=composer" \
+		--annotation "io.tetratelabs.built-on-envoy.extension.composer_version=$(COMPOSER_VERSION)" \
+		-t $(IMAGE)-$(OS)-$(ARCH) \
+		-f ./Dockerfile .
+
+# For push, we default it would be multiple architectures image on Linux.
+PLATFORMS ?= linux/arm64,linux/amd64
+BUILDER_NAME := $(NAME)-builder-$(shell date +%s)
+.PHONY: push
+push: ## Build and push docker image for the plugin for cross-platform support
+	@echo "Creating new builder: $(BUILDER_NAME)"
+	docker buildx create --name $(BUILDER_NAME) --use
+	@echo "Building and pushing image..."
+	docker buildx build --platform=$(PLATFORMS) \
+		--output type=registry,oci-mediatypes=true \
+		--provenance=false \
+		--annotation "index,manifest:org.opencontainers.image.source=$(SOURCE)" \
+		--annotation "index,manifest:org.opencontainers.image.licenses=$(LICENSE)" \
+		--annotation "index,manifest:org.opencontainers.image.title=$(NAME)" \
+		--annotation "index,manifest:org.opencontainers.image.version=$(VERSION)" \
+		--annotation "index,manifest:org.opencontainers.image.description=$(DESCRIPTION)" \
+		--annotation "index,manifest:org.opencontainers.image.created=$(TIMESTAMP)" \
+		--annotation "index,manifest:org.opencontainers.image.revision=$(COMMIT_SHA)" \
+		--annotation "index,manifest:org.opencontainers.image.authors=$(AUTHOR)" \
+		--annotation "index,manifest:io.tetratelabs.built-on-envoy.extension.type=composer" \
+		--annotation "index,manifest:io.tetratelabs.built-on-envoy.extension.composer_version=$(COMPOSER_VERSION)" \
+		--tag $(IMAGE) \
+		-f ./Dockerfile .
+	@echo "Removing builder: $(BUILDER_NAME)"
+	docker buildx rm $(BUILDER_NAME)
 
 .PHONY: clean
 clean:
@@ -231,4 +309,29 @@ require (
 	github.com/envoyproxy/envoy/source/extensions/dynamic_modules v0.0.0-20260129014508-e8c1dc7dcbcd
 )
 
+`
+
+const dockerfileTmpl = `# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# WARNING: This Dockerfile is auto-generated. Do not modify it directly.
+# If you need to customize the build process, consider creating a separate
+# Dockerfile (e.g., Dockerfile.custom) instead of editing this file.
+
+# Build the manager binary
+FROM golang:1.25.6 AS builder
+
+WORKDIR /workspace
+COPY . .
+
+RUN go mod download all
+
+# Build go plugin
+RUN CGO_ENABLED=1 go build -buildmode=plugin -o plugin.so .
+
+FROM scratch AS final
+
+COPY --from=builder /workspace/plugin.so /
 `
