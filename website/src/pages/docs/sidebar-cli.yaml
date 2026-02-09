@@ -10,10 +10,6 @@ sections:
         href: /docs/cli/gen-config
       - title: list
         href: /docs/cli/list
-      - title: pull
-        href: /docs/cli/pull
-      - title: push
-        href: /docs/cli/push
       - title: run
         href: /docs/cli/run
 
