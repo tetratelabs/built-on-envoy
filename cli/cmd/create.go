@@ -6,7 +6,7 @@
 package cmd
 
 import (
-	_ "embed"
+	"embed"
 	"fmt"
 	"os"
 	"os/exec"
@@ -16,6 +16,9 @@ import (
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
+
+//go:embed templates/create/*
+var templateFS embed.FS
 
 // Create is a command to create a new extension template.
 type Create struct {
@@ -53,36 +56,47 @@ func createComposerHTTPFilter(dirs *xdg.Directories, path, name string) error {
 		"DataHome":           dirs.DataHome,
 	}
 
+	// Map of output filename to template filename
 	files := map[string]string{
-		"plugin.go":     pluginGoTmpl,
-		"manifest.yaml": manifestYamlTmpl,
-		"Makefile":      makefileTmpl,
-		"go.mod":        goModTmpl,
+		"plugin.go":       "templates/create/plugin.go.tmpl",
+		"manifest.yaml":   "templates/create/manifest.yaml.tmpl",
+		"Makefile":        "templates/create/Makefile.tmpl",
+		"go.mod":          "templates/create/go.mod.tmpl",
+		"Dockerfile":      "templates/create/Dockerfile.tmpl",
+		"Dockerfile.code": "templates/create/Dockerfile.code.tmpl",
+		".dockerignore":   "templates/create/.dockerignore.tmpl",
 	}
 
-	for name, tmpl := range files {
-		path := filepath.Join(repoPath, name)
-		// #nosec G304
-		f, err := os.Create(path)
+	for outputName, tmplPath := range files {
+		outputPath := filepath.Join(repoPath, outputName)
+
+		// Read template from embedded filesystem
+		tmplContent, err := templateFS.ReadFile(tmplPath)
 		if err != nil {
-			return fmt.Errorf("failed to create file %s: %w", path, err)
+			return fmt.Errorf("failed to read template %s: %w", tmplPath, err)
+		}
+
+		// #nosec G304
+		f, err := os.Create(outputPath)
+		if err != nil {
+			return fmt.Errorf("failed to create file %s: %w", outputPath, err)
 		}
 		defer func() {
 			err = f.Close()
 			if err != nil {
-				fmt.Printf("Warning: failed to close file %s: %v\n", path, err)
+				fmt.Printf("Warning: failed to close file %s: %v\n", outputPath, err)
 			}
 		}()
 
-		t, err := template.New(name).Parse(tmpl)
+		t, err := template.New(outputName).Parse(string(tmplContent))
 		if err != nil {
-			return fmt.Errorf("failed to parse template for %s: %w", name, err)
+			return fmt.Errorf("failed to parse template for %s: %w", outputName, err)
 		}
 
 		if err := t.Execute(f, data); err != nil {
-			return fmt.Errorf("failed to execute template for %s: %w", name, err)
+			return fmt.Errorf("failed to execute template for %s: %w", outputName, err)
 		}
-		fmt.Printf("Created %s\n", path)
+		fmt.Printf("Created %s\n", outputPath)
 	}
 
 	cmd := exec.Command("go", "mod", "tidy")
@@ -92,139 +106,3 @@ func createComposerHTTPFilter(dirs *xdg.Directories, path, name string) error {
 	}
 	return nil
 }
-
-const pluginGoTmpl = `package main
-
-import (
-	"encoding/json"
-
-	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
-)
-
-// Config represents the JSON configuration for this filter.
-type customHttpFilterConfig struct {
-	HeaderValue string ` + "`json:\"header_value\"`" + `
-}
-
-// This is the implementation of the HTTP filter.
-type customHttpFilter struct {
-	shared.EmptyHttpFilter
-	handle shared.HttpFilterHandle
-	config *customHttpFilterConfig
-}
-
-func (f *customHttpFilter) OnRequestHeaders(headers shared.HeaderMap, endStream bool) shared.HeadersStatus {
-	// TODO: To implement your own custom logic here.
-	headers.Add("x-{{ .Name }}", f.config.HeaderValue)
-	f.handle.Log(shared.LogLevelInfo, "{{ .Name }}: OnRequestHeaders called")
-	return shared.HeadersStatusContinue
-}
-
-func (f *customHttpFilter) OnRequestBody(body shared.BodyBuffer, endStream bool) shared.BodyStatus {
-	return shared.BodyStatusContinue
-}
-
-func (f *customHttpFilter) OnRequestTrailers(trailers shared.HeaderMap) shared.TrailersStatus {
-	return shared.TrailersStatusContinue
-}
-
-func (f *customHttpFilter) OnResponseHeaders(headers shared.HeaderMap, endStream bool) shared.HeadersStatus {
-	// TODO: To implement your own custom logic here.
-	headers.Add("x-{{ .Name }}", f.config.HeaderValue)
-	f.handle.Log(shared.LogLevelInfo, "{{ .Name }}: OnResponseHeaders called")
-	return shared.HeadersStatusContinue
-}
-
-func (f *customHttpFilter) OnResponseBody(body shared.BodyBuffer, endStream bool) shared.BodyStatus {
-	return shared.BodyStatusContinue
-}
-
-func (f *customHttpFilter) OnResponseTrailers(trailers shared.HeaderMap) shared.TrailersStatus {
-	return shared.TrailersStatusContinue
-}
-
-// This is the factory for the HTTP filter.
-type customHttpFilterFactory struct {
-	config *customHttpFilterConfig
-}
-
-func (f *customHttpFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
-	return &customHttpFilter{handle: handle, config: f.config}
-}
-
-// This is the configuration factory for the HTTP filter.
-type customHttpFilterConfigFactory struct {
-	shared.EmptyHttpFilterConfigFactory
-}
-
-func (f *customHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
-	// Parse JSON configuration
-	// TODO: To implement your own configuration parsing and validation logic here.
-	cfg := &customHttpFilterConfig{
-		HeaderValue: "example",
-	}
-	if len(config) > 0 {
-		if err := json.Unmarshal(config, cfg); err != nil {
-			handle.Log(shared.LogLevelError, "{{ .Name }}: failed to parse config: "+err.Error())
-			return nil, err
-		}
-	}
-	handle.Log(shared.LogLevelInfo, "{{ .Name }}: loaded config with header_value="+cfg.HeaderValue)
-	return &customHttpFilterFactory{config: cfg}, nil
-}
-
-func WellKnownHttpFilterConfigFactories() map[string]shared.HttpFilterConfigFactory {
-	return map[string]shared.HttpFilterConfigFactory{
-		"{{ .Name }}": &customHttpFilterConfigFactory{},
-	}
-}
-`
-
-const manifestYamlTmpl = `name: {{ .Name }}
-version: 0.0.1
-categories:
-  - Misc
-author: Unknown
-description: A custom Go extension.
-longDescription: |
-  A custom Go extension.
-type: composer
-composerVersion: {{ .LibComposerVersion }}
-tags:
-  - go
-  - http
-  - filter
-license: Apache-2.0
-examples: []
-`
-
-const makefileTmpl = `PLUGIN_NAME := {{ .Name }}
-# Default data home layout for boe
-BOE_DATA_HOME ?= {{ .DataHome }}
-
-.PHONY: build
-build:
-	go build -buildmode=plugin -o $(PLUGIN_NAME).so .
-
-.PHONY: install
-install: build
-	@echo "Installing $(PLUGIN_NAME)..."
-	@version=$$(grep "version:" manifest.yaml | awk '{print $$2}'); \
-	mkdir -p $(BOE_DATA_HOME)/extensions/goplugin/$(PLUGIN_NAME)/$$version; \
-	cp $(PLUGIN_NAME).so $(BOE_DATA_HOME)/extensions/goplugin/$(PLUGIN_NAME)/$$version/plugin.so;
-	@echo "Installed to $(BOE_DATA_HOME)/extensions/goplugin/$(PLUGIN_NAME)"
-
-.PHONY: clean
-clean:
-	rm -f $(PLUGIN_NAME).so
-`
-
-const goModTmpl = `module {{ .Name }}
-
-go 1.25.6
-
-require (
-	github.com/envoyproxy/envoy/source/extensions/dynamic_modules v0.0.0-20260129014508-e8c1dc7dcbcd
-)
-
-`

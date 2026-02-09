@@ -6,7 +6,7 @@
 # This IMAGE_NONCE will be appended to the final image tag if set.
 # It is intended to be used in CI environments to ensure that each image
 # built gets a unique tag.
-IMAGE_NONCE  ?= ""
+IMAGE_NONCE  ?=
 OCI_REGISTRY ?= ghcr.io/tetratelabs
 ifndef EXTENSION_PATH
 $(error The EXTENSION_PATH variable should be set)

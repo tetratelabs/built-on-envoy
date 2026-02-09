@@ -101,3 +101,14 @@ func TestCreate_Run(t *testing.T) {
 		assert.Contains(t, string(plugin), "WellKnownHttpFilterConfigFactories")
 	}
 }
+
+func TestUnsupportedType(t *testing.T) {
+	c := &Create{
+		Type: "unsupported-type",
+		Name: "test-extension",
+	}
+
+	err := c.Run(&xdg.Directories{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported extension type")
+}
