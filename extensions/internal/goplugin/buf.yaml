@@ -3,25 +3,20 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-version: v1
-name: buf.build/tetrateio/extensibility
+version: v2
+
+modules:
+  - path: .
+
 deps:
   - buf.build/protocolbuffers/wellknowntypes
-  - buf.build/googleapis/googleapis
+
 lint:
   use:
-    - DEFAULT
+    - STANDARD
   except:
-    - ENUM_VALUE_PREFIX
-    - ENUM_VALUE_UPPER_SNAKE_CASE
-    - ENUM_ZERO_VALUE_SUFFIX
-    - FIELD_LOWER_SNAKE_CASE
     - PACKAGE_DIRECTORY_MATCH
     - PACKAGE_VERSION_SUFFIX
-    - RPC_REQUEST_STANDARD_NAME
-    - RPC_RESPONSE_STANDARD_NAME
-    - RPC_REQUEST_RESPONSE_UNIQUE
-    - SERVICE_SUFFIX
 breaking:
   use:
     - FILE

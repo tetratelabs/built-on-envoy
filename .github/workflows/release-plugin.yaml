@@ -38,7 +38,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and Push Plugin
-        run: |
-          make -C extensions/internal/libplugin buildx \
-            EXTENSION_PATH=${{ inputs.extension_path }} \
-            IMAGE_NONCE="${{ inputs.nonce }}"
+        env:
+          IMAGE_NONCE: ${{ inputs.nonce }}
+          EXTENSION_PATH: ${{ inputs.extension_path }}
+        run: make -C extensions/internal/libplugin push

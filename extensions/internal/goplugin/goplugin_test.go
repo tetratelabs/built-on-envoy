@@ -34,8 +34,7 @@ func Test_Create(t *testing.T) {
 		return nil, fmt.Errorf("error")
 	}
 
-	// Invalid plugin config.
-	{
+	t.Run("Invalid plugin config", func(t *testing.T) {
 		configFactory := &goplugin.GoPluginLoaderConfigFactory{
 			LoadPlugin: loadPluginNoError,
 		}
@@ -45,10 +44,9 @@ func Test_Create(t *testing.T) {
 		if !strings.Contains(err.Error(), "failed to load go plugin config from module config") {
 			t.Errorf("unexpected error: %v", err)
 		}
-	}
+	})
 
-	// No name or url.
-	{
+	t.Run("No name or url", func(t *testing.T) {
 		configFactory := &goplugin.GoPluginLoaderConfigFactory{
 			LoadPlugin: loadPluginNoError,
 		}
@@ -58,10 +56,9 @@ func Test_Create(t *testing.T) {
 		if !strings.Contains(err.Error(), "plugin name or url is empty") {
 			t.Errorf("unexpected error: %v", err)
 		}
-	}
+	})
 
-	// Load plugin error.
-	{
+	t.Run("Load plugin error", func(t *testing.T) {
 		configFactory := &goplugin.GoPluginLoaderConfigFactory{
 			LoadPlugin: loadPluginWithError,
 		}
@@ -71,10 +68,9 @@ func Test_Create(t *testing.T) {
 		if !strings.Contains(err.Error(), "failed to handle dynamic module plugin") {
 			t.Errorf("unexpected error: %v", err)
 		}
-	}
+	})
 
-	// Successful case.
-	{
+	t.Run("Successful case", func(t *testing.T) {
 		configFactory := &goplugin.GoPluginLoaderConfigFactory{
 			LoadPlugin: loadPluginNoError,
 		}
@@ -86,7 +82,7 @@ func Test_Create(t *testing.T) {
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
-	}
+	})
 }
 
 func Test_CreatePerRoute(t *testing.T) {
@@ -106,8 +102,7 @@ func Test_CreatePerRoute(t *testing.T) {
 		return nil, fmt.Errorf("error")
 	}
 
-	// Invalid plugin config.
-	{
+	t.Run("Invalid plugin config", func(t *testing.T) {
 		configFactory := &goplugin.GoPluginLoaderConfigFactory{
 			LoadPlugin: loadPluginNoError,
 		}
@@ -117,10 +112,9 @@ func Test_CreatePerRoute(t *testing.T) {
 		if !strings.Contains(err.Error(), "failed to load go plugin config from module config") {
 			t.Errorf("unexpected error: %v", err)
 		}
-	}
+	})
 
-	// No name or url.
-	{
+	t.Run("No name or url", func(t *testing.T) {
 		configFactory := &goplugin.GoPluginLoaderConfigFactory{
 			LoadPlugin: loadPluginNoError,
 		}
@@ -130,10 +124,9 @@ func Test_CreatePerRoute(t *testing.T) {
 		if !strings.Contains(err.Error(), "plugin name or url is empty") {
 			t.Errorf("unexpected error: %v", err)
 		}
-	}
+	})
 
-	// Load plugin error.
-	{
+	t.Run("Load plugin error", func(t *testing.T) {
 		configFactory := &goplugin.GoPluginLoaderConfigFactory{
 			LoadPlugin: loadPluginWithError,
 		}
@@ -143,10 +136,9 @@ func Test_CreatePerRoute(t *testing.T) {
 		if !strings.Contains(err.Error(), "failed to handle dynamic module plugin") {
 			t.Errorf("unexpected error: %v", err)
 		}
-	}
+	})
 
-	// Successful case.
-	{
+	t.Run("Successful case", func(t *testing.T) {
 		configFactory := &goplugin.GoPluginLoaderConfigFactory{
 			LoadPlugin: loadPluginNoError,
 		}
@@ -158,5 +150,5 @@ func Test_CreatePerRoute(t *testing.T) {
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
-	}
+	})
 }
