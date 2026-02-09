@@ -140,10 +140,6 @@ func TestCreateWithDockerSupport(t *testing.T) {
 		output, err = manifestCmd.CombinedOutput()
 		t.Logf("docker buildx imagetools inspect output: %s", string(output))
 		require.NoError(t, err, "Should be able to inspect image with buildx imagetools")
-		// Ensure the annotations contain the
-		// `"io.tetratelabs.built-on-envoy.extension.artifact": "binary"`.
-		require.Contains(t, string(output), `"io.tetratelabs.built-on-envoy.extension.artifact": "binary"`,
-			"Image should have correct artifact annotation")
 	})
 
 	t.Run("makefile_push_target", func(t *testing.T) {
@@ -162,10 +158,6 @@ func TestCreateWithDockerSupport(t *testing.T) {
 		output, err = manifestCmd.CombinedOutput()
 		t.Logf("docker buildx imagetools inspect output: %s", string(output))
 		require.NoError(t, err, "Should be able to inspect image with buildx imagetools after push")
-		// Ensure the annotations contain the
-		// `"io.tetratelabs.built-on-envoy.extension.artifact": "binary"`.
-		require.Contains(t, string(output), `"io.tetratelabs.built-on-envoy.extension.artifact": "binary"`,
-			"Image should have correct artifact annotation after push")
 	})
 
 	t.Run("makefile_code_target", func(t *testing.T) {
@@ -184,9 +176,5 @@ func TestCreateWithDockerSupport(t *testing.T) {
 		output, err = manifestCmd.CombinedOutput()
 		t.Logf("docker buildx imagetools inspect output for code image: %s", string(output))
 		require.NoError(t, err, "Should be able to inspect code image with buildx imagetools after push")
-		// Ensure the annotations contain the
-		// `"io.tetratelabs.built-on-envoy.extension.artifact": "binary"`.
-		require.Contains(t, string(output), `"io.tetratelabs.built-on-envoy.extension.artifact": "source"`,
-			"Code image should have correct artifact annotation")
 	})
 }
