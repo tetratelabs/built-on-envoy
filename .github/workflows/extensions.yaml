@@ -74,6 +74,18 @@ jobs:
           cache-dependency-path: extensions/go.sum
       - run: make -C extensions/core/libplugin lib_so
 
+  test:
+    needs: changes
+    if: ${{ needs.changes.outputs.extensions == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: extensions/go.mod
+          cache-dependency-path: extensions/go.sum
+      - run: go -C extensions/ test ./...
+
   lint:
     needs: changes
     if: ${{ needs.changes.outputs.extensions == 'true' }}
@@ -93,6 +105,7 @@ jobs:
       - goplugin
       - libcomposer
       - libplugin
+      - test
       - lint
     # We need this to run always to force-fail (and not skip) if any needed
     # job has failed. Otherwise, a skipped job will not fail the workflow.

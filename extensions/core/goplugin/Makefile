@@ -8,7 +8,7 @@ SHELL    := /bin/bash
 repo_dir := $(shell git rev-parse --show-toplevel)
 
 .PHONY: all
-all: lint gen test check
+all: lint gen check
 
 .PHONY: lint
 lint:
