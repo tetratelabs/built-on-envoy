@@ -29,7 +29,9 @@ jobs:
           filters: |
             website:
               - 'website/**'
-          predicate-quantifier: every  # Make the filters be AND-ed
+              - 'cli/cmd/**'
+              - 'extensions/manifest.schema.json'
+          predicate-quantifier: some  # Make the filters be OR-ed
           token: "" # don't use github api
     outputs:
       website: ${{ steps.changes.outputs.website }}
