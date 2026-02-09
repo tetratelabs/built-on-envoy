@@ -114,11 +114,6 @@ func createFactory[T any](binaryPath string, symbolName string, pluginName strin
 	return goPluginModule, nil
 }
 
-// CreatePluginConfigFactory creates a PluginConfigFactory for the given plugin name.
-func CreatePluginConfigFactory(pluginName string, binaryPath string) (shared.HttpFilterFactory, error) {
-	return createFactory[shared.HttpFilterFactory](binaryPath, "WellKnownPluginConfigFactories", pluginName)
-}
-
 // CreateStreamPluginConfigFactory creates a PluginConfigFactory for the given plugin name.
 func CreateStreamPluginConfigFactory(pluginName string, binaryPath string) (shared.HttpFilterConfigFactory, error) {
 	return createFactory[shared.HttpFilterConfigFactory](binaryPath, "WellKnownHttpFilterConfigFactories", pluginName)
