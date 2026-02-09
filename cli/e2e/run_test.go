@@ -37,6 +37,25 @@ func TestCustomPorts(t *testing.T) {
 	require.NoError(t, internaltesting.CheckGet(ctx, "http://localhost:12000/server_info", internaltesting.EqualStatus(200)))
 }
 
+func TestLuaRemoteExecution(t *testing.T) {
+	internaltesting.SkipIfTestRegistryNotConfigured(t)
+
+	// Run the remote extension.
+	// This will resolve the latest tag of the extension, download it to
+	// the data directory, and execute it from there.
+	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin, "--log-level", "lua:info", "--extension", "example-lua")
+
+	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
+	checkHeader := func(r *http.Response) bool {
+		return r.Header.Get("x-lua-response-processed") == "true"
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	t.Cleanup(cancel)
+
+	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
+}
+
 func TestLuaLocalExtension(t *testing.T) {
 	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin,
 		"--log-level", "lua:info",
