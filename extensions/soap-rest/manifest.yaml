@@ -1,0 +1,72 @@
+name: soap-rest
+version: 0.1.0
+categories:
+  - Transform
+author: Tetrate
+description: Bidirectional SOAP/REST bridge - converts SOAP requests to REST and REST requests to SOAP
+longDescription: |
+  A bidirectional protocol bridge that transparently converts between SOAP XML
+  and REST JSON at the Envoy proxy layer. Supports two modes of operation:
+
+  **SOAP to REST**: Accepts incoming SOAP XML requests, parses the SOAP envelope,
+  extracts the operation name and parameters, and rewrites the request as a REST
+  JSON call with the appropriate HTTP method, path, and JSON body. REST responses
+  are wrapped back into SOAP XML envelopes for the client.
+
+  **REST to SOAP**: Accepts incoming REST JSON requests and wraps them in SOAP XML
+  envelopes for forwarding to a SOAP backend. SOAP XML responses are unwrapped
+  and returned as JSON to the client.
+
+  Features:
+  - Automatic mode detection based on Content-Type headers
+  - Generic XML-to-JSON and JSON-to-XML conversion (handles arbitrary structures)
+  - Configurable operation-to-path mappings with path parameter substitution
+  - SOAP Fault to HTTP error code mapping (and vice versa)
+  - SOAP 1.1 and 1.2 envelope support
+  - Sensible defaults with JSON config overrides
+type: composer
+composerVersion: 0.2.1
+tags:
+  - soap
+  - rest
+  - xml
+  - json
+  - transform
+  - protocol-bridge
+  - go
+  - http
+  - filter
+license: Apache-2.0
+examples:
+  - title: SOAP to REST (default config)
+    description: Run with default configuration - SOAP operations map to /api/{operationName}
+    code: boe run --extension soap-rest
+  - title: SOAP to REST (custom mappings)
+    description: Run with custom operation-to-REST mappings
+    code: |
+      boe run --extension soap-rest --config '{
+        "operations": {
+          "GetUser": {
+            "restMethod": "GET",
+            "restPath": "/users/{id}",
+            "pathParams": {"id": "UserId"}
+          },
+          "CreateOrder": {
+            "restMethod": "POST",
+            "restPath": "/orders"
+          }
+        },
+        "defaults": {
+          "restMethod": "POST",
+          "restPathPrefix": "/api",
+          "soapEndpoint": "/ws",
+          "soapNamespace": "http://example.com/services"
+        }
+      }'
+  - title: REST to SOAP
+    description: Send a REST JSON request that gets converted to SOAP for the upstream
+    code: |
+      curl -X POST http://localhost:10000/users \
+        -H "Content-Type: application/json" \
+        -H "X-Target-SOAPAction: http://example.com/GetUser" \
+        -d '{"UserId": "123", "Name": "Alice"}'
