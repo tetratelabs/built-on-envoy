@@ -6,6 +6,7 @@
 package envoy
 
 import (
+	"encoding/json"
 	"fmt"
 
 	accesslogv3 "github.com/envoyproxy/go-control-plane/envoy/config/accesslog/v3"
@@ -41,9 +42,65 @@ type ConfigGenerationParams struct {
 	Configs []string
 }
 
+// GeneratedConfigResources holds the generated Envoy resources for an extension.
+type GeneratedConfigResources struct {
+	// HTTPFilters are the generated HTTP filters to be included in the Envoy configuration.
+	HTTPFilters []*hcmv3.HttpFilter
+	// Clusters are the generated clusters to be included in the Envoy configuration.
+	Clusters []*clusterv3.Cluster
+}
+
+// ConfigRenderer is a function type that renders the Envoy configuration based on the provided parameters and generated resources.
+type ConfigRenderer func(ConfigGenerationParams, GeneratedConfigResources) (string, error)
+
 // RenderConfig renders the Envoy configuration with the given parameters.
 // The ouyput is a YAML string that is passed to func-e to run Envoy.
-func RenderConfig(params ConfigGenerationParams) (string, error) {
+func RenderConfig(params ConfigGenerationParams, renderer ConfigRenderer) (string, error) {
+	gen, err := generateConfig(params)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate config resources: %w", err)
+	}
+	return renderer(params, gen)
+}
+
+// FullConfigRenderer is a default ConfigRenderer that generates the full Envoy configuration with listeners, clusters, and admin interface.
+func FullConfigRenderer(params ConfigGenerationParams, gen GeneratedConfigResources) (string, error) {
+	cfg, err := buildFullConfig(params.AdminPort, params.ListenerPort, gen.HTTPFilters, gen.Clusters)
+	if err != nil {
+		return "", fmt.Errorf("failed to build config: %w", err)
+	}
+	cfgYaml, err := ProtoToYaml(cfg)
+	if err != nil {
+		return "", fmt.Errorf("failed to convert config to YAML: %w", err)
+	}
+	return string(cfgYaml), nil
+}
+
+// MinimalConfigRenderer is a ConfigRenderer that generates a minimal Envoy configuration containing only the generated HTTP filters and clusters.
+func MinimalConfigRenderer(_ ConfigGenerationParams, gen GeneratedConfigResources) (string, error) {
+	filterConfigs, err := protoListToAny(gen.HTTPFilters)
+	if err != nil {
+		return "", fmt.Errorf("failed to serialize filter configs: %w", err)
+	}
+
+	payload := map[string]any{"http_filters": filterConfigs}
+	clusterConfigs, err := protoListToAny(gen.Clusters)
+	if err != nil {
+		return "", fmt.Errorf("failed to serialize cluster configs: %w", err)
+	}
+	if len(clusterConfigs) > 0 {
+		payload["clusters"] = clusterConfigs
+	}
+	cfgYaml, err := yaml.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal config to YAML: %w", err)
+	}
+
+	return string(cfgYaml), nil
+}
+
+// generateConfig generates the Envoy configuration resources for the given extensions and parameters.
+func generateConfig(params ConfigGenerationParams) (GeneratedConfigResources, error) {
 	filters := make([]*hcmv3.HttpFilter, 0, len(params.Extensions))
 	clusters := make([]*clusterv3.Cluster, 0)
 	for i, ext := range params.Extensions {
@@ -53,32 +110,26 @@ func RenderConfig(params ConfigGenerationParams) (string, error) {
 		}
 		resources, err := GenerateFilterConfig(ext, params.DataHome, config)
 		if err != nil {
-			return "", fmt.Errorf("failed to generate filter config for extension %q: %w", ext.Name, err)
+			return GeneratedConfigResources{}, fmt.Errorf("failed to generate filter config for extension %q: %w", ext.Name, err)
 		}
 		filters = append(filters, resources.HTTPFilters...)
 		clusters = append(clusters, resources.Clusters...)
 	}
 
-	cfg, err := buildConfig(params.AdminPort, params.ListenerPort, filters, clusters)
-	if err != nil {
-		return "", fmt.Errorf("failed to build config: %w", err)
-	}
-	cfgYaml, err := ProtoToYaml(cfg)
-	if err != nil {
-		return "", fmt.Errorf("failed to convert config to YAML: %w", err)
-	}
-
-	return string(cfgYaml), nil
+	return GeneratedConfigResources{
+		HTTPFilters: filters,
+		Clusters:    clusters,
+	}, nil
 }
 
-// buildConfig creates the EnvoyConfiguration based on the provided parameters.
+// buildFullConfig creates the EnvoyConfiguration based on the provided parameters.
 //
 // Note we won't generate a "bootstrap" configuration but normal Envoy config. However,
 // using the Bootstrap struct is convenient as a wrapper as it is already a `proto.Message`
 // and allows us to use the proto marshalling functions. Otherwise, we would have to create a wrapper
 // proto on our own, or marshal the config manually.
 // TODO(nacx): Is there a wrapper for `admin` and `static_resources` we could use other than Bootstrap?
-func buildConfig(adminPort, listenerPort uint32, filters []*hcmv3.HttpFilter, clusters []*clusterv3.Cluster) (*bootstrapv3.Bootstrap, error) {
+func buildFullConfig(adminPort, listenerPort uint32, filters []*hcmv3.HttpFilter, clusters []*clusterv3.Cluster) (*bootstrapv3.Bootstrap, error) {
 	testupstreamCluster, err := buildTestUpstreamCluster("httpbin", "httpbin.org", 443)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build test upstream cluster: %w", err)
@@ -272,4 +323,23 @@ func ProtoToYaml(msg proto.Message) ([]byte, error) {
 	}
 
 	return yamlBytes, nil
+}
+
+// protoListToAny converts a list of proto messages to a list of interface{} by marshaling to JSON and unmarshaling back.
+func protoListToAny[T proto.Message](items []T) ([]any, error) {
+	marshaler := protojson.MarshalOptions{UseProtoNames: true}
+	out := make([]any, 0, len(items))
+	for _, item := range items {
+		raw, err := marshaler.Marshal(item)
+		if err != nil {
+			return nil, err
+		}
+		var decoded any
+		if err := json.Unmarshal(raw, &decoded); err != nil {
+			return nil, err
+		}
+		out = append(out, decoded)
+	}
+
+	return out, nil
 }

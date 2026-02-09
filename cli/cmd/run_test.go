@@ -57,7 +57,7 @@ Flags:
                                    or "name:version").
       --local=LOCAL                Path to a directory containing a local
                                    Extension to enable.
-      --config=CONFIG,...          Optional JSON config string for extensions.
+      --config=CONFIG              Optional JSON config string for extensions.
                                    Applied in order to combined --extension and
                                    --local flags.
       --registry="ghcr.io/tetratelabs/built-on-envoy"
@@ -461,4 +461,26 @@ func TestRunIncomaptibleEnvoyVersion(t *testing.T) {
 	}
 	err := r.Run(t.Context(), nil)
 	require.ErrorIs(t, err, errIncompatibleEnvoyVersion)
+}
+
+func TestRunMultipleConfigArgsWithCommas(t *testing.T) {
+	config1 := `{"header":"value1","header2":"value2"}`
+	config2 := `{"another_config":"value3","yet_another_config":"value4"}`
+
+	var cli struct {
+		Run Run `cmd:"" help:"Run Envoy with specified extensions"`
+	}
+
+	var buf bytes.Buffer
+	parser, err := kong.New(&cli,
+		kong.Name("boe"),
+		kong.Writers(&buf, &buf),
+		kong.Exit(func(int) {}),
+		Vars,
+	)
+	require.NoError(t, err)
+
+	_, err = parser.Parse([]string{"run", "--config", config1, "--config", config2})
+	require.NoError(t, err)
+	require.Equal(t, []string{config1, config2}, cli.Run.Configs)
 }
