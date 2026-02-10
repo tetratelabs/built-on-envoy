@@ -10,6 +10,8 @@ import (
 	"errors"
 	"fmt"
 
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+
 	"github.com/tetratelabs/built-on-envoy/cli/internal/oci"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
@@ -20,6 +22,8 @@ type Downloader struct {
 	Password string
 	Insecure bool
 	Dirs     *xdg.Directories
+	OS       string
+	Arch     string
 
 	// client factory function to allow mocking in tests.
 	newClient func(repository, username, password string, insecure bool) (oci.RepositoryClient, error)
@@ -43,8 +47,16 @@ func (d *Downloader) Download(ctx context.Context, repository, version, path str
 		}
 	}
 
+	var platform *ocispec.Platform
+	if d.OS != "" && d.Arch != "" {
+		platform = &ocispec.Platform{
+			OS:           d.OS,
+			Architecture: d.Arch,
+		}
+	}
+
 	downloadDir := downloadDirectory(path, d.Dirs, NameFromRepository(repository), version)
-	_, digest, err := client.Pull(ctx, version, downloadDir)
+	_, digest, err := client.Pull(ctx, version, downloadDir, platform)
 	return downloadDir, digest, err
 }
 

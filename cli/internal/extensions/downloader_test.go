@@ -38,7 +38,7 @@ func (m *mockRepositoryClient) Push(context.Context, string, string, map[string]
 	return "", nil
 }
 
-func (m *mockRepositoryClient) Pull(context.Context, string, string) (ocispec.Manifest, string, error) {
+func (m *mockRepositoryClient) Pull(context.Context, string, string, *ocispec.Platform) (ocispec.Manifest, string, error) {
 	return ocispec.Manifest{}, m.pullDigest, m.pullErr
 }
 
@@ -46,7 +46,7 @@ func (m *mockRepositoryClient) Tags(context.Context) ([]string, error) {
 	return m.tags, m.tagsErr
 }
 
-func (m *mockRepositoryClient) FetchManifest(context.Context, string) (ocispec.Manifest, error) {
+func (m *mockRepositoryClient) FetchManifest(context.Context, string, *ocispec.Platform) (ocispec.Manifest, error) {
 	return ocispec.Manifest{}, nil
 }
 
