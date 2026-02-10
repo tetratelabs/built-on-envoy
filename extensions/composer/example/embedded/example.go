@@ -3,7 +3,8 @@
 // The full text of the Apache license is available in the LICENSE file at
 // the root of the repo.
 
-package impl
+// Package example demonstrates an example HTTP filter plugin implementation.
+package example
 
 import (
 	"fmt"
@@ -12,13 +13,15 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 )
 
-type ExamplePlugin struct {
+// Plugin is an HTTP filter plugin that demonstrates various capabilities.
+type Plugin struct {
 	shared.EmptyHttpFilter
 
 	statsCollector *statsCollector
 	handle         shared.HttpFilterHandle
 }
 
+// OnRequestHeaders processes request headers and demonstrates various plugin capabilities:
 // - Get headers from request and log then.
 // - Get single header from request and log it.
 // - Get attributes from request and log them.
@@ -27,9 +30,10 @@ type ExamplePlugin struct {
 // - Set request header and get it and them log it.
 // - Update request body if present.
 // - Check x-send-local-reply header and if present send local reply.
-func (p *ExamplePlugin) OnRequestHeaders(headers shared.HeaderMap,
-	endStream bool) shared.HeadersStatus {
-	p.handle.Log(shared.LogLevelInfo, "ExamplePlugin: OnRequestHeaders called")
+func (p *Plugin) OnRequestHeaders(headers shared.HeaderMap,
+	endStream bool,
+) shared.HeadersStatus {
+	p.handle.Log(shared.LogLevelInfo, "Example plugin: OnRequestHeaders called")
 
 	if p.statsCollector.hasCounterMetric {
 		p.handle.IncrementCounterValue(p.statsCollector.counterMetric, 1)
@@ -106,8 +110,10 @@ func (p *ExamplePlugin) OnRequestHeaders(headers shared.HeaderMap,
 	return shared.HeadersStatusContinue
 }
 
-func (p *ExamplePlugin) OnRequestBody(body shared.BodyBuffer,
-	endStream bool) shared.BodyStatus {
+// OnRequestBody processes the request body and modifies it if the stream has ended.
+func (p *Plugin) OnRequestBody(body shared.BodyBuffer,
+	endStream bool,
+) shared.BodyStatus {
 	p.handle.Log(shared.LogLevelInfo, "ExamplePlugin: OnRequestBody called with body size: %v/%v",
 		body.GetSize(), endStream)
 
@@ -119,7 +125,7 @@ func (p *ExamplePlugin) OnRequestBody(body shared.BodyBuffer,
 	return shared.BodyStatusStopAndBuffer
 }
 
-func (p *ExamplePlugin) rewriteRequestBody(receivedBody shared.BodyBuffer) {
+func (p *Plugin) rewriteRequestBody(receivedBody shared.BodyBuffer) {
 	bufferedBody := p.handle.BufferedRequestBody()
 	bufferedBody.Drain(bufferedBody.GetSize())
 	if receivedBody != nil {
@@ -136,15 +142,18 @@ func (p *ExamplePlugin) rewriteRequestBody(receivedBody shared.BodyBuffer) {
 	requestHeaders.Set("content-type", "plain/text")
 }
 
-func (p *ExamplePlugin) OnRequestTrailers(trailers shared.HeaderMap) shared.TrailersStatus {
+// OnRequestTrailers processes request trailers and rewrites the request body.
+func (p *Plugin) OnRequestTrailers(trailers shared.HeaderMap) shared.TrailersStatus {
 	p.handle.Log(shared.LogLevelInfo, "ExamplePlugin: OnRequestTrailers called with trailers: %v",
 		trailers.GetAll())
 	p.rewriteRequestBody(nil)
 	return shared.TrailersStatusContinue
 }
 
-func (p *ExamplePlugin) OnResponseHeaders(headers shared.HeaderMap,
-	endStream bool) shared.HeadersStatus {
+// OnResponseHeaders processes response headers and adds an example header.
+func (p *Plugin) OnResponseHeaders(headers shared.HeaderMap,
+	endStream bool,
+) shared.HeadersStatus {
 	p.handle.Log(shared.LogLevelInfo, "ExamplePlugin: OnResponseHeaders called with headers: %v",
 		headers.GetAll())
 
@@ -162,7 +171,7 @@ func (p *ExamplePlugin) OnResponseHeaders(headers shared.HeaderMap,
 	return shared.HeadersStatusContinue
 }
 
-func (p *ExamplePlugin) rewriteResponseBody(receivedBody shared.BodyBuffer) {
+func (p *Plugin) rewriteResponseBody(receivedBody shared.BodyBuffer) {
 	// Get original response body from buffer
 	bufferedBody := p.handle.BufferedResponseBody()
 
@@ -204,8 +213,10 @@ func (p *ExamplePlugin) rewriteResponseBody(receivedBody shared.BodyBuffer) {
 	responseHeaders.Remove("content-length")
 }
 
-func (p *ExamplePlugin) OnResponseBody(body shared.BodyBuffer,
-	endStream bool) shared.BodyStatus {
+// OnResponseBody processes the response body and modifies it if the stream has ended.
+func (p *Plugin) OnResponseBody(body shared.BodyBuffer,
+	endStream bool,
+) shared.BodyStatus {
 	p.handle.Log(shared.LogLevelInfo, "ExamplePlugin: OnResponseBody called with body size: %v/%v",
 		body.GetSize(), endStream)
 
@@ -217,23 +228,28 @@ func (p *ExamplePlugin) OnResponseBody(body shared.BodyBuffer,
 	return shared.BodyStatusStopAndBuffer
 }
 
-func (p *ExamplePlugin) OnResponseTrailers(trailers shared.HeaderMap) shared.TrailersStatus {
+// OnResponseTrailers processes response trailers and rewrites the response body.
+func (p *Plugin) OnResponseTrailers(trailers shared.HeaderMap) shared.TrailersStatus {
 	p.handle.Log(shared.LogLevelInfo, "ExamplePlugin: OnResponseTrailers called with trailers: %v",
 		trailers.GetAll())
 	p.rewriteResponseBody(nil)
 	return shared.TrailersStatusContinue
 }
 
-type ExamplePluginFactory struct {
+// PluginFactory creates instances of Plugin.
+type PluginFactory struct {
 	statsCollector *statsCollector
 }
 
-func (f *ExamplePluginFactory) Create(
-	handle shared.HttpFilterHandle) shared.HttpFilter {
-	return &ExamplePlugin{handle: handle, statsCollector: f.statsCollector}
+// Create creates a new Plugin instance with the provided handle.
+func (f *PluginFactory) Create(
+	handle shared.HttpFilterHandle,
+) shared.HttpFilter {
+	return &Plugin{handle: handle, statsCollector: f.statsCollector}
 }
 
-type ExamplePluginConfigFactory struct {
+// PluginConfigFactory creates PluginFactory instances with configuration.
+type PluginConfigFactory struct {
 	shared.EmptyHttpFilterConfigFactory
 }
 
@@ -252,10 +268,11 @@ type statsCollector struct {
 	hasHistogramMetricWithTags bool
 }
 
-func (f *ExamplePluginConfigFactory) Create(handle shared.HttpFilterConfigHandle,
-	unparsedConfig []byte) (shared.HttpFilterFactory, error) {
-
-	handle.Log(shared.LogLevelInfo, "ExamplePluginConfigFactory: Create called with config: %s", string(unparsedConfig))
+// Create parses configuration and creates a PluginFactory with metrics.
+func (f *PluginConfigFactory) Create(handle shared.HttpFilterConfigHandle,
+	unparsedConfig []byte,
+) (shared.HttpFilterFactory, error) {
+	handle.Log(shared.LogLevelInfo, "PluginConfigFactory: Create called with config: %s", string(unparsedConfig))
 	// Example of creating metrics
 	stats := &statsCollector{}
 
@@ -290,5 +307,5 @@ func (f *ExamplePluginConfigFactory) Create(handle shared.HttpFilterConfigHandle
 		stats.hasHistogramMetricWithTags = true
 	}
 
-	return &ExamplePluginFactory{statsCollector: stats}, nil
+	return &PluginFactory{statsCollector: stats}, nil
 }

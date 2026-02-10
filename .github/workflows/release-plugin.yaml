@@ -12,10 +12,6 @@ on:
         description: 'Optional nonce to append to the image tag for uniqueness.'
         required: false
         type: string
-      extension_path:
-        description: 'relative path under extensions/, e.g. example-go/standalone.'
-        required: true
-        type: string
 
 env:
   OCI_REGISTRY: ghcr.io/tetratelabs
@@ -40,5 +36,9 @@ jobs:
       - name: Build and Push Plugin
         env:
           IMAGE_NONCE: ${{ inputs.nonce }}
-          EXTENSION_PATH: ${{ inputs.extension_path }}
-        run: make -C extensions/core/libplugin push
+        run: make -C extensions/composer/example/standalone push_image
+
+      - name: Push source code
+        env:
+          IMAGE_NONCE: ${{ inputs.nonce }}
+        run: make -C extensions/composer/example/standalone push_code

@@ -109,6 +109,8 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories) error {
 		}
 	}
 
+	fmt.Printf("Starting Envoy %s with extensions: %v\n", r.EnvoyVersion, r.Local)
+
 	runner := &envoy.Runner{
 		EnvoyVersion:      r.EnvoyVersion,
 		DefaultLogLevel:   r.defaultLogLevel,

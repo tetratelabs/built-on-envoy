@@ -251,6 +251,59 @@ func TestEnvoyConstraints(t *testing.T) {
 	}
 }
 
+func TestValidateParentManifest(t *testing.T) {
+	tests := []struct {
+		name    string
+		wantErr bool
+	}{
+		{"parent_valid.yaml", false},
+		{"parent_valid_with_version.yaml", false},
+		{"parent_missing_version.yaml", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			manifestPath := filepath.Join("testdata", tt.name)
+			localManifest, err := LoadLocalManifest(manifestPath)
+			require.NoError(t, err)
+
+			err = ValidateManifest(localManifest)
+			if tt.wantErr {
+				require.Error(t, err, "manifest: %s", localManifest.Name)
+			} else {
+				require.NoError(t, err, "manifest: %s", localManifest.Name)
+			}
+		})
+	}
+}
+
+func TestValidateExtensionSetManifest(t *testing.T) {
+	tests := []struct {
+		name    string
+		wantErr bool
+	}{
+		{"extension_set_valid.yaml", false},
+		{"extension_set_missing_extensions.yaml", true},
+		{"extension_set_false_with_extensions.yaml", true},
+		{"extensions_without_set.yaml", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			manifestPath := filepath.Join("testdata", tt.name)
+			localManifest, err := LoadLocalManifest(manifestPath)
+			require.NoError(t, err)
+
+			err = ValidateManifest(localManifest)
+			if tt.wantErr {
+				require.Error(t, err, "manifest: %s", localManifest.Name)
+			} else {
+				require.NoError(t, err, "manifest: %s", localManifest.Name)
+			}
+		})
+	}
+}
+
 func TestLoadLocalManifest(t *testing.T) {
 	t.Run("valid-manifest", func(t *testing.T) {
 		manifestPath := filepath.Join("testdata", "valid_manifest.yaml")

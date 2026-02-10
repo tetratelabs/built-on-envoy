@@ -1,0 +1,17 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# WARNING: This Dockerfile is auto-generated. Do not modify it directly.
+# If you need to customize the build process, consider creating a separate
+# Dockerfile (e.g., Dockerfile.code.custom) instead of editing this file.
+
+# Package source code into a scratch-based image
+FROM scratch
+
+# Copy all source files
+COPY . /src/
+
+# Set working directory metadata
+WORKDIR /src

@@ -17,12 +17,12 @@ import "C"
 import (
 	_ "github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/abi"
 
+	// Example built-in plugin.
+	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/example/embedded"
 	// Register built-in plugins into the binary. Because only one golang shared library
 	// can be loaded into a process, we need to register all built-in plugins here and
 	// build them into the same binary.
-	_ "github.com/tetratelabs/built-on-envoy/extensions/core/goplugin"
-	// Example built-in plugin.
-	_ "github.com/tetratelabs/built-on-envoy/extensions/example-go/embedded"
+	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/goplugin"
 )
 
 func main() {} // main is required to build as a C shared library.

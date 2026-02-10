@@ -3,8 +3,8 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-name: example-go-embedded
-version: 0.2.1
+name: composer.http.example
+parent: composer
 categories:
   - Examples
 author: Tetrate
@@ -39,4 +39,4 @@ examples:
   - title: Basic Example
     description: Load the example go plugin as an HTTP filter
     code: |
-      boe run --extension example-go-embedded
+      boe run --extension composer.http.example

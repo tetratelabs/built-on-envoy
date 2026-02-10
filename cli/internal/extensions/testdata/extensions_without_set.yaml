@@ -1,0 +1,20 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: extensions-without-set
+version: 1.0.0
+categories:
+  - Security
+author: Test Author
+description: Has extensions but no extensionSet field
+longDescription: |
+  This extension provides extensions without setting extensionSet.
+type: wasm
+tags:
+  - test
+license: Apache-2.0
+examples: []
+extensions:
+  - ext-one
