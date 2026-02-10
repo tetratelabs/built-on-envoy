@@ -90,8 +90,8 @@ func buildLibComposer(dataHome string, composerSrcPath string) error {
 
 	// #nosec G204
 	exampleCmd := exec.Command("make", "-C",
-		"composer/example/standalone",
-		"install",
+		"composer",
+		"install_plugins",
 		"BOE_DATA_HOME="+dataHome,
 	)
 	exampleCmd.Dir = composerSrcPath

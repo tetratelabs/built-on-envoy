@@ -70,9 +70,9 @@ jobs:
       - uses: docker/setup-buildx-action@v3
       - uses: actions/setup-go@v5
         with:
-          go-version-file: extensions/composer/example/standalone/go.mod
-          cache-dependency-path: extensions/composer/example/standalone/go.sum
-      - run: make -C extensions/composer/example/standalone build
+          go-version-file: extensions/composer/go.mod
+          cache-dependency-path: extensions/composer/go.sum
+      - run: make -C extensions/composer build_plugins
 
   test:
     needs: changes

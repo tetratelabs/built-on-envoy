@@ -3,7 +3,7 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-name: Release Composer Plugin
+name: Release Composer Loader
 
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ env:
   OCI_REGISTRY: ghcr.io/tetratelabs
 
 jobs:
-  release-plugin:
+  release-composer:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -33,12 +33,24 @@ jobs:
           registry: ${{ env.OCI_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and Push Plugin
+
+      - name: Build and Push Composer
         env:
           IMAGE_NONCE: ${{ inputs.nonce }}
-        run: make -C extensions/composer/example/standalone push_image
+        run: make -C extensions/composer push_image
+      
+      - name: Build and Push Lite Composer
+        env:
+          COMPOSER_LITE: true
+          IMAGE_NONCE: ${{ inputs.nonce }}
+        run: make -C extensions/composer push_image
 
       - name: Push source code
         env:
           IMAGE_NONCE: ${{ inputs.nonce }}
-        run: make -C extensions/composer/example/standalone push_code
+        run: make -C extensions/composer push_code
+
+      - name: Push all plugins
+        env:
+          IMAGE_NONCE: ${{ inputs.nonce }}
+        run: make -C extensions/composer push_plugins

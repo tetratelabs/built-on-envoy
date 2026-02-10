@@ -10,13 +10,15 @@
 # Build the manager binary
 FROM golang:1.25.6 AS builder
 
+ARG EXTENSION_PATH
+
 WORKDIR /workspace
-COPY . .
+COPY --from=composer . .
 
 RUN go mod download all
 
 # Build go plugin
-RUN CGO_ENABLED=1 go build -buildmode=plugin -o plugin.so .
+RUN CGO_ENABLED=1 go build -buildmode=plugin -o plugin.so ./$EXTENSION_PATH/standalone
 
 FROM scratch AS final
 

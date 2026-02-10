@@ -232,7 +232,7 @@ func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manif
 			Name:         "composer",
 			LoadGlobally: true,
 		},
-		FilterName:   "composer.http.goplugin",
+		FilterName:   "goplugin",
 		FilterConfig: anyConfig,
 	}
 	composerAny, err := anypb.New(protoConfig)

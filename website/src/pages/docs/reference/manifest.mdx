@@ -120,21 +120,6 @@ Whether this manifest defines a set of extensions
 
 
 
-## extensions
-
-List of extensions included in this extension set
-
-| | |
-|---|---|
-| **Type** | `[]string` |
-| **Required** | No |
-| **Min items** | 1 |
-| **Item pattern** | `^[a-z][a-z0-9-_.]*$` |
-| **Item min length** | 1 |
-| **Required when** | `extensionSet` is `` |
-
-
-
 ## featured
 
 Whether to feature this extension in UI/listings
@@ -246,7 +231,7 @@ Unique identifier for the extension
 
 ## parent
 
-Parent extension set whose version will be used. When set, the version field can be omitted.
+Parent extension whose version will be used. When set, the version field can be omitted.
 
 | | |
 |---|---|

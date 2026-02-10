@@ -167,16 +167,6 @@
     "extensionSet": {
       "type": "boolean",
       "description": "Whether this manifest defines a set of extensions"
-    },
-    "extensions": {
-      "type": "array",
-      "description": "List of extensions included in this extension set",
-      "minItems": 1,
-      "items": {
-        "type": "string",
-        "minLength": 1,
-        "pattern": "^[a-z][a-z0-9-_.]*$"
-      }
     }
   },
   "allOf": [
@@ -197,16 +187,34 @@
     },
     {
       "if": {
-        "properties": {
-          "type": { "const": "composer" }
-        }
+        "allOf": [
+          {
+            "properties": {
+              "type": { "const": "composer" }
+            }
+          },
+          {
+            "not": {
+              "required": ["parent"]
+            }
+          }
+        ]
       },
       "then": {
         "required": ["composerVersion"]
       },
       "else": {
-        "properties": {
-          "composerVersion": false
+        "if": {
+          "properties": {
+            "type": { "const": "composer" }
+          },
+          "required": ["type"]
+        },
+        "then": {},
+        "else": {
+          "properties": {
+            "composerVersion": false
+          }
         }
       }
     },
@@ -218,22 +226,6 @@
       },
       "then": {
         "required": ["version"]
-      }
-    },
-    {
-      "if": {
-        "properties": {
-          "extensionSet": { "enum": [true] }
-        },
-        "required": ["extensionSet"]
-      },
-      "then": {
-        "required": ["extensions"]
-      },
-      "else": {
-        "properties": {
-          "extensions": false
-        }
       }
     }
   ]

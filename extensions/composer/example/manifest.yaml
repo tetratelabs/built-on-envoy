@@ -3,7 +3,7 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-name: composer.http.example
+name: example
 parent: composer
 categories:
   - Examples
@@ -29,7 +29,7 @@ longDescription: |
   This is the **embedded** version of the plugin, compiled directly into the Composer
   dynamic module binary. This approach guarantees Go runtime compatibility since the
   plugin and host are built together with the same toolchain and dependencies.
-type: dynamic_module
+type: composer
 tags:
   - go
   - http
@@ -39,4 +39,4 @@ examples:
   - title: Basic Example
     description: Load the example go plugin as an HTTP filter
     code: |
-      boe run --extension composer.http.example
+      boe run --extension example

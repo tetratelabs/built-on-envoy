@@ -60,12 +60,12 @@ The plugin is compiled directly into the Composer dynamic module binary.
 **How it works:**
 - [embedded/host.go](embedded/host.go) imports the plugin package and registers it with the SDK during initialization
 - The Composer's [main.go](../main.go) imports the embedded package, including it in the final binary
-- The plugin is registered under the name `composer.http.example` (as defined in the plugin's factory map)
+- The plugin is registered under the name `example` (as defined in the plugin's factory map)
 
 **Advantages:**
 - Guaranteed Go runtime compatibility (plugin and host are compiled together)
 - No version mismatch issues between dependencies
-- Simpler deployment (single binary). The Composer self is an extension set that contains all built-in plugins, so the embedded plugin is available without any additional loading steps
+- Simpler deployment (single binary). The embedded plugin is available without any additional loading steps
 
 **Disadvantages:**
 - Requires rebuilding the entire Composer module to update the plugin
@@ -73,7 +73,7 @@ The plugin is compiled directly into the Composer dynamic module binary.
 
 **Usage:**
 ```bash
-boe run --extension composer.http.example
+boe run --extension example
 ```
 
 ## Go Runtime Compatibility

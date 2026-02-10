@@ -31,10 +31,7 @@ type (
 		// When set, the version field can be omitted.
 		Parent string `yaml:"parent,omitempty" json:"parent,omitempty"`
 		// ExtensionSet indicates this manifest defines a set of extensions.
-		// When true, the extensions field must be a non-empty list.
-		ExtensionSet bool `yaml:"extensionSet,omitempty" json:"extensionSet,omitempty"`
-		// Extensions lists the extensions included in this extension set.
-		Extensions      []string  `yaml:"extensions,omitempty" json:"extensions,omitempty"`
+		ExtensionSet    bool      `yaml:"extensionSet,omitempty" json:"extensionSet,omitempty"`
 		Categories      []string  `yaml:"categories" json:"categories"`
 		Author          string    `yaml:"author" json:"author"`
 		Featured        bool      `yaml:"featured" json:"featured,omitempty"`

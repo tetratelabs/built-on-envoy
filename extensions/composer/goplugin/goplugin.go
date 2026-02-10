@@ -221,7 +221,7 @@ func (f *GoPluginLoaderConfigFactory) CreatePerRoute(unparsedConfig []byte) (any
 }
 
 var wellKnownHttpFilterConfigFactories = map[string]shared.HttpFilterConfigFactory{ //nolint:revive
-	"composer.http.goplugin": &GoPluginLoaderConfigFactory{
+	"goplugin": &GoPluginLoaderConfigFactory{
 		LoadPlugin: loadPluginImpl,
 	},
 }

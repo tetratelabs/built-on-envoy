@@ -31,7 +31,5 @@ examples:
   - title: Run with the example plugin
     description: Start Envoy with the composer dynamic module and example plugin
     code: |
-      boe run --extension composer.http.example
+      boe run --extension example
 extensionSet: true
-extensions:
-  - composer.http.example

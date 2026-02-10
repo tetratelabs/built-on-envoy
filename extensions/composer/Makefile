@@ -106,7 +106,7 @@ build:
 install: build
 	@echo "Installing $(NAME)..."
 	mkdir -p $(BOE_DATA_HOME)/extensions/dym/$(NAME)/$(VERSION); \
-	cp lib$(NAME).so $(BOE_DATA_HOME)/extensions/dym/$(NAME)/$(VERSION)/lib$(NAME).so;
+	mv lib$(NAME).so $(BOE_DATA_HOME)/extensions/dym/$(NAME)/$(VERSION)/lib$(NAME).so;
 	@echo "Installed to $(BOE_DATA_HOME)/extensions/dym/$(NAME)"
 
 # For single local platform build, we will add the OS and ARCH to the image tag to avoid confusion.
@@ -146,3 +146,23 @@ push_code: ## Build and push source code image
 		$(SOURCE_ARTIFACT) \
 		--tag $(CODE_IMAGE) \
 		-f ./Dockerfile.code .
+
+# Find all sub-directories containing a manifest.yaml file and get their names.
+# Ignore current directory.
+PLUGIN_DIRS := $(shell find . -mindepth 2 -maxdepth 2 -type f -name 'manifest.yaml' -exec dirname {} \; | sort)
+PLUGIN_CLEAN_DIRS := $(notdir $(PLUGIN_DIRS))
+
+push_plugins: ## Push all plugin images
+	@for dir in $(PLUGIN_CLEAN_DIRS); do \
+		$(MAKE) -C libplugin/ push_image EXTENSION_PATH=$$dir; \
+	done
+
+build_plugins: ## Build all plugins locally
+	@for dir in $(PLUGIN_CLEAN_DIRS); do \
+		$(MAKE) -C libplugin/ build EXTENSION_PATH=$$dir; \
+	done
+
+install_plugins: ## Install all plugins locally
+	@for dir in $(PLUGIN_CLEAN_DIRS); do \
+		$(MAKE) -C libplugin/ install EXTENSION_PATH=$$dir; \
+	done

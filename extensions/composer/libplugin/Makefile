@@ -22,14 +22,21 @@ endif
 # Default data home layout for boe
 BOE_DATA_HOME ?= $(HOME)/.local/share/boe
 
+EXTENSION_PATH ?=
+# Ensure the EXTENSION_PATH always be set
+ifeq ($(EXTENSION_PATH),)
+  $(error "EXTENSION_PATH is not set. Please set it to the path of the extension.")
+endif
+
 # Labels for this plugin image.
-NAME             := $(shell grep "^name:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-VERSION          := $(shell grep "^version:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-DESCRIPTION      := $(shell grep "^description:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+# All in-tree plugins will share the same version and composer version because they are treated as part of composer
+NAME             := $(shell grep "^name:" ../$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+VERSION          := $(shell grep "^version:" ../manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+DESCRIPTION      := $(shell grep "^description:" ../$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
 TIMESTAMP        := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 COMMIT_SHA       := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
-AUTHOR           := $(shell grep "^author:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-COMPOSER_VERSION := $(shell grep "^composerVersion:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+AUTHOR           := $(shell grep "^author:" ../$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+COMPOSER_VERSION := $(shell grep "^version:" ../manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
 LICENSE          := Apache-2.0
 
 HUB    := $(OCI_REGISTRY)/built-on-envoy
@@ -68,26 +75,27 @@ MULTI_OCI_ANNOTATIONS := \
 
 .PHONY: build
 build:
-	CGO_ENABLED=1 go build -buildmode=plugin -o plugin.so .
+	CGO_ENABLED=1 go build -buildmode=plugin -o $(NAME).so ../$(EXTENSION_PATH)/standalone
 
 .PHONY: install
 install: build
 	@echo "Installing $(NAME)..."
 	mkdir -p $(BOE_DATA_HOME)/extensions/goplugin/$(NAME)/$(VERSION); \
-	cp plugin.so $(BOE_DATA_HOME)/extensions/goplugin/$(NAME)/$(VERSION)/plugin.so;
-	@echo "Installed to $(BOE_DATA_HOME)/extensions/goplugin/$(NAME)"
+	mv $(NAME).so $(BOE_DATA_HOME)/extensions/goplugin/$(NAME)/$(VERSION)/plugin.so;
+	@echo "Installed to $(BOE_DATA_HOME)/extensions/goplugin/$(NAME)/$(VERSION)"
 
 # For single local platform build, we will add the OS and ARCH to the image tag to avoid confusion.
 # And we will not push it to the registry by default.
 .PHONY: build_image
 build_image:
-	docker buildx build \
+	docker buildx build --build-context composer=.. \
 		--output type=docker,oci-mediatypes=true \
 		--provenance=false \
+		--build-arg EXTENSION_PATH=$(EXTENSION_PATH) \
 		$(BASE_OCI_ANNOTATIONS) \
 		$(BINARY_ARTIFACT) \
 		-t $(IMAGE)-linux-$(ARCH) \
-		-f ./Dockerfile .
+		-f ../Dockerfile.plugin .
 
 # For default push operation, we will also prefer to build a multi-platform image to support
 # both amd64 and arm64 architectures, and push it to the registry.
@@ -95,26 +103,11 @@ PLATFORMS ?= linux/arm64,linux/amd64
 .PHONY: push_image
 push_image: ## Build and push docker image for the plugin for cross-platform support
 	@echo "Building and pushing image..."
-	docker buildx build --platform=$(PLATFORMS) \
+	docker buildx build --build-context composer=.. \
+		--platform=$(PLATFORMS) \
 		--output type=registry,oci-mediatypes=true$(registry_output) \
 		--provenance=false \
+		--build-arg EXTENSION_PATH=$(EXTENSION_PATH) \
 		$(MULTI_OCI_ANNOTATIONS) \
 		--tag $(IMAGE) \
-		-f ./Dockerfile .
-
-# Package source code into an image and push it to the registry.
-CODE_IMAGE := $(HUB)/extension-src-$(NAME):$(VERSION)$(IMAGE_NONCE)
-.PHONY: push_code
-push_code: ## Build and push source code image
-	@echo "Building and pushing source code image..."
-	docker buildx build \
-		--output type=registry,oci-mediatypes=true$(registry_output) \
-		--provenance=false \
-		$(BASE_OCI_ANNOTATIONS) \
-		$(SOURCE_ARTIFACT) \
-		--tag $(CODE_IMAGE) \
-		-f ./Dockerfile.code .
-
-.PHONY: clean
-clean:
-	rm -f plugin.so
+		-f ../Dockerfile.plugin .
