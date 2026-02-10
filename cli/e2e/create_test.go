@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -27,37 +26,8 @@ func TestCreateWithDockerSupport(t *testing.T) {
 
 	ctx := t.Context()
 
-	// Create a local registry for testing
-	container, registry, err := internaltesting.StartOCIRegistry(ctx)
-	require.NoError(t, err, "failed to start local OCI registry")
-	t.Cleanup(func() {
-		if terminateError := container.Terminate(ctx); terminateError != nil {
-			t.Logf("failed to terminate registry container: %v", terminateError)
-		}
-	})
-
 	// Create a new builder instance that uses the custom buildkit configuration and host network.
-	builderName := fmt.Sprintf("test-builder-%d", time.Now().Unix())
-	// #nosec G204
-	createBuilderCmd := exec.CommandContext(ctx, "docker", "buildx", "create",
-		"--name", builderName,
-		"--use",
-		"--driver-opt", "network=host",
-	)
-	output, err := createBuilderCmd.CombinedOutput()
-	t.Logf("buildx create output: %s", string(output))
-	require.NoError(t, err, "failed to create buildx builder")
-
-	// Clean up after the test by removing the builder instance.
-	t.Cleanup(func() {
-		// #nosec G204
-		destroyCmd := exec.CommandContext(ctx, "docker", "buildx", "rm", builderName)
-		output, destroyBuilderErr := destroyCmd.CombinedOutput()
-		t.Logf("buildx rm output: %s", string(output))
-		if destroyBuilderErr != nil {
-			t.Logf("failed to remove buildx builder: %v", destroyBuilderErr)
-		}
-	})
+	internaltesting.CreateBuildxBuilder(t)
 
 	// Create a new extension
 	process := internaltesting.RunCLI(t, cliBin, "create", "test-docker", "--path", tmpDir)
@@ -95,7 +65,7 @@ func TestCreateWithDockerSupport(t *testing.T) {
 	t.Run("makefile_image_target", func(t *testing.T) {
 		// #nosec G204
 		makeCmd := exec.CommandContext(ctx, "make", "build_image",
-			fmt.Sprintf("OCI_REGISTRY=%s", registry))
+			fmt.Sprintf("OCI_REGISTRY=%s", registryAddr))
 		makeCmd.Dir = extensionDir
 		output, err := makeCmd.CombinedOutput()
 		t.Logf("make build_image output: %s", string(output))
@@ -116,7 +86,7 @@ func TestCreateWithDockerSupport(t *testing.T) {
 	t.Run("makefile_push_target", func(t *testing.T) {
 		// #nosec G204
 		makeCmd := exec.CommandContext(ctx, "make", "push_image",
-			fmt.Sprintf("OCI_REGISTRY=%s", registry), "INSECURE_REGISTRY=true")
+			fmt.Sprintf("OCI_REGISTRY=%s", registryAddr), "INSECURE_REGISTRY=true")
 		makeCmd.Dir = extensionDir
 		output, err := makeCmd.CombinedOutput()
 		t.Logf("make push_image output: %s", string(output))
@@ -129,7 +99,7 @@ func TestCreateWithDockerSupport(t *testing.T) {
 	t.Run("makefile_code_target", func(t *testing.T) {
 		// #nosec G204
 		makeCmd := exec.CommandContext(ctx, "make", "push_code",
-			fmt.Sprintf("OCI_REGISTRY=%s", registry), "INSECURE_REGISTRY=true")
+			fmt.Sprintf("OCI_REGISTRY=%s", registryAddr), "INSECURE_REGISTRY=true")
 		makeCmd.Dir = extensionDir
 		output, err := makeCmd.CombinedOutput()
 		t.Logf("make push_code output: %s", string(output))
