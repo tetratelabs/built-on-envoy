@@ -63,7 +63,7 @@ MULTI_OCI_ANNOTATIONS := \
 
 .PHONY: build
 build:
-	go build -buildmode=plugin -o plugin.so .
+	go build -buildmode=plugin -o plugin.so ./entrypoint-standalone
 
 .PHONY: install
 install: build

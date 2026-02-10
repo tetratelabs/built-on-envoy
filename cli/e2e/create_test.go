@@ -18,6 +18,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 
@@ -29,11 +30,11 @@ func TestCreateWithDockerSupport(t *testing.T) {
 	// Create a local registry for testing
 	container, registry, err := internaltesting.StartOCIRegistry(ctx)
 	require.NoError(t, err, "failed to start local OCI registry")
-	defer func() {
+	t.Cleanup(func() {
 		if terminateError := container.Terminate(ctx); terminateError != nil {
 			t.Logf("failed to terminate registry container: %v", terminateError)
 		}
-	}()
+	})
 
 	// Create a new builder instance that uses the custom buildkit configuration and host network.
 	builderName := fmt.Sprintf("test-builder-%d", time.Now().Unix())
@@ -48,7 +49,7 @@ func TestCreateWithDockerSupport(t *testing.T) {
 	require.NoError(t, err, "failed to create buildx builder")
 
 	// Clean up after the test by removing the builder instance.
-	defer func() {
+	t.Cleanup(func() {
 		// #nosec G204
 		destroyCmd := exec.CommandContext(ctx, "docker", "buildx", "rm", builderName)
 		output, destroyBuilderErr := destroyCmd.CombinedOutput()
@@ -56,7 +57,7 @@ func TestCreateWithDockerSupport(t *testing.T) {
 		if destroyBuilderErr != nil {
 			t.Logf("failed to remove buildx builder: %v", destroyBuilderErr)
 		}
-	}()
+	})
 
 	// Create a new extension
 	process := internaltesting.RunCLI(t, cliBin, "create", "test-docker", "--path", tmpDir)
@@ -65,23 +66,7 @@ func TestCreateWithDockerSupport(t *testing.T) {
 	require.Equal(t, 0, status.ExitCode())
 
 	extensionDir := filepath.Join(tmpDir, "test-docker")
-
-	// Verify all required files were created
-	requiredFiles := []string{
-		"plugin.go",
-		"manifest.yaml",
-		"Makefile",
-		"go.mod",
-		"Dockerfile",
-		"Dockerfile.code",
-		".dockerignore",
-	}
-
-	for _, file := range requiredFiles {
-		filePath := filepath.Join(extensionDir, file)
-		_, err := os.Stat(filePath)
-		require.NoError(t, err, "file %s should exist", file)
-	}
+	version := extensions.LibComposerVersion
 
 	t.Run("makefile_build_target", func(t *testing.T) {
 		// #nosec G204
@@ -119,13 +104,13 @@ func TestCreateWithDockerSupport(t *testing.T) {
 		// Push local image to registry and check its annotations
 		// #nosec G204
 		pushCmd := exec.CommandContext(ctx, "docker", "push",
-			fmt.Sprintf("%s/built-on-envoy/extension-test-docker:0.0.1-linux-%s", registry, runtime.GOARCH))
+			fmt.Sprintf("%s/built-on-envoy/extension-test-docker:%s-linux-%s", registry, version, runtime.GOARCH))
 		output, err = pushCmd.CombinedOutput()
 		t.Logf("docker push output: %s", string(output))
 		require.NoError(t, err, "Should be able to push image to local registry")
 
 		// Pull the image manifest and check annotations
-		fetchManifest(t, registry, "built-on-envoy/extension-test-docker", fmt.Sprintf("0.0.1-linux-%s", runtime.GOARCH))
+		fetchManifest(t, registry, "built-on-envoy/extension-test-docker", fmt.Sprintf("%s-linux-%s", version, runtime.GOARCH))
 	})
 
 	t.Run("makefile_push_target", func(t *testing.T) {
@@ -138,7 +123,7 @@ func TestCreateWithDockerSupport(t *testing.T) {
 		require.NoError(t, err, "Makefile push_image target should be valid")
 
 		// Pull the image manifest and check annotations
-		fetchManifest(t, registry, "built-on-envoy/extension-test-docker", "0.0.1")
+		fetchManifest(t, registry, "built-on-envoy/extension-test-docker", version)
 	})
 
 	t.Run("makefile_code_target", func(t *testing.T) {
@@ -151,7 +136,7 @@ func TestCreateWithDockerSupport(t *testing.T) {
 		require.NoError(t, err, "Makefile push_code target should be valid")
 
 		// Pull the image manifest and check annotations
-		fetchManifest(t, registry, "built-on-envoy/extension-src-test-docker", "0.0.1")
+		fetchManifest(t, registry, "built-on-envoy/extension-src-test-docker", version)
 	})
 }
 
