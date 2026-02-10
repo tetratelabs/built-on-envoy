@@ -30,7 +30,7 @@ func TestCreateWithDockerSupport(t *testing.T) {
 	internaltesting.CreateBuildxBuilder(t)
 
 	// Create a new extension
-	process := internaltesting.RunCLI(t, cliBin, "create", "test-docker", "--path", tmpDir)
+	process := internaltesting.RunCLI(t, boeBin, "create", "test-docker", "--path", tmpDir)
 	status, err := process.Wait()
 	require.NoError(t, err)
 	require.Equal(t, 0, status.ExitCode())

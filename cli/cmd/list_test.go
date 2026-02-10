@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
-	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 
 func TestParseCmdListHelp(t *testing.T) {
@@ -40,7 +39,7 @@ List available extensions
 %s
 Flags:
   -h, --help    Show context-sensitive help.
-`, internaltesting.WrapHelp(listHelp))
+`, wrapHelp(listHelp))
 
 	require.Equal(t, expected, buf.String())
 }

@@ -16,7 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
-	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
@@ -69,7 +68,7 @@ Flags:
                                    ($BOE_REGISTRY_USERNAME).
       --password=STRING            Password for the OCI registry
                                    ($BOE_REGISTRY_PASSWORD).
-`, internaltesting.WrapHelp(runHelp))
+`, wrapHelp(runHelp))
 
 	require.Equal(t, expected, buf.String())
 }

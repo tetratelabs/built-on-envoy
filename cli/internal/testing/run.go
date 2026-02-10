@@ -74,14 +74,10 @@ func RunEnvoy(t *testing.T, cliBin string, args ...string) (listenPort int, admi
 			t.Logf("Failed to send interrupt to boe process: %v", err)
 		}
 		// Wait for the process to exit gracefully, in worst case this is
-		// killed in 3 seconds by WaitDelay conigured int he command.
+		// killed in 3 seconds by WaitDelay configured in the command.
 		// In that case, you may have a zombie Envoy process left behind!
 		if _, err := process.Wait(); err != nil {
 			t.Logf("Failed to wait for boe process to exit: %v", err)
-		}
-		// Delete the hard-coded path to certs defined in Envoy AI Gateway
-		if err := os.RemoveAll("/tmp/envoy-gateway/certs"); err != nil {
-			t.Logf("Failed to delete envoy gateway certs: %v", err)
 		}
 	})
 
@@ -137,7 +133,7 @@ func RunCLI(t *testing.T, cliBin string, args ...string) *os.Process {
 	return cmd.Process
 }
 
-// Function to check if a port is in use (returns true if listening).
+// isPortInUse checks if a port is in use (returns true if listening).
 func isPortInUse(ctx context.Context, port int) bool {
 	dialer := net.Dialer{Timeout: 100 * time.Millisecond}
 	conn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort("127.0.0.1", fmt.Sprintf("%d", port)))

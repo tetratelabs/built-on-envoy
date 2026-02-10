@@ -15,13 +15,13 @@ import (
 )
 
 var (
-	cliBin       string
+	boeBin       string
 	registryAddr string
 )
 
 func TestMain(m *testing.M) {
 	var err error
-	cliBin, err = buildCLIOnDemand()
+	boeBin, err = buildCLIOnDemand()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to build CLI binary: %v\n", err)
 		os.Exit(1)
@@ -40,8 +40,8 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// buildCLIOnDemand builds the CLI binary unless CLI_BIN is set.
-// If CLI_BIN environment variable is set, it will use that path instead.
+// buildCLIOnDemand builds the CLI binary unless BOE_BIN is set.
+// If BOE_BIN environment variable is set, it will use that path instead.
 func buildCLIOnDemand() (string, error) {
-	return internaltesting.BuildGoBinaryOnDemand("CLI_BIN", "boe", ".")
+	return internaltesting.BuildGoBinaryOnDemand("BOE_BIN", "boe", ".")
 }

@@ -17,7 +17,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
@@ -51,7 +50,7 @@ Flags:
                            supported.
       --path=STRING        Output directory for the extension. Defaults to the
                            extension name.
-`, internaltesting.WrapHelp(createHelp))
+`, wrapHelp(createHelp))
 	require.Equal(t, expected, buf.String())
 }
 
@@ -84,6 +83,7 @@ func TestCreate_Run(t *testing.T) {
 
 		files := []string{
 			"plugin.go",
+			"plugin_test.go",
 			"manifest.yaml",
 			"Makefile",
 			"go.mod",

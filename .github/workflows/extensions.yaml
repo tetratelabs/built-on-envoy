@@ -66,13 +66,17 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.extensions == 'true' }}
     runs-on: ubuntu-latest
+    env:
+      BOE_TEST_LOG_LEVEL: "all:debug"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version-file: extensions/composer/go.mod
-          cache-dependency-path: extensions/composer/go.sum
-      - run: go -C extensions/composer/ test ./...
+          go-version-file: extensions/go.mod
+          cache-dependency-path: extensions/go.sum
+      - run: make -C cli build
+      - run: echo "BOE_BIN=${{ github.workspace }}/cli/out/boe-$(go env GOOS)-$(go env GOARCH)" >> $GITHUB_ENV
+      - run: go -C extensions/ test ./...
 
   lint:
     needs: changes

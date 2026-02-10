@@ -20,7 +20,7 @@ import (
 )
 
 func TestDefaultProxy(t *testing.T) {
-	proxyPort, adminPort := internaltesting.RunEnvoy(t, cliBin)
+	proxyPort, adminPort := internaltesting.RunEnvoy(t, boeBin)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	t.Cleanup(cancel)
@@ -30,7 +30,7 @@ func TestDefaultProxy(t *testing.T) {
 }
 
 func TestCustomPorts(t *testing.T) {
-	_, _ = internaltesting.RunEnvoy(t, cliBin, "--listen-port", "11000", "--admin-port", "12000")
+	_, _ = internaltesting.RunEnvoy(t, boeBin, "--listen-port", "11000", "--admin-port", "12000")
 
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	t.Cleanup(cancel)
@@ -45,7 +45,7 @@ func TestLuaRemoteExecution(t *testing.T) {
 	// Run the remote extension.
 	// This will resolve the latest tag of the extension, download it to
 	// the data directory, and execute it from there.
-	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin, "--log-level", "lua:info", "--extension", "example-lua")
+	proxyPort, _ := internaltesting.RunEnvoy(t, boeBin, "--log-level", "lua:info", "--extension", "example-lua")
 
 	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
 	checkHeader := func(r *http.Response) bool {
@@ -59,7 +59,7 @@ func TestLuaRemoteExecution(t *testing.T) {
 }
 
 func TestLuaLocalExtension(t *testing.T) {
-	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin,
+	proxyPort, _ := internaltesting.RunEnvoy(t, boeBin,
 		"--log-level", "lua:info",
 		"--local", "../../extensions/example-lua",
 	)
@@ -79,7 +79,7 @@ func TestLocalGoExtension(t *testing.T) {
 	dataDir := t.TempDir()
 
 	// Create a brand new extension
-	process := internaltesting.RunCLI(t, cliBin, "create", "go-e2e", "--path", dataDir)
+	process := internaltesting.RunCLI(t, boeBin, "create", "go-e2e", "--path", dataDir)
 	status, err := process.Wait()
 	require.NoError(t, err)
 	require.Equal(t, 0, status.ExitCode())
@@ -88,7 +88,7 @@ func TestLocalGoExtension(t *testing.T) {
 	// even the dependencies of the extension are not a subset of the composer's dependencies.
 	addDummyDependencyToExtension(t, dataDir+"/go-e2e")
 
-	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin,
+	proxyPort, _ := internaltesting.RunEnvoy(t, boeBin,
 		"--local", dataDir+"/go-e2e",
 		"--local", dataDir+"/go-e2e",
 		"--config", "{}",
