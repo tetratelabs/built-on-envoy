@@ -55,14 +55,14 @@ COMPOSER_VERSION := $(shell grep "^composerVersion:" manifest.yaml | sed 's/[^:]
 LICENSE          := Apache-2.0
 
 HUB    := $(OCI_REGISTRY)/built-on-envoy
-IMAGE  := $(HUB)/extension-$(NAME):$(VERSION)$(IMAGE_NONCE)
+IMAGE  := $(HUB)/$(NAME):$(VERSION)$(IMAGE_NONCE)
 SOURCE := https://$(subst ghcr.io,github.com,$(HUB))
 
 # Option to build lite version of the loader.
 ifeq ($(strip $(COMPOSER_LITE)),true)
 	DESCRIPTION := Go plugin loader.
 	COMPOSER_BUILD_TAG := lite
-	IMAGE := $(HUB)/extension-$(NAME)-lite:$(VERSION)$(IMAGE_NONCE)
+	IMAGE := $(HUB)/$(NAME)-lite:$(VERSION)$(IMAGE_NONCE)
 else
 	COMPOSER_BUILD_TAG := ""
 endif
@@ -154,15 +154,15 @@ PLUGIN_CLEAN_DIRS := $(notdir $(PLUGIN_DIRS))
 
 push_plugins: ## Push all plugin images
 	@for dir in $(PLUGIN_CLEAN_DIRS); do \
-		$(MAKE) -C libplugin/ push_image EXTENSION_PATH=$$dir; \
+		$(MAKE) -f Makefile.plugin push_image EXTENSION_PATH=$$dir; \
 	done
 
 build_plugins: ## Build all plugins locally
 	@for dir in $(PLUGIN_CLEAN_DIRS); do \
-		$(MAKE) -C libplugin/ build EXTENSION_PATH=$$dir; \
+		$(MAKE) -f Makefile.plugin build EXTENSION_PATH=$$dir; \
 	done
 
 install_plugins: ## Install all plugins locally
 	@for dir in $(PLUGIN_CLEAN_DIRS); do \
-		$(MAKE) -C libplugin/ install EXTENSION_PATH=$$dir; \
+		$(MAKE) -f Makefile.plugin install EXTENSION_PATH=$$dir; \
 	done

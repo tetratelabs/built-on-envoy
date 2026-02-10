@@ -30,13 +30,13 @@ endif
 
 # Labels for this plugin image.
 # All in-tree plugins will share the same version and composer version because they are treated as part of composer
-NAME             := $(shell grep "^name:" ../$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-VERSION          := $(shell grep "^version:" ../manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-DESCRIPTION      := $(shell grep "^description:" ../$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+NAME             := $(shell grep "^name:" ./$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+VERSION          := $(shell grep "^version:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+DESCRIPTION      := $(shell grep "^description:" ./$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
 TIMESTAMP        := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 COMMIT_SHA       := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
-AUTHOR           := $(shell grep "^author:" ../$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-COMPOSER_VERSION := $(shell grep "^version:" ../manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+AUTHOR           := $(shell grep "^author:" ./$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+COMPOSER_VERSION := $(shell grep "^version:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
 LICENSE          := Apache-2.0
 
 HUB    := $(OCI_REGISTRY)/built-on-envoy
@@ -75,7 +75,7 @@ MULTI_OCI_ANNOTATIONS := \
 
 .PHONY: build
 build:
-	CGO_ENABLED=1 go build -buildmode=plugin -o $(NAME).so ../$(EXTENSION_PATH)/standalone
+	CGO_ENABLED=1 go build -buildmode=plugin -o $(NAME).so ./$(EXTENSION_PATH)/standalone
 
 .PHONY: install
 install: build
@@ -88,14 +88,14 @@ install: build
 # And we will not push it to the registry by default.
 .PHONY: build_image
 build_image:
-	docker buildx build --build-context composer=.. \
+	docker buildx build \
 		--output type=docker,oci-mediatypes=true \
 		--provenance=false \
 		--build-arg EXTENSION_PATH=$(EXTENSION_PATH) \
 		$(BASE_OCI_ANNOTATIONS) \
 		$(BINARY_ARTIFACT) \
 		-t $(IMAGE)-linux-$(ARCH) \
-		-f ../Dockerfile.plugin .
+		-f ./Dockerfile.plugin .
 
 # For default push operation, we will also prefer to build a multi-platform image to support
 # both amd64 and arm64 architectures, and push it to the registry.
@@ -103,11 +103,11 @@ PLATFORMS ?= linux/arm64,linux/amd64
 .PHONY: push_image
 push_image: ## Build and push docker image for the plugin for cross-platform support
 	@echo "Building and pushing image..."
-	docker buildx build --build-context composer=.. \
+	docker buildx build \
 		--platform=$(PLATFORMS) \
 		--output type=registry,oci-mediatypes=true$(registry_output) \
 		--provenance=false \
 		--build-arg EXTENSION_PATH=$(EXTENSION_PATH) \
 		$(MULTI_OCI_ANNOTATIONS) \
 		--tag $(IMAGE) \
-		-f ../Dockerfile.plugin .
+		-f ./Dockerfile.plugin .
