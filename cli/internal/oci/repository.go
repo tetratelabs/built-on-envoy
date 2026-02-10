@@ -8,6 +8,7 @@ package oci
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -125,6 +126,9 @@ func (r *repositoryClient) Pull(ctx context.Context, tag, destPath string, platf
 	return manifest, desc.Digest.String(), nil
 }
 
+// ErrPlatformNotFound is returned when no manifest is found for the specified platform in a multi-arch artifact.
+var ErrPlatformNotFound = errors.New("no manifest found for specified platform")
+
 // fetchManifest retrieves and decodes the manifest for the specified tag.
 func (r *repositoryClient) fetchManifest(ctx context.Context, tag string, platform *ocispec.Platform) (ocispec.Manifest, ocispec.Descriptor, error) {
 	desc, err := r.target.Resolve(ctx, tag)
@@ -152,11 +156,18 @@ func (r *repositoryClient) fetchManifest(ctx context.Context, tag string, platfo
 			return ocispec.Manifest{}, ocispec.Descriptor{}, fmt.Errorf("failed to unmarshal index: %w", err)
 		}
 
+		found := false
 		for _, m := range index.Manifests {
 			if m.Platform != nil && m.Platform.OS == platform.OS && m.Platform.Architecture == platform.Architecture {
 				desc = m
+				found = true
 				break
 			}
+		}
+
+		if !found {
+			return ocispec.Manifest{}, ocispec.Descriptor{},
+				fmt.Errorf("%w: %s/%s", ErrPlatformNotFound, platform.OS, platform.Architecture)
 		}
 	}
 

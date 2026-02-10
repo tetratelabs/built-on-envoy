@@ -57,16 +57,37 @@ func TestPullMultiArch(t *testing.T) {
 	require.NoError(t, err)
 	client := NewRepositoryClient(repo)
 
+	tests := []struct {
+		name     string
+		platform *ocispec.Platform
+		wantErr  error
+	}{
+		{
+			name:     "linux/amd64",
+			platform: &ocispec.Platform{OS: "linux", Architecture: "amd64"},
+		},
+		{
+			name:     "linux/arm64",
+			platform: &ocispec.Platform{OS: "linux", Architecture: "arm64"},
+		},
+		{
+			name:     "darwin/arm64 (unsupported platform)",
+			platform: &ocispec.Platform{OS: "darwin", Architecture: "arm64"},
+			wantErr:  ErrPlatformNotFound,
+		},
+	}
+
 	// Pull each multiarch image and verify that it only contains the expected file.
-	for _, platform := range []ocispec.Platform{
-		{OS: "linux", Architecture: "amd64"},
-		{OS: "linux", Architecture: "arm64"},
-	} {
-		t.Run(fmt.Sprintf("%s/%s", platform.OS, platform.Architecture), func(t *testing.T) {
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
 			dest := t.TempDir()
 
-			manifest, _, err := client.Pull(t.Context(), "latest", dest, &platform)
-			require.NoError(t, err)
+			manifest, _, err := client.Pull(t.Context(), "latest", dest, tc.platform)
+			require.ErrorIs(t, err, tc.wantErr)
+			if tc.wantErr != nil {
+				return
+			}
+
 			require.NotNil(t, manifest)
 
 			// Verify that only the expected file for the platform is present in the pulled directory.
@@ -74,7 +95,8 @@ func TestPullMultiArch(t *testing.T) {
 			files, err := os.ReadDir(dest + "/files")
 			require.NoError(t, err)
 			require.Len(t, files, 1)
-			require.Equal(t, fmt.Sprintf("test-%s-%s.txt", platform.OS, platform.Architecture), files[0].Name())
+			require.Equal(t, fmt.Sprintf("test-%s-%s.txt",
+				tc.platform.OS, tc.platform.Architecture), files[0].Name())
 		})
 	}
 }
