@@ -56,7 +56,7 @@ LICENSE          := Apache-2.0
 
 HUB    := $(OCI_REGISTRY)/built-on-envoy
 IMAGE  := $(HUB)/extension-$(NAME):$(VERSION)$(IMAGE_NONCE)
-SOURCE := https://$(subst ghcr.io.,github.com,$(HUB))
+SOURCE := https://$(subst ghcr.io,github.com,$(HUB))
 
 # Option to build lite version of the loader.
 ifeq ($(strip $(COMPOSER_LITE)),true)

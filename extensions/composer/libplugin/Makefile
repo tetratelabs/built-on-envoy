@@ -41,7 +41,7 @@ LICENSE          := Apache-2.0
 
 HUB    := $(OCI_REGISTRY)/built-on-envoy
 IMAGE  := $(HUB)/extension-$(NAME):$(VERSION)$(IMAGE_NONCE)
-SOURCE := https://$(subst ghcr.io.,github.com,$(HUB))
+SOURCE := https://$(subst ghcr.io,github.com,$(HUB))
 
 ARCH := $(shell uname -m)
 ifeq ($(ARCH),x86_64)
