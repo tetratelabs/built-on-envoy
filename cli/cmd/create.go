@@ -54,15 +54,15 @@ func createComposerHTTPFilter(dirs *xdg.Directories, path, name string) error {
 
 	// Map of output filename to template filename
 	files := map[string]string{
-		"plugin.go":                     "templates/create/plugin.go.tmpl",
-		"manifest.yaml":                 "templates/create/manifest.yaml.tmpl",
-		"Makefile":                      "templates/create/Makefile.tmpl",
-		"go.mod":                        "templates/create/go.mod.tmpl",
-		"Dockerfile":                    "templates/create/Dockerfile.tmpl",
-		"Dockerfile.code":               "templates/create/Dockerfile.code.tmpl",
-		".dockerignore":                 "templates/create/.dockerignore.tmpl",
-		"entrypoint-embedded/host.go":   "templates/create/host.go.tmpl",
-		"entrypoint-standalone/main.go": "templates/create/main.go.tmpl",
+		"plugin.go":          "templates/create/plugin.go.tmpl",
+		"manifest.yaml":      "templates/create/manifest.yaml.tmpl",
+		"Makefile":           "templates/create/Makefile.tmpl",
+		"go.mod":             "templates/create/go.mod.tmpl",
+		"Dockerfile":         "templates/create/Dockerfile.tmpl",
+		"Dockerfile.code":    "templates/create/Dockerfile.code.tmpl",
+		".dockerignore":      "templates/create/.dockerignore.tmpl",
+		"embedded/host.go":   "templates/create/host.go.tmpl",
+		"standalone/main.go": "templates/create/main.go.tmpl",
 	}
 
 	for outputName, tmplPath := range files {

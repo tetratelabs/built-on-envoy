@@ -90,8 +90,8 @@ func TestCreate_Run(t *testing.T) {
 			"Dockerfile",
 			"Dockerfile.code",
 			".dockerignore",
-			"entrypoint-embedded/host.go",
-			"entrypoint-standalone/main.go",
+			"embedded/host.go",
+			"standalone/main.go",
 		}
 		for _, f := range files {
 			require.FileExists(t, filepath.Join(repoPath, f))
