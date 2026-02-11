@@ -159,7 +159,7 @@ func dummy() string {
 	return inner.Inner()
 }
 `
-	dummyGoFilePath := path + "/dummy.go"
+	dummyGoFilePath := path + "/standalone/dummy.go"
 	err = os.WriteFile(dummyGoFilePath, []byte(dummyGoFileContent), 0o600)
 	require.NoError(t, err, "failed to write dummy go file")
 
