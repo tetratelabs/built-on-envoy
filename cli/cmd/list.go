@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"text/tabwriter"
 
@@ -35,14 +35,10 @@ func (l *List) Run() error {
 		out = os.Stdout
 	}
 
-	var names []string
-	for n, m := range extensions.Manifests {
-		if !m.ExtensionSet {
-			// Skip composer uber-manifests
-			names = append(names, n)
-		}
-	}
-	sort.Strings(names)
+	manifests := extensions.ManifestsForCatalog()
+	slices.SortFunc(manifests, func(a, b *extensions.Manifest) int {
+		return strings.Compare(a.Name, b.Name)
+	})
 
 	// Create a tabwriter for nicely formatted table output
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
@@ -51,15 +47,10 @@ func (l *List) Run() error {
 	_, _ = fmt.Fprintln(w, "NAME\tVERSION\tTYPE\tDESCRIPTION")
 
 	// Print each extension
-	for _, name := range names {
-		m := extensions.Manifests[name]
-		version := m.Version
-		if version == "" {
-			version = "N/A"
-		}
+	for _, m := range manifests {
 		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
 			m.Name,
-			version,
+			m.Version,
 			m.Type,
 			truncateDescription(m.Description, 60),
 		)

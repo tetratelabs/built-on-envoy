@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"path/filepath"
 	"testing"
+	"testing/fstest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -275,6 +276,36 @@ func TestValidateParentManifest(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestResolveVersionsMissingParent(t *testing.T) {
+	m := &Manifest{
+		Name:   "child",
+		Type:   TypeComposer,
+		Parent: "nonexistent-parent",
+	}
+	err := resolveVersions(m, map[string]*Manifest{})
+	require.ErrorIs(t, err, ErrParentManifestNotFound)
+}
+
+func TestLoadManifestsDuplicateName(t *testing.T) {
+	manifest := `name: duplicate-name
+version: 1.0.0
+categories: [Security]
+author: Test
+description: A test extension
+longDescription: Test
+type: wasm
+tags: [test]
+license: Apache-2.0
+examples: []
+`
+	fsys := fstest.MapFS{
+		"manifests/ext1/manifest.yaml": &fstest.MapFile{Data: []byte(manifest)},
+		"manifests/ext2/manifest.yaml": &fstest.MapFile{Data: []byte(manifest)},
+	}
+	_, err := loadManifests(fsys)
+	require.ErrorIs(t, err, ErrDuplicateManifestName)
 }
 
 func TestLoadLocalManifest(t *testing.T) {
