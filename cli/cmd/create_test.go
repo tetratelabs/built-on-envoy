@@ -82,7 +82,17 @@ func TestCreate_Run(t *testing.T) {
 		repoPath := filepath.Join(tmpDir, name)
 		require.DirExists(t, repoPath)
 
-		files := []string{"plugin.go", "manifest.yaml", "Makefile", "go.mod"}
+		files := []string{
+			"plugin.go",
+			"manifest.yaml",
+			"Makefile",
+			"go.mod",
+			"Dockerfile",
+			"Dockerfile.code",
+			".dockerignore",
+			"embedded/host.go",
+			"standalone/main.go",
+		}
 		for _, f := range files {
 			require.FileExists(t, filepath.Join(repoPath, f))
 		}

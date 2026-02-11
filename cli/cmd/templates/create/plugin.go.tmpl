@@ -1,4 +1,4 @@
-package main
+package impl
 
 import (
 	"encoding/json"
@@ -58,11 +58,11 @@ func (f *customHttpFilterFactory) Create(handle shared.HttpFilterHandle) shared.
 }
 
 // This is the configuration factory for the HTTP filter.
-type customHttpFilterConfigFactory struct {
+type CustomHttpFilterConfigFactory struct {
 	shared.EmptyHttpFilterConfigFactory
 }
 
-func (f *customHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
+func (f *CustomHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
 	// Parse JSON configuration
 	// TODO: To implement your own configuration parsing and validation logic here.
 	cfg := &customHttpFilterConfig{
@@ -76,10 +76,4 @@ func (f *customHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHan
 	}
 	handle.Log(shared.LogLevelInfo, "{{ .Name }}: loaded config with header_value="+cfg.HeaderValue)
 	return &customHttpFilterFactory{config: cfg}, nil
-}
-
-func WellKnownHttpFilterConfigFactories() map[string]shared.HttpFilterConfigFactory {
-	return map[string]shared.HttpFilterConfigFactory{
-		"{{ .Name }}": &customHttpFilterConfigFactory{},
-	}
 }

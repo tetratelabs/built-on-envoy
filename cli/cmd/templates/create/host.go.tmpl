@@ -1,0 +1,14 @@
+package host
+
+import (
+	sdk "github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go"
+	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
+	impl "{{ .Name }}"
+)
+
+// Register this plugin to the host registry if this is built into the host binary.
+func init() {
+	sdk.RegisterHttpFilterConfigFactories(map[string]shared.HttpFilterConfigFactory{
+		"{{ .Name }}": &impl.CustomHttpFilterConfigFactory{},
+	})
+}

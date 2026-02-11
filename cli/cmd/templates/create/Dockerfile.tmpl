@@ -16,7 +16,7 @@ COPY . .
 RUN go mod download all
 
 # Build go plugin
-RUN CGO_ENABLED=1 go build -buildmode=plugin -o plugin.so .
+RUN CGO_ENABLED=1 go build -buildmode=plugin -o plugin.so ./standalone
 
 FROM scratch AS final
 

@@ -45,10 +45,6 @@ func (c *Create) Run(dirs *xdg.Directories) error {
 
 func createComposerHTTPFilter(dirs *xdg.Directories, path, name string) error {
 	repoPath := filepath.Join(path, name)
-	err := os.MkdirAll(repoPath, 0o750)
-	if err != nil {
-		return fmt.Errorf("failed to create directory %s: %w", repoPath, err)
-	}
 
 	data := map[string]string{
 		"Name":               name,
@@ -58,13 +54,15 @@ func createComposerHTTPFilter(dirs *xdg.Directories, path, name string) error {
 
 	// Map of output filename to template filename
 	files := map[string]string{
-		"plugin.go":       "templates/create/plugin.go.tmpl",
-		"manifest.yaml":   "templates/create/manifest.yaml.tmpl",
-		"Makefile":        "templates/create/Makefile.tmpl",
-		"go.mod":          "templates/create/go.mod.tmpl",
-		"Dockerfile":      "templates/create/Dockerfile.tmpl",
-		"Dockerfile.code": "templates/create/Dockerfile.code.tmpl",
-		".dockerignore":   "templates/create/.dockerignore.tmpl",
+		"plugin.go":          "templates/create/plugin.go.tmpl",
+		"manifest.yaml":      "templates/create/manifest.yaml.tmpl",
+		"Makefile":           "templates/create/Makefile.tmpl",
+		"go.mod":             "templates/create/go.mod.tmpl",
+		"Dockerfile":         "templates/create/Dockerfile.tmpl",
+		"Dockerfile.code":    "templates/create/Dockerfile.code.tmpl",
+		".dockerignore":      "templates/create/.dockerignore.tmpl",
+		"embedded/host.go":   "templates/create/host.go.tmpl",
+		"standalone/main.go": "templates/create/main.go.tmpl",
 	}
 
 	for outputName, tmplPath := range files {
@@ -74,6 +72,10 @@ func createComposerHTTPFilter(dirs *xdg.Directories, path, name string) error {
 		tmplContent, err := templateFS.ReadFile(tmplPath)
 		if err != nil {
 			return fmt.Errorf("failed to read template %s: %w", tmplPath, err)
+		}
+		fileDir := filepath.Dir(outputPath)
+		if err = os.MkdirAll(fileDir, 0o750); err != nil {
+			return fmt.Errorf("failed to create directory %s: %w", fileDir, err)
 		}
 
 		// #nosec G304
