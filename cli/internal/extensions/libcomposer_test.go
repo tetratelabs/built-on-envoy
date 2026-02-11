@@ -7,11 +7,12 @@ package extensions
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"golang.org/x/mod/semver"
+
+	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
 func TestLibComposerVersion(t *testing.T) {
@@ -20,13 +21,28 @@ func TestLibComposerVersion(t *testing.T) {
 }
 
 func TestCheckOrBuildLibComposer(t *testing.T) {
-	fakeDataHome := t.TempDir()
-	err := CheckOrBuildLibComposer(fakeDataHome)
-	require.NoError(t, err, "CheckOrBuildLibComposer failed")
+	fakeDirs := &xdg.Directories{DataHome: t.TempDir()}
+	err := CheckOrBuildLibComposer(fakeDirs, true)
+	require.NoError(t, err)
 
 	// Ensure the libcomposer.so is created.
-	composerPath := filepath.Join(fakeDataHome, "extensions", "dym", "composer",
-		LibComposerVersion, "libcomposer.so")
+	composerPath := LocalCacheComposerLib(fakeDirs, LibComposerVersion)
 	_, err = os.Stat(composerPath)
-	require.NoErrorf(t, err, "libcomposer.so not found at %s", composerPath)
+	require.NoError(t, err)
+}
+
+func TestBuildExtensionFromPath(t *testing.T) {
+	extensionPath := "../../../extensions/composer/example"
+	fakeDirs := &xdg.Directories{DataHome: t.TempDir()}
+
+	manifest, err := LoadLocalManifest(extensionPath + "/manifest.yaml")
+	require.NoError(t, err)
+
+	err = BuildExtensionFromPath(fakeDirs, manifest, extensionPath)
+	require.NoError(t, err)
+
+	// Ensure the plugin.so is created.
+	pluginPath := LocalCacheExtension(fakeDirs, manifest)
+	_, err = os.Stat(pluginPath)
+	require.NoError(t, err)
 }

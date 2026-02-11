@@ -10,7 +10,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 
 	funce "github.com/tetratelabs/func-e"
@@ -49,7 +48,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	config, err := RenderConfig(ConfigGenerationParams{
 		AdminPort:    r.AdminPort,
 		ListenerPort: r.ListenPort,
-		DataHome:     r.Dirs.DataHome,
+		Dirs:         r.Dirs,
 		Extensions:   r.Extensions,
 		Configs:      r.Configs,
 	}, FullConfigRenderer)
@@ -60,8 +59,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	// For now only golang dynamic modules are supported and will be built into same libcomposer.so.
 	// So, only need to expose path of libcomposer.so to Envoy.
 	// TODO(wbpcode): make this more general when other dynamic module types are supported.
-	composerPath := getComposerPath(r.Dirs.DataHome, extensions.LibComposerVersion)
-	composerParentDir := filepath.Dir(composerPath)
+	composerParentDir := extensions.LocalCacheComposerDir(r.Dirs, extensions.LibComposerVersion)
 	err = os.Setenv("ENVOY_DYNAMIC_MODULES_SEARCH_PATH", composerParentDir)
 	if err != nil {
 		return fmt.Errorf("failed to set ENVOY_DYNAMIC_MODULES_SEARCH_PATH: %w", err)
