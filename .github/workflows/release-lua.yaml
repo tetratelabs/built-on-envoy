@@ -3,11 +3,15 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-name: Release Composer and Plugins Manually
+name: Release Lua Extension Manually
 
 on:
   workflow_dispatch:
     inputs:
+      extension:
+        description: 'Relative path of the Lua extension to extensions/ (e.g., "example-lua"). The extension must have a manifest.yaml with type: lua.'
+        required: true
+        type: string
       nonce:
         description: 'Optional nonce to append to the image tag for uniqueness.'
         required: false
@@ -17,7 +21,7 @@ env:
   OCI_REGISTRY: ghcr.io/tetratelabs
 
 jobs:
-  release-composer:
+  release-lua:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -34,23 +38,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and Push Composer
-        env:
-          IMAGE_NONCE: ${{ inputs.nonce }}
-        run: make -C extensions/composer push_image
-      
-      - name: Build and Push Lite Composer
-        env:
-          COMPOSER_LITE: true
-          IMAGE_NONCE: ${{ inputs.nonce }}
-        run: make -C extensions/composer push_image
+      - name: Validate extension exists
+        run: |
+          if [ ! -f "extensions/${{ inputs.extension }}/manifest.yaml" ]; then
+            echo "Error: Extension 'extensions/${{ inputs.extension }}/manifest.yaml' not found"
+            exit 1
+          fi
+          if ! grep -q "type: lua" "extensions/${{ inputs.extension }}/manifest.yaml"; then
+            echo "Error: Extension '${{ inputs.extension }}' is not a lua extension"
+            exit 1
+          fi
 
-      - name: Push source code
+      - name: Build and Push Lua Extension
         env:
+          EXTENSION_PATH: ${{ inputs.extension }}
           IMAGE_NONCE: ${{ inputs.nonce }}
-        run: make -C extensions/composer push_code
-
-      - name: Push all plugins
-        env:
-          IMAGE_NONCE: ${{ inputs.nonce }}
-        run: make -C extensions/composer push_plugins
+        run: make -C extensions push_lua
