@@ -178,6 +178,7 @@ func (f *GoPluginLoaderConfigFactory) Create(handle shared.HttpFilterConfigHandl
 		return nil, err
 	}
 	if pluginName == "" || pluginURL == "" {
+		handle.Log(shared.LogLevelWarn, "plugin name or url is empty: %s/%s", pluginName, pluginURL)
 		return nil, fmt.Errorf("plugin name or url is empty")
 	}
 
@@ -190,6 +191,8 @@ func (f *GoPluginLoaderConfigFactory) Create(handle shared.HttpFilterConfigHandl
 
 	pluginFactory, err := configFactory.Create(handle, pluginConfig)
 	if err != nil {
+		handle.Log(shared.LogLevelWarn, "failed to create plugin factory: %s/%s/%v",
+			pluginName, pluginURL, err)
 		return nil, fmt.Errorf("failed to create plugin factory for plugin %s: %w", pluginName, err)
 	}
 

@@ -1,0 +1,18 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: child-extension
+parent: parent-extension
+categories:
+  - Security
+author: Test Author
+description: A child extension that inherits parent version
+longDescription: |
+  This is a child extension.
+type: wasm
+tags:
+  - test
+license: Apache-2.0
+examples: []

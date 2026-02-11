@@ -14,7 +14,7 @@ set -e
 
 ROOT="$(git rev-parse --show-toplevel)"
 MANIFESTS_TARGET_DIR="${ROOT}/cli/internal/extensions/manifests"
-LIBCOMPOSER_VERSION_SRC="${ROOT}/extensions/core/libcomposer/Makefile"
+LIBCOMPOSER_VERSION_SRC="${ROOT}/extensions/composer/manifest.yaml"
 
 
 echo "Synchronizing extension manifests to ${MANIFESTS_TARGET_DIR}..."
@@ -28,10 +28,10 @@ rsync -amq --include=*/ \
     --exclude=* \
     "${ROOT}/extensions/" "${MANIFESTS_TARGET_DIR}/"
 
-# Extract libcomposer version from its Makefile, cleaning up whitespaces, etc.
+# Extract libcomposer version from its manifest.yaml, cleaning up whitespaces, etc.
 echo "Extracting libcomposer version..."
 
-grep -E "^VERSION[[:space:]]*[:?]?=" "${LIBCOMPOSER_VERSION_SRC}" | sed 's/.*=[[:space:]]*//' | tr -d '\n' > "${MANIFESTS_TARGET_DIR}/libcomposer-version.txt"
+grep -E "^version:" "${LIBCOMPOSER_VERSION_SRC}" | sed 's/[^:]*:[[:space:]]*//g' | tr -d '\n' > "${MANIFESTS_TARGET_DIR}/libcomposer-version.txt"
 
 if [ ! -s "${MANIFESTS_TARGET_DIR}/libcomposer-version.txt" ]; then
     echo "Failed to extract libcomposer version from ${LIBCOMPOSER_VERSION_SRC}"

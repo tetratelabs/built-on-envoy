@@ -1,29 +1,33 @@
 # Example Go Plugin
 
-This directory contains an example Go plugin for Envoy HTTP filters using the Composer Dynamic Module system. The same plugin implementation can be packaged in two different ways, each with its own trade-offs.
+This directory contains an example Go plugin for Envoy HTTP filters using the Composer Dynamic Module system. It demonstrates two packaging approaches: embedding the plugin directly into the Composer binary and compiling it as a standalone Go plugin.
 
 ## Directory Structure
 
 ```
-example-go/
-├── example.go           # Core plugin implementation
+example/
 ├── embedded/            # Embedded packaging (compiled into Composer)
 │   ├── host.go
 │   └── manifest.yaml
+│   └── example.go       # Core plugin implementation
+│
 └── standalone/          # Standalone packaging (loaded at runtime)
     ├── plugin.go
     └── manifest.yaml
+    └── example.go       # Core plugin implementation
 ```
 
 ## Plugin Implementation
 
-The core plugin logic is in [example.go](example.go). It implements an HTTP filter that demonstrates:
+The core plugin logic is in [example.go](./embedded/example.go). It implements an HTTP filter that demonstrates:
 
 - Reading and modifying request/response headers
 - Accessing request attributes and metadata
 - Modifying request and response bodies
 - Sending local replies
 - Working with Envoy metrics (counters, gauges, histograms)
+
+NOTE: To avoid introduce complex dependency, and also make the standalone plugin more like a real-world example, the core plugin implementation is duplicated in both `embedded/` and `standalone/` directories. In a real project, you would typically have a shared package that both packaging approaches import.
 
 ## Packaging Approaches
 
@@ -32,8 +36,8 @@ The core plugin logic is in [example.go](example.go). It implements an HTTP filt
 The plugin is compiled as a separate Go plugin binary (`.so` file) and loaded at runtime.
 
 **How it works:**
-- [plugin/plugin.go](plugin/plugin.go) exports `WellKnownHttpFilterConfigFactories()` as the entry point
-- The Composer's [goplugin loader](../internal/goplugin/goplugin.go) loads the `.so` file at runtime
+- [standalone/plugin.go](standalone/plugin.go) exports `WellKnownHttpFilterConfigFactories()` as the entry point
+- The Composer's [goplugin loader](../goplugin/goplugin.go) loads the `.so` file at runtime
 - Before loading, the loader validates that the plugin was built with the same Go version and matching dependency versions
 
 **Advantages:**
@@ -55,13 +59,13 @@ The plugin is compiled directly into the Composer dynamic module binary.
 
 **How it works:**
 - [embedded/host.go](embedded/host.go) imports the plugin package and registers it with the SDK during initialization
-- The Composer's [main.go](../core/libcomposer/main.go) imports the embedded package, including it in the final binary
-- The plugin is registered under the name `example-go-embedded` (as defined in the plugin's factory map)
+- The Composer's [main.go](../main.go) imports the embedded package, including it in the final binary
+- The plugin is registered under the name `example` (as defined in the plugin's factory map)
 
 **Advantages:**
 - Guaranteed Go runtime compatibility (plugin and host are compiled together)
 - No version mismatch issues between dependencies
-- Simpler deployment (single binary)
+- Simpler deployment (single binary). The embedded plugin is available without any additional loading steps
 
 **Disadvantages:**
 - Requires rebuilding the entire Composer module to update the plugin
@@ -69,7 +73,7 @@ The plugin is compiled directly into the Composer dynamic module binary.
 
 **Usage:**
 ```bash
-boe run --extension example-go-embedded
+boe run --extension example
 ```
 
 ## Go Runtime Compatibility

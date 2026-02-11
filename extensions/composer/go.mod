@@ -3,7 +3,7 @@
 // dependency version compatibility. Do not create separate go.mod files for
 // embedded plugins; they should be part of this module.
 
-module github.com/tetratelabs/built-on-envoy/extensions
+module github.com/tetratelabs/built-on-envoy/extensions/composer
 
 go 1.25.6
 

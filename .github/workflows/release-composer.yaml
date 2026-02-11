@@ -37,10 +37,20 @@ jobs:
       - name: Build and Push Composer
         env:
           IMAGE_NONCE: ${{ inputs.nonce }}
-        run: make -C extensions/core/libcomposer push
+        run: make -C extensions/composer push_image
       
       - name: Build and Push Lite Composer
         env:
           COMPOSER_LITE: true
           IMAGE_NONCE: ${{ inputs.nonce }}
-        run: make -C extensions/core/libcomposer push
+        run: make -C extensions/composer push_image
+
+      - name: Push source code
+        env:
+          IMAGE_NONCE: ${{ inputs.nonce }}
+        run: make -C extensions/composer push_code
+
+      - name: Push all plugins
+        env:
+          IMAGE_NONCE: ${{ inputs.nonce }}
+        run: make -C extensions/composer push_plugins

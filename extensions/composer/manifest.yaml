@@ -1,0 +1,35 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: composer
+version: 0.2.1
+categories:
+  - Misc
+author: Tetrate
+featured: true
+description: Extension set of all in-tree golang dynamic module extensions and Go plugin loader
+longDescription: |
+  The Composer is a dynamic module that bundles all in-tree Go extensions and
+  the Go plugin loader into a single shared library (libcomposer.so).
+
+  ## Packaging
+
+  Composer ships as an OCI image containing the compiled shared library. It can
+  be built in two variants:
+
+  - **Full**: Includes all embedded plugins and the Go plugin loader.
+  - **Lite**: Includes only the Go plugin loader for runtime-loaded plugins.
+type: dynamic_module
+tags:
+  - go
+  - dynamic-module
+  - plugin-loader
+license: Apache-2.0
+examples:
+  - title: Run with the example plugin
+    description: Start Envoy with the composer dynamic module and example plugin
+    code: |
+      boe run --extension example
+extensionSet: true

@@ -25,8 +25,13 @@ import (
 type (
 	// Manifest represents the metadata of an Envoy extension.
 	Manifest struct {
-		Name            string    `yaml:"name" json:"name"`
-		Version         string    `yaml:"version" json:"version"`
+		Name    string `yaml:"name" json:"name"`
+		Version string `yaml:"version,omitempty" json:"version,omitempty"`
+		// Parent references a parent extension whose version will be used.
+		// When set, the version field can be omitted.
+		Parent string `yaml:"parent,omitempty" json:"parent,omitempty"`
+		// ExtensionSet indicates this manifest defines a set of extensions.
+		ExtensionSet    bool      `yaml:"extensionSet,omitempty" json:"extensionSet,omitempty"`
 		Categories      []string  `yaml:"categories" json:"categories"`
 		Author          string    `yaml:"author" json:"author"`
 		Featured        bool      `yaml:"featured" json:"featured,omitempty"`

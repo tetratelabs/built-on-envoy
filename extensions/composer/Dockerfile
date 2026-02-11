@@ -7,7 +7,7 @@
 FROM golang:1.25.6 AS builder
 
 WORKDIR /workspace
-COPY --from=composer . .
+COPY . .
 
 # Install necessary tools for cgo
 RUN apt-get update
@@ -18,7 +18,7 @@ RUN go mod download all
 ARG BUILD_TAG=""
 # Build go shared library
 RUN CGO_ENABLED=1 go build -tags ${BUILD_TAG} -buildmode=c-shared -o libcomposer.so \
-    ./core/libcomposer
+    .
 
 FROM scratch AS final
 

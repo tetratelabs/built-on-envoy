@@ -45,7 +45,6 @@ Version of Built On Envoy Composer
 | **Type** | `string` |
 | **Required** | No |
 | **Pattern** | `^\d+\.\d+\.\d+$` |
-| **Required when** | `type` is `composer` |
 
 
 
@@ -106,6 +105,17 @@ Short title for the example
 | **Required** | Yes |
 | **Min length** | 1 |
 
+
+
+
+## extensionSet
+
+Whether this manifest defines a set of extensions
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
 
 
 
@@ -214,7 +224,20 @@ Unique identifier for the extension
 | **Type** | `string` |
 | **Required** | Yes |
 | **Min length** | 1 |
-| **Pattern** | `^[a-z][a-z0-9-_]*$` |
+| **Pattern** | `^[a-z][.a-z0-9-_]*$` |
+
+
+
+## parent
+
+Parent extension set whose version will be used. When set, the version field can be omitted.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+| **Min length** | 1 |
+| **Pattern** | `^[a-z][a-z0-9-_.]*$` |
 
 
 
@@ -252,7 +275,7 @@ Semantic version of the extension
 | | |
 |---|---|
 | **Type** | `string` |
-| **Required** | Yes |
+| **Required** | No |
 | **Pattern** | `^\d+\.\d+\.\d+$` |
 
 

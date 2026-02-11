@@ -14,7 +14,7 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
 	"go.uber.org/mock/gomock"
 
-	"github.com/tetratelabs/built-on-envoy/extensions/core/goplugin"
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/goplugin"
 )
 
 func Test_Create(t *testing.T) {

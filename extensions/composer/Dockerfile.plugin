@@ -3,17 +3,22 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
+# WARNING: This Dockerfile is auto-generated. Do not modify it directly.
+# If you need to customize the build process, consider creating a separate
+# Dockerfile (e.g., Dockerfile.custom) instead of editing this file.
+
 # Build the manager binary
 FROM golang:1.25.6 AS builder
 
+ARG EXTENSION_PATH
+
 WORKDIR /workspace
-COPY --from=composer . .
+COPY . .
 
 RUN go mod download all
-ARG EXTENSION_PATH=""
 
 # Build go plugin
-RUN CGO_ENABLED=1 go build -buildmode=plugin -o plugin.so ./${EXTENSION_PATH}
+RUN CGO_ENABLED=1 go build -buildmode=plugin -o plugin.so ./$EXTENSION_PATH/standalone
 
 FROM scratch AS final
 

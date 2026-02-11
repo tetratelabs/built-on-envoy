@@ -50,9 +50,13 @@ func (l *List) Run() error {
 	// Print each extension
 	for _, name := range names {
 		m := extensions.Manifests[name]
+		version := m.Version
+		if version == "" {
+			version = "N/A"
+		}
 		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
 			m.Name,
-			m.Version,
+			version,
 			m.Type,
 			truncateDescription(m.Description, 60),
 		)

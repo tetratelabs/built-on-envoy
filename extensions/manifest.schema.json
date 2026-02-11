@@ -6,7 +6,6 @@
   "type": "object",
   "required": [
     "name",
-    "version",
     "categories",
     "author",
     "description",
@@ -22,7 +21,7 @@
       "type": "string",
       "description": "Unique identifier for the extension",
       "minLength": 1,
-      "pattern": "^[a-z][a-z0-9-_]*$"
+      "pattern": "^[a-z][.a-z0-9-_]*$"
     },
     "version": {
       "type": "string",
@@ -158,6 +157,16 @@
         { "required": ["path"] },
         { "required": ["inline"] }
       ]
+    },
+    "parent": {
+      "type": "string",
+      "description": "Parent extension set whose version will be used. When set, the version field can be omitted.",
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9-_.]*$"
+    },
+    "extensionSet": {
+      "type": "boolean",
+      "description": "Whether this manifest defines a set of extensions"
     }
   },
   "allOf": [
@@ -178,17 +187,45 @@
     },
     {
       "if": {
-        "properties": {
-          "type": { "const": "composer" }
-        }
+        "allOf": [
+          {
+            "properties": {
+              "type": { "const": "composer" }
+            }
+          },
+          {
+            "not": {
+              "required": ["parent"]
+            }
+          }
+        ]
       },
       "then": {
         "required": ["composerVersion"]
       },
       "else": {
-        "properties": {
-          "composerVersion": false
+        "if": {
+          "properties": {
+            "type": { "const": "composer" }
+          },
+          "required": ["type"]
+        },
+        "then": {},
+        "else": {
+          "properties": {
+            "composerVersion": false
+          }
         }
+      }
+    },
+    {
+      "if": {
+        "not": {
+          "required": ["parent"]
+        }
+      },
+      "then": {
+        "required": ["version"]
       }
     }
   ]

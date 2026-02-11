@@ -76,7 +76,7 @@ func buildLibComposer(dataHome string, composerSrcPath string) error {
 
 	// #nosec G204
 	cmd := exec.Command("make", "-C",
-		"core/libcomposer",
+		"composer",
 		"install",
 		"BOE_DATA_HOME="+dataHome,
 	)
@@ -87,5 +87,20 @@ func buildLibComposer(dataHome string, composerSrcPath string) error {
 		return fmt.Errorf("failed to build libcomposer from source at %s: %w\nOutput: %s",
 			composerSrcPath, err, string(output))
 	}
+
+	// #nosec G204
+	exampleCmd := exec.Command("make", "-C",
+		"composer",
+		"install_plugins",
+		"BOE_DATA_HOME="+dataHome,
+	)
+	exampleCmd.Dir = composerSrcPath
+
+	exampleOutput, exampleErr := exampleCmd.CombinedOutput()
+	if exampleErr != nil {
+		return fmt.Errorf("failed to build composer example plugin from source at %s: %w\nOutput: %s",
+			composerSrcPath, exampleErr, string(exampleOutput))
+	}
+
 	return nil
 }
