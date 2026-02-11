@@ -1,5 +1,5 @@
 module github.com/tetratelabs/built-on-envoy/cli/tools/gen-manifest-reference
 
-go 1.25.6
+go 1.25.7
 
 require golang.org/x/text v0.32.0
