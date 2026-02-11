@@ -74,13 +74,13 @@ func TestCreateWithDockerSupport(t *testing.T) {
 		// Push local image to registry and check its annotations
 		// #nosec G204
 		pushCmd := exec.CommandContext(ctx, "docker", "push",
-			fmt.Sprintf("%s/built-on-envoy/extension-test-docker:%s-linux-%s", registry, version, runtime.GOARCH))
+			fmt.Sprintf("%s/built-on-envoy/extension-test-docker:%s-linux-%s", registryAddr, version, runtime.GOARCH))
 		output, err = pushCmd.CombinedOutput()
 		t.Logf("docker push output: %s", string(output))
 		require.NoError(t, err, "Should be able to push image to local registry")
 
 		// Pull the image manifest and check annotations
-		fetchManifest(t, registry, "built-on-envoy/extension-test-docker", fmt.Sprintf("%s-linux-%s", version, runtime.GOARCH))
+		fetchManifest(t, registryAddr, "built-on-envoy/extension-test-docker", fmt.Sprintf("%s-linux-%s", version, runtime.GOARCH))
 	})
 
 	t.Run("makefile_push_target", func(t *testing.T) {
@@ -93,7 +93,7 @@ func TestCreateWithDockerSupport(t *testing.T) {
 		require.NoError(t, err, "Makefile push_image target should be valid")
 
 		// Pull the image manifest and check annotations
-		fetchManifest(t, registry, "built-on-envoy/extension-test-docker", version)
+		fetchManifest(t, registryAddr, "built-on-envoy/extension-test-docker", version)
 	})
 
 	t.Run("makefile_code_target", func(t *testing.T) {
@@ -106,7 +106,7 @@ func TestCreateWithDockerSupport(t *testing.T) {
 		require.NoError(t, err, "Makefile push_code target should be valid")
 
 		// Pull the image manifest and check annotations
-		fetchManifest(t, registry, "built-on-envoy/extension-src-test-docker", version)
+		fetchManifest(t, registryAddr, "built-on-envoy/extension-src-test-docker", version)
 	})
 }
 
