@@ -8,6 +8,7 @@ package goplugin
 
 import (
 	"debug/buildinfo"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"os"
@@ -18,7 +19,6 @@ import (
 
 	sdk "github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
-	"google.golang.org/protobuf/encoding/protojson"
 )
 
 var (
@@ -135,19 +135,28 @@ func CreateStreamPluginConfigFactory(pluginName string, binaryPath string,
 		"WellKnownHttpFilterConfigFactories", pluginName, strictCheck)
 }
 
-func loadGoPlugin(moduleConfig []byte) (*GoPlugin, []byte, error) {
+func loadGoPlugin(moduleConfig []byte) (Config, []byte, error) {
 	// load JSON config into GoPlugin
-	goPlugin := &GoPlugin{}
-	err := protojson.Unmarshal(moduleConfig, goPlugin)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to load go plugin config from module config: %w", err)
+	goPlugin := Config{}
+	if err := json.Unmarshal(moduleConfig, &goPlugin); err != nil {
+		return Config{}, nil, fmt.Errorf("failed to load go plugin config from module config: %w", err)
+	}
+
+	// Set the default avlue after reading
+	if goPlugin.StrictCheck == nil {
+		strictCheck := true
+		goPlugin.StrictCheck = &strictCheck
 	}
 
 	// Marshal the inner plugin config back to JSON for the plugin factory.
-	innerConfigJSON, marshalErr := protojson.Marshal(goPlugin.GetConfig())
-	if marshalErr != nil {
-		// This should never happen.
-		return nil, nil, fmt.Errorf("failed to marshal inner plugin config to JSON: %w", marshalErr)
+	var innerConfigJSON []byte
+	if goPlugin.Config != nil {
+		var err error
+		innerConfigJSON, err = json.Marshal(goPlugin.Config)
+		if err != nil {
+			// This should never happen.
+			return Config{}, nil, fmt.Errorf("failed to marshal inner plugin config to JSON: %w", err)
+		}
 	}
 	return goPlugin, innerConfigJSON, nil
 }
@@ -191,30 +200,24 @@ func (f *GoPluginLoaderConfigFactory) Create(handle shared.HttpFilterConfigHandl
 	if err != nil {
 		return nil, err
 	}
-	if goPlugin.GetName() == "" || goPlugin.GetUrl() == "" {
-		handle.Log(shared.LogLevelWarn, "plugin name or url is empty: %s/%s", goPlugin.GetName(),
-			goPlugin.GetUrl())
+	if goPlugin.Name == "" || goPlugin.URL == "" {
+		handle.Log(shared.LogLevelWarn, "plugin name or url is empty: %s/%s", goPlugin.Name,
+			goPlugin.URL)
 		return nil, fmt.Errorf("plugin name or url is empty")
 	}
 
-	var strictCheck = true
-	if goPlugin.GetStrictCheck() != nil {
-		strictCheck = goPlugin.GetStrictCheck().GetValue()
-	}
-
-	configFactory, err := f.LoadPlugin(goPlugin.GetName(), goPlugin.GetUrl(),
-		strictCheck)
+	configFactory, err := f.LoadPlugin(goPlugin.Name, goPlugin.URL, *goPlugin.StrictCheck)
 	if err != nil {
 		handle.Log(shared.LogLevelWarn, "failed to handle dynamic module plugin: %s/%s/%v",
-			goPlugin.GetName(), goPlugin.GetUrl(), err)
-		return nil, fmt.Errorf("failed to handle dynamic module plugin %s: %w", goPlugin.GetName(), err)
+			goPlugin.Name, goPlugin.URL, err)
+		return nil, fmt.Errorf("failed to handle dynamic module plugin %s: %w", goPlugin.Name, err)
 	}
 
 	pluginFactory, err := configFactory.Create(handle, pluginConfig)
 	if err != nil {
 		handle.Log(shared.LogLevelWarn, "failed to create plugin factory: %s/%s/%v",
-			goPlugin.GetName(), goPlugin.GetUrl(), err)
-		return nil, fmt.Errorf("failed to create plugin factory for plugin %s: %w", goPlugin.GetName(), err)
+			goPlugin.Name, goPlugin.URL, err)
+		return nil, fmt.Errorf("failed to create plugin factory for plugin %s: %w", goPlugin.Name, err)
 	}
 
 	return pluginFactory, nil
@@ -226,23 +229,18 @@ func (f *GoPluginLoaderConfigFactory) CreatePerRoute(unparsedConfig []byte) (any
 	if err != nil {
 		return nil, err
 	}
-	if goPlugin.GetName() == "" || goPlugin.GetUrl() == "" {
+	if goPlugin.Name == "" || goPlugin.URL == "" {
 		return nil, fmt.Errorf("plugin name or url is empty")
 	}
 
-	var strictCheck = true
-	if goPlugin.GetStrictCheck() != nil {
-		strictCheck = goPlugin.GetStrictCheck().GetValue()
-	}
-	configFactory, err := f.LoadPlugin(goPlugin.GetName(), goPlugin.GetUrl(),
-		strictCheck)
+	configFactory, err := f.LoadPlugin(goPlugin.Name, goPlugin.URL, *goPlugin.StrictCheck)
 	if err != nil {
-		return nil, fmt.Errorf("failed to handle dynamic module plugin %s: %w", goPlugin.GetName(), err)
+		return nil, fmt.Errorf("failed to handle dynamic module plugin %s: %w", goPlugin.Name, err)
 	}
 	anyConfig, err := configFactory.CreatePerRoute(pluginConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create per-route config for plugin %s: %w",
-			goPlugin.GetName(), err)
+			goPlugin.Name, err)
 	}
 	return anyConfig, nil
 }
