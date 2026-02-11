@@ -15,6 +15,7 @@ import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	structpb "google.golang.org/protobuf/types/known/structpb"
+	wrapperspb "google.golang.org/protobuf/types/known/wrapperspb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -35,7 +36,13 @@ type GoPlugin struct {
 	// Plugin configuration
 	Config *structpb.Struct `protobuf:"bytes,2,opt,name=config,proto3" json:"config,omitempty"`
 	// URL to fetch the plugin if it is a custom plugin
-	Url           string `protobuf:"bytes,3,opt,name=url,proto3" json:"url,omitempty"`
+	Url string `protobuf:"bytes,3,opt,name=url,proto3" json:"url,omitempty"`
+	// The composer will expect the loaded plugin's dependencies are subset of composer's
+	// dependencies and no version conflict.
+	// If set to true and then composer will reject any extensions that not meet the
+	// above requirement strictly.
+	// True by default.
+	StrictCheck   *wrapperspb.BoolValue `protobuf:"bytes,4,opt,name=strict_check,json=strictCheck,proto3" json:"strict_check,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -91,15 +98,23 @@ func (x *GoPlugin) GetUrl() string {
 	return ""
 }
 
+func (x *GoPlugin) GetStrictCheck() *wrapperspb.BoolValue {
+	if x != nil {
+		return x.StrictCheck
+	}
+	return nil
+}
+
 var File_config_proto protoreflect.FileDescriptor
 
 const file_config_proto_rawDesc = "" +
 	"\n" +
-	"\fconfig.proto\x12%builtonenvoy.extensions.core.goplugin\x1a\x1cgoogle/protobuf/struct.proto\"a\n" +
+	"\fconfig.proto\x12%builtonenvoy.extensions.core.goplugin\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1egoogle/protobuf/wrappers.proto\"\xa0\x01\n" +
 	"\bGoPlugin\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12/\n" +
 	"\x06config\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06config\x12\x10\n" +
-	"\x03url\x18\x03 \x01(\tR\x03urlB\xb0\x02\n" +
+	"\x03url\x18\x03 \x01(\tR\x03url\x12=\n" +
+	"\fstrict_check\x18\x04 \x01(\v2\x1a.google.protobuf.BoolValueR\vstrictCheckB\xb0\x02\n" +
 	")com.builtonenvoy.extensions.core.gopluginB\vConfigProtoP\x01Z>github.com/tetratelabs/built-on-envoy/extensions/core/goplugin\xa2\x02\x04BECG\xaa\x02%Builtonenvoy.Extensions.Core.Goplugin\xca\x02%Builtonenvoy\\Extensions\\Core\\Goplugin\xe2\x021Builtonenvoy\\Extensions\\Core\\Goplugin\\GPBMetadata\xea\x02(Builtonenvoy::Extensions::Core::Gopluginb\x06proto3"
 
 var (
@@ -116,16 +131,18 @@ func file_config_proto_rawDescGZIP() []byte {
 
 var file_config_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_config_proto_goTypes = []any{
-	(*GoPlugin)(nil),        // 0: builtonenvoy.extensions.core.goplugin.GoPlugin
-	(*structpb.Struct)(nil), // 1: google.protobuf.Struct
+	(*GoPlugin)(nil),             // 0: builtonenvoy.extensions.core.goplugin.GoPlugin
+	(*structpb.Struct)(nil),      // 1: google.protobuf.Struct
+	(*wrapperspb.BoolValue)(nil), // 2: google.protobuf.BoolValue
 }
 var file_config_proto_depIdxs = []int32{
 	1, // 0: builtonenvoy.extensions.core.goplugin.GoPlugin.config:type_name -> google.protobuf.Struct
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	2, // 1: builtonenvoy.extensions.core.goplugin.GoPlugin.strict_check:type_name -> google.protobuf.BoolValue
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_config_proto_init() }

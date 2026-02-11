@@ -9,6 +9,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"os/exec"
 	"testing"
 	"time"
 
@@ -82,6 +84,8 @@ func TestLocalGoExtension(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 0, status.ExitCode())
 
+	addSenselessDependencyToExtension(t, dataDir+"/go-e2e")
+
 	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin,
 		"--local", dataDir+"/go-e2e",
 		"--local", dataDir+"/go-e2e",
@@ -104,4 +108,64 @@ func TestLocalGoExtension(t *testing.T) {
 	t.Cleanup(cancel)
 
 	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
+}
+
+func addSenselessDependencyToExtension(t *testing.T, path string) {
+	// Create another module in the extension project as an senseless dependency for the extension.
+	// This is to test that the extension can be built and run successfully even the dependencies
+	// of the extension are not subset of the composer's dependencies.
+
+	goModContent := `module inner
+go 1.25.6
+`
+
+	goFileContent := `package inner
+func Inner() string {
+	return "inner"
+}
+`
+
+	newModulePath := path + "/inner"
+
+	err := os.Mkdir(newModulePath, 0o700)
+	require.NoError(t, err, "failed to create inner module directory")
+
+	goModPath := newModulePath + "/go.mod"
+	err = os.WriteFile(goModPath, []byte(goModContent), 0o600)
+	require.NoError(t, err, "failed to write go.mod for inner module")
+
+	goFilePath := newModulePath + "/inner.go"
+	err = os.WriteFile(goFilePath, []byte(goFileContent), 0o600)
+	require.NoError(t, err, "failed to write inner.go for inner module")
+
+	// Append the content to go.mod.
+	newDependencyContent := `require inner v0.0.0
+replace inner => ./inner
+`
+	// #nosec G304
+	f, err := os.OpenFile(path+"/go.mod", os.O_APPEND|os.O_WRONLY, 0o600)
+	require.NoError(t, err)
+	defer func() { _ = f.Close() }()
+	_, err = f.WriteString(newDependencyContent)
+	require.NoError(t, err, "failed to write go.mod content")
+
+	// Add some code in the parent project to use the go-e2e-inner extension.
+	dummyGoFileContent := `
+package main
+
+import "inner"
+
+func dummy() string {
+	return inner.Inner()
+}
+`
+	dummyGoFilePath := path + "/standalone/dummy.go"
+	err = os.WriteFile(dummyGoFilePath, []byte(dummyGoFileContent), 0o600)
+	require.NoError(t, err, "failed to write dummy go file")
+
+	// Run `go mod tidy` to make sure the dependencies are properly resolved.
+	goModTidyCmd := exec.Command("go", "mod", "tidy")
+	goModTidyCmd.Dir = path
+	output, err := goModTidyCmd.CombinedOutput()
+	require.NoError(t, err, string(output))
 }

@@ -26,11 +26,11 @@ func Test_Create(t *testing.T) {
 
 	mockFactory := mocks.NewMockHttpFilterConfigFactory(ctrl)
 
-	loadPluginNoError := func(_, _ string) (shared.HttpFilterConfigFactory, error) {
+	loadPluginNoError := func(_, _ string, _ bool) (shared.HttpFilterConfigFactory, error) {
 		return mockFactory, nil
 	}
 
-	loadPluginWithError := func(_, _ string) (shared.HttpFilterConfigFactory, error) {
+	loadPluginWithError := func(_, _ string, _ bool) (shared.HttpFilterConfigFactory, error) {
 		return nil, fmt.Errorf("error")
 	}
 
@@ -94,11 +94,11 @@ func Test_CreatePerRoute(t *testing.T) {
 
 	mockFactory := mocks.NewMockHttpFilterConfigFactory(ctrl)
 
-	loadPluginNoError := func(_, _ string) (shared.HttpFilterConfigFactory, error) {
+	loadPluginNoError := func(_, _ string, _ bool) (shared.HttpFilterConfigFactory, error) {
 		return mockFactory, nil
 	}
 
-	loadPluginWithError := func(_, _ string) (shared.HttpFilterConfigFactory, error) {
+	loadPluginWithError := func(_, _ string, _ bool) (shared.HttpFilterConfigFactory, error) {
 		return nil, fmt.Errorf("error")
 	}
 

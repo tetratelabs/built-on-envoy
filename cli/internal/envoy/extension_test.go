@@ -254,9 +254,10 @@ func TestComposerFilterGenerator(t *testing.T) {
 							FilterConfig: func() *anypb.Any {
 								configStruct := &structpb.Struct{
 									Fields: map[string]*structpb.Value{
-										"name":   structpb.NewStringValue(manifest.Name),
-										"url":    structpb.NewStringValue("file://" + fmt.Sprintf("%s/extensions/goplugin/%s/%s/plugin.so", dataHome, manifest.Name, manifest.Version)),
-										"config": structpb.NewNullValue(),
+										"name":         structpb.NewStringValue(manifest.Name),
+										"url":          structpb.NewStringValue("file://" + fmt.Sprintf("%s/extensions/goplugin/%s/%s/plugin.so", dataHome, manifest.Name, manifest.Version)),
+										"config":       structpb.NewNullValue(),
+										"strict_check": structpb.NewBoolValue(false),
 									},
 								}
 								marshaledJSON, marshalErr := protojson.Marshal(configStruct)
@@ -301,9 +302,10 @@ func TestComposerFilterGenerator(t *testing.T) {
 							FilterConfig: func() *anypb.Any {
 								configStruct := &structpb.Struct{
 									Fields: map[string]*structpb.Value{
-										"name":   structpb.NewStringValue(manifest.Name),
-										"url":    structpb.NewStringValue("file://" + fmt.Sprintf("%s/extensions/goplugin/%s/%s/plugin.so", dataHome, manifest.Name, manifest.Version)),
-										"config": structpb.NewStructValue(innerStruct),
+										"name":         structpb.NewStringValue(manifest.Name),
+										"url":          structpb.NewStringValue("file://" + fmt.Sprintf("%s/extensions/goplugin/%s/%s/plugin.so", dataHome, manifest.Name, manifest.Version)),
+										"config":       structpb.NewStructValue(innerStruct),
+										"strict_check": structpb.NewBoolValue(false),
 									},
 								}
 								marshaledJSON, marshalErr := protojson.Marshal(configStruct)
