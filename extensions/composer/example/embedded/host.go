@@ -16,7 +16,7 @@ import (
 
 // ExtensionName is the name of the extension that will be used in the
 // `run` command to refer to this embedded plugin.
-const ExtensionName = "example"
+const ExtensionName = "example-go"
 
 // Register this plugin to the host registry if this is built into the host binary.
 func init() {
