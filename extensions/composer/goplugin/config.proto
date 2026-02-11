@@ -8,6 +8,7 @@ syntax = "proto3";
 package builtonenvoy.extensions.core.goplugin;
 
 import "google/protobuf/struct.proto";
+import "google/protobuf/wrappers.proto";
 
 option go_package = "github.com/tetratelabs/built-on-envoy/extensions/core/goplugin";
 
@@ -15,8 +16,17 @@ option go_package = "github.com/tetratelabs/built-on-envoy/extensions/core/goplu
 message GoPlugin {
   // Name of the dynamic module plugin
   string name = 1;
+  
   // Plugin configuration
   google.protobuf.Struct config = 2;
+
   // URL to fetch the plugin if it is a custom plugin
   string url = 3;
+
+  // The composer will expect the loaded plugin's dependencies are subset of composer's 
+  // dependencies and no version conflict.
+  // If set to true and then composer will reject any extensions that not meet the
+  // above requirement strictly.
+  // True by default.
+  google.protobuf.BoolValue strict_check = 4;
 }
