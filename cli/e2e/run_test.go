@@ -84,7 +84,9 @@ func TestLocalGoExtension(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 0, status.ExitCode())
 
-	addSenselessDependencyToExtension(t, dataDir+"/go-e2e")
+	// Add a dummy dependency to the extension to test that the extension can be built and run successfully
+	// even the dependencies of the extension are not a subset of the composer's dependencies.
+	addDummyDependencyToExtension(t, dataDir+"/go-e2e")
 
 	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin,
 		"--local", dataDir+"/go-e2e",
@@ -110,8 +112,8 @@ func TestLocalGoExtension(t *testing.T) {
 	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
 }
 
-func addSenselessDependencyToExtension(t *testing.T, path string) {
-	// Create another module in the extension project as an senseless dependency for the extension.
+func addDummyDependencyToExtension(t *testing.T, path string) {
+	// Create another module in the extension project as a dummy dependency for the extension.
 	// This is to test that the extension can be built and run successfully even the dependencies
 	// of the extension are not subset of the composer's dependencies.
 

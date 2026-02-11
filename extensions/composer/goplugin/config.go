@@ -15,5 +15,5 @@ type Config struct {
 	Config map[string]any `json:"config,omitempty"`
 	// StrictCheck indicates whether to perform strict compatibility checks between the plugin and the host.
 	// If not set, defaults to `true`.
-	StrictCheck *bool `json:"strictCheck,omitempty"`
+	StrictCheck *bool `json:"strict_check,omitempty"`
 }
