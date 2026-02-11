@@ -43,8 +43,8 @@ jobs:
       - uses: docker/setup-buildx-action@v3
       - uses: actions/setup-go@v5
         with:
-          go-version-file: extensions/composer/go.mod
-          cache-dependency-path: extensions/composer/go.sum
+          go-version-file: extensions/go.mod
+          cache-dependency-path: extensions/go.sum
       - run: make -C extensions/composer build
 
   example:
@@ -58,8 +58,8 @@ jobs:
       - uses: docker/setup-buildx-action@v3
       - uses: actions/setup-go@v5
         with:
-          go-version-file: extensions/composer/go.mod
-          cache-dependency-path: extensions/composer/go.sum
+          go-version-file: extensions/go.mod
+          cache-dependency-path: extensions/go.sum
       - run: make -C extensions/composer build_plugins
 
   test:
@@ -86,8 +86,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version-file: extensions/composer/go.mod
-          cache-dependency-path: extensions/composer/go.sum
+          go-version-file: extensions/go.mod
+          cache-dependency-path: extensions/go.sum
       - run: make -C extensions/composer format lint
 
   # Aggregate all the required jobs and make it easier to customize CI required jobs
