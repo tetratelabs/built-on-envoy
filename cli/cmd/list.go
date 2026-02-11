@@ -9,9 +9,7 @@ import (
 	_ "embed"
 	"fmt"
 	"io"
-	"maps"
 	"os"
-	"slices"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -37,8 +35,13 @@ func (l *List) Run() error {
 		out = os.Stdout
 	}
 
-	// Get all extension names and sort them alphabetically
-	names := slices.Collect(maps.Keys(extensions.Manifests))
+	var names []string
+	for n, m := range extensions.Manifests {
+		if !m.ExtensionSet {
+			// Skip composer uber-manifests
+			names = append(names, n)
+		}
+	}
 	sort.Strings(names)
 
 	// Create a tabwriter for nicely formatted table output

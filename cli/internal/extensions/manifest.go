@@ -174,6 +174,14 @@ func loadManifests(fsys embed.FS) (map[string]*Manifest, error) {
 		result[m.Name] = m
 		return nil
 	})
+
+	// For composer manifests that have a parent, resolve the version and composer versions
+	for _, m := range result {
+		if err = resolveVersions(m, result); err != nil {
+			return nil, err
+		}
+	}
+
 	return result, err
 }
 
@@ -198,6 +206,23 @@ func loadManifest(fsys fs.FS, path string) (*Manifest, error) {
 	return &m, nil
 }
 
+// resolveVersions resolves the version and composer version for a manifest if it has a parent.
+func resolveVersions(m *Manifest, all map[string]*Manifest) error {
+	if m.Type == TypeComposer && m.Parent != "" {
+		parent, ok := all[m.Parent]
+		if !ok {
+			return fmt.Errorf("failed to find parent manifest %s for manifest %s", m.Parent, m.Name)
+		}
+		if m.Version == "" {
+			m.Version = parent.Version
+		}
+		if m.ComposerVersion == "" {
+			m.ComposerVersion = parent.Version
+		}
+	}
+	return nil
+}
+
 // LoadLocalManifest loads a manifest from the given file path.
 func LoadLocalManifest(path string) (*Manifest, error) {
 	m, err := loadManifest(os.DirFS(filepath.Dir(path)), filepath.Base(path))
@@ -205,6 +230,9 @@ func LoadLocalManifest(path string) (*Manifest, error) {
 		return nil, err
 	}
 	m.Path = path
+	if err = resolveVersions(m, Manifests); err != nil {
+		return nil, err
+	}
 	return m, nil
 }
 

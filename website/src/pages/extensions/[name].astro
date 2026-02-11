@@ -32,6 +32,7 @@ interface Extension {
 	longDescription: string;
 	tags: string[];
 	license: string;
+	composerVersion?: string;
 	examples?: Example[];
 	path: string;
 }
@@ -80,6 +81,12 @@ function formatTypeName(type: string): string {
 									<span class="meta-label">Version</span>
 									<span class="meta-value">{extension.version}</span>
 								</div>
+								{extension.type === 'composer' && extension.composerVersion && (
+									<div class="meta-item">
+										<span class="meta-label">Composer</span>
+										<span class="meta-value">{extension.composerVersion}</span>
+									</div>
+								)}
 								<div class="meta-item">
 									<span class="meta-label">Author</span>
 									<span class="meta-value">{extension.author}</span>

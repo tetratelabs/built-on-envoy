@@ -14,6 +14,7 @@ export interface Extension {
 	repository: string;
 	license: string;
 	featured?: boolean;
+	composerVersion?: string;
 	/** Relative path from the extensions directory to the extension folder */
 	path: string;
 }
