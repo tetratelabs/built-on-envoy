@@ -38,6 +38,7 @@
 
 .extension-header-left {
 	flex-shrink: 0;
+	min-width: 0;
 }
 
 .extension-hero h1 {
@@ -46,6 +47,7 @@
 	color: var(--primary-dark);
 	font-family: 'Monaco', 'Menlo', monospace;
 	margin: 0 0 24px 0;
+	overflow-wrap: break-word;
 }
 
 .extension-description {
@@ -53,6 +55,7 @@
 	color: var(--text-muted);
 	line-height: 1.6;
 	max-width: 480px;
+	overflow-wrap: break-word;
 }
 
 /* Metadata */
@@ -93,6 +96,10 @@
 	gap: 64px;
 }
 
+.main-content {
+	min-width: 0;
+}
+
 .content-section {
 	margin-bottom: 48px;
 }
@@ -112,6 +119,7 @@
 .long-description.prose {
 	color: var(--text);
 	line-height: 1.8;
+	overflow-wrap: break-word;
 }
 
 .long-description.prose p {
@@ -259,6 +267,7 @@
 .example-description {
 	color: var(--text-muted);
 	margin-bottom: 16px;
+	overflow-wrap: break-word;
 }
 
 /* Code Blocks */

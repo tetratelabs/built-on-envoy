@@ -31,6 +31,7 @@ jobs:
               - 'website/**'
               - 'cli/cmd/**'
               - 'extensions/manifest.schema.json'
+              - 'extensions/**/manifest.yaml'
           predicate-quantifier: some  # Make the filters be OR-ed
           token: "" # don't use github api
     outputs:

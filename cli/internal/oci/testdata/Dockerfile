@@ -3,12 +3,9 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-version: v2
+FROM scratch
 
-managed:
-  enabled: true
+ARG TARGETOS
+ARG TARGETARCH
 
-plugins:
-  - remote: buf.build/protocolbuffers/go
-    out: .
-    opt: paths=source_relative
+COPY ./test-${TARGETOS}-${TARGETARCH}.txt /files/

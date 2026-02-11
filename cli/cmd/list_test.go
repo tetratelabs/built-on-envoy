@@ -69,19 +69,14 @@ func TestListCommand(t *testing.T) {
 		m, ok := extensions.Manifests[fields[0]]
 
 		require.Truef(t, ok, "extension %s not found in manifests", fields[0])
-		// TODO(wbpcode): Optimize after we improved the `list` command.
-		version := m.Version
-		if version == "" {
-			version = "N/A"
-		}
 		require.Equal(t,
-			[]string{m.Name, version, string(m.Type), truncateDescription(m.Description, 60)},
+			[]string{m.Name, m.Version, string(m.Type), truncateDescription(m.Description, 60)},
 			fields,
 		)
 
 		names[m.Name] = struct{}{}
 	}
-	require.Len(t, names, len(extensions.Manifests))
+	require.Len(t, names, len(extensions.ManifestsForCatalog()))
 }
 
 func fieldsN(s string, n int) []string {

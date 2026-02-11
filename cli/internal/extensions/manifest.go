@@ -131,6 +131,8 @@ var (
 	ErrReadManifestFile = fmt.Errorf("failed to read manifest file")
 	// ErrParseManifestFile is returned when a manifest file cannot be parsed.
 	ErrParseManifestFile = fmt.Errorf("failed to parse manifest file")
+	// ErrParentManifestNotFound is returned when a parent manifest cannot be found.
+	ErrParentManifestNotFound = fmt.Errorf("parent manifest not found")
 )
 
 func init() {
@@ -157,8 +159,8 @@ func init() {
 	}
 }
 
-// loadManifests walks the embedded filesystem and loads all manifest.yaml files.
-func loadManifests(fsys embed.FS) (map[string]*Manifest, error) {
+// loadManifests walks the filesystem and loads all manifest.yaml files.
+func loadManifests(fsys fs.FS) (map[string]*Manifest, error) {
 	result := make(map[string]*Manifest)
 	err := fs.WalkDir(fsys, "manifests", func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || filepath.Base(path) != "manifest.yaml" {
@@ -174,7 +176,18 @@ func loadManifests(fsys embed.FS) (map[string]*Manifest, error) {
 		result[m.Name] = m
 		return nil
 	})
-	return result, err
+	if err != nil {
+		return nil, err
+	}
+
+	// For composer manifests that have a parent, resolve the version and composer versions
+	for _, m := range result {
+		if err := resolveVersions(m, result); err != nil {
+			return nil, err
+		}
+	}
+
+	return result, nil
 }
 
 // loadManifest loads a manifest from the given filesystem and path.
@@ -198,6 +211,35 @@ func loadManifest(fsys fs.FS, path string) (*Manifest, error) {
 	return &m, nil
 }
 
+// resolveVersions resolves the version and composer version for a manifest if it has a parent.
+func resolveVersions(m *Manifest, all map[string]*Manifest) error {
+	if m.Type == TypeComposer && m.Parent != "" {
+		parent, ok := all[m.Parent]
+		if !ok {
+			return fmt.Errorf("%w: %s", ErrParentManifestNotFound, m.Parent)
+		}
+		if m.Version == "" {
+			m.Version = parent.Version
+		}
+		if m.ComposerVersion == "" {
+			m.ComposerVersion = parent.Version
+		}
+	}
+	return nil
+}
+
+// ManifestsForCatalog returns a list of manifests that should be included in the catalog.
+// This filters out manifests that are only used as parents for version inheritance.
+func ManifestsForCatalog() []*Manifest {
+	manifests := make([]*Manifest, 0, len(Manifests))
+	for _, m := range Manifests {
+		if !m.ExtensionSet {
+			manifests = append(manifests, m)
+		}
+	}
+	return manifests
+}
+
 // LoadLocalManifest loads a manifest from the given file path.
 func LoadLocalManifest(path string) (*Manifest, error) {
 	m, err := loadManifest(os.DirFS(filepath.Dir(path)), filepath.Base(path))
@@ -205,6 +247,9 @@ func LoadLocalManifest(path string) (*Manifest, error) {
 		return nil, err
 	}
 	m.Path = path
+	if err = resolveVersions(m, Manifests); err != nil {
+		return nil, err
+	}
 	return m, nil
 }
 

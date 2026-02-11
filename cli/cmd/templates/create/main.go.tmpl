@@ -8,7 +8,5 @@ import (
 // WellKnownHttpFilterConfigFactories is the plugin entry point when running it as an
 // independently loaded composer plugin.
 func WellKnownHttpFilterConfigFactories() map[string]shared.HttpFilterConfigFactory {
-	return map[string]shared.HttpFilterConfigFactory{
-		"{{ .Name }}": &impl.CustomHttpFilterConfigFactory{},
-	}
+	return impl.WellKnownHttpFilterConfigFactories()
 }

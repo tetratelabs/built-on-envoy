@@ -309,3 +309,13 @@ func (f *PluginConfigFactory) Create(handle shared.HttpFilterConfigHandle,
 
 	return &PluginFactory{statsCollector: stats}, nil
 }
+
+// ExtensionName is the name of the extension that will be used in the
+// `run` command to refer to this plugin.
+const ExtensionName = "example-go"
+
+func WellKnownHttpFilterConfigFactories() map[string]shared.HttpFilterConfigFactory { //nolint:revive
+	return map[string]shared.HttpFilterConfigFactory{
+		ExtensionName: &PluginConfigFactory{},
+	}
+}

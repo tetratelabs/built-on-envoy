@@ -64,7 +64,7 @@ func TestRepositoryClient_PushPull(t *testing.T) {
 
 			// Pull to a new directory
 			destDir := t.TempDir()
-			manifest, pulledDigest, err := client.Pull(ctx, tag, destDir)
+			manifest, pulledDigest, err := client.Pull(ctx, tag, destDir, nil)
 			require.NoError(t, err)
 			assert.Equal(t, digest, pulledDigest)
 			assert.Equal(t, tag, manifest.Annotations[ocispec.AnnotationVersion])
@@ -80,7 +80,7 @@ func TestRepositoryClient_PushPull(t *testing.T) {
 			}
 
 			// Check manifest
-			fetchedManifest, err := client.FetchManifest(ctx, tag)
+			fetchedManifest, err := client.FetchManifest(ctx, tag, nil)
 			require.NoError(t, err)
 			assert.Equal(t, manifest, fetchedManifest)
 		})
@@ -112,7 +112,7 @@ func TestRepositoryClient_PushPull_MultipleTags(t *testing.T) {
 
 			// Pull v1 and verify
 			destDir1 := t.TempDir()
-			manifest1, _, err := client.Pull(ctx, "v1", destDir1)
+			manifest1, _, err := client.Pull(ctx, "v1", destDir1, nil)
 			require.NoError(t, err)
 			assert.NotEmpty(t, manifest1.Annotations[ocispec.AnnotationCreated])
 
@@ -122,7 +122,7 @@ func TestRepositoryClient_PushPull_MultipleTags(t *testing.T) {
 
 			// Pull v2 and verify
 			destDir2 := t.TempDir()
-			manifest2, _, err := client.Pull(ctx, "v2", destDir2)
+			manifest2, _, err := client.Pull(ctx, "v2", destDir2, nil)
 			require.NoError(t, err)
 			assert.NotEmpty(t, manifest2.Annotations[ocispec.AnnotationCreated])
 
@@ -145,9 +145,9 @@ func TestRepositoryClient_Pull_NonExistentTag(t *testing.T) {
 			client := tt.newRepoClient(t)
 
 			destDir := t.TempDir()
-			_, _, err := client.Pull(ctx, "nonexistent", destDir)
+			_, _, err := client.Pull(ctx, "nonexistent", destDir, nil)
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), "failed to pull from registry")
+			assert.Contains(t, err.Error(), "failed to get manifest")
 		})
 	}
 }
@@ -160,7 +160,7 @@ func TestRepositoryClient_Push_NonExistentPath(t *testing.T) {
 
 			_, err := client.Push(ctx, "/nonexistent/path", "v1", nil)
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), "failed to package directory")
+			assert.Contains(t, err.Error(), "no such file or directory")
 		})
 	}
 }

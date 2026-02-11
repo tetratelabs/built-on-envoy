@@ -215,6 +215,10 @@ func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manif
 			"name":   structpb.NewStringValue(manifest.Name),
 			"url":    structpb.NewStringValue("file://" + cachedPluginPath),
 			"config": configValue,
+			// TODO(wbpcode): this could be false always in local testing/development.
+			// Should we support to configure this or give different default value for
+			// `run` and `genconfig` command?
+			"strict_check": structpb.NewBoolValue(false),
 		},
 	}
 

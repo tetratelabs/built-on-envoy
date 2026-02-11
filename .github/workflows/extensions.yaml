@@ -34,18 +34,6 @@ jobs:
     outputs:
       extensions: ${{ steps.changes.outputs.extensions }}
 
-  goplugin:
-    needs: changes
-    if: ${{ needs.changes.outputs.extensions == 'true' }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: extensions/composer/go.mod
-          cache-dependency-path: extensions/composer/go.sum
-      - run: make -C extensions/composer/goplugin all
-
   composer:
     needs: changes
     if: ${{ needs.changes.outputs.extensions == 'true' }}
@@ -102,7 +90,6 @@ jobs:
   extensions-checks:
     runs-on: ubuntu-latest
     needs:
-      - goplugin
       - composer
       - example
       - test

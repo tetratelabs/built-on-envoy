@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { parse } from 'yaml';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -39,6 +40,42 @@ function findManifests(dir, baseDir = dir) {
 }
 
 /**
+ * Parse all manifests and build a lookup map by name
+ */
+function loadAllManifests(manifestEntries) {
+	const allManifests = new Map();
+	for (const { sourcePath, relativePath } of manifestEntries) {
+		const rawContent = fs.readFileSync(sourcePath, 'utf-8');
+		const manifest = parse(rawContent);
+		allManifests.set(manifest.name, { manifest, rawContent, sourcePath, relativePath });
+	}
+	return allManifests;
+}
+
+/**
+ * Resolve versions for composer-type manifests that reference a parent.
+ * Mirrors the Go resolveVersions logic.
+ * Returns YAML lines to append to the original file content.
+ */
+function resolveVersions(manifest, allManifests) {
+	const appendLines = [];
+	if (manifest.type === 'composer' && manifest.parent) {
+		const parentEntry = allManifests.get(manifest.parent);
+		if (!parentEntry) {
+			throw new Error(`Failed to find parent manifest ${manifest.parent} for manifest ${manifest.name}`);
+		}
+		const parent = parentEntry.manifest;
+		if (!manifest.version) {
+			appendLines.push(`version: ${parent.version}`);
+		}
+		if (!manifest.composerVersion) {
+			appendLines.push(`composerVersion: ${parent.version}`);
+		}
+	}
+	return appendLines;
+}
+
+/**
  * Copy manifests to the target directory
  */
 function copyManifests() {
@@ -51,24 +88,43 @@ function copyManifests() {
 	fs.mkdirSync(targetDir, { recursive: true });
 
 	// Find all manifests
-	const manifests = findManifests(extensionsDir);
+	const manifestEntries = findManifests(extensionsDir);
+	console.log(`Found ${manifestEntries.length} manifest(s)`);
 
-	console.log(`Found ${manifests.length} manifest(s)`);
+	// Parse all manifests so we can resolve parent references
+	const allManifests = loadAllManifests(manifestEntries);
 
-	// Copy each manifest
-	for (const { sourcePath, relativePath } of manifests) {
+	let copied = 0;
+	for (const [name, { manifest, rawContent, relativePath }] of allManifests) {
+		// Skip extension sets
+		if (manifest.extensionSet) {
+			console.log(`  Skipped extension set: ${name}`);
+			continue;
+		}
+
+		// Resolve versions from parent manifests
+		const appendLines = resolveVersions(manifest, allManifests);
+
 		const targetPath = path.join(targetDir, relativePath, 'manifest.yaml');
 		const targetDirPath = path.dirname(targetPath);
 
 		// Ensure target directory exists
 		fs.mkdirSync(targetDirPath, { recursive: true });
 
-		// Copy the file
-		fs.copyFileSync(sourcePath, targetPath);
+		// Write the original content with any resolved fields appended
+		let output = rawContent;
+		if (appendLines.length > 0) {
+			if (!output.endsWith('\n')) {
+				output += '\n';
+			}
+			output += appendLines.join('\n') + '\n';
+		}
+		fs.writeFileSync(targetPath, output);
 		console.log(`  Copied: ${relativePath}/manifest.yaml`);
+		copied++;
 	}
 
-	console.log('Manifests copied successfully!');
+	console.log(`Copied ${copied} manifest(s) successfully!`);
 }
 
 // Run the copy

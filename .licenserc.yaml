@@ -28,3 +28,4 @@ header:
     - "**/Dockerfile.plugin"
     - .editorconfig
     - LICENSE
+    - "**/coraza/rules/**"
