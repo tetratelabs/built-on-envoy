@@ -22,19 +22,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var (
-	// boeRunTimeout is the timeout for BOERun, which can be set via
-	// the BOE_TEST_RUN_TIMEOUT environment variable.
-	boeRunTimeout = cmp.Or(os.Getenv("BOE_TEST_RUN_TIMEOUT"), "30s")
-	// boeLogLevel is the log level for the Envoy process,
-	// which can be set via the BOE_TEST_LOG_LEVEL environment variable.
-	boeLogLevel = cmp.Or(os.Getenv("BOE_TEST_LOG_LEVEL"), "all:warning")
-)
-
 // BOERun runs the BOE binary with the given arguments and returns the port it's listening on.
 // It also sets up a cleanup function to gracefully shut down the process after the test finishes.
 func BOERun(t *testing.T, args ...string) int {
-	boeBin := cmp.Or(os.Getenv("BOE_BIN"), "boe")
+	var (
+		// boeBin is the binary used by BOERun, which can be set via the
+		// BOE_BIN environment variable.
+		boeBin = cmp.Or(os.Getenv("BOE_BIN"), "boe")
+		// boeRunTimeout is the timeout for BOERun, which can be set via
+		// the BOE_TEST_RUN_TIMEOUT environment variable.
+		boeRunTimeout = cmp.Or(os.Getenv("BOE_TEST_RUN_TIMEOUT"), "30s")
+		// boeLogLevel is the log level for the Envoy process,
+		// which can be set via the BOE_TEST_LOG_LEVEL environment variable.
+		boeLogLevel = cmp.Or(os.Getenv("BOE_TEST_LOG_LEVEL"), "all:warning")
+	)
+
 	t.Logf("Using BOE binary: %s", boeBin)
 
 	waitTimeout, err := time.ParseDuration(boeRunTimeout)

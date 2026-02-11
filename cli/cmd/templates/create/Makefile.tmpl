@@ -65,10 +65,10 @@ MULTI_OCI_ANNOTATIONS := \
 build:
 	go build -buildmode=plugin -o plugin.so ./standalone
 
-GO_TEST_OPTS ?= -v
+GO_TEST_ARGS ?= -v
 .PHONY: test
 test:
-	go test $(GO_TEST_OPTS) ./...
+	go test $(GO_TEST_ARGS) ./...
 
 .PHONY: install
 install: build

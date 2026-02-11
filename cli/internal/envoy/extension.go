@@ -175,7 +175,8 @@ func getComposerPath(dataHome, composerVersion string) string {
 		composerVersion, "libcomposer.so")
 }
 
-func getGoPluginPathFromManifest(dataHome string, manifest *extensions.Manifest) string {
+// GetGoPluginPathFromManifest returns the path to the local cache where the plugin is stored.
+func GetGoPluginPathFromManifest(dataHome string, manifest *extensions.Manifest) string {
 	// Build the path: $BOE_DATA_HOME/extensions/goplugin/$name/$version/plugin.so
 	return filepath.Join(dataHome, "extensions", "goplugin", manifest.Name,
 		manifest.Version, "plugin.so")
@@ -189,7 +190,7 @@ func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manif
 		return nil, fmt.Errorf("composer binary not found at %s", cachedComposerPath)
 	}
 
-	cachedPluginPath := getGoPluginPathFromManifest(dataHome, manifest)
+	cachedPluginPath := GetGoPluginPathFromManifest(dataHome, manifest)
 	if _, err := os.Stat(cachedPluginPath); os.IsNotExist(err) {
 		// TODO(wbpcode): Download the plugin binary from the URL specified in the manifest.
 		return nil, fmt.Errorf("go plugin binary not found at %s", cachedPluginPath)

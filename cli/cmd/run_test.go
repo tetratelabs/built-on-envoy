@@ -331,13 +331,13 @@ func TestSplitRef(t *testing.T) {
 
 func TestLoadLocalManifests(t *testing.T) {
 	t.Run("empty paths", func(t *testing.T) {
-		manifests, err := loadLocalManifests([]string{})
+		manifests, err := loadLocalManifests("", []string{})
 		require.NoError(t, err)
 		require.Empty(t, manifests)
 	})
 
 	t.Run("multiple valid paths", func(t *testing.T) {
-		manifests, err := loadLocalManifests([]string{"./testdata", "./testdata/push_pull"})
+		manifests, err := loadLocalManifests("", []string{"./testdata", "./testdata/push_pull"})
 		require.NoError(t, err)
 		require.Len(t, manifests, 2)
 		require.Equal(t, "test-lua", manifests[0].Name)
@@ -345,13 +345,13 @@ func TestLoadLocalManifests(t *testing.T) {
 	})
 
 	t.Run("nonexistent path", func(t *testing.T) {
-		_, err := loadLocalManifests([]string{"/nonexistent/path"})
+		_, err := loadLocalManifests("", []string{"/nonexistent/path"})
 		require.Error(t, err)
 		require.ErrorIs(t, err, errFailedToLoadLocalManifest)
 	})
 
 	t.Run("invalid path", func(t *testing.T) {
-		_, err := loadLocalManifests([]string{"./"})
+		_, err := loadLocalManifests("", []string{"./"})
 		require.Error(t, err)
 		require.ErrorIs(t, err, errFailedToLoadLocalManifest)
 	})
@@ -369,7 +369,7 @@ func TestLoadLocalManifests(t *testing.T) {
 		err = os.Remove(tempDir + "/test_custom/go.sum")
 		require.NoError(t, err)
 
-		_, err = loadLocalManifests([]string{tempDir + "/test_custom"})
+		_, err = loadLocalManifests("", []string{tempDir + "/test_custom"})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "failed to run 'go mod tidy'")
 	})
@@ -384,9 +384,9 @@ func TestLoadLocalManifests(t *testing.T) {
 		// Skip real build for unit tests ot not require libcomposer to be built and installed
 		savedBuildFunc := buildComposerLocally
 		t.Cleanup(func() { buildComposerLocally = savedBuildFunc })
-		buildComposerLocally = func(string) error { return nil }
+		buildComposerLocally = func(string, *extensions.Manifest, string) error { return nil }
 
-		manifests, err := loadLocalManifests([]string{tempDir + "/test_valid"})
+		manifests, err := loadLocalManifests("", []string{tempDir + "/test_valid"})
 		require.NoError(t, err)
 		require.Len(t, manifests, 1)
 		require.Equal(t, "test_valid", manifests[0].Name)
@@ -458,7 +458,7 @@ func TestRunIncomaptibleEnvoyVersion(t *testing.T) {
 		EnvoyVersion: "1.37.0",
 		Local:        []string{"./testdata/input_lua_inline"},
 	}
-	err := r.Run(t.Context(), nil)
+	err := r.Run(t.Context(), &xdg.Directories{DataHome: t.TempDir()})
 	require.ErrorIs(t, err, errIncompatibleEnvoyVersion)
 }
 

@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	internaltesting "github.com/tetratelabs/built-on-envoy/extensions/core/testing"
+	internaltesting "github.com/tetratelabs/built-on-envoy/extensions/testing"
 )
 
 func TestPluginResponseHeaders(t *testing.T) {

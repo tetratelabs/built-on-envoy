@@ -96,7 +96,7 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories) error {
 		return err
 	}
 
-	extensions, err := loadLocalManifests(append(downloaded, r.Local...))
+	extensions, err := loadLocalManifests(dirs.DataHome, append(downloaded, r.Local...))
 	if err != nil {
 		return err
 	}
@@ -190,7 +190,7 @@ func parseLogLevels(logLevel string) (string, string, error) {
 
 var errFailedToLoadLocalManifest = errors.New("failed to load local manifest")
 
-var buildComposerLocally = func(path string) error {
+var buildComposerLocally = func(dataHome string, manifest *extensions.Manifest, path string) error {
 	// Run go mod tidy in the local extension directory to ensure dependencies are up to date.
 	cmd := exec.Command("go", "mod", "tidy")
 	cmd.Dir = path
@@ -200,9 +200,12 @@ var buildComposerLocally = func(path string) error {
 			path, err, string(output))
 	}
 
+	dest := envoy.GetGoPluginPathFromManifest(dataHome, manifest)
+
 	// Run make install to install local extension before running under the localPath.
 	// #nosec G204
-	cmd = exec.Command("make", "-C", path, "install")
+	cmd = exec.Command("go", "build", "-buildmode=plugin", "-o", dest, "./standalone")
+	cmd.Dir = path
 	output, err = cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to install local extension from %s: %w\nOutput: %s",
@@ -212,7 +215,7 @@ var buildComposerLocally = func(path string) error {
 }
 
 // loadLocalManifests loads extension manifests from the specified local paths.
-func loadLocalManifests(paths []string) ([]*extensions.Manifest, error) {
+func loadLocalManifests(dataHome string, paths []string) ([]*extensions.Manifest, error) {
 	manifests := make([]*extensions.Manifest, 0, len(paths))
 	for _, path := range paths {
 		manifest, err := extensions.LoadLocalManifest(path + "/manifest.yaml")
@@ -221,7 +224,7 @@ func loadLocalManifests(paths []string) ([]*extensions.Manifest, error) {
 		}
 
 		if manifest.Type == "composer" {
-			if err := buildComposerLocally(path); err != nil {
+			if err := buildComposerLocally(dataHome, manifest, path); err != nil {
 				return nil, fmt.Errorf("failed to build local composer extension at %s: %w", path, err)
 			}
 		}

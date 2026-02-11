@@ -59,7 +59,7 @@ func (c *GenConfig) Run(ctx context.Context, dirs *xdg.Directories) error {
 		return err
 	}
 
-	c.extensions, err = loadLocalManifests(append(downloaded, c.Local...))
+	c.extensions, err = loadLocalManifests(dirs.DataHome, append(downloaded, c.Local...))
 	if err != nil {
 		return err
 	}
