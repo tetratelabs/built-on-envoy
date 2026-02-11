@@ -9,9 +9,11 @@ package goplugin
 import (
 	"debug/buildinfo"
 	"fmt"
+	"maps"
 	"os"
 	"plugin"
 	"runtime/debug"
+	"slices"
 	"strings"
 
 	sdk "github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go"
@@ -108,7 +110,8 @@ func createFactory[T any](binaryPath string, symbolName string, pluginName strin
 	}
 	goPluginModule, ok = factories()[pluginName]
 	if !ok {
-		return goPluginModule, fmt.Errorf("failed to get config factory from plugin: %w", err)
+		plugins := slices.Collect(maps.Keys(factories()))
+		return goPluginModule, fmt.Errorf("failed to get config factory from plugin %q. Plugins: %v", pluginName, plugins)
 	}
 	// Successfully loaded as a Go plugin module.
 	return goPluginModule, nil

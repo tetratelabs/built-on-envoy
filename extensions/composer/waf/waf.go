@@ -480,8 +480,11 @@ func (p *wafPlugin) handleResponseBody() bool {
 	return true
 }
 
+// ExtensionName is the name of the extension that will be used in the `run` command to refer to this embedded plugin.
+const ExtensionName = "coraza-waf"
+
 var wellKnownHTTPFilterConfigFactories = map[string]shared.HttpFilterConfigFactory{
-	"composer.http.coraza_waf": &wafPluginConfigFactory{},
+	ExtensionName: &wafPluginConfigFactory{},
 }
 
 // WellKnownHttpFilterConfigFactories returns the map of well-known HTTP filter config factories.

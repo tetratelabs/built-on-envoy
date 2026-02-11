@@ -49,4 +49,12 @@ examples:
   - title: Basic Usage
     description: Enable WAF protection with default OWASP CRS rules
     code: |
-      boe run --extension coraza-waf --config '{"directives":["Include @recommended-conf","Include @ftw-conf","Include @crs-setup-conf","Include @owasp_crs/*.conf"]}'
+      boe run --extension coraza-waf --config '
+        {
+          "directives": [
+            "Include @recommended-conf",
+            "Include @ftw-conf",
+            "Include @crs-setup-conf",
+            "Include @owasp_crs/*.conf"
+          ]
+        }'
