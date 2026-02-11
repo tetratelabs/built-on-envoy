@@ -135,7 +135,7 @@ push_image: ## Build and push docker image for the plugin for cross-platform sup
 		-f ./Dockerfile .
 
 # Package source code into an image and push it to the registry.
-CODE_IMAGE := $(HUB)/extension-src-$(NAME):$(VERSION)$(IMAGE_NONCE)
+CODE_IMAGE := $(HUB)/$(NAME)-src:$(VERSION)$(IMAGE_NONCE)
 .PHONY: push_code
 push_code: ## Build and push source code image
 	@echo "Building and pushing source code image..."
