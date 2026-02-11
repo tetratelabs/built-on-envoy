@@ -1,0 +1,52 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: coraza-waf
+parent: composer
+categories:
+  - Security
+author: Tetrate
+featured: true
+description: Web Application Firewall (WAF) for HTTP traffic using Coraza
+longDescription: |
+  A Web Application Firewall (WAF) HTTP filter plugin that provides layer 7 security
+  for web applications using the Coraza WAF engine.
+
+  ## Features
+
+  This plugin provides comprehensive web application security:
+
+  - **OWASP ModSecurity Core Rule Set (CRS)**: Built-in protection against common web attacks
+  - **Request inspection**: Analyzes HTTP requests for malicious patterns and anomalies
+  - **Response inspection**: Examines HTTP responses to prevent data leakage
+  - **Flexible rule engine**: Supports custom security rules and policies
+  - **Multiple operation modes**: Detection-only or active blocking modes
+  - **Detailed logging**: Comprehensive audit logging of security events
+
+  ## Packaging
+
+  This is the **embedded** version of the plugin, compiled directly into the Composer
+  dynamic module binary. This approach guarantees Go runtime compatibility since the
+  plugin and host are built together with the same toolchain and dependencies.
+
+  ## Security Rules
+
+  The WAF comes with support for OWASP ModSecurity Core Rule Set (CRS) and allows
+  custom rule configuration for specific security requirements.
+type: composer
+tags:
+  - go
+  - http
+  - security
+  - waf
+  - coraza
+  - owasp
+  - modsecurity
+license: Apache-2.0
+examples:
+  - title: Basic Usage
+    description: Enable WAF protection with default OWASP CRS rules
+    code: |
+      boe run --extension coraza-waf --config '{"directives":["Include @recommended-conf","Include @ftw-conf","Include @crs-setup-conf","Include @owasp_crs/*.conf"]}'

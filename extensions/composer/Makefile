@@ -20,7 +20,7 @@ format:
 	@$(GO_TOOL) license-eye -c $(ROOT)/.licenserc.yaml header fix
 
 .PHONY: lint
-lint: 
+lint:
 	@echo "golangci-lint => ./..."
 	@$(GO_TOOL) golangci-lint run
 
