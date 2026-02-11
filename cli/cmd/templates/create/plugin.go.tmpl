@@ -77,3 +77,10 @@ func (f *CustomHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHan
 	handle.Log(shared.LogLevelInfo, "{{ .Name }}: loaded config with header_value="+cfg.HeaderValue)
 	return &customHttpFilterFactory{config: cfg}, nil
 }
+
+// WellKnownHttpFilterConfigFactories is used to load the plugin.
+func WellKnownHttpFilterConfigFactories() map[string]shared.HttpFilterConfigFactory {
+	return map[string]shared.HttpFilterConfigFactory{
+		"{{ .Name }}": &CustomHttpFilterConfigFactory{},
+	}
+}

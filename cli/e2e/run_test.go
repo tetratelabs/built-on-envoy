@@ -116,7 +116,7 @@ func addSenselessDependencyToExtension(t *testing.T, path string) {
 	// of the extension are not subset of the composer's dependencies.
 
 	goModContent := `module inner
-go 1.25.6
+go 1.25.7
 `
 
 	goFileContent := `package inner
