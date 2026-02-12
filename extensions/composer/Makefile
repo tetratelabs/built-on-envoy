@@ -100,7 +100,7 @@ MULTI_OCI_ANNOTATIONS := \
 
 .PHONY: build
 build:
-	CGO_ENABLED=1 go build -buildmode=c-shared -tags $(COMPOSER_BUILD_TAG) -o lib$(NAME).so .
+	CGO_ENABLED=1 go build -buildmode=c-shared -tags $(COMPOSER_BUILD_TAG) -o lib$(NAME).so ./main
 
 .PHONY: install
 install: build
