@@ -11,7 +11,9 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
-	"os/exec"
+	"maps"
+	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -78,37 +80,40 @@ func (r *Run) Validate() error {
 // Run executes the run command
 func (r *Run) Run(ctx context.Context, dirs *xdg.Directories) error {
 	downloader := &extensions.Downloader{
+		Registry: r.OCI.Registry,
 		Username: r.OCI.Username,
 		Password: r.OCI.Password,
 		Insecure: r.OCI.Insecure,
 		Dirs:     dirs,
+		OS:       runtime.GOOS,
+		Arch:     runtime.GOARCH,
 	}
 
-	if dirs != nil {
-		// Ensure libcomposer is built before running any extensions that may depend on it.
-		if err := extensions.CheckOrBuildLibComposer(dirs.DataHome); err != nil {
-			return err
-		}
-	}
-
-	downloaded, err := downloadExtensions(ctx, r.OCI.Registry, downloader, r.Extensions)
+	downloaded, err := downloadExtensions(ctx, downloader, r.Extensions)
 	if err != nil {
 		return err
 	}
 
-	extensions, err := loadLocalManifests(append(downloaded, r.Local...))
+	local, err := loadLocalManifests(dirs, r.Local, true)
 	if err != nil {
 		return err
 	}
+	extensions := append(downloaded, local...) //nolint: gocritic
 
 	// TODO(nacx): Find a way to eagerly get from func-e the Envoy version that will
 	// be used when r.EnvoyVersion is empty, without starting the download or run.
 	if r.EnvoyVersion != "" {
-		if err := validateEnvoyCompat(r.EnvoyVersion, extensions); err != nil {
+		if err = validateEnvoyCompat(r.EnvoyVersion, extensions); err != nil {
 			return err
 		}
 	}
 
+	// Make sure all composer extensions use the same version of composer
+	if err = validateComposerCompat(extensions); err != nil {
+		return err
+	}
+
+	// TODO(nacx): fix log to print all names
 	fmt.Printf("Starting Envoy %s with extensions: %v\n", r.EnvoyVersion, r.Local)
 
 	runner := &envoy.Runner{
@@ -127,16 +132,24 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories) error {
 }
 
 // downloadExtensions downloads the specified extensions using the provided downloader.
-func downloadExtensions(ctx context.Context, registry string, downloader *extensions.Downloader, refs []string) ([]string, error) {
-	downloaded := make([]string, 0, len(refs))
+func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, refs []string) ([]*extensions.Manifest, error) {
+	downloaded := make([]*extensions.Manifest, 0, len(refs))
 	for _, ext := range refs {
 		name, tag := splitRef(ext)
-		repository := extensions.RepositoryName(registry, name)
-		downloadDir, _, err := downloader.Download(ctx, repository, tag, "")
+		extension, err := downloader.DownloadExtension(ctx, name, tag)
 		if err != nil {
 			return nil, err
 		}
-		downloaded = append(downloaded, downloadDir)
+
+		if extension.Type == "composer" {
+			// Ensure the composer is downloaded before running any extensions that may depend on it.
+			if err = extensions.CheckOrDownloadLibComposer(ctx, downloader, extension.ComposerVersion); err != nil {
+				return nil, fmt.Errorf("failed to download libcomposer %s for extension %s: %w",
+					extension.ComposerVersion, extension.Name, err)
+			}
+		}
+
+		downloaded = append(downloaded, extension)
 	}
 	return downloaded, nil
 }
@@ -190,29 +203,8 @@ func parseLogLevels(logLevel string) (string, string, error) {
 
 var errFailedToLoadLocalManifest = errors.New("failed to load local manifest")
 
-var buildComposerLocally = func(path string) error {
-	// Run go mod tidy in the local extension directory to ensure dependencies are up to date.
-	cmd := exec.Command("go", "mod", "tidy")
-	cmd.Dir = path
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to run 'go mod tidy' in %s: %w\nOutput: %s",
-			path, err, string(output))
-	}
-
-	// Run make install to install local extension before running under the localPath.
-	// #nosec G204
-	cmd = exec.Command("make", "-C", path, "install")
-	output, err = cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to install local extension from %s: %w\nOutput: %s",
-			path, err, string(output))
-	}
-	return nil
-}
-
 // loadLocalManifests loads extension manifests from the specified local paths.
-func loadLocalManifests(paths []string) ([]*extensions.Manifest, error) {
+func loadLocalManifests(dirs *xdg.Directories, paths []string, build bool) ([]*extensions.Manifest, error) {
 	manifests := make([]*extensions.Manifest, 0, len(paths))
 	for _, path := range paths {
 		manifest, err := extensions.LoadLocalManifest(path + "/manifest.yaml")
@@ -220,14 +212,20 @@ func loadLocalManifests(paths []string) ([]*extensions.Manifest, error) {
 			return nil, fmt.Errorf("%w from %s: %w", errFailedToLoadLocalManifest, path, err)
 		}
 
-		if manifest.Type == "composer" {
-			if err := buildComposerLocally(path); err != nil {
-				return nil, fmt.Errorf("failed to build local composer extension at %s: %w", path, err)
+		if build && manifest.Type == "composer" {
+			// Rebuild the extension from the given path
+			if err := extensions.BuildExtensionFromPath(dirs, manifest, path); err != nil {
+				return nil, err
+			}
+			// Ensure libcomposer is built before running any extensions that may depend on it.
+			if err := extensions.CheckOrBuildLibComposer(dirs, false); err != nil {
+				return nil, err
 			}
 		}
 
 		manifests = append(manifests, manifest)
 	}
+
 	return manifests, nil
 }
 
@@ -254,4 +252,29 @@ func validateEnvoyCompat(envoyVersion string, extensions []*extensions.Manifest)
 	}
 
 	return errors.Join(errs...)
+}
+
+// validateComposerCompat validates that all extensions use the same composer version.
+func validateComposerCompat(extensions []*extensions.Manifest) error {
+	versions := make(map[string][]string)
+	for _, ext := range extensions {
+		if ext.Type == "composer" {
+			versions[ext.ComposerVersion] = append(versions[ext.ComposerVersion], ext.Name)
+		}
+	}
+
+	if len(versions) > 1 {
+		var b strings.Builder
+		sortedVersions := slices.Collect(maps.Keys(versions))
+		slices.Sort(sortedVersions)
+
+		for _, version := range sortedVersions {
+			fmt.Fprintf(&b, "  - version %s used by extensions: %s\n",
+				version, strings.Join(versions[version], ", "))
+		}
+		return fmt.Errorf("incompatible composer versions found:\n%s"+
+			"all composer extensions must use the same composer version", b.String())
+	}
+
+	return nil
 }

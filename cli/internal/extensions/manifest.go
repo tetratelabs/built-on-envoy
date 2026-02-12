@@ -49,8 +49,11 @@ type (
 		ComposerVersion string `yaml:"composerVersion,omitempty" json:"composerVersion,omitempty"`
 		Lua             *Lua   `yaml:"lua,omitempty" json:"lua,omitempty"`
 
-		// Only used when loading manifests from a local path
+		// Path to the manifest file in the local filesystem.
 		Path string `yaml:"-" json:"-"`
+		// Remote indicates whether this manifest is from a remote extension.
+		// This is set by the extension Downloader when fetching remote manifests.
+		Remote bool `yaml:"-" json:"-"`
 	}
 
 	// Example represents an example usage of an extension.
