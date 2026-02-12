@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
+	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
 // ConfigGenerationParams holds parameters for generating the Envoy config.
@@ -34,8 +35,8 @@ type ConfigGenerationParams struct {
 	AdminPort uint32
 	// ListenerPort is the port where Envoy listens for incoming traffic.
 	ListenerPort uint32
-	// DataHome is the base directory for data files (extensions, cache, etc.).
-	DataHome string
+	// Dirs provides access to XDG directories for locating extension resources.
+	Dirs *xdg.Directories
 	// Extensions to generate the config for
 	Extensions []*extensions.Manifest
 	// Configs specifies optional JSON config strings for each extension (by index).
@@ -108,7 +109,7 @@ func generateConfig(params ConfigGenerationParams) (GeneratedConfigResources, er
 		if i < len(params.Configs) {
 			config = params.Configs[i]
 		}
-		resources, err := GenerateFilterConfig(ext, params.DataHome, config)
+		resources, err := GenerateFilterConfig(ext, params.Dirs, config)
 		if err != nil {
 			return GeneratedConfigResources{}, fmt.Errorf("failed to generate filter config for extension %q: %w", ext.Name, err)
 		}
