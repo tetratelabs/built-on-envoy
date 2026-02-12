@@ -34,9 +34,135 @@ jobs:
     outputs:
       extensions: ${{ steps.changes.outputs.extensions }}
 
-  composer:
+  discover:
     needs: changes
     if: ${{ needs.changes.outputs.extensions == 'true' }}
+    runs-on: ubuntu-latest
+    outputs:
+      extensions: ${{ steps.discover.outputs.extensions }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Discover extensions
+        id: discover
+        run: |
+          # Discover extensions and their languages
+          extensions="[]"
+          
+          for dir in extensions/*/; do
+            # Skip if not a directory
+            [ -d "$dir" ] || continue
+            
+            ext_name=$(basename "$dir")
+            manifest="$dir/manifest.yaml"
+            
+            # Skip if no manifest
+            [ -f "$manifest" ] || continue
+            
+            # Read type from manifest
+            type=$(grep "^type:" "$manifest" | sed 's/type: *//' | tr -d '\r')
+            
+            # Detect language
+            lang=""
+            if [ -f "$dir/Cargo.toml" ]; then
+              lang="rust"
+            elif [ -f "$dir/go.mod" ]; then
+              lang="go"
+            elif grep -q "^lua:" "$manifest"; then
+              lang="lua"
+            fi
+            
+            echo "Found extension: $ext_name (type=$type, lang=$lang)"
+            
+            # Add to extensions array
+            if [ -n "$lang" ]; then
+              extensions=$(echo "$extensions" | jq -c ". + [{\"name\": \"$ext_name\", \"type\": \"$type\", \"language\": \"$lang\", \"path\": \"$ext_name\"}]")
+            fi
+          done
+          
+          echo "extensions=$extensions" >> $GITHUB_OUTPUT
+          echo "Extensions: $extensions"
+
+  # Rust extensions checks
+  rust-fmt:
+    needs: discover
+    if: ${{ contains(fromJson(needs.discover.outputs.extensions).*.language, 'rust') }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        extension: ${{ fromJson(needs.discover.outputs.extensions) }}
+        exclude:
+          - extension:
+              language: go
+          - extension:
+              language: lua
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Check formatting
+        run: cargo fmt --check --manifest-path extensions/${{ matrix.extension.path }}/Cargo.toml
+
+  rust-clippy:
+    needs: discover
+    if: ${{ contains(fromJson(needs.discover.outputs.extensions).*.language, 'rust') }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        extension: ${{ fromJson(needs.discover.outputs.extensions) }}
+        exclude:
+          - extension:
+              language: go
+          - extension:
+              language: lua
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Run clippy
+        run: cargo clippy --manifest-path extensions/${{ matrix.extension.path }}/Cargo.toml -- -D warnings
+
+  rust-build:
+    needs: discover
+    if: ${{ contains(fromJson(needs.discover.outputs.extensions).*.language, 'rust') }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        extension: ${{ fromJson(needs.discover.outputs.extensions) }}
+        exclude:
+          - extension:
+              language: go
+          - extension:
+              language: lua
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build
+        run: cargo build --manifest-path extensions/${{ matrix.extension.path }}/Cargo.toml --release
+
+  rust-test:
+    needs: discover
+    if: ${{ contains(fromJson(needs.discover.outputs.extensions).*.language, 'rust') }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        extension: ${{ fromJson(needs.discover.outputs.extensions) }}
+        exclude:
+          - extension:
+              language: go
+          - extension:
+              language: lua
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run tests
+        run: cargo test --manifest-path extensions/${{ matrix.extension.path }}/Cargo.toml
+
+  # Go extensions checks (composer)
+  composer-build:
+    needs: discover
+    if: ${{ contains(fromJson(needs.discover.outputs.extensions).*.name, 'composer') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -47,9 +173,9 @@ jobs:
           cache-dependency-path: extensions/composer/go.sum
       - run: make -C extensions/composer build
 
-  example:
-    needs: changes
-    if: ${{ needs.changes.outputs.extensions == 'true' }}
+  composer-example:
+    needs: discover
+    if: ${{ contains(fromJson(needs.discover.outputs.extensions).*.name, 'composer') }}
     runs-on: ubuntu-latest
     env:
       EXTENSION_PATH: example-go/standalone
@@ -62,9 +188,9 @@ jobs:
           cache-dependency-path: extensions/composer/go.sum
       - run: make -C extensions/composer build_plugins
 
-  test:
-    needs: changes
-    if: ${{ needs.changes.outputs.extensions == 'true' }}
+  composer-test:
+    needs: discover
+    if: ${{ contains(fromJson(needs.discover.outputs.extensions).*.name, 'composer') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -74,9 +200,9 @@ jobs:
           cache-dependency-path: extensions/composer/go.sum
       - run: go -C extensions/composer/ test ./...
 
-  lint:
-    needs: changes
-    if: ${{ needs.changes.outputs.extensions == 'true' }}
+  composer-lint:
+    needs: discover
+    if: ${{ contains(fromJson(needs.discover.outputs.extensions).*.name, 'composer') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -90,10 +216,15 @@ jobs:
   extensions-checks:
     runs-on: ubuntu-latest
     needs:
-      - composer
-      - example
-      - test
-      - lint
+      - discover
+      - rust-fmt
+      - rust-clippy
+      - rust-build
+      - rust-test
+      - composer-build
+      - composer-example
+      - composer-test
+      - composer-lint
     # We need this to run always to force-fail (and not skip) if any needed
     # job has failed. Otherwise, a skipped job will not fail the workflow.
     if: always()

@@ -1,0 +1,93 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: ip-restriction
+version: 0.1.0
+categories:
+  - Security
+  - Examples
+author: Tetrate
+featured: true
+description: IP-based access control using allowlists or denylists (first Rust dynamic module example)
+longDescription: |
+  This extension provides IP-based access control for your Envoy proxy using Rust and Envoy's
+  dynamic module framework. It allows you to define allowlists or denylists of IP addresses,
+  restricting access based on the client's source IP.
+
+  ## Features
+
+  * **IP Allowlisting**: Only permit requests from specific IP addresses
+  * **IP Denylisting**: Block requests from specific IP addresses
+  * **IPv4 and IPv6 Support**: Handles both IPv4 and IPv6 addresses
+
+  ## How It Works
+
+  The filter examines the source IP address of incoming requests and compares it against
+  the configured allow or deny list. Requests that don't match the policy receive a 403
+  Forbidden response.
+
+  ## Configuration
+
+  You must specify exactly one of:
+  - `allow_addresses`: Array of IP addresses to allow (all others blocked)
+  - `deny_addresses`: Array of IP addresses to deny (all others allowed)
+
+  ## Building
+
+  This is a Rust dynamic module that must be compiled to a shared library (`.so` on Linux,
+  `.dylib` on macOS). The compiled module is loaded by Envoy at runtime.
+
+  ```bash
+  cargo build --release -p ip-restriction
+  ```
+
+  The compiled library will be at `target/release/libip_restriction.{so,dylib}`
+
+  ## Note on Dynamic Modules
+
+  This extension requires Envoy to be built with dynamic module support. This feature
+  is experimental and may not be available in all Envoy distributions.
+tags:
+  - security
+  - ip-filtering
+  - access-control
+  - rust
+  - dynamic-module
+  - example
+license: Apache-2.0
+type: dynamic_module
+examples:
+  - title: Allow Specific IPs
+    description: Only allow requests from localhost and a specific IP
+    code: |
+      boe run --extension ip-restriction --config '
+        {
+          "allow_addresses": [
+            "127.0.0.1",
+            "::1",
+            "192.168.1.100"
+          ]
+        }'
+  - title: Deny Specific IPs
+    description: Block requests from specific malicious IPs
+    code: |
+      boe run --extension ip-restriction --config '
+        {
+          "deny_addresses": [
+            "192.168.1.50",
+            "10.0.0.100"
+          ]
+        }'
+  - title: IPv6 Support
+    description: Works with both IPv4 and IPv6 addresses
+    code: |
+      boe run --extension ip-restriction --config '
+        {
+          "allow_addresses": [
+            "127.0.0.1",
+            "::1",
+            "2001:db8::1"
+          ]
+        }'

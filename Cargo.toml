@@ -1,0 +1,10 @@
+[workspace]
+resolver = "2"
+members = [
+    "extensions/ip-restriction",
+]
+
+[workspace.package]
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/tetratelabs/built-on-envoy"

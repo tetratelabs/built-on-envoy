@@ -33,3 +33,8 @@ Thumbs.db
 
 # Compiled extensions
 *.so
+
+# Rust
+target/
+Cargo.lock
+*.dylib

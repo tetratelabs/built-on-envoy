@@ -10,7 +10,7 @@ Each extension should be in its own directory with:
 extension-name/
 ├── README.md           # Description and usage
 ├── manifest.yaml       # Metadata (name, version, author, etc.)
-├── main.{go,lua.rs}    # Extension code
+├── main.{go,lua,rs}    # Extension code (language-specific)
 ├── config.yaml         # Example Envoy configuration
 └── examples/           # Example usage and test cases
 ```
