@@ -25,11 +25,17 @@ func LocalCacheExtension(dirs *xdg.Directories, manifest *Manifest) string {
 }
 
 // LocalCacheComposerDir returns the local cache directory for the composer.
-func LocalCacheComposerDir(dirs *xdg.Directories, version string) string {
+func LocalCacheComposerDir(dirs *xdg.Directories, version string, localBuild bool) string {
+	// When localBuild is true, we return the path for the locally built composer lib.
+	// We keep the locally build composer separate from the binary downloaded one to avoid potential
+	// conflicts and allow parallel existence of both versions for testing and development purposes.
+	if localBuild {
+		return filepath.Join(dirs.DataHome, "extensions", "dym", "composer", "build", version)
+	}
 	return filepath.Join(dirs.DataHome, "extensions", "dym", "composer", version)
 }
 
 // LocalCacheComposerLib returns the local cache path for the composer lib.
-func LocalCacheComposerLib(dirs *xdg.Directories, version string) string {
-	return filepath.Join(LocalCacheComposerDir(dirs, version), "libcomposer.so")
+func LocalCacheComposerLib(dirs *xdg.Directories, version string, localBuild bool) string {
+	return filepath.Join(LocalCacheComposerDir(dirs, version, localBuild), "libcomposer.so")
 }

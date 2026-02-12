@@ -26,7 +26,7 @@ func TestCheckOrBuildLibComposer(t *testing.T) {
 	require.NoError(t, err)
 
 	// Ensure the libcomposer.so is created.
-	composerPath := LocalCacheComposerLib(fakeDirs, LibComposerVersion)
+	composerPath := LocalCacheComposerLib(fakeDirs, LibComposerVersion, true)
 	_, err = os.Stat(composerPath)
 	require.NoError(t, err)
 }

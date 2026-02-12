@@ -126,7 +126,7 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 	// TODO(wbpcode): For now, we only support Composer dynamic modules because all golang dynamic
 	// modules will be compiled into the same binary.
 	// Once we support other dynamic modules, we need to differentiate them here.
-	cachedComposerPath := extensions.LocalCacheComposerLib(dirs, manifest.Version)
+	cachedComposerPath := extensions.LocalCacheComposerLib(dirs, manifest.Version, !manifest.Remote)
 	if _, err := os.Stat(cachedComposerPath); os.IsNotExist(err) {
 		// TODO(wbpcode): Download the composer binary from the URL specified in the manifest.
 		return nil, fmt.Errorf("composer binary not found at %s", cachedComposerPath)
@@ -171,7 +171,7 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 
 // GenerateFilterConfig generates the filter configuration for Composer extensions.
 func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, dirs *xdg.Directories, config string) (*ExtensionResources, error) {
-	cachedComposerPath := extensions.LocalCacheComposerLib(dirs, manifest.ComposerVersion)
+	cachedComposerPath := extensions.LocalCacheComposerLib(dirs, manifest.ComposerVersion, !manifest.Remote)
 	if _, err := os.Stat(cachedComposerPath); os.IsNotExist(err) {
 		// TODO(wbpcode): Download the composer binary from the URL specified in the manifest.
 		return nil, fmt.Errorf("composer binary not found at %s", cachedComposerPath)

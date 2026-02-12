@@ -36,8 +36,8 @@ func (d *Downloader) DownloadComposer(ctx context.Context, version string) error
 	return d.download(ctx, d.Registry+"/composer-lite", version, func(manifest *ocispec.Manifest) string {
 		// use the composer version resolved from the manifest, as the input parameter one could be
 		// "latest" which needs to be resolved to a concrete version.
-		composerVersion := manifest.Annotations[ocispec.AnnotationVersion]
-		return LocalCacheComposerDir(d.Dirs, composerVersion)
+		composerVersion := manifest.Annotations[OCIAnnotationComposerVersion]
+		return LocalCacheComposerDir(d.Dirs, composerVersion, false)
 	})
 }
 
@@ -68,6 +68,10 @@ func (d *Downloader) DownloadExtension(ctx context.Context, name, version string
 		}
 		extensionManifest = m
 	}
+
+	// Mark the manifest as remote so that config generation knows the extension is
+	// a remote one and can take it into account.
+	extensionManifest.Remote = true
 
 	return extensionManifest, nil
 }

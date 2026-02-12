@@ -13,7 +13,7 @@ import (
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
-func TestLocalCacheExtensionDir(t *testing.T) {
+func TestLocalCacheExtensionDirs(t *testing.T) {
 	dirs := &xdg.Directories{DataHome: "/home/user/.local/share"}
 
 	require.Equal(t, "/home/user/.local/share/extensions/test/1.0.1",
@@ -21,10 +21,6 @@ func TestLocalCacheExtensionDir(t *testing.T) {
 
 	require.Equal(t, "/home/user/.local/share/extensions/goplugin/test/1.0.1",
 		LocalCacheExtensionDir(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: "composer"}))
-}
-
-func TestLocalCacheExtension(t *testing.T) {
-	dirs := &xdg.Directories{DataHome: "/home/user/.local/share"}
 
 	require.Equal(t, "/home/user/.local/share/extensions/test/1.0.1/plugin.so",
 		LocalCacheExtension(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: "dynamic_module"}))
@@ -33,16 +29,16 @@ func TestLocalCacheExtension(t *testing.T) {
 		LocalCacheExtension(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: "composer"}))
 }
 
-func TestLocalCacheComposerDir(t *testing.T) {
+func TestLocalCacheComposerDirs(t *testing.T) {
 	dirs := &xdg.Directories{DataHome: "/home/user/.local/share"}
 
 	require.Equal(t, "/home/user/.local/share/extensions/dym/composer/2.0.0",
-		LocalCacheComposerDir(dirs, "2.0.0"))
-}
-
-func TestLocalCacheComposerLib(t *testing.T) {
-	dirs := &xdg.Directories{DataHome: "/home/user/.local/share"}
-
+		LocalCacheComposerDir(dirs, "2.0.0", false))
 	require.Equal(t, "/home/user/.local/share/extensions/dym/composer/2.0.0/libcomposer.so",
-		LocalCacheComposerLib(dirs, "2.0.0"))
+		LocalCacheComposerLib(dirs, "2.0.0", false))
+
+	require.Equal(t, "/home/user/.local/share/extensions/dym/composer/build/2.0.0",
+		LocalCacheComposerDir(dirs, "2.0.0", true))
+	require.Equal(t, "/home/user/.local/share/extensions/dym/composer/build/2.0.0/libcomposer.so",
+		LocalCacheComposerLib(dirs, "2.0.0", true))
 }

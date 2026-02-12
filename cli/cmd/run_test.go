@@ -480,3 +480,56 @@ func TestRunMultipleConfigArgsWithCommas(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{config1, config2}, cli.Run.Configs)
 }
+
+func TestValidateComposerCompat(t *testing.T) {
+	tests := []struct {
+		name       string
+		extensions []*extensions.Manifest
+		wantErr    string
+	}{
+		{
+			name: "no composer extensions",
+			extensions: []*extensions.Manifest{
+				{Name: "ext-1", Version: "1.0.0", Type: "http-filter"},
+				{Name: "ext-2", Version: "2.0.0", Type: "network-filter"},
+			},
+		},
+		{
+			name: "single composer extension",
+			extensions: []*extensions.Manifest{
+				{Name: "ext-1", Version: "1.0.0", Type: "composer", ComposerVersion: "1.2.3"},
+				{Name: "ext-2", Version: "2.0.0", Type: "http-filter"},
+			},
+		},
+		{
+			name: "multiple composer extensions with same version",
+			extensions: []*extensions.Manifest{
+				{Name: "ext-1", Version: "1.0.0", Type: "composer", ComposerVersion: "1.2.3"},
+				{Name: "ext-2", Version: "2.0.0", Type: "composer", ComposerVersion: "1.2.3"},
+			},
+		},
+		{
+			name: "multiple composer extensions with different versions",
+			extensions: []*extensions.Manifest{
+				{Name: "ext-1", Version: "1.0.0", Type: "composer", ComposerVersion: "1.2.3"},
+				{Name: "ext-2", Version: "2.0.0", Type: "composer", ComposerVersion: "2.0.0"},
+				{Name: "ext-3", Version: "2.0.0", Type: "composer", ComposerVersion: "2.0.0"},
+			},
+			wantErr: `incompatible composer versions found:
+  - version 1.2.3 used by extensions: ext-1
+  - version 2.0.0 used by extensions: ext-2, ext-3
+all composer extensions must use the same composer version`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateComposerCompat(tt.extensions)
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+			} else {
+				require.EqualError(t, err, tt.wantErr)
+			}
+		})
+	}
+}

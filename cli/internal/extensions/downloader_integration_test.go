@@ -83,6 +83,7 @@ func TestDownloadExtensionWithManifest(t *testing.T) {
 
 	manifest, err := downloader.DownloadExtension(t.Context(), "test", "latest")
 	require.NoError(t, err)
+	require.True(t, manifest.Remote)
 	// Verify that the manifest has been read by checking properties that are
 	// not present in OCI annotations.
 	require.NotNil(t, manifest.Lua)
@@ -101,7 +102,7 @@ func TestCheckOrDownloadComposer(t *testing.T) {
 		"-t", composerRepo+":1.2.3",
 		"--push",
 		"--annotation", "index,manifest:org.opencontainers.image.title=composer-lite",
-		"--annotation", "index,manifest:org.opencontainers.image.version=1.2.3",
+		"--annotation", "index,manifest:io.tetratelabs.built-on-envoy.extension.composer_version=1.2.3",
 		"testdata/extension-with-manifest",
 	)
 	output, err := cmd.CombinedOutput()
@@ -118,5 +119,5 @@ func TestCheckOrDownloadComposer(t *testing.T) {
 
 	assert.ErrorContains(t, CheckOrDownloadLibComposer(t.Context(), downloader, "unexisting"), "not found") //nolint: testifylint
 	assert.NoError(t, CheckOrDownloadLibComposer(t.Context(), downloader, "1.2.3"))                         //nolint: testifylint
-	assert.FileExists(t, LocalCacheComposerLib(downloader.Dirs, "1.2.3"))                                   //nolint: testifylint
+	assert.FileExists(t, LocalCacheComposerLib(downloader.Dirs, "1.2.3", false))                            //nolint: testifylint
 }

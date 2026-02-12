@@ -11,7 +11,9 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"maps"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -101,9 +103,14 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories) error {
 	// TODO(nacx): Find a way to eagerly get from func-e the Envoy version that will
 	// be used when r.EnvoyVersion is empty, without starting the download or run.
 	if r.EnvoyVersion != "" {
-		if err := validateEnvoyCompat(r.EnvoyVersion, extensions); err != nil {
+		if err = validateEnvoyCompat(r.EnvoyVersion, extensions); err != nil {
 			return err
 		}
+	}
+
+	// Make sure all composer extensions use the same version of composer
+	if err = validateComposerCompat(extensions); err != nil {
+		return err
 	}
 
 	// TODO(nacx): fix log to print all names
@@ -206,18 +213,19 @@ func loadLocalManifests(dirs *xdg.Directories, paths []string, build bool) ([]*e
 		}
 
 		if build && manifest.Type == "composer" {
-			// Ensure libcomposer is built before running any extensions that may depend on it.
-			if err := extensions.CheckOrBuildLibComposer(dirs, false); err != nil {
-				return nil, err
-			}
 			// Rebuild the extension from the given path
 			if err := extensions.BuildExtensionFromPath(dirs, manifest, path); err != nil {
+				return nil, err
+			}
+			// Ensure libcomposer is built before running any extensions that may depend on it.
+			if err := extensions.CheckOrBuildLibComposer(dirs, false); err != nil {
 				return nil, err
 			}
 		}
 
 		manifests = append(manifests, manifest)
 	}
+
 	return manifests, nil
 }
 
@@ -244,4 +252,29 @@ func validateEnvoyCompat(envoyVersion string, extensions []*extensions.Manifest)
 	}
 
 	return errors.Join(errs...)
+}
+
+// validateComposerCompat validates that all extensions use the same composer version.
+func validateComposerCompat(extensions []*extensions.Manifest) error {
+	versions := make(map[string][]string)
+	for _, ext := range extensions {
+		if ext.Type == "composer" {
+			versions[ext.ComposerVersion] = append(versions[ext.ComposerVersion], ext.Name)
+		}
+	}
+
+	if len(versions) > 1 {
+		var b strings.Builder
+		sortedVersions := slices.Collect(maps.Keys(versions))
+		slices.Sort(sortedVersions)
+
+		for _, version := range sortedVersions {
+			fmt.Fprintf(&b, "  - version %s used by extensions: %s\n",
+				version, strings.Join(versions[version], ", "))
+		}
+		return fmt.Errorf("incompatible composer versions found:\n%s"+
+			"all composer extensions must use the same composer version", b.String())
+	}
+
+	return nil
 }

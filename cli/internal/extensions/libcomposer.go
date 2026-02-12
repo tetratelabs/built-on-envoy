@@ -37,7 +37,9 @@ var composerExtenionsBytes []byte
 // CheckOrBuildLibComposer checks if the libcomposer.so exists in the dataHome directory.
 // If not, it builds the libcomposer from source.
 func CheckOrBuildLibComposer(dirs *xdg.Directories, buildPlugins bool) error {
-	if _, err := os.Stat(LocalCacheComposerLib(dirs, LibComposerVersion)); err == nil {
+	// look for the cached local build of composer
+	libcomposer := LocalCacheComposerLib(dirs, LibComposerVersion, true)
+	if _, err := os.Stat(libcomposer); err == nil {
 		// libcomposer already exists
 		return nil
 	}
@@ -73,7 +75,7 @@ func CheckOrBuildLibComposer(dirs *xdg.Directories, buildPlugins bool) error {
 // CheckOrDownloadLibComposer checks if the libcomposer.so exists in the dataHome directory.
 // If not, it tries to download the pre-built libcomposer from OCI registry.
 func CheckOrDownloadLibComposer(ctx context.Context, downloader *Downloader, version string) error {
-	if _, err := os.Stat(LocalCacheComposerLib(downloader.Dirs, version)); err == nil {
+	if _, err := os.Stat(LocalCacheComposerLib(downloader.Dirs, version, false)); err == nil {
 		// libcomposer already exists
 		return nil
 	}
@@ -114,6 +116,7 @@ func buildLibComposer(dataHome string, composerSrcPath string, buildPlugins bool
 		"composer",
 		"install",
 		"BOE_DATA_HOME="+dataHome,
+		"COMPOSER_LITE=true",
 	)
 	cmd.Dir = composerSrcPath
 

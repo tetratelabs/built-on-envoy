@@ -133,9 +133,11 @@ end
 func TestDynamicModuleFilterGenerator(t *testing.T) {
 	dirs := &xdg.Directories{DataHome: t.TempDir()}
 	manifest := &extensions.Manifest{
-		Name:    "test-dynamic-module",
-		Type:    extensions.TypeDynamicModule,
-		Version: "v1.0.0",
+		Name:            "test-dynamic-module",
+		Type:            extensions.TypeDynamicModule,
+		Version:         "v1.0.0",
+		ComposerVersion: "v1.0.0",
+		Remote:          true,
 	}
 
 	// Case 1: Composer binary missing
@@ -143,7 +145,7 @@ func TestDynamicModuleFilterGenerator(t *testing.T) {
 	require.ErrorContains(t, err, "composer binary not found")
 
 	// Case 2: Composer binary exists
-	composerPath := filepath.Join(dirs.DataHome, "extensions", "dym", "composer", manifest.Version)
+	composerPath := extensions.LocalCacheComposerDir(dirs, manifest.ComposerVersion, !manifest.Remote)
 	require.NoError(t, os.MkdirAll(composerPath, 0o750))
 	require.NoError(t, os.WriteFile(filepath.Join(composerPath, "libcomposer.so"), []byte("fake binary"), 0o600))
 
@@ -216,6 +218,7 @@ func TestComposerFilterGenerator(t *testing.T) {
 		Type:            extensions.TypeComposer,
 		Version:         "v0.0.1",
 		ComposerVersion: "v1.0.0",
+		Remote:          true,
 	}
 
 	// Case 1: Composer binary missing
@@ -223,7 +226,7 @@ func TestComposerFilterGenerator(t *testing.T) {
 	require.ErrorContains(t, err, "composer binary not found")
 
 	// Create Composer binary
-	composerPath := filepath.Join(dirs.DataHome, "extensions", "dym", "composer", manifest.ComposerVersion)
+	composerPath := extensions.LocalCacheComposerDir(dirs, manifest.ComposerVersion, !manifest.Remote)
 	require.NoError(t, os.MkdirAll(composerPath, 0o750))
 	require.NoError(t, os.WriteFile(filepath.Join(composerPath, "libcomposer.so"), []byte("fake binary"), 0o600))
 

@@ -174,6 +174,7 @@ func TestDownloadExtension(t *testing.T) {
 			if tt.wantErr == nil {
 				require.Equal(t, tt.wantName, manifest.Name)
 				require.Equal(t, tt.wantVersion, manifest.Version)
+				require.True(t, manifest.Remote)
 			}
 		})
 	}

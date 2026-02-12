@@ -45,13 +45,14 @@ type Runner struct {
 
 // Run starts Envoy using func-e as a library
 func (r *Runner) Run(ctx context.Context) error {
-	config, err := RenderConfig(ConfigGenerationParams{
+	params := ConfigGenerationParams{
 		AdminPort:    r.AdminPort,
 		ListenerPort: r.ListenPort,
 		Dirs:         r.Dirs,
 		Extensions:   r.Extensions,
 		Configs:      r.Configs,
-	}, FullConfigRenderer)
+	}
+	config, err := RenderConfig(params, FullConfigRenderer)
 	if err != nil {
 		return err
 	}
@@ -59,8 +60,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	// For now only golang dynamic modules are supported and will be built into same libcomposer.so.
 	// So, only need to expose path of libcomposer.so to Envoy.
 	// TODO(wbpcode): make this more general when other dynamic module types are supported.
-	composerParentDir := extensions.LocalCacheComposerDir(r.Dirs, extensions.LibComposerVersion)
-	err = os.Setenv("ENVOY_DYNAMIC_MODULES_SEARCH_PATH", composerParentDir)
+	err = os.Setenv("ENVOY_DYNAMIC_MODULES_SEARCH_PATH", dynamicModuleSearchPath(params))
 	if err != nil {
 		return fmt.Errorf("failed to set ENVOY_DYNAMIC_MODULES_SEARCH_PATH: %w", err)
 	}
@@ -118,4 +118,18 @@ Press Ctrl+C to stop
 	}
 
 	return funce.Run(ctx, args, opts...)
+}
+
+// dynamicModuleSearchPath returns the path to search for dynamic modules based on the extensions
+// used in the config generation params.
+func dynamicModuleSearchPath(params ConfigGenerationParams) string {
+	localExtensions := false
+	for _, ext := range params.Extensions {
+		if ext.Type == "composer" && !ext.Remote {
+			localExtensions = true
+			break
+		}
+	}
+
+	return extensions.LocalCacheComposerDir(params.Dirs, extensions.LibComposerVersion, localExtensions)
 }
