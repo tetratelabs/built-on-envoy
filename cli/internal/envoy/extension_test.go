@@ -24,11 +24,12 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
+	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
 func TestGenerateFilterConfigUnsupportedType(t *testing.T) {
 	manifest := extensions.Manifest{Type: "unsupported_type"}
-	_, err := GenerateFilterConfig(&manifest, "", "")
+	_, err := GenerateFilterConfig(&manifest, &xdg.Directories{}, "")
 	require.ErrorIs(t, err, ErrUnsupportedExtensionType)
 }
 
@@ -38,7 +39,7 @@ func TestGenerateFilterConfigUnimplemented(t *testing.T) {
 	} {
 		t.Run(string(et), func(t *testing.T) {
 			manifest := extensions.Manifest{Type: et}
-			_, err := GenerateFilterConfig(&manifest, "", "")
+			_, err := GenerateFilterConfig(&manifest, &xdg.Directories{}, "")
 			require.ErrorIs(t, err, ErrUnimplemented)
 		})
 	}
@@ -118,7 +119,7 @@ end
 			localManifest, err := extensions.LoadLocalManifest(manifestPath)
 			require.NoError(t, err)
 
-			got, err := GenerateFilterConfig(localManifest, "", "")
+			got, err := GenerateFilterConfig(localManifest, &xdg.Directories{}, "")
 			require.ErrorIs(t, err, tt.wantErr)
 			if tt.wantErr != nil {
 				return
@@ -130,23 +131,25 @@ end
 }
 
 func TestDynamicModuleFilterGenerator(t *testing.T) {
-	dataHome := t.TempDir()
+	dirs := &xdg.Directories{DataHome: t.TempDir()}
 	manifest := &extensions.Manifest{
-		Name:    "test-dynamic-module",
-		Type:    extensions.TypeDynamicModule,
-		Version: "v1.0.0",
+		Name:            "test-dynamic-module",
+		Type:            extensions.TypeDynamicModule,
+		Version:         "v1.0.0",
+		ComposerVersion: "v1.0.0",
+		Remote:          true,
 	}
 
 	// Case 1: Composer binary missing
-	_, err := GenerateFilterConfig(manifest, dataHome, "")
+	_, err := GenerateFilterConfig(manifest, dirs, "")
 	require.ErrorContains(t, err, "composer binary not found")
 
 	// Case 2: Composer binary exists
-	composerPath := filepath.Join(dataHome, "extensions", "dym", "composer", manifest.Version)
+	composerPath := extensions.LocalCacheComposerDir(dirs, manifest.ComposerVersion, !manifest.Remote)
 	require.NoError(t, os.MkdirAll(composerPath, 0o750))
 	require.NoError(t, os.WriteFile(filepath.Join(composerPath, "libcomposer.so"), []byte("fake binary"), 0o600))
 
-	got, err := GenerateFilterConfig(manifest, dataHome, "")
+	got, err := GenerateFilterConfig(manifest, dirs, "")
 	require.NoError(t, err)
 
 	want := &ExtensionResources{
@@ -175,7 +178,7 @@ func TestDynamicModuleFilterGenerator(t *testing.T) {
 
 	// Case 3: Success with config
 	configJSON := `{"key":"value","nested":{"foo":"bar"}}`
-	got, err = GenerateFilterConfig(manifest, dataHome, configJSON)
+	got, err = GenerateFilterConfig(manifest, dirs, configJSON)
 	require.NoError(t, err, "GenerateFilterConfig with config failed")
 
 	wantWithConfig := &ExtensionResources{
@@ -209,34 +212,35 @@ func TestDynamicModuleFilterGenerator(t *testing.T) {
 }
 
 func TestComposerFilterGenerator(t *testing.T) {
-	dataHome := t.TempDir()
+	dirs := &xdg.Directories{DataHome: t.TempDir()}
 	manifest := &extensions.Manifest{
 		Name:            "test-composer",
 		Type:            extensions.TypeComposer,
 		Version:         "v0.0.1",
 		ComposerVersion: "v1.0.0",
+		Remote:          true,
 	}
 
 	// Case 1: Composer binary missing
-	_, err := GenerateFilterConfig(manifest, dataHome, "")
+	_, err := GenerateFilterConfig(manifest, dirs, "")
 	require.ErrorContains(t, err, "composer binary not found")
 
 	// Create Composer binary
-	composerPath := filepath.Join(dataHome, "extensions", "dym", "composer", manifest.ComposerVersion)
+	composerPath := extensions.LocalCacheComposerDir(dirs, manifest.ComposerVersion, !manifest.Remote)
 	require.NoError(t, os.MkdirAll(composerPath, 0o750))
 	require.NoError(t, os.WriteFile(filepath.Join(composerPath, "libcomposer.so"), []byte("fake binary"), 0o600))
 
 	// Case 2: Plugin binary missing
-	_, err = GenerateFilterConfig(manifest, dataHome, "")
+	_, err = GenerateFilterConfig(manifest, dirs, "")
 	require.ErrorContains(t, err, "go plugin binary not found")
 
 	// Create Plugin binary
-	pluginPath := filepath.Join(dataHome, "extensions", "goplugin", manifest.Name, manifest.Version)
+	pluginPath := filepath.Join(dirs.DataHome, "extensions", "goplugin", manifest.Name, manifest.Version)
 	require.NoError(t, os.MkdirAll(pluginPath, 0o750))
 	require.NoError(t, os.WriteFile(filepath.Join(pluginPath, "plugin.so"), []byte("fake binary"), 0o600))
 
 	// Case 3: Success without config
-	got, err := GenerateFilterConfig(manifest, dataHome, "")
+	got, err := GenerateFilterConfig(manifest, dirs, "")
 	require.NoError(t, err)
 
 	want := &ExtensionResources{
@@ -255,7 +259,7 @@ func TestComposerFilterGenerator(t *testing.T) {
 								configStruct := &structpb.Struct{
 									Fields: map[string]*structpb.Value{
 										"name":         structpb.NewStringValue(manifest.Name),
-										"url":          structpb.NewStringValue("file://" + fmt.Sprintf("%s/extensions/goplugin/%s/%s/plugin.so", dataHome, manifest.Name, manifest.Version)),
+										"url":          structpb.NewStringValue(fmt.Sprintf("file://%s/extensions/goplugin/%s/%s/plugin.so", dirs.DataHome, manifest.Name, manifest.Version)),
 										"config":       structpb.NewNullValue(),
 										"strict_check": structpb.NewBoolValue(false),
 									},
@@ -280,7 +284,7 @@ func TestComposerFilterGenerator(t *testing.T) {
 
 	// Case 4: Success with config
 	configJSON := `{"key":"value","nested":{"foo":"bar"}}`
-	got, err = GenerateFilterConfig(manifest, dataHome, configJSON)
+	got, err = GenerateFilterConfig(manifest, dirs, configJSON)
 	require.NoError(t, err, "GenerateFilterConfig with config failed")
 
 	wantWithConfig := &ExtensionResources{
@@ -303,7 +307,7 @@ func TestComposerFilterGenerator(t *testing.T) {
 								configStruct := &structpb.Struct{
 									Fields: map[string]*structpb.Value{
 										"name":         structpb.NewStringValue(manifest.Name),
-										"url":          structpb.NewStringValue("file://" + fmt.Sprintf("%s/extensions/goplugin/%s/%s/plugin.so", dataHome, manifest.Name, manifest.Version)),
+										"url":          structpb.NewStringValue(fmt.Sprintf("file://%s/extensions/goplugin/%s/%s/plugin.so", dirs.DataHome, manifest.Name, manifest.Version)),
 										"config":       structpb.NewStructValue(innerStruct),
 										"strict_check": structpb.NewBoolValue(false),
 									},
