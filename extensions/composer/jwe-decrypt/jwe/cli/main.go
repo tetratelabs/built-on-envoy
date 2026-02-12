@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 
@@ -8,7 +9,29 @@ import (
 
 	"github.com/lestrrat-go/jwx/v3/jwa"
 	"github.com/lestrrat-go/jwx/v3/jwe"
+	"github.com/lestrrat-go/jwx/v3/jwk"
 )
+
+func genJWKS(privKeyInput string) {
+	var err error
+
+	keys, err := boeJwe.ParsePrivateKey(privKeyInput)
+	if err != nil {
+		fmt.Printf("failed to parse key: %s\n", err)
+		return
+	}
+
+	set := jwk.NewSet()
+	k := keys.PrivateKey
+	k.Set(jwk.AlgorithmKey, jwa.RSA_OAEP())
+	set.AddKey(k)
+	jwksJSON, err := json.MarshalIndent(set, "", "  ")
+	if err != nil {
+		fmt.Printf("failed to marshal JWKS: %s\n", err)
+		return
+	}
+	fmt.Printf("Generated JWKS: %s\n", jwksJSON)
+}
 
 func main() {
 	var (
@@ -17,6 +40,7 @@ func main() {
 		privKeyFile  string
 		pubKeyFile   string
 		payload      string
+		generateJWKS bool
 
 		keys *boeJwe.KeyInput
 		err  error
@@ -27,7 +51,13 @@ func main() {
 	flag.StringVar(&pubKeyInput, "public-key", "", "JWK file to read key from")
 	flag.StringVar(&pubKeyFile, "public-key-file", "", "JWK file to read key from")
 	flag.StringVar(&payload, "payload", "", "Payload to encrypt")
+	flag.BoolVar(&generateJWKS, "generate-jwks", false, "Generate JWKS")
 	flag.Parse()
+
+	if generateJWKS {
+		genJWKS(privKeyInput)
+		return
+	}
 
 	if privKeyFile != "" {
 		keys, err = boeJwe.ParseKeysFromFile(privKeyFile, pubKeyFile)
