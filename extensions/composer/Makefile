@@ -122,7 +122,7 @@ build_image:
 		--provenance=false \
 		$(BASE_OCI_ANNOTATIONS) \
 		$(BINARY_ARTIFACT) \
-		-t $(IMAGE)-linux-$(ARCH) \
+		-t $(IMAGE)-$(OS)-$(ARCH) \
 		-f ./Dockerfile .
 
 # For default push operation, we will also prefer to build a multi-platform image to support

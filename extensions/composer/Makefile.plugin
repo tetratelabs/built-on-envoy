@@ -43,6 +43,7 @@ HUB    := $(OCI_REGISTRY)/built-on-envoy
 IMAGE  := $(HUB)/extension-$(NAME):$(VERSION)$(IMAGE_NONCE)
 SOURCE := https://$(subst ghcr.io,github.com,$(HUB))
 
+OS := linux
 ARCH := $(shell uname -m)
 ifeq ($(ARCH),x86_64)
   ARCH := amd64
@@ -94,7 +95,7 @@ build_image:
 		--build-arg EXTENSION_PATH=$(EXTENSION_PATH) \
 		$(BASE_OCI_ANNOTATIONS) \
 		$(BINARY_ARTIFACT) \
-		-t $(IMAGE)-linux-$(ARCH) \
+		-t $(IMAGE)-$(OS)-$(ARCH) \
 		-f ./Dockerfile.plugin .
 
 # For default push operation, we will also prefer to build a multi-platform image to support

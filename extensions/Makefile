@@ -10,13 +10,10 @@ IMAGE_NONCE  ?=
 OCI_REGISTRY ?= ghcr.io/tetratelabs
 INSECURE_REGISTRY ?= false
 
-registry_output :=
+registry_flag :=
 ifeq ($(INSECURE_REGISTRY),true)
-  registry_output := ",registry.insecure=true"
+  registry_flag := "--plain-http"
 endif
-
-# Default data home layout for boe
-BOE_DATA_HOME ?= $(HOME)/.local/share/boe
 
 EXTENSION_PATH ?=
 # Ensure the EXTENSION_PATH always be set
@@ -38,13 +35,6 @@ HUB    := $(OCI_REGISTRY)/built-on-envoy
 IMAGE  := $(HUB)/extension-$(NAME):$(VERSION)$(IMAGE_NONCE)
 SOURCE := https://$(subst ghcr.io,github.com,$(HUB))
 
-ARCH := $(shell uname -m)
-ifeq ($(ARCH),x86_64)
-  ARCH := amd64
-else ifeq ($(ARCH),aarch64)
-  ARCH := arm64
-endif
-
 # Base OCI image annotations (shared by all image types)
 BASE_OCI_ANNOTATIONS := \
 	--annotation "org.opencontainers.image.source=$(SOURCE)" \
@@ -61,9 +51,9 @@ BASE_OCI_ANNOTATIONS := \
 .PHONY: push_lua
 push_lua:
 	@echo "Building and pushing Lua extension image: $(IMAGE)"
-	@docker buildx build \
-		--output type=registry,oci-mediatypes=true$(registry_output) \
+	@tar -czf $(EXTENSION_PATH).tar.gz -C ./$(EXTENSION_PATH) .
+	@oras push $(registry_flag) $(IMAGE) \
+		./$(EXTENSION_PATH).tar.gz:application/vnd.tetratelabs.lua.v1+tar+gzip \
 		$(BASE_OCI_ANNOTATIONS) \
-		--build-arg EXTENSION_PATH=$(EXTENSION_PATH) \
-		--tag $(IMAGE) \
-		--file Dockerfile.lua ./$(EXTENSION_PATH)
+		--annotation "io.tetratelabs.built-on-envoy.extension.artifact=source"
+	@rm -f $(EXTENSION_PATH).tar.gz
