@@ -72,7 +72,7 @@ jobs:
         with:
           go-version-file: extensions/composer/go.mod
           cache-dependency-path: extensions/composer/go.sum
-      - run: go -C extensions/composer/ test ./...
+      - run: make -C extensions/composer test
 
   lint:
     needs: changes

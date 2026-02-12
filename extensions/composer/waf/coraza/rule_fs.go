@@ -10,8 +10,9 @@ package coraza
 
 import (
 	"embed"
-	"fmt"
 	"io/fs"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -26,44 +27,44 @@ type rulesFS struct{}
 
 // Open implements [fs.FS.Open]
 func (r rulesFS) Open(name string) (fs.File, error) {
-	path, err := mapPath(name)
-	if err != nil {
-		return nil, err
+	path, ok := mapPath(name)
+	if !ok {
+		return os.Open(filepath.Clean(name))
 	}
 	return crs.Open(path)
 }
 
 // ReadDir implements [fs.FS.ReadDir]
 func (r rulesFS) ReadDir(name string) ([]fs.DirEntry, error) {
-	path, err := mapPath(name)
-	if err != nil {
-		return nil, err
+	path, ok := mapPath(name)
+	if !ok {
+		return os.ReadDir(filepath.Clean(name))
 	}
 	return fs.ReadDir(crs, path)
 }
 
 // ReadFile implements [fs.FS.ReadFile]
 func (r rulesFS) ReadFile(name string) ([]byte, error) {
-	path, err := mapPath(name)
-	if err != nil {
-		return nil, err
+	path, ok := mapPath(name)
+	if !ok {
+		return os.ReadFile(filepath.Clean(name))
 	}
 	return fs.ReadFile(crs, path)
 }
 
 // mapPath maps the "@" prefixed paths to the actual file paths in the embedded filesystem.
-func mapPath(p string) (string, error) {
+func mapPath(p string) (string, bool) {
 	switch p {
-	case "@recommended-conf":
-		return "rules/recommended.conf", nil
-	case "@ftw-conf":
-		return "rules/ftw.conf", nil
-	case "@crs-setup-conf":
-		return "rules/crs-setup.conf", nil
+	case "@recommended.conf":
+		return "rules/recommended.conf", true
+	case "@ftw.conf":
+		return "rules/ftw.conf", true
+	case "@crs-setup.conf":
+		return "rules/crs-setup.conf", true
 	default:
 		if strings.HasPrefix(p, "@owasp_crs") {
-			return strings.Replace(p, "@owasp_crs", "rules/owasp_crs", 1), nil
+			return strings.Replace(p, "@owasp_crs", "rules/owasp_crs", 1), true
 		}
 	}
-	return "", fmt.Errorf("unknown path %s", p)
+	return "", false
 }

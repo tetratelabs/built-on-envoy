@@ -117,7 +117,7 @@ function formatTypeName(type: string): string {
 									{extension.examples.map(example => (
 										<div class="example-block">
 											<h3>{example.title}</h3>
-											<p class="example-description">{example.description}</p>
+											<div class="example-description prose" set:html={marked.parse(example.description)} />
 											<div class="code-block-wrapper">
 												<pre class="code-block"><code>{example.code.trim()}</code></pre>
 												<button class="copy-btn" aria-label="Copy code">

@@ -46,15 +46,34 @@ tags:
   - modsecurity
 license: Apache-2.0
 examples:
-  - title: Basic Usage
-    description: Enable WAF protection with default OWASP CRS rules
+  - title: SQL Injection Protection
+    description: |
+      The following example demonstrates how to run the WAF plugin with recommended OWASP CRS rules and test SQL
+      injection protection by sending a malicious payload that should be blocked by the WAF.
+
+      By default WAF is configured in `DetectionOnly` mode, which means it will only log detected attacks without
+      blocking them. To enable active blocking, this example sets `SecRuleEngine On` in the configuration. It also
+      sets `SecResponseBodyAccess Off` to disable response body inspection as it's not needed for hte example.
     code: |
+      # Start WAF with recommended OWASP CRS rules and enforcement enabled
       boe run --extension coraza-waf --config '
         {
           "directives": [
-            "Include @recommended-conf",
-            "Include @ftw-conf",
-            "Include @crs-setup-conf",
+            "Include @recommended.conf",
+            "SecRuleEngine On",
+            "SecResponseBodyAccess Off",
+            "Include @crs-setup.conf",
             "Include @owasp_crs/*.conf"
           ]
         }'
+
+      # Try sending a SQL injection payload and see the request rejected
+      curl -v http://localhost:10000/post -X POST --data "1%27%20ORDER%20BY%203--%2B"
+
+      < HTTP/1.1 403 Forbidden
+      < content-length: 22
+      < content-type: text/plain
+      < date: Thu, 12 Feb 2026 10:28:16 GMT
+      < server: envoy
+      <
+      Request blocked by WAF
