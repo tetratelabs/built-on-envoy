@@ -204,9 +204,9 @@ func Test_RequestOnlyWaf(t *testing.T) {
 
 	config := map[string]interface{}{
 		"directives": []string{
-			"Include @recommended-conf",
-			"Include @ftw-conf",
-			"Include @crs-setup-conf",
+			"Include @recommended.conf",
+			"Include @ftw.conf",
+			"Include @crs-setup.conf",
 			"Include @owasp_crs/*.conf",
 		},
 		"mode": "REQUEST_ONLY",
@@ -478,9 +478,9 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 
 	config := map[string]interface{}{
 		"directives": []string{
-			"Include @recommended-conf",
-			"Include @ftw-conf",
-			"Include @crs-setup-conf",
+			"Include @recommended.conf",
+			"Include @ftw.conf",
+			"Include @crs-setup.conf",
 			"Include @owasp_crs/*.conf",
 		},
 		"mode": "RESPONSE_ONLY",
@@ -804,9 +804,9 @@ func Test_FullWaf(t *testing.T) {
 
 	config := map[string]interface{}{
 		"directives": []string{
-			"Include @recommended-conf",
-			"Include @ftw-conf",
-			"Include @crs-setup-conf",
+			"Include @recommended.conf",
+			"Include @ftw.conf",
+			"Include @crs-setup.conf",
 			"Include @owasp_crs/*.conf",
 		},
 		"mode": "FULL",
