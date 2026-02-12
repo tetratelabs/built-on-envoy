@@ -120,8 +120,8 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for Filter {
 
         if let Some(port) = downstream_port {
             // Strip the port from the downstream addr.
-            let downstream_addr_slice = &downstream_addr_slice
-                [0..downstream_addr_slice.len() - port.to_string().len() - 1];
+            let downstream_addr_slice =
+                &downstream_addr_slice[0..downstream_addr_slice.len() - port.to_string().len() - 1];
 
             unsafe {
                 downstream_addr_str
