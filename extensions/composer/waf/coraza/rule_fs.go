@@ -29,6 +29,8 @@ type rulesFS struct{}
 func (r rulesFS) Open(name string) (fs.File, error) {
 	path, ok := mapPath(name)
 	if !ok {
+		// If the given path is not a recognized embedded path, fallback to load the
+		// file from the local filesystem.
 		return os.Open(filepath.Clean(name))
 	}
 	return crs.Open(path)
@@ -38,6 +40,8 @@ func (r rulesFS) Open(name string) (fs.File, error) {
 func (r rulesFS) ReadDir(name string) ([]fs.DirEntry, error) {
 	path, ok := mapPath(name)
 	if !ok {
+		// If the given path is not a recognized embedded path, fallback to load the
+		// file from the local filesystem.
 		return os.ReadDir(filepath.Clean(name))
 	}
 	return fs.ReadDir(crs, path)
@@ -47,6 +51,8 @@ func (r rulesFS) ReadDir(name string) ([]fs.DirEntry, error) {
 func (r rulesFS) ReadFile(name string) ([]byte, error) {
 	path, ok := mapPath(name)
 	if !ok {
+		// If the given path is not a recognized embedded path, fallback to load the
+		// file from the local filesystem.
 		return os.ReadFile(filepath.Clean(name))
 	}
 	return fs.ReadFile(crs, path)
@@ -55,11 +61,11 @@ func (r rulesFS) ReadFile(name string) ([]byte, error) {
 // mapPath maps the "@" prefixed paths to the actual file paths in the embedded filesystem.
 func mapPath(p string) (string, bool) {
 	switch p {
-	case "@recommended.conf":
+	case "@recommended.conf", "@recommended-conf":
 		return "rules/recommended.conf", true
-	case "@ftw.conf":
+	case "@ftw.conf", "@ftw-conf":
 		return "rules/ftw.conf", true
-	case "@crs-setup.conf":
+	case "@crs-setup.conf", "@crs-setup-conf":
 		return "rules/crs-setup.conf", true
 	default:
 		if strings.HasPrefix(p, "@owasp_crs") {

@@ -22,12 +22,27 @@ func TestMapPath(t *testing.T) {
 			expectedOK: true,
 		},
 		{
+			input:      "@recommended-conf",
+			expected:   "rules/recommended.conf",
+			expectedOK: true,
+		},
+		{
 			input:      "@ftw.conf",
 			expected:   "rules/ftw.conf",
 			expectedOK: true,
 		},
 		{
+			input:      "@ftw-conf",
+			expected:   "rules/ftw.conf",
+			expectedOK: true,
+		},
+		{
 			input:      "@crs-setup.conf",
+			expected:   "rules/crs-setup.conf",
+			expectedOK: true,
+		},
+		{
+			input:      "@crs-setup-conf",
 			expected:   "rules/crs-setup.conf",
 			expectedOK: true,
 		},
