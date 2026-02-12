@@ -17,7 +17,7 @@ import (
 )
 
 // rnd is a random number generator used for creating unique builder names in tests.
-var rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
+var rnd = rand.New(rand.NewSource(time.Now().UnixNano())) //nolint: gosec
 
 // CreateBuildxBuilder creates a new Docker Buildx builder instance with host network configuration for testing.
 func CreateBuildxBuilder(t *testing.T) string {
