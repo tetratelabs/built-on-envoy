@@ -6,9 +6,7 @@
 package impl
 
 import (
-	"encoding/base64"
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -24,17 +22,11 @@ import (
 // Helper functions
 
 func getTestKeyPath() string {
-	return filepath.Join("jwe", "test", "private_key.pem")
+	return filepath.Join("jwe", "test", "private.jwks")
 }
 
 func getTestPublicKeyPath() string {
 	return filepath.Join("jwe", "test", "public_key.pem")
-}
-
-func readTestPrivateKey(t *testing.T) string {
-	keyBytes, err := os.ReadFile(getTestKeyPath())
-	require.NoError(t, err)
-	return string(keyBytes)
 }
 
 func createTestJWE(t *testing.T, payload string) string {
@@ -48,108 +40,6 @@ func createTestJWE(t *testing.T, payload string) string {
 	return string(encrypted)
 }
 
-// Tests for getKey method
-
-func TestGetKey_WithKeyFile(t *testing.T) {
-	config := &jweDecryptConfig{
-		KeyFile: getTestKeyPath(),
-	}
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
-	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-
-	filter := &jweDecryptHttpFilter{
-		config: config,
-		handle: mockHandle,
-	}
-
-	key, err := filter.getKey()
-	require.NoError(t, err)
-	require.NotNil(t, key)
-	require.NotNil(t, key.PrivateKey)
-}
-
-func TestGetKey_WithInlineKey(t *testing.T) {
-	privateKey := readTestPrivateKey(t)
-	encodedKey := base64.StdEncoding.EncodeToString([]byte(privateKey))
-
-	config := &jweDecryptConfig{
-		InlineKey: encodedKey,
-	}
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
-	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-
-	filter := &jweDecryptHttpFilter{
-		config: config,
-		handle: mockHandle,
-	}
-
-	key, err := filter.getKey()
-	require.NoError(t, err)
-	require.NotNil(t, key)
-	require.NotNil(t, key.PrivateKey)
-}
-
-func TestGetKey_WithInvalidBase64InlineKey(t *testing.T) {
-	config := &jweDecryptConfig{
-		InlineKey: "not-valid-base64!!!",
-	}
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
-	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-
-	filter := &jweDecryptHttpFilter{
-		config: config,
-		handle: mockHandle,
-	}
-
-	key, err := filter.getKey()
-	require.Error(t, err)
-	require.Nil(t, key)
-	require.Contains(t, err.Error(), "failed to base64 decode inline key")
-}
-
-func TestGetKey_WithNoKey(t *testing.T) {
-	config := &jweDecryptConfig{}
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
-	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-
-	filter := &jweDecryptHttpFilter{
-		config: config,
-		handle: mockHandle,
-	}
-
-	key, err := filter.getKey()
-	require.Error(t, err)
-	require.Nil(t, key)
-	require.Contains(t, err.Error(), "no decryption key provided in config")
-}
-
-func TestGetKey_WithNonExistentFile(t *testing.T) {
-	config := &jweDecryptConfig{
-		KeyFile: "/path/to/nonexistent/key.pem",
-	}
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
-	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-
-	filter := &jweDecryptHttpFilter{
-		config: config,
-		handle: mockHandle,
-	}
-
-	key, err := filter.getKey()
-	require.Error(t, err)
-	require.Nil(t, key)
-}
-
 // Tests for OnRequestHeaders method
 
 func TestOnRequestHeaders_SuccessfulDecryption(t *testing.T) {
@@ -161,6 +51,11 @@ func TestOnRequestHeaders_SuccessfulDecryption(t *testing.T) {
 		InputHeader:  "x-jwe-token",
 		OutputHeader: "x-decrypted",
 	}
+
+	// Populate the privateJwks field
+	keySet, err := config.getKeySet()
+	require.NoError(t, err)
+	config.privateJwks = keySet
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -198,6 +93,11 @@ func TestOnRequestHeaders_WithMetadataOutput(t *testing.T) {
 		OutputMetadataKey: "decrypted-payload",
 	}
 
+	// Populate the privateJwks field
+	keySet, err := config.getKeySet()
+	require.NoError(t, err)
+	config.privateJwks = keySet
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
@@ -234,6 +134,11 @@ func TestOnRequestHeaders_WithBothHeaderAndMetadata(t *testing.T) {
 		OutputHeader:      "x-decrypted",
 		OutputMetadataKey: "decrypted-payload",
 	}
+
+	// Populate the privateJwks field
+	keySet, err := config.getKeySet()
+	require.NoError(t, err)
+	config.privateJwks = keySet
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -329,6 +234,11 @@ func TestOnRequestHeaders_MultipleJWEValues(t *testing.T) {
 		InputHeader:  "x-jwe-token",
 		OutputHeader: "x-decrypted",
 	}
+
+	// Populate the privateJwks field
+	keySet, err := config.getKeySet()
+	require.NoError(t, err)
+	config.privateJwks = keySet
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
