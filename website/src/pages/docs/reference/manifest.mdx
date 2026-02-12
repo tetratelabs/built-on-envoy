@@ -230,7 +230,7 @@ Unique identifier for the extension
 
 ## parent
 
-Parent extension set whose version will be used. When set, the version field can be omitted.
+Parent extension set whose version will be used. When set, the `version` and `composerVersion` fields can't be set.
 
 | | |
 |---|---|
@@ -270,7 +270,7 @@ Type of the extension
 
 ## version
 
-Semantic version of the extension
+Semantic version of the extension. Required unless the `parent` field is set.
 
 | | |
 |---|---|

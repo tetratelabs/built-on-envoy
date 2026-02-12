@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/manifest.schema.json",
   "title": "Extension Manifest",
-  "description": "Schema for Built On Envoy extension manifest files",
+  "description": "Schema for Built On Envoy extension manifest files.",
   "type": "object",
   "required": [
     "name",
@@ -19,28 +19,28 @@
   "properties": {
     "name": {
       "type": "string",
-      "description": "Unique identifier for the extension",
+      "description": "Unique identifier for the extension.",
       "minLength": 1,
       "pattern": "^[a-z][.a-z0-9-_]*$"
     },
     "version": {
       "type": "string",
-      "description": "Semantic version of the extension",
+      "description": "Semantic version of the extension. Required unless the `parent` field is set.",
       "pattern": "^\\d+\\.\\d+\\.\\d+$"
     },
     "minEnvoyVersion": {
       "type": "string",
-      "description": "Minimum compatible Envoy version",
+      "description": "Minimum compatible Envoy version.",
       "pattern": "^\\d+\\.\\d+\\.\\d+$"
     },
     "maxEnvoyVersion": {
       "type": "string",
-      "description": "Maximum compatible Envoy version",
+      "description": "Maximum compatible Envoy version.",
       "pattern": "^\\d+\\.\\d+\\.\\d+$"
     },
     "categories": {
       "type": "array",
-      "description": "Functional categories of the extension",
+      "description": "Functional categories of the extension.",
       "items": {
         "type": "string",
         "enum": [
@@ -57,27 +57,27 @@
     },
     "author": {
       "type": "string",
-      "description": "Author or organization name",
+      "description": "Author or organization name.",
       "minLength": 1
     },
     "featured": {
       "type": "boolean",
-      "description": "Whether to feature this extension in UI/listings"
+      "description": "Whether to feature this extension in UI/listings."
     },
     "description": {
       "type": "string",
-      "description": "Short single-line description of the extension",
+      "description": "Short single-line description of the extension.",
       "minLength": 1,
       "maxLength": 200
     },
     "longDescription": {
       "type": "string",
-      "description": "Detailed multi-line description with markdown support",
+      "description": "Detailed multi-line description with markdown support.",
       "minLength": 1
     },
     "type": {
       "type": "string",
-      "description": "Type of the extension",
+      "description": "Type of the extension.",
       "enum": [
         "lua",
         "wasm",
@@ -87,12 +87,12 @@
     },
     "composerVersion": {
       "type": "string",
-      "description": "Version of Built On Envoy Composer",
+      "description": "Version of Built On Envoy Composer. Required if type is `composer` unless the `parent` field is set.",
       "pattern": "^\\d+\\.\\d+\\.\\d+$"
     },
     "tags": {
       "type": "array",
-      "description": "Searchable tags for categorization",
+      "description": "Searchable tags for categorization.",
       "minItems": 1,
       "uniqueItems": true,
       "items": {
@@ -103,12 +103,12 @@
     },
     "license": {
       "type": "string",
-      "description": "SPDX license identifier",
+      "description": "SPDX license identifier.",
       "minLength": 1
     },
     "examples": {
       "type": "array",
-      "description": "Usage examples for the extension",
+      "description": "Usage examples for the extension.",
       "minItems": 0,
       "items": {
         "type": "object",
@@ -121,17 +121,17 @@
         "properties": {
           "title": {
             "type": "string",
-            "description": "Short title for the example",
+            "description": "Short title for the example.",
             "minLength": 1
           },
           "description": {
             "type": "string",
-            "description": "Explanation of what the example demonstrates",
+            "description": "Explanation of what the example demonstrates.",
             "minLength": 1
           },
           "code": {
             "type": "string",
-            "description": "Code snippet showing usage",
+            "description": "Code snippet showing usage.",
             "minLength": 1
           }
         }
@@ -139,17 +139,17 @@
     },
     "lua": {
       "type": "object",
-      "description": "Lua extension configuration",
+      "description": "Lua extension configuration.",
       "additionalProperties": false,
       "properties": {
         "path": {
           "type": "string",
-          "description": "Path to the Lua script file",
+          "description": "Path to the Lua script file.",
           "minLength": 1
         },
         "inline": {
           "type": "string",
-          "description": "Inline Lua script code",
+          "description": "Inline Lua script code.",
           "minLength": 1
         }
       },
@@ -160,13 +160,13 @@
     },
     "parent": {
       "type": "string",
-      "description": "Parent extension set whose version will be used. When set, the version field can be omitted.",
+      "description": "Parent extension set whose version will be used. When set, the `version` and `composerVersion` fields can't be set.",
       "minLength": 1,
       "pattern": "^[a-z][a-z0-9-_.]*$"
     },
     "extensionSet": {
       "type": "boolean",
-      "description": "Whether this manifest defines a set of extensions"
+      "description": "Whether this manifest defines a set of extensions."
     }
   },
   "allOf": [
@@ -187,6 +187,28 @@
     },
     {
       "if": {
+        "required": ["parent"]
+      },
+      "then": {
+        "properties": {
+          "type": { "const": "composer" },
+          "version": false,
+          "composerVersion": false
+        }
+      }
+    },
+    {
+      "if": {
+        "not": {
+          "required": ["parent"]
+        }
+      },
+      "then": {
+        "required": ["version"]
+      }
+    },
+    {
+      "if": {
         "allOf": [
           {
             "properties": {
@@ -202,30 +224,6 @@
       },
       "then": {
         "required": ["composerVersion"]
-      },
-      "else": {
-        "if": {
-          "properties": {
-            "type": { "const": "composer" }
-          },
-          "required": ["type"]
-        },
-        "then": {},
-        "else": {
-          "properties": {
-            "composerVersion": false
-          }
-        }
-      }
-    },
-    {
-      "if": {
-        "not": {
-          "required": ["parent"]
-        }
-      },
-      "then": {
-        "required": ["version"]
       }
     }
   ]
