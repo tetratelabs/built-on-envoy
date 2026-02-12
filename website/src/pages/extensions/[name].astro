@@ -1,11 +1,30 @@
 ---
-import { PROJECT_NAME, CLI_NAME, GITHUB_REPO, EXTENSIONS_PATH } from '../../constants';
+import { PROJECT_NAME, GITHUB_REPO, EXTENSIONS_PATH } from '../../constants';
 import Head from '../../components/Head.astro';
 import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
 import { loadExtensions } from '../../utils/extensions';
 import { marked } from 'marked';
+import { createHighlighter } from 'shiki';
 import '../../styles/extension-detail.css';
+
+const highlighter = await createHighlighter({
+	themes: ['github-dark'],
+	langs: ['shell', 'bash', 'yaml', 'json', 'javascript', 'typescript', 'go', 'rust', 'plaintext'],
+});
+
+// Custom marked renderer that uses Shiki for code blocks
+const renderer = new marked.Renderer();
+renderer.code = function ({ text, lang }: { text: string; lang?: string }) {
+	const language = lang || 'plaintext';
+	try {
+		return highlighter.codeToHtml(text, { lang: language, theme: 'github-dark' });
+	} catch {
+		// Fallback for unsupported languages
+		return highlighter.codeToHtml(text, { lang: 'plaintext', theme: 'github-dark' });
+	}
+};
+marked.use({ renderer });
 
 export async function getStaticPaths() {
 	const extensions = loadExtensions();
@@ -119,7 +138,7 @@ function formatTypeName(type: string): string {
 											<h3>{example.title}</h3>
 											<div class="example-description prose" set:html={marked.parse(example.description)} />
 											<div class="code-block-wrapper">
-												<pre class="code-block"><code>{example.code.trim()}</code></pre>
+												<Fragment set:html={highlighter.codeToHtml(example.code.trim(), { lang: 'shell', theme: 'github-dark' })} />
 												<button class="copy-btn" aria-label="Copy code">
 													<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
 														<path d="M5.5 2.5h-3v11h7v-3m-4-8h7v7h-7v-7z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -130,21 +149,6 @@ function formatTypeName(type: string): string {
 									))}
 								</section>
 							)}
-
-							<section class="content-section">
-								<h2>Quick Start</h2>
-								<div class="quick-start">
-									<p>Get started with this extension in seconds:</p>
-									<div class="code-block-wrapper">
-										<pre class="code-block"><code>{CLI_NAME} run --extension {extension.name}</code></pre>
-										<button class="copy-btn" aria-label="Copy code">
-													<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-														<path d="M5.5 2.5h-3v11h7v-3m-4-8h7v7h-7v-7z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-													</svg>
-												</button>
-									</div>
-								</div>
-							</section>
 						</div>
 
 						<aside class="sidebar">

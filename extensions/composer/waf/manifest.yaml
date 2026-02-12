@@ -12,13 +12,13 @@ featured: true
 description: Web Application Firewall (WAF) for HTTP traffic using Coraza
 longDescription: |
   A Web Application Firewall (WAF) HTTP filter plugin that provides layer 7 security
-  for web applications using the Coraza WAF engine.
+  for web applications using the [Coraza WAF engine](https://coraza.io/).
 
   ## Features
 
   This plugin provides comprehensive web application security:
 
-  - **OWASP ModSecurity Core Rule Set (CRS)**: Built-in protection against common web attacks
+  - **OWASP ModSecurity [Core Rule Set (CRS)](https://coreruleset.org/)**: Built-in protection against common web attacks
   - **Request inspection**: Analyzes HTTP requests for malicious patterns and anomalies
   - **Response inspection**: Examines HTTP responses to prevent data leakage
   - **Flexible rule engine**: Supports custom security rules and policies
