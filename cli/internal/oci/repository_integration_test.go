@@ -38,12 +38,13 @@ func newLocalRegistryRepositoryClient(t *testing.T) RepositoryClient {
 }
 
 func TestPullMultiArch(t *testing.T) {
-	internaltesting.CreateBuildxBuilder(t)
+	builder := internaltesting.CreateBuildxBuilder(t)
 
 	// Create the multi-arch image
-	testRepo := fmt.Sprintf("%s/test/multiarch", registryAddr)
+	testRepo := fmt.Sprintf("%s/test-multiarch", registryAddr)
 	// #nosec G204
 	cmd := exec.CommandContext(t.Context(), "docker", "buildx", "build",
+		"--builder", builder,
 		"--platform", "linux/amd64,linux/arm64",
 		"-t", testRepo+":latest",
 		"--push",

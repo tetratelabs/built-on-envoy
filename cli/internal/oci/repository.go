@@ -27,11 +27,11 @@ type RepositoryClient interface {
 	Push(ctx context.Context, path, tag string, annotations map[string]string) (string, error)
 	// Pull fetches the artifact with the given tag from the registry and extracts
 	// it to the specified destination path. Returns the digest of the pulled artifact.
-	Pull(ctx context.Context, tag, destPath string, platform *ocispec.Platform) (ocispec.Manifest, string, error)
+	Pull(ctx context.Context, tag, destPath string, platform *ocispec.Platform) (*ocispec.Manifest, string, error)
 	// Tags lists all tags in the repository.
 	Tags(ctx context.Context) ([]string, error)
 	// FetchManifest retrieves the manifest for the specified tag.
-	FetchManifest(ctx context.Context, tag string, platform *ocispec.Platform) (ocispec.Manifest, error)
+	FetchManifest(ctx context.Context, tag string, platform *ocispec.Platform) (*ocispec.Manifest, error)
 }
 
 // TargetWithTags extends oras.Target to support listing tags.
@@ -103,22 +103,22 @@ func (r *repositoryClient) Push(ctx context.Context, path, tag string, annotatio
 	return desc.Digest.String(), nil
 }
 
-func (r *repositoryClient) Pull(ctx context.Context, tag, destPath string, platform *ocispec.Platform) (ocispec.Manifest, string, error) {
+func (r *repositoryClient) Pull(ctx context.Context, tag, destPath string, platform *ocispec.Platform) (*ocispec.Manifest, string, error) {
 	manifest, desc, err := r.fetchManifest(ctx, tag, platform)
 	if err != nil {
-		return ocispec.Manifest{}, "", fmt.Errorf("failed to get manifest: %w", err)
+		return nil, "", fmt.Errorf("failed to get manifest: %w", err)
 	}
 
 	// Extract each layer
 	for _, layer := range manifest.Layers {
 		layerReader, err := r.target.Fetch(ctx, layer)
 		if err != nil {
-			return ocispec.Manifest{}, "", fmt.Errorf("failed to fetch layer: %w", err)
+			return nil, "", fmt.Errorf("failed to fetch layer: %w", err)
 		}
 
 		if err := ExtractPackage(layerReader, destPath); err != nil {
 			_ = layerReader.Close()
-			return ocispec.Manifest{}, "", fmt.Errorf("failed to extract layer: %w", err)
+			return nil, "", fmt.Errorf("failed to extract layer: %w", err)
 		}
 		_ = layerReader.Close()
 	}
@@ -130,10 +130,10 @@ func (r *repositoryClient) Pull(ctx context.Context, tag, destPath string, platf
 var ErrPlatformNotFound = errors.New("no manifest found for specified platform")
 
 // fetchManifest retrieves and decodes the manifest for the specified tag.
-func (r *repositoryClient) fetchManifest(ctx context.Context, tag string, platform *ocispec.Platform) (ocispec.Manifest, ocispec.Descriptor, error) {
+func (r *repositoryClient) fetchManifest(ctx context.Context, tag string, platform *ocispec.Platform) (*ocispec.Manifest, ocispec.Descriptor, error) {
 	desc, err := r.target.Resolve(ctx, tag)
 	if err != nil {
-		return ocispec.Manifest{}, ocispec.Descriptor{}, fmt.Errorf("failed to resolve tag: %w", err)
+		return nil, ocispec.Descriptor{}, fmt.Errorf("failed to resolve tag: %w", err)
 	}
 
 	// If it is an index (multi-arch artifact), fetch it to find the right manifest for the current platform
@@ -141,19 +141,19 @@ func (r *repositoryClient) fetchManifest(ctx context.Context, tag string, platfo
 		var rc io.ReadCloser
 		rc, err = r.target.Fetch(ctx, desc)
 		if err != nil {
-			return ocispec.Manifest{}, ocispec.Descriptor{}, fmt.Errorf("failed to fetch index: %w", err)
+			return nil, ocispec.Descriptor{}, fmt.Errorf("failed to fetch index: %w", err)
 		}
 		defer func() { _ = rc.Close() }()
 
 		var indexBytes []byte
 		indexBytes, err = io.ReadAll(rc)
 		if err != nil {
-			return ocispec.Manifest{}, ocispec.Descriptor{}, fmt.Errorf("failed to read index: %w", err)
+			return nil, ocispec.Descriptor{}, fmt.Errorf("failed to read index: %w", err)
 		}
 
 		var index ocispec.Index
 		if err = json.Unmarshal(indexBytes, &index); err != nil {
-			return ocispec.Manifest{}, ocispec.Descriptor{}, fmt.Errorf("failed to unmarshal index: %w", err)
+			return nil, ocispec.Descriptor{}, fmt.Errorf("failed to unmarshal index: %w", err)
 		}
 
 		found := false
@@ -166,7 +166,7 @@ func (r *repositoryClient) fetchManifest(ctx context.Context, tag string, platfo
 		}
 
 		if !found {
-			return ocispec.Manifest{}, ocispec.Descriptor{},
+			return nil, ocispec.Descriptor{},
 				fmt.Errorf("%w: %s/%s", ErrPlatformNotFound, platform.OS, platform.Architecture)
 		}
 	}
@@ -174,16 +174,16 @@ func (r *repositoryClient) fetchManifest(ctx context.Context, tag string, platfo
 	// Fetch the manifest
 	manifestReader, err := r.target.Fetch(ctx, desc)
 	if err != nil {
-		return ocispec.Manifest{}, ocispec.Descriptor{}, fmt.Errorf("failed to fetch manifest: %w", err)
+		return nil, ocispec.Descriptor{}, fmt.Errorf("failed to fetch manifest: %w", err)
 	}
 	defer func() { _ = manifestReader.Close() }()
 
 	var manifest ocispec.Manifest
 	if err = json.NewDecoder(manifestReader).Decode(&manifest); err != nil {
-		return ocispec.Manifest{}, ocispec.Descriptor{}, fmt.Errorf("failed to decode manifest: %w", err)
+		return nil, ocispec.Descriptor{}, fmt.Errorf("failed to decode manifest: %w", err)
 	}
 
-	return manifest, desc, nil
+	return &manifest, desc, nil
 }
 
 // Tags lists all tags in the repository.
@@ -206,7 +206,7 @@ func (r *repositoryClient) Tags(ctx context.Context) ([]string, error) {
 }
 
 // FetchManifest retrieves the manifest for the specified tag.
-func (r *repositoryClient) FetchManifest(ctx context.Context, tag string, platform *ocispec.Platform) (ocispec.Manifest, error) {
+func (r *repositoryClient) FetchManifest(ctx context.Context, tag string, platform *ocispec.Platform) (*ocispec.Manifest, error) {
 	m, _, err := r.fetchManifest(ctx, tag, platform)
 	return m, err
 }
