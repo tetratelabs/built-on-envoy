@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	sdk "github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go"
+	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
 
@@ -39,9 +40,7 @@ func TestManifestValidation(t *testing.T) {
 		}
 		return nil
 	})
-	if err != nil {
-		t.Fatalf("Failed to walk embedded files: %v", err)
-	}
+	require.NoError(t, err, "Failed to walk embedded files")
 
 	t.Logf("Found %d embedded manifest.yaml files", len(manifestPaths))
 	t.Logf("Manifest paths: %v", manifestPaths)
@@ -57,45 +56,27 @@ func TestManifestValidation(t *testing.T) {
 func validateManifest(t *testing.T, path string, knownExtensions map[string]bool) {
 	// Read the manifest file from embedded FS
 	data, err := manifestFiles.ReadFile(path)
-	if err != nil {
-		t.Fatalf("Failed to read embedded manifest: %v", err)
-	}
+	require.NoError(t, err, "Failed to read embedded manifest")
 
 	// Parse YAML
 	var manifest Manifest
-	if err := yaml.Unmarshal(data, &manifest); err != nil {
-		t.Fatalf("Failed to parse YAML: %v", err)
-	}
+	err = yaml.Unmarshal(data, &manifest)
+	require.NoError(t, err, "Failed to parse YAML")
 
 	// Validate name
-	if manifest.Name == "" {
-		t.Error("name is required")
-	} else {
-		if knownExtensions[manifest.Name] {
-			t.Errorf("duplicate extension name '%s'", manifest.Name)
-		}
-		knownExtensions[manifest.Name] = true
-		if sdk.GetHttpFilterConfigFactory(manifest.Name) == nil {
-			t.Errorf("plugin '%s' is not registered into the binary, please ensure it is properly initialized or imported in the plugins.go", manifest.Name)
-		}
-	}
+	require.NotEmpty(t, manifest.Name, "name is required")
+	require.False(t, knownExtensions[manifest.Name], "duplicate extension name '%s'", manifest.Name)
+	knownExtensions[manifest.Name] = true
+	require.NotNil(t, sdk.GetHttpFilterConfigFactory(manifest.Name), "plugin '%s' is not registered into the binary, please ensure it is properly initialized or imported in the plugins.go", manifest.Name)
 
 	// Validate type
-	if manifest.Type != "composer" {
-		t.Errorf("type '%s' must be 'composer'", manifest.Type)
-	}
+	require.Equal(t, "composer", manifest.Type, "type must be 'composer'")
 
 	// Validate version.
-	if manifest.Version != "" {
-		t.Errorf("in-tree composer plugins should not have a version: '%s'", manifest.Version)
-	}
+	require.Empty(t, manifest.Version, "in-tree composer plugins should not have a version")
 
-	if manifest.ComposerVersion != "" {
-		t.Errorf("in-tree composer plugins should not have a composerVersion: '%s'", manifest.ComposerVersion)
-	}
+	require.Empty(t, manifest.ComposerVersion, "in-tree composer plugins should not have a composerVersion")
 
 	// Validate parent.
-	if manifest.Parent != "composer" {
-		t.Errorf("composer plugins must have parent composer")
-	}
+	require.Equal(t, "composer", manifest.Parent, "composer plugins must have parent composer")
 }
