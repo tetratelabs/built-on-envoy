@@ -51,7 +51,7 @@ DESCRIPTION      := $(shell grep "^description:" manifest.yaml | sed 's/[^:]*:[[
 TIMESTAMP        := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 COMMIT_SHA       := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
 AUTHOR           := $(shell grep "^author:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-COMPOSER_VERSION := $(shell grep "^composerVersion:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+COMPOSER_VERSION := $(VERSION)
 LICENSE          := Apache-2.0
 
 HUB    := $(OCI_REGISTRY)/built-on-envoy
