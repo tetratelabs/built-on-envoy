@@ -293,6 +293,267 @@ func TestOnRequestHeaders_KeyError(t *testing.T) {
 	require.Equal(t, shared.HeadersStatusContinue, status)
 }
 
+// Tests for prefix handling
+
+func TestOnRequestHeaders_WithPrefix(t *testing.T) {
+	payload := "test-payload-with-prefix"
+	jweToken := createTestJWE(t, payload)
+
+	config := &jweDecryptConfig{
+		KeyFile:      getTestKeyPath(),
+		InputHeader:  "Authorization",
+		OutputHeader: "x-decrypted",
+		Prefix:       "Bearer ",
+	}
+
+	// Populate the privateJwks field
+	keySet, err := config.getKeySet()
+	require.NoError(t, err)
+	config.privateJwks = keySet
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	requestHeaders := fake.NewFakeHeaderMap(map[string][]string{})
+	mockHandle.EXPECT().RequestHeaders().Return(requestHeaders).AnyTimes()
+	mockHandle.EXPECT().SetMetadata(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	filter := &jweDecryptHttpFilter{
+		config: config,
+		handle: mockHandle,
+	}
+
+	// JWE token with "Bearer " prefix
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		"Authorization": {"Bearer " + jweToken},
+	})
+
+	status := filter.OnRequestHeaders(headers, false)
+
+	require.Equal(t, shared.HeadersStatusContinue, status)
+	decryptedValues := requestHeaders.Get("x-decrypted")
+	require.Len(t, decryptedValues, 1)
+	// Should have prefix restored in the output
+	require.Equal(t, "Bearer "+payload, decryptedValues[0])
+}
+
+func TestOnRequestHeaders_WithPrefixNotMatching(t *testing.T) {
+	payload := "test-payload-no-prefix"
+	jweToken := createTestJWE(t, payload)
+
+	config := &jweDecryptConfig{
+		KeyFile:      getTestKeyPath(),
+		InputHeader:  "Authorization",
+		OutputHeader: "x-decrypted",
+		Prefix:       "Bearer ",
+	}
+
+	// Populate the privateJwks field
+	keySet, err := config.getKeySet()
+	require.NoError(t, err)
+	config.privateJwks = keySet
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	requestHeaders := fake.NewFakeHeaderMap(map[string][]string{})
+	mockHandle.EXPECT().RequestHeaders().Return(requestHeaders).AnyTimes()
+	mockHandle.EXPECT().SetMetadata(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	filter := &jweDecryptHttpFilter{
+		config: config,
+		handle: mockHandle,
+	}
+
+	// JWE token without the expected prefix
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		"Authorization": {jweToken},
+	})
+
+	status := filter.OnRequestHeaders(headers, false)
+
+	require.Equal(t, shared.HeadersStatusContinue, status)
+	decryptedValues := requestHeaders.Get("x-decrypted")
+	require.Len(t, decryptedValues, 1)
+	// Should have prefix added in the output even though input didn't have it
+	require.Equal(t, "Bearer "+payload, decryptedValues[0])
+}
+
+func TestOnRequestHeaders_WithPrefixShorterThanValue(t *testing.T) {
+	config := &jweDecryptConfig{
+		KeyFile:      getTestKeyPath(),
+		InputHeader:  "Authorization",
+		OutputHeader: "x-decrypted",
+		Prefix:       "Bearer ",
+	}
+
+	// Populate the privateJwks field
+	keySet, err := config.getKeySet()
+	require.NoError(t, err)
+	config.privateJwks = keySet
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	requestHeaders := fake.NewFakeHeaderMap(map[string][]string{})
+	mockHandle.EXPECT().RequestHeaders().Return(requestHeaders).AnyTimes()
+
+	filter := &jweDecryptHttpFilter{
+		config: config,
+		handle: mockHandle,
+	}
+
+	// Value shorter than prefix - should not crash, just fail to decrypt
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		"Authorization": {"Bear"},
+	})
+
+	status := filter.OnRequestHeaders(headers, false)
+
+	require.Equal(t, shared.HeadersStatusContinue, status)
+	// Should have no decrypted values since decryption failed
+	decryptedValues := requestHeaders.Get("x-decrypted")
+	require.Len(t, decryptedValues, 0)
+}
+
+func TestOnRequestHeaders_WithPrefixAndMetadata(t *testing.T) {
+	payload := "test-payload-metadata"
+	jweToken := createTestJWE(t, payload)
+
+	config := &jweDecryptConfig{
+		KeyFile:           getTestKeyPath(),
+		InputHeader:       "Authorization",
+		OutputMetadataKey: "decrypted-payload",
+		Prefix:            "Bearer ",
+	}
+
+	// Populate the privateJwks field
+	keySet, err := config.getKeySet()
+	require.NoError(t, err)
+	config.privateJwks = keySet
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().RequestHeaders().Return(fake.NewFakeHeaderMap(map[string][]string{})).AnyTimes()
+
+	var capturedMetadata []byte
+	mockHandle.EXPECT().SetMetadata("jwe-decrypt", "decrypted-payload", gomock.Any()).Do(func(ns, key string, value []byte) {
+		capturedMetadata = value
+	})
+
+	filter := &jweDecryptHttpFilter{
+		config: config,
+		handle: mockHandle,
+	}
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		"Authorization": {"Bearer " + jweToken},
+	})
+
+	status := filter.OnRequestHeaders(headers, false)
+
+	require.Equal(t, shared.HeadersStatusContinue, status)
+	// Metadata should have prefix restored
+	require.Equal(t, []byte("Bearer "+payload), capturedMetadata)
+}
+
+func TestOnRequestHeaders_WithPrefixMultipleValues(t *testing.T) {
+	payload1 := "payload-one"
+	payload2 := "payload-two"
+	jweToken1 := createTestJWE(t, payload1)
+	jweToken2 := createTestJWE(t, payload2)
+
+	config := &jweDecryptConfig{
+		KeyFile:      getTestKeyPath(),
+		InputHeader:  "Authorization",
+		OutputHeader: "x-decrypted",
+		Prefix:       "Bearer ",
+	}
+
+	// Populate the privateJwks field
+	keySet, err := config.getKeySet()
+	require.NoError(t, err)
+	config.privateJwks = keySet
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	requestHeaders := fake.NewFakeHeaderMap(map[string][]string{})
+	mockHandle.EXPECT().RequestHeaders().Return(requestHeaders).AnyTimes()
+
+	filter := &jweDecryptHttpFilter{
+		config: config,
+		handle: mockHandle,
+	}
+
+	// Multiple JWE tokens with prefix
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		"Authorization": {"Bearer " + jweToken1, "Bearer " + jweToken2},
+	})
+
+	status := filter.OnRequestHeaders(headers, false)
+
+	require.Equal(t, shared.HeadersStatusContinue, status)
+	decryptedValues := requestHeaders.Get("x-decrypted")
+	require.Len(t, decryptedValues, 2)
+	// Both should have prefix restored
+	require.Contains(t, decryptedValues, "Bearer "+payload1)
+	require.Contains(t, decryptedValues, "Bearer "+payload2)
+}
+
+func TestOnRequestHeaders_WithEmptyPrefix(t *testing.T) {
+	payload := "test-payload-empty-prefix"
+	jweToken := createTestJWE(t, payload)
+
+	config := &jweDecryptConfig{
+		KeyFile:      getTestKeyPath(),
+		InputHeader:  "x-jwe-token",
+		OutputHeader: "x-decrypted",
+		Prefix:       "", // Empty prefix should be ignored
+	}
+
+	// Populate the privateJwks field
+	keySet, err := config.getKeySet()
+	require.NoError(t, err)
+	config.privateJwks = keySet
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	requestHeaders := fake.NewFakeHeaderMap(map[string][]string{})
+	mockHandle.EXPECT().RequestHeaders().Return(requestHeaders).AnyTimes()
+	mockHandle.EXPECT().SetMetadata(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	filter := &jweDecryptHttpFilter{
+		config: config,
+		handle: mockHandle,
+	}
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		"x-jwe-token": {jweToken},
+	})
+
+	status := filter.OnRequestHeaders(headers, false)
+
+	require.Equal(t, shared.HeadersStatusContinue, status)
+	decryptedValues := requestHeaders.Get("x-decrypted")
+	require.Len(t, decryptedValues, 1)
+	// Should not have any prefix added
+	require.Equal(t, payload, decryptedValues[0])
+}
+
 // Tests for jweDecryptHttpFilterFactory
 
 func TestJweDecryptHttpFilterFactory_Create(t *testing.T) {

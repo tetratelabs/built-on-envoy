@@ -18,11 +18,13 @@ type jweDecryptConfig struct {
 	KeyFile string `json:"key_file"`
 	// InlineKey is the decryption key provided directly in the configuration, in PEM format, base64 encoded.
 	InlineKey string `json:"inline_key"`
-	// InputHeader is the name of the header that contains the JWE string to be decrypted.
+	// InputHeader is the name of the header that contains the JWE string to be decrypted. Defaults to Authorization if not specified.
 	InputHeader string `json:"input_header"`
+	// Prefix is an optional prefix to remove from the input header value before decryption (e.g., "Bearer ").
+	Prefix string `json:"prefix"`
 	// OutputHeader is the name of the header where the decrypted payload will be stored.
 	OutputHeader string `json:"output_header"`
-	// OutputMetadataKey is the key under which the decrypted payload will be stored in the filter state for later use.
+	// OutputMetadataKey is the key under which the decrypted payload will be stored in the request metadata for later use.
 	OutputMetadataKey string `json:"output_metadata_key"`
 
 	privateJwks jwk.Set
@@ -54,7 +56,7 @@ func (c *jweDecryptConfig) getKeySet() (jwk.Set, error) {
 
 // This is the implementation of the HTTP filter.
 type jweDecryptHttpFilter struct {
-	shared.HttpFilter
+	shared.EmptyHttpFilter
 	handle shared.HttpFilterHandle
 	config *jweDecryptConfig
 }
@@ -68,10 +70,22 @@ func (f *jweDecryptHttpFilter) OnRequestHeaders(headers shared.HeaderMap, endStr
 
 	for _, jweValue := range jweHeaderValues {
 		f.handle.Log(shared.LogLevelInfo, "Decrypting: "+jweValue)
-		payload, err := jwe.Decrypt([]byte(jweValue), jwe.WithKeySet(f.config.privateJwks, jwe.WithRequireKid(false)))
+
+		// Handle prefix if specified
+		encrypted := jweValue
+		if f.config.Prefix != "" && len(jweValue) > len(f.config.Prefix) && jweValue[:len(f.config.Prefix)] == f.config.Prefix {
+			encrypted = jweValue[len(f.config.Prefix):]
+		}
+
+		payload, err := jwe.Decrypt([]byte(encrypted), jwe.WithKeySet(f.config.privateJwks, jwe.WithRequireKid(false)))
 		if err != nil {
 			f.handle.Log(shared.LogLevelError, "jwe-decrypt: failed to decrypt JWE: "+err.Error())
 			continue
+		}
+
+		// Put prefix back if it was removed
+		if f.config.Prefix != "" {
+			payload = append([]byte(f.config.Prefix), payload...)
 		}
 
 		if f.config.OutputHeader != "" {
@@ -83,30 +97,6 @@ func (f *jweDecryptHttpFilter) OnRequestHeaders(headers shared.HeaderMap, endStr
 	}
 
 	return shared.HeadersStatusContinue
-}
-
-func (f *jweDecryptHttpFilter) OnStreamComplete() {
-	f.handle.Log(shared.LogLevelInfo, "jwe-decrypt: stream complete")
-}
-
-func (f *jweDecryptHttpFilter) OnRequestBody(body shared.BodyBuffer, endStream bool) shared.BodyStatus {
-	return shared.BodyStatusContinue
-}
-
-func (f *jweDecryptHttpFilter) OnRequestTrailers(trailers shared.HeaderMap) shared.TrailersStatus {
-	return shared.TrailersStatusContinue
-}
-
-func (f *jweDecryptHttpFilter) OnResponseHeaders(headers shared.HeaderMap, endStream bool) shared.HeadersStatus {
-	return shared.HeadersStatusContinue
-}
-
-func (f *jweDecryptHttpFilter) OnResponseBody(body shared.BodyBuffer, endStream bool) shared.BodyStatus {
-	return shared.BodyStatusContinue
-}
-
-func (f *jweDecryptHttpFilter) OnResponseTrailers(trailers shared.HeaderMap) shared.TrailersStatus {
-	return shared.TrailersStatusContinue
 }
 
 // This is the factory for the HTTP filter.
@@ -123,9 +113,8 @@ type JWEDecryptHttpFilterConfigFactory struct {
 	shared.EmptyHttpFilterConfigFactory
 }
 
+// Create parses the JSON configuration and creates a factory for the HTTP filter.
 func (f *JWEDecryptHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
-	// Parse JSON configuration
-	// TODO: To implement your own configuration parsing and validation logic here.
 	if len(config) == 0 {
 		handle.Log(shared.LogLevelError, "jwe-decrypt: empty config")
 		return nil, fmt.Errorf("empty config")
@@ -144,6 +133,11 @@ func (f *JWEDecryptHttpFilterConfigFactory) Create(handle shared.HttpFilterConfi
 		return nil, err
 	}
 	cfg.privateJwks = k
+
+	// Default input header to "Authorization" if not specified
+	if cfg.InputHeader == "" {
+		cfg.InputHeader = "Authorization"
+	}
 
 	return &jweDecryptHttpFilterFactory{config: &cfg}, nil
 }
