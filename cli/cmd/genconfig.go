@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/envoy"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
@@ -48,21 +49,24 @@ func (c *GenConfig) Run(ctx context.Context, dirs *xdg.Directories) error {
 	}
 
 	downloader := &extensions.Downloader{
+		Registry: c.OCI.Registry,
 		Username: c.OCI.Username,
 		Password: c.OCI.Password,
 		Insecure: c.OCI.Insecure,
 		Dirs:     dirs,
+		OS:       runtime.GOOS,
+		Arch:     runtime.GOARCH,
 	}
 
-	downloaded, err := downloadExtensions(ctx, c.OCI.Registry, downloader, c.Extensions)
+	downloaded, err := downloadExtensions(ctx, downloader, c.Extensions)
 	if err != nil {
 		return err
 	}
-
-	c.extensions, err = loadLocalManifests(append(downloaded, c.Local...))
+	local, err := loadLocalManifests(dirs, c.Local, false)
 	if err != nil {
 		return err
 	}
+	c.extensions = append(downloaded, local...) //nolint: gocritic
 
 	var renderer envoy.ConfigRenderer
 	if c.Minimal {
@@ -74,7 +78,7 @@ func (c *GenConfig) Run(ctx context.Context, dirs *xdg.Directories) error {
 	config, err := envoy.RenderConfig(envoy.ConfigGenerationParams{
 		AdminPort:    c.AdminPort,
 		ListenerPort: c.ListenPort,
-		DataHome:     dirs.DataHome,
+		Dirs:         dirs,
 		Extensions:   c.extensions,
 		Configs:      c.Configs,
 	}, renderer)

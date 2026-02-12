@@ -51,7 +51,7 @@ DESCRIPTION      := $(shell grep "^description:" manifest.yaml | sed 's/[^:]*:[[
 TIMESTAMP        := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 COMMIT_SHA       := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
 AUTHOR           := $(shell grep "^author:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-COMPOSER_VERSION := $(shell grep "^composerVersion:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+COMPOSER_VERSION := $(VERSION)
 LICENSE          := Apache-2.0
 
 HUB    := $(OCI_REGISTRY)/built-on-envoy
@@ -105,9 +105,9 @@ build:
 .PHONY: install
 install: build
 	@echo "Installing $(NAME)..."
-	mkdir -p $(BOE_DATA_HOME)/extensions/dym/$(NAME)/$(VERSION); \
-	mv lib$(NAME).so $(BOE_DATA_HOME)/extensions/dym/$(NAME)/$(VERSION)/lib$(NAME).so;
-	@echo "Installed to $(BOE_DATA_HOME)/extensions/dym/$(NAME)"
+	mkdir -p $(BOE_DATA_HOME)/extensions/dym/$(NAME)/build/$(VERSION); \
+	mv lib$(NAME).so $(BOE_DATA_HOME)/extensions/dym/$(NAME)/build/$(VERSION)/lib$(NAME).so;
+	@echo "Installed to $(BOE_DATA_HOME)/extensions/dym/$(NAME)/build"
 
 # For single local platform build, we will add the OS and ARCH to the image tag to avoid confusion.
 # And we will not push it to the registry by default.
@@ -135,7 +135,7 @@ push_image: ## Build and push docker image for the plugin for cross-platform sup
 		-f ./Dockerfile .
 
 # Package source code into an image and push it to the registry.
-CODE_IMAGE := $(HUB)/extension-src-$(NAME):$(VERSION)$(IMAGE_NONCE)
+CODE_IMAGE := $(HUB)/$(NAME)-src:$(VERSION)$(IMAGE_NONCE)
 .PHONY: push_code
 push_code: ## Build and push source code image
 	@echo "Building and pushing source code image..."
