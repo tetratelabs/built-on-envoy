@@ -9,19 +9,16 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"os"
-
-	"github.com/lestrrat-go/jwx/v3/jwe"
-	"github.com/lestrrat-go/jwx/v3/jwk"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
+	boeJwe "github.com/tetratelabs/built-on-envoy/extensions/composer/jwe-decrypt/jwe"
 )
 
 // Config represents the JSON configuration for this filter.
 type jweDecryptConfig struct {
-	// KeyFile is the path to the file containing the decryption key.
+	// KeyFile is the path to the file containing the PKCS8 private key, in PEM format.
 	KeyFile string `json:"key_file"`
-	// InlineKey is the decryption key provided directly in the configuration, in PEM format, base64 encoded.
+	// InlineKey is the PKCS8 private key provided directly in the configuration, in PEM format, base64 encoded.
 	InlineKey string `json:"inline_key"`
 	// InputHeader is the name of the header that contains the JWE string to be decrypted. Defaults to Authorization if not specified.
 	InputHeader string `json:"input_header"`
@@ -32,31 +29,21 @@ type jweDecryptConfig struct {
 	// OutputMetadataKey is the key under which the decrypted payload will be stored in the request metadata for later use.
 	OutputMetadataKey string `json:"output_metadata_key"`
 
-	privateJwks jwk.Set
+	privateKey *boeJwe.Keys
 }
 
-func (c *jweDecryptConfig) getKeySet() (jwk.Set, error) {
-	// Key file
-	if c.KeyFile != "" {
-		bytes, err := os.ReadFile(c.KeyFile)
+func (f *jweDecryptConfig) getKey() (*boeJwe.Keys, error) {
+	if f.KeyFile != "" {
+		return boeJwe.ParsePrivateKeyFromFile(f.KeyFile)
+	} else if f.InlineKey != "" {
+		// base64 decode the inline key before parsing
+		decodedKey, err := base64.StdEncoding.DecodeString(f.InlineKey)
 		if err != nil {
-			return nil, fmt.Errorf("failed to read key file: %w", err)
+			return nil, fmt.Errorf("failed to base64 decode inline key: %w", err)
 		}
-		k, err := jwk.ParseString(string(bytes))
-		return k, nil
+		return boeJwe.ParsePrivateKey(string(decodedKey))
 	}
-
-	// Inline key
-	// base64 decode the inline key before parsing
-	decodedKey, err := base64.StdEncoding.DecodeString(c.InlineKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to base64 decode inline key: %w", err)
-	}
-	k, err := jwk.ParseString(string(decodedKey))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse inline key: %w", err)
-	}
-	return k, nil
+	return nil, fmt.Errorf("no decryption key provided in config")
 }
 
 // This is the implementation of the HTTP filter.
@@ -82,7 +69,7 @@ func (f *jweDecryptHttpFilter) OnRequestHeaders(headers shared.HeaderMap, endStr
 			encrypted = jweValue[len(f.config.Prefix):]
 		}
 
-		payload, err := jwe.Decrypt([]byte(encrypted), jwe.WithKeySet(f.config.privateJwks, jwe.WithRequireKid(false)))
+		payload, err := f.config.privateKey.Decrypt([]byte(encrypted))
 		if err != nil {
 			f.handle.Log(shared.LogLevelError, "jwe-decrypt: failed to decrypt JWE: "+err.Error())
 			continue
@@ -132,12 +119,12 @@ func (f *JWEDecryptHttpFilterConfigFactory) Create(handle shared.HttpFilterConfi
 	}
 
 	// Parse private key from config (either from file or inline)
-	k, err := cfg.getKeySet()
+	k, err := cfg.getKey()
 	if err != nil {
 		handle.Log(shared.LogLevelError, "jwe-decrypt: failed to get decryption key set: "+err.Error())
 		return nil, err
 	}
-	cfg.privateJwks = k
+	cfg.privateKey = k
 
 	// Default input header to "Authorization" if not specified
 	if cfg.InputHeader == "" {

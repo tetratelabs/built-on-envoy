@@ -17,18 +17,19 @@ import (
 	"github.com/lestrrat-go/jwx/v3/jwk"
 )
 
-type KeyInput struct {
+type Keys struct {
 	PrivateKey jwk.Key
 	PublicKey  jwk.Key
 }
 
-func ParseKeys(priv string, pub string) (*KeyInput, error) {
-	keys := &KeyInput{}
+func ParseKeys(priv string, pub string) (*Keys, error) {
+	keys := &Keys{}
 	if priv != "" {
 		privKey, err := ParsePrivateKey(priv)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse private key: %w", err)
 		}
+		privKey.PrivateKey.Set(jwk.AlgorithmKey, jwa.RSA_OAEP)
 		keys.PrivateKey = privKey.PrivateKey
 	}
 	if pub != "" {
@@ -41,13 +42,14 @@ func ParseKeys(priv string, pub string) (*KeyInput, error) {
 	return keys, nil
 }
 
-func ParseKeysFromFile(privFile string, pubFile string) (*KeyInput, error) {
-	keys := &KeyInput{}
+func ParseKeysFromFile(privFile string, pubFile string) (*Keys, error) {
+	keys := &Keys{}
 	if privFile != "" {
 		privKey, err := ParsePrivateKeyFromFile(privFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse private key from file: %w", err)
 		}
+		privKey.PrivateKey.Set(jwk.AlgorithmKey, jwa.RSA_OAEP)
 		keys.PrivateKey = privKey.PrivateKey
 	}
 	if pubFile != "" {
@@ -60,7 +62,7 @@ func ParseKeysFromFile(privFile string, pubFile string) (*KeyInput, error) {
 	return keys, nil
 }
 
-func ParsePrivateKey(keyInput string) (*KeyInput, error) {
+func ParsePrivateKey(keyInput string) (*Keys, error) {
 	if keyInput == "" {
 		return nil, fmt.Errorf("no key input provided")
 	}
@@ -81,10 +83,11 @@ func ParsePrivateKey(keyInput string) (*KeyInput, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to import private key: %w", err)
 	}
-	return &KeyInput{PrivateKey: priv}, nil
+	priv.Set(jwk.AlgorithmKey, jwa.RSA_OAEP)
+	return &Keys{PrivateKey: priv}, nil
 }
 
-func ParsePrivateKeyFromFile(keyFile string) (*KeyInput, error) {
+func ParsePrivateKeyFromFile(keyFile string) (*Keys, error) {
 	keyBytes, err := os.ReadFile(keyFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read key file: %w", err)
@@ -92,7 +95,7 @@ func ParsePrivateKeyFromFile(keyFile string) (*KeyInput, error) {
 	return ParsePrivateKey(string(keyBytes))
 }
 
-func ParsePublicKey(keyInput string) (*KeyInput, error) {
+func ParsePublicKey(keyInput string) (*Keys, error) {
 	if keyInput == "" {
 		return nil, fmt.Errorf("no key input provided")
 	}
@@ -113,10 +116,10 @@ func ParsePublicKey(keyInput string) (*KeyInput, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to import public key: %w", err)
 	}
-	return &KeyInput{PublicKey: priv}, nil
+	return &Keys{PublicKey: priv}, nil
 }
 
-func ParsePublicKeyFromFile(keyFile string) (*KeyInput, error) {
+func ParsePublicKeyFromFile(keyFile string) (*Keys, error) {
 	keyBytes, err := os.ReadFile(keyFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read key file: %w", err)
@@ -124,7 +127,7 @@ func ParsePublicKeyFromFile(keyFile string) (*KeyInput, error) {
 	return ParsePublicKey(string(keyBytes))
 }
 
-func (k *KeyInput) Encrypt(payload []byte) ([]byte, error) {
+func (k *Keys) Encrypt(payload []byte) ([]byte, error) {
 	encrypted, err := jwe.Encrypt([]byte(payload), jwe.WithKey(jwa.RSA_OAEP(), k.PublicKey))
 	if err != nil {
 		fmt.Printf("failed to encrypt payload: %s\n", err)
@@ -133,7 +136,7 @@ func (k *KeyInput) Encrypt(payload []byte) ([]byte, error) {
 	return encrypted, nil
 }
 
-func (k *KeyInput) Decrypt(encrypted []byte) ([]byte, error) {
+func (k *Keys) Decrypt(encrypted []byte) ([]byte, error) {
 	decrypted, err := jwe.Decrypt(encrypted, jwe.WithKey(jwa.RSA_OAEP(), k.PrivateKey))
 	if err != nil {
 		fmt.Printf("failed to decrypt payload: %s\n", err)

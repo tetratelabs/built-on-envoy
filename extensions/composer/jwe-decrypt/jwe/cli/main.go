@@ -47,7 +47,7 @@ func main() {
 		payload      string
 		generateJWKS bool
 
-		keys *boeJwe.KeyInput
+		keys *boeJwe.Keys
 		err  error
 	)
 

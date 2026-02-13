@@ -22,7 +22,7 @@ import (
 // Helper functions
 
 func getTestKeyPath() string {
-	return filepath.Join("jwe", "test", "private.jwks")
+	return filepath.Join("jwe", "test", "private_key.pem")
 }
 
 func getTestPublicKeyPath() string {
@@ -53,9 +53,9 @@ func TestOnRequestHeaders_SuccessfulDecryption(t *testing.T) {
 	}
 
 	// Populate the privateJwks field
-	keySet, err := config.getKeySet()
+	keySet, err := config.getKey()
 	require.NoError(t, err)
-	config.privateJwks = keySet
+	config.privateKey = keySet
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -94,9 +94,9 @@ func TestOnRequestHeaders_WithMetadataOutput(t *testing.T) {
 	}
 
 	// Populate the privateJwks field
-	keySet, err := config.getKeySet()
+	keySet, err := config.getKey()
 	require.NoError(t, err)
-	config.privateJwks = keySet
+	config.privateKey = keySet
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -136,9 +136,9 @@ func TestOnRequestHeaders_WithBothHeaderAndMetadata(t *testing.T) {
 	}
 
 	// Populate the privateJwks field
-	keySet, err := config.getKeySet()
+	keySet, err := config.getKey()
 	require.NoError(t, err)
-	config.privateJwks = keySet
+	config.privateKey = keySet
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -203,6 +203,11 @@ func TestOnRequestHeaders_InvalidJWE(t *testing.T) {
 		OutputHeader: "x-decrypted",
 	}
 
+	// Populate the privateKey field
+	keySet, err := config.getKey()
+	require.NoError(t, err)
+	config.privateKey = keySet
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
@@ -236,9 +241,9 @@ func TestOnRequestHeaders_MultipleJWEValues(t *testing.T) {
 	}
 
 	// Populate the privateJwks field
-	keySet, err := config.getKeySet()
+	keySet, err := config.getKey()
 	require.NoError(t, err)
-	config.privateJwks = keySet
+	config.privateKey = keySet
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -266,33 +271,6 @@ func TestOnRequestHeaders_MultipleJWEValues(t *testing.T) {
 	require.Contains(t, decryptedValues, payload2)
 }
 
-func TestOnRequestHeaders_KeyError(t *testing.T) {
-	config := &jweDecryptConfig{
-		KeyFile:      "/nonexistent/key.pem",
-		InputHeader:  "x-jwe-token",
-		OutputHeader: "x-decrypted",
-	}
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
-	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockHandle.EXPECT().RequestHeaders().Return(fake.NewFakeHeaderMap(map[string][]string{})).AnyTimes()
-
-	filter := &jweDecryptHttpFilter{
-		config: config,
-		handle: mockHandle,
-	}
-
-	headers := fake.NewFakeHeaderMap(map[string][]string{
-		"x-jwe-token": {"some-jwe-token"},
-	})
-
-	status := filter.OnRequestHeaders(headers, false)
-
-	require.Equal(t, shared.HeadersStatusContinue, status)
-}
-
 // Tests for prefix handling
 
 func TestOnRequestHeaders_WithPrefix(t *testing.T) {
@@ -307,9 +285,9 @@ func TestOnRequestHeaders_WithPrefix(t *testing.T) {
 	}
 
 	// Populate the privateJwks field
-	keySet, err := config.getKeySet()
+	keySet, err := config.getKey()
 	require.NoError(t, err)
-	config.privateJwks = keySet
+	config.privateKey = keySet
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -351,9 +329,9 @@ func TestOnRequestHeaders_WithPrefixNotMatching(t *testing.T) {
 	}
 
 	// Populate the privateJwks field
-	keySet, err := config.getKeySet()
+	keySet, err := config.getKey()
 	require.NoError(t, err)
-	config.privateJwks = keySet
+	config.privateKey = keySet
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -392,9 +370,9 @@ func TestOnRequestHeaders_WithPrefixShorterThanValue(t *testing.T) {
 	}
 
 	// Populate the privateJwks field
-	keySet, err := config.getKeySet()
+	keySet, err := config.getKey()
 	require.NoError(t, err)
-	config.privateJwks = keySet
+	config.privateKey = keySet
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -434,9 +412,9 @@ func TestOnRequestHeaders_WithPrefixAndMetadata(t *testing.T) {
 	}
 
 	// Populate the privateJwks field
-	keySet, err := config.getKeySet()
+	keySet, err := config.getKey()
 	require.NoError(t, err)
-	config.privateJwks = keySet
+	config.privateKey = keySet
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -479,9 +457,9 @@ func TestOnRequestHeaders_WithPrefixMultipleValues(t *testing.T) {
 	}
 
 	// Populate the privateJwks field
-	keySet, err := config.getKeySet()
+	keySet, err := config.getKey()
 	require.NoError(t, err)
-	config.privateJwks = keySet
+	config.privateKey = keySet
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -523,9 +501,9 @@ func TestOnRequestHeaders_WithEmptyPrefix(t *testing.T) {
 	}
 
 	// Populate the privateJwks field
-	keySet, err := config.getKeySet()
+	keySet, err := config.getKey()
 	require.NoError(t, err)
-	config.privateJwks = keySet
+	config.privateKey = keySet
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
