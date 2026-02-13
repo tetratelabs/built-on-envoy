@@ -31,56 +31,67 @@ type GenConfig struct {
 	Configs []string `name:"config" sep:"none" help:"Optional JSON config string for extensions. Applied in order to combined --extension and --local flags."`
 	OCI     OCIFlags `embed:""`
 
-	extensions []*extensions.Manifest `kong:"-"` // Internal field: loaded extension manifests
-	output     io.Writer              `kong:"-"` // Internal field for testing
+	extensionPositions extensionPositions `kong:"-"` // Internal field: tracks the original position of extensions specified via both --extension and --local flags
+	output             io.Writer          `kong:"-"` // Internal field for testing
 }
 
 //go:embed genconfig_help.md
 var genConfigHelp string
 
 // Help provides detailed help for the config command.
-func (c *GenConfig) Help() string { return genConfigHelp }
+func (g *GenConfig) Help() string { return genConfigHelp }
+
+// BeforeResolve is called by Kong before resolving the command to save the positions of extensions specified
+// via --extension and --local flags, to ensure they are considered in the expected order.
+func (g *GenConfig) BeforeResolve() error {
+	var err error
+	g.extensionPositions, err = saveExtensionPositions(os.Args)
+	return err
+}
 
 // Run executes the GenConfig command.
-func (c *GenConfig) Run(ctx context.Context, dirs *xdg.Directories) error {
-	out := c.output
+func (g *GenConfig) Run(ctx context.Context, dirs *xdg.Directories) error {
+	out := g.output
 	if out == nil {
 		out = os.Stdout
 	}
 
 	downloader := &extensions.Downloader{
-		Registry: c.OCI.Registry,
-		Username: c.OCI.Username,
-		Password: c.OCI.Password,
-		Insecure: c.OCI.Insecure,
+		Registry: g.OCI.Registry,
+		Username: g.OCI.Username,
+		Password: g.OCI.Password,
+		Insecure: g.OCI.Insecure,
 		Dirs:     dirs,
 		OS:       runtime.GOOS,
 		Arch:     runtime.GOARCH,
 	}
 
-	downloaded, err := downloadExtensions(ctx, downloader, c.Extensions)
+	downloaded, err := downloadExtensions(ctx, downloader, g.Extensions)
 	if err != nil {
 		return err
 	}
-	local, err := loadLocalManifests(dirs, c.Local, false)
+	local, err := loadLocalManifests(dirs, g.Local, false)
 	if err != nil {
 		return err
 	}
-	c.extensions = append(downloaded, local...) //nolint: gocritic
+	extensions, err := g.extensionPositions.sort(append(downloaded, local...))
+	if err != nil {
+		return err
+	}
 
 	var renderer envoy.ConfigRenderer
-	if c.Minimal {
+	if g.Minimal {
 		renderer = envoy.MinimalConfigRenderer
 	} else {
 		renderer = envoy.FullConfigRenderer
 	}
 
 	config, err := envoy.RenderConfig(envoy.ConfigGenerationParams{
-		AdminPort:    c.AdminPort,
-		ListenerPort: c.ListenPort,
+		AdminPort:    g.AdminPort,
+		ListenerPort: g.ListenPort,
 		Dirs:         dirs,
-		Extensions:   c.extensions,
-		Configs:      c.Configs,
+		Extensions:   extensions,
+		Configs:      g.Configs,
 	}, renderer)
 	if err != nil {
 		return err

@@ -13,7 +13,7 @@ import (
 
 // LocalCacheManifest returns the local cache path for the manifest.yaml file of the extension based on the manifest.
 func LocalCacheManifest(dirs *xdg.Directories, manifest *Manifest) string {
-	return filepath.Join(LocalCacheExtensionDir(dirs, manifest), "src", "manifest.yaml")
+	return filepath.Join(LocalCacheExtensionDir(dirs, manifest), "manifest.yaml")
 }
 
 // LocalCacheExtensionDir returns the local cache directory for the given extension manifest.

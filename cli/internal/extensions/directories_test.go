@@ -16,10 +16,10 @@ import (
 func TestLocalCacheManifest(t *testing.T) {
 	dirs := &xdg.Directories{DataHome: "/home/user/.local/share"}
 
-	require.Equal(t, "/home/user/.local/share/extensions/test/1.0.1/src/manifest.yaml",
+	require.Equal(t, "/home/user/.local/share/extensions/test/1.0.1/manifest.yaml",
 		LocalCacheManifest(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: "dynamic_module"}))
 
-	require.Equal(t, "/home/user/.local/share/extensions/goplugin/test/1.0.1/src/manifest.yaml",
+	require.Equal(t, "/home/user/.local/share/extensions/goplugin/test/1.0.1/manifest.yaml",
 		LocalCacheManifest(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: "composer"}))
 }
 

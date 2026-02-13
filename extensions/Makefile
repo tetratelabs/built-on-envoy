@@ -74,6 +74,5 @@ push_lua: create_builder
 		--output type=registry,oci-mediatypes=true$(registry_output) \
 		--provenance=false \
 		$(BASE_OCI_ANNOTATIONS) \
-		--build-arg EXTENSION_PATH=$(EXTENSION_PATH) \
 		--tag $(IMAGE) \
 		--file Dockerfile.lua ./$(EXTENSION_PATH)
