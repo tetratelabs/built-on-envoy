@@ -5,5 +5,5 @@
 
 FROM scratch
 
-COPY ./manifest.yaml /src/manifest.yaml
+COPY ./manifest.yaml /manifest.yaml
 COPY ./libcomposer.so.txt /libcomposer.so

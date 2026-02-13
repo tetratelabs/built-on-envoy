@@ -455,7 +455,12 @@ func TestRunIncomaptibleEnvoyVersion(t *testing.T) {
 		EnvoyVersion: "1.37.0",
 		Local:        []string{"./testdata/input_lua_inline"},
 	}
-	err := r.Run(t.Context(), nil)
+
+	var err error
+	r.extensionPositions, err = saveExtensionPositions([]string{"--local", "./testdata/input_lua_inline"})
+	require.NoError(t, err)
+
+	err = r.Run(t.Context(), nil)
 	require.ErrorIs(t, err, errIncompatibleEnvoyVersion)
 }
 

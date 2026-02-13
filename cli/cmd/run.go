@@ -3,7 +3,6 @@
 // The full text of the Apache license is available in the LICENSE file at
 // the root of the repo.
 
-// Package cmd contains the CLI commands
 package cmd
 
 import (
@@ -12,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"os"
 	"runtime"
 	"slices"
 	"strings"
@@ -40,8 +40,9 @@ type Run struct {
 	Configs []string `name:"config" sep:"none" help:"Optional JSON config string for extensions. Applied in order to combined --extension and --local flags."`
 	OCI     OCIFlags `embed:""`
 
-	defaultLogLevel   string `kong:"-"` // Internal field: parsed defaut log level
-	componentLogLevel string `kong:"-"` // Internal field: parsed component log levels
+	extensionPositions extensionPositions `kong:"-"` // Internal field: tracks the original position of extensions specified via both --extension and --local flags
+	defaultLogLevel    string             `kong:"-"` // Internal field: parsed defaut log level
+	componentLogLevel  string             `kong:"-"` // Internal field: parsed component log levels
 }
 
 // OCIFlags holds flags for OCI registry authentication and configuration.
@@ -57,6 +58,14 @@ var runHelp string
 
 // Help provides detailed help for the run command.
 func (r *Run) Help() string { return runHelp }
+
+// BeforeResolve is called by Kong before resolving the command to save the positions of extensions specified
+// via --extension and --local flags, to ensure they are considered in the expected order.
+func (r *Run) BeforeResolve() error {
+	var err error
+	r.extensionPositions, err = saveExtensionPositions(os.Args)
+	return err
+}
 
 // BeforeApply is called by Kong before applying defaults to set computed default values.
 func (r *Run) BeforeApply() error {
@@ -98,7 +107,10 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories) error {
 	if err != nil {
 		return err
 	}
-	extensions := append(downloaded, local...) //nolint: gocritic
+	extensions, err := r.extensionPositions.sort(append(downloaded, local...))
+	if err != nil {
+		return err
+	}
 
 	// TODO(nacx): Find a way to eagerly get from func-e the Envoy version that will
 	// be used when r.EnvoyVersion is empty, without starting the download or run.

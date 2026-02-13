@@ -5,6 +5,8 @@
 
 FROM scratch
 
-# Copy all extension files from the specified path
-WORKDIR /src
-COPY . .
+# Copy all source files
+COPY . /
+
+# Set working directory metadata
+WORKDIR /

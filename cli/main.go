@@ -29,7 +29,7 @@ func main() {
 		cancel()
 	}()
 
-	kongCtx := kong.Parse(&cmd.CLI{},
+	kongCtx := kong.Parse(cmd.NewCLI(),
 		kong.Name(cmd.CLIName),
 		kong.Description("Built On Envoy CLI - Discover, run, and build custom filters with zero friction"),
 		kong.UsageOnError(),

@@ -5,6 +5,5 @@
 
 FROM scratch
 
-# Copy all extension files from the specified path
-WORKDIR /src
-COPY . .
+# Copy all lua extension files from the specified path
+COPY . /

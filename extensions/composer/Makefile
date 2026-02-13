@@ -110,10 +110,6 @@ create_builder:
 build:
 	CGO_ENABLED=1 go build -buildmode=c-shared -tags $(COMPOSER_BUILD_TAG) -o lib$(NAME).so ./main
 
-.PHONY: test
-test:
-	go test $(GO_TEST_ARGS) ./...
-
 .PHONY: install
 install: build
 	@echo "Installing $(NAME)..."

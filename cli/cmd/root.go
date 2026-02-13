@@ -17,6 +17,11 @@ import (
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
+// NewCLI creates a new instance of the CLI with default values.
+func NewCLI() *CLI {
+	return &CLI{}
+}
+
 // CLIName is the name of the CLI binary.
 const CLIName = "boe"
 

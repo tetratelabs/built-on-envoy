@@ -101,6 +101,14 @@ func TestGenConfig(t *testing.T) {
 				output:     &buf,
 			}
 
+			var args []string
+			var err error
+			for _, local := range tt.local {
+				args = append(args, "--local", local)
+			}
+			cmd.extensionPositions, err = saveExtensionPositions(args)
+			require.NoError(t, err)
+
 			require.NoError(t, cmd.Run(t.Context(), &xdg.Directories{DataHome: t.TempDir()}))
 
 			want, err := os.ReadFile(tt.wantFile)
