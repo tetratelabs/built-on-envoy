@@ -46,7 +46,7 @@ impl FilterConfig {
         // One and only one of deny_addresses and allow_addresses should be set.
         if filter_config.deny_addresses.is_empty() == filter_config.allow_addresses.is_empty() {
             eprintln!(
-                "Error parsing filter config: one and only one of deny_addresses\
+                "Error parsing filter config: one and only one of deny_addresses \
          and allow_addresses should be set"
             );
             return None;
