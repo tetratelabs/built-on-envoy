@@ -3,6 +3,7 @@
 // The full text of the Apache license is available in the LICENSE file at
 // the root of the repo.
 
+// Package impl contains the implementation of the JWE decryption filter.
 package impl
 
 import (
@@ -11,6 +12,7 @@ import (
 	"fmt"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
+
 	boeJwe "github.com/tetratelabs/built-on-envoy/extensions/composer/jwe-decrypt/jwe"
 )
 
@@ -47,13 +49,13 @@ func (f *jweDecryptConfig) getKey() (*boeJwe.Keys, error) {
 }
 
 // This is the implementation of the HTTP filter.
-type jweDecryptHttpFilter struct {
+type jweDecryptHttpFilter struct { //nolint:revive
 	shared.EmptyHttpFilter
 	handle shared.HttpFilterHandle
 	config *jweDecryptConfig
 }
 
-func (f *jweDecryptHttpFilter) OnRequestHeaders(headers shared.HeaderMap, endStream bool) shared.HeadersStatus {
+func (f *jweDecryptHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) shared.HeadersStatus {
 	jweHeaderValues := headers.Get(f.config.InputHeader)
 	if len(jweHeaderValues) == 0 {
 		f.handle.Log(shared.LogLevelInfo, "jwe-decrypt: no JWE found in header "+f.config.InputHeader)
@@ -92,7 +94,7 @@ func (f *jweDecryptHttpFilter) OnRequestHeaders(headers shared.HeaderMap, endStr
 }
 
 // This is the factory for the HTTP filter.
-type jweDecryptHttpFilterFactory struct {
+type jweDecryptHttpFilterFactory struct { //nolint:revive
 	config *jweDecryptConfig
 }
 
@@ -100,8 +102,8 @@ func (f *jweDecryptHttpFilterFactory) Create(handle shared.HttpFilterHandle) sha
 	return &jweDecryptHttpFilter{handle: handle, config: f.config}
 }
 
-// This is the configuration factory for the HTTP filter.
-type JWEDecryptHttpFilterConfigFactory struct {
+// JWEDecryptHttpFilterConfigFactory is the configuration factory for the HTTP filter.
+type JWEDecryptHttpFilterConfigFactory struct { //nolint:revive
 	shared.EmptyHttpFilterConfigFactory
 }
 
@@ -135,7 +137,7 @@ func (f *JWEDecryptHttpFilterConfigFactory) Create(handle shared.HttpFilterConfi
 }
 
 // WellKnownHttpFilterConfigFactories is used to load the plugin.
-func WellKnownHttpFilterConfigFactories() map[string]shared.HttpFilterConfigFactory {
+func WellKnownHttpFilterConfigFactories() map[string]shared.HttpFilterConfigFactory { //nolint:revive
 	return map[string]shared.HttpFilterConfigFactory{
 		"jwe-decrypt": &JWEDecryptHttpFilterConfigFactory{},
 	}

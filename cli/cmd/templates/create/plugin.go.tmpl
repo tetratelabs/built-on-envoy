@@ -1,3 +1,4 @@
+// Package impl contains the implementation of the {{ .Name }} extension.
 package impl
 
 import (
@@ -7,7 +8,7 @@ import (
 )
 
 // Config represents the JSON configuration for this filter.
-type customHttpFilterConfig struct {
+type customHttpFilterConfig struct { //nolint:revive
 	HeaderValue string `json:"header_value"`
 }
 
@@ -58,7 +59,7 @@ func (f *customHttpFilterFactory) Create(handle shared.HttpFilterHandle) shared.
 }
 
 // This is the configuration factory for the HTTP filter.
-type CustomHttpFilterConfigFactory struct {
+type CustomHttpFilterConfigFactory struct { //nolint:revive
 	shared.EmptyHttpFilterConfigFactory
 }
 
@@ -79,7 +80,7 @@ func (f *CustomHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHan
 }
 
 // WellKnownHttpFilterConfigFactories is used to load the plugin.
-func WellKnownHttpFilterConfigFactories() map[string]shared.HttpFilterConfigFactory {
+func WellKnownHttpFilterConfigFactories() map[string]shared.HttpFilterConfigFactory { //nolint:revive
 	return map[string]shared.HttpFilterConfigFactory{
 		"{{ .Name }}": &CustomHttpFilterConfigFactory{},
 	}

@@ -7,10 +7,9 @@
 package composer
 
 import (
-	// Example built-in plugin.
-	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/example/embedded"
+	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/example/embedded" // Example built-in plugin.
 	// Go plugin to loader other composer plugins that be compiled into separate shared libraries.
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/goplugin"
-	// WAF plugin.
-	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/waf/embedded"
+	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/jwe-decrypt/embedded" // JWE decryption plugin.
+	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/waf/embedded"         // WAF plugin.
 )

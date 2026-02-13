@@ -141,7 +141,7 @@ aW52YWxpZCBjb250ZW50
 
 	require.Error(t, err)
 	require.Nil(t, keyInput)
-	require.Contains(t, err.Error(), "failed to parse PKCS8 private key")
+	require.Contains(t, err.Error(), "failed to parse PKIX public key")
 }
 
 // Tests for ParsePublicKeyFromFile

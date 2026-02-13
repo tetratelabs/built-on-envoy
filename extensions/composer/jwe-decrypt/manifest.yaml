@@ -4,7 +4,7 @@
 # the root of the repo.
 
 name: jwe-decrypt
-version: 0.0.1
+parent: composer
 categories:
   - Security
 author: Tetrate
@@ -15,7 +15,6 @@ longDescription: |
   payload as a new header or Envoy metadata key for downstream processing.
 type: composer
 featured: true
-composerVersion: 0.2.1
 tags:
   - go
   - http

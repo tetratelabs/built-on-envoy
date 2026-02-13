@@ -10,13 +10,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	boeJwe "github.com/tetratelabs/built-on-envoy/extensions/composer/jwe-decrypt/jwe"
-
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/fake"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+
+	boeJwe "github.com/tetratelabs/built-on-envoy/extensions/composer/jwe-decrypt/jwe"
 )
 
 // Helper functions
@@ -105,7 +105,7 @@ func TestOnRequestHeaders_WithMetadataOutput(t *testing.T) {
 	mockHandle.EXPECT().RequestHeaders().Return(fake.NewFakeHeaderMap(map[string][]string{})).AnyTimes()
 
 	var capturedMetadata []byte
-	mockHandle.EXPECT().SetMetadata("jwe-decrypt", "decrypted-payload", gomock.Any()).Do(func(ns, key string, value []byte) {
+	mockHandle.EXPECT().SetMetadata("jwe-decrypt", "decrypted-payload", gomock.Any()).Do(func(_, _ string, value []byte) {
 		capturedMetadata = value
 	})
 
@@ -149,7 +149,7 @@ func TestOnRequestHeaders_WithBothHeaderAndMetadata(t *testing.T) {
 	mockHandle.EXPECT().RequestHeaders().Return(requestHeaders).AnyTimes()
 
 	var capturedMetadata []byte
-	mockHandle.EXPECT().SetMetadata("jwe-decrypt", "decrypted-payload", gomock.Any()).Do(func(ns, key string, value []byte) {
+	mockHandle.EXPECT().SetMetadata("jwe-decrypt", "decrypted-payload", gomock.Any()).Do(func(_, _ string, value []byte) {
 		capturedMetadata = value
 	})
 
@@ -397,7 +397,7 @@ func TestOnRequestHeaders_WithPrefixShorterThanValue(t *testing.T) {
 	require.Equal(t, shared.HeadersStatusContinue, status)
 	// Should have no decrypted values since decryption failed
 	decryptedValues := requestHeaders.Get("x-decrypted")
-	require.Len(t, decryptedValues, 0)
+	require.Empty(t, decryptedValues)
 }
 
 func TestOnRequestHeaders_WithPrefixAndMetadata(t *testing.T) {
@@ -423,7 +423,7 @@ func TestOnRequestHeaders_WithPrefixAndMetadata(t *testing.T) {
 	mockHandle.EXPECT().RequestHeaders().Return(fake.NewFakeHeaderMap(map[string][]string{})).AnyTimes()
 
 	var capturedMetadata []byte
-	mockHandle.EXPECT().SetMetadata("jwe-decrypt", "decrypted-payload", gomock.Any()).Do(func(ns, key string, value []byte) {
+	mockHandle.EXPECT().SetMetadata("jwe-decrypt", "decrypted-payload", gomock.Any()).Do(func(_, _ string, value []byte) {
 		capturedMetadata = value
 	})
 
