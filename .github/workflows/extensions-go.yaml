@@ -32,8 +32,6 @@ jobs:
         run: make build
       
       - name: Build plugins
-        env:
-          EXTENSION_PATH: example-go/standalone
         run: make build_plugins
       
       - name: Run tests
