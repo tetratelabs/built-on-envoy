@@ -56,6 +56,14 @@ jobs:
       - run: make -C ../cli gen 
       - run: npm ci
       - run: npm run build
+  
+  publish:
+    needs: website
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Netlify Build
+        run: curl -X POST -d '{}' ${{ secrets.NETLIFY_BUILD_HOOK }}
 
   # Aggregate all the required jobs and make it easier to customize CI required jobs
   website-checks:
