@@ -13,6 +13,7 @@ import (
 	"maps"
 	"os"
 	"plugin"
+	"runtime"
 	"runtime/debug"
 	"slices"
 	"strings"
@@ -142,7 +143,7 @@ func loadGoPlugin(moduleConfig []byte) (Config, []byte, error) {
 		return Config{}, nil, fmt.Errorf("failed to load go plugin config from module config: %w", err)
 	}
 
-	// Set the default avlue after reading
+	// Set the default value after reading
 	if goPlugin.StrictCheck == nil {
 		strictCheck := true
 		goPlugin.StrictCheck = &strictCheck
@@ -161,18 +162,44 @@ func loadGoPlugin(moduleConfig []byte) (Config, []byte, error) {
 	return goPlugin, innerConfigJSON, nil
 }
 
-// TODO(wbpcode): when migrating this from extensibility to built-on-envoy, we removed
-// remote image fetching support temporarily to keep code tree clean. Re-add it later.
-func fetchGoPluginPath(pluginURL string, _ string) (string, error) {
+// fetchGoPluginPath fetches the plugin binary from the given URL.
+// Supports file:// URLs for local files and OCI image references for remote registries.
+func fetchGoPluginPath(pluginURL string) (string, error) {
 	if strings.HasPrefix(pluginURL, "file://") {
 		binaryPath := strings.TrimPrefix(pluginURL, "file://")
 		return binaryPath, nil
 	}
+
+	// Reject clearly unsupported URL schemes
+	if strings.HasPrefix(pluginURL, "http://") || strings.HasPrefix(pluginURL, "https://") ||
+		strings.HasPrefix(pluginURL, "ftp://") {
+		return "", fmt.Errorf("unsupported plugin URL: %s", pluginURL)
+	}
+
+	// Handle OCI image references (must contain "/" to be valid registry path)
+	if strings.Contains(pluginURL, "/") {
+		// This looks like an OCI image reference
+		pluginData, err := fetchImageFromRegistry(pluginURL)
+		if err != nil {
+			return "", fmt.Errorf("failed to fetch from registry: %w", err)
+		}
+
+		// Save to a temporary file
+		platform := runtime.GOOS
+		arch := runtime.GOARCH
+		tmpPath, err := saveCachedPlugin(pluginURL, platform, arch, pluginData)
+		if err != nil {
+			return "", fmt.Errorf("failed to save plugin: %w", err)
+		}
+
+		return tmpPath, nil
+	}
+
 	return "", fmt.Errorf("unsupported plugin URL: %s", pluginURL)
 }
 
 func loadPluginImpl(name, url string, strictCheck bool) (shared.HttpFilterConfigFactory, error) {
-	binaryPath, err := fetchGoPluginPath(url, name)
+	binaryPath, err := fetchGoPluginPath(url)
 	if err != nil || binaryPath == "" {
 		return nil, fmt.Errorf("failed to fetch plugin image: %w", err)
 	}

@@ -10,6 +10,7 @@ type Config struct {
 	// Name of the dynamic module plugin
 	Name string `json:"name"`
 	// URL to fetch the plugin if it is a custom plugin
+	// Supports file:// URLs for local files and OCI image references for remote registries
 	URL string `json:"url"`
 	// Config is an optional plugin configuration
 	Config map[string]any `json:"config,omitempty"`
