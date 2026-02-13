@@ -139,9 +139,6 @@ func TestDynamicModuleFilterGenerator(t *testing.T) {
 		Remote:  true,
 	}
 
-	// The module name uses the library name (with underscores, without lib prefix and .so extension)
-	libName := "test_dynamic_module"
-
 	// Case 1: Generate config for Rust dynamic module
 	got, err := GenerateFilterConfig(manifest, dirs, "")
 	require.NoError(t, err)
@@ -154,7 +151,7 @@ func TestDynamicModuleFilterGenerator(t *testing.T) {
 					TypedConfig: func() *anypb.Any {
 						dymConfig := &dymhttpv3.DynamicModuleFilter{
 							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-								Name:         libName,
+								Name:         manifest.Name,
 								LoadGlobally: false,
 							},
 							FilterName: manifest.Name,
@@ -183,7 +180,7 @@ func TestDynamicModuleFilterGenerator(t *testing.T) {
 					TypedConfig: func() *anypb.Any {
 						dymConfig := &dymhttpv3.DynamicModuleFilter{
 							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-								Name:         libName,
+								Name:         manifest.Name,
 								LoadGlobally: false,
 							},
 							FilterName: manifest.Name,
