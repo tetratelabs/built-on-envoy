@@ -133,22 +133,16 @@ end
 func TestDynamicModuleFilterGenerator(t *testing.T) {
 	dirs := &xdg.Directories{DataHome: t.TempDir()}
 	manifest := &extensions.Manifest{
-		Name:            "test-dynamic-module",
-		Type:            extensions.TypeDynamicModule,
-		Version:         "v1.0.0",
-		ComposerVersion: "v1.0.0",
-		Remote:          true,
+		Name:    "test-dynamic-module",
+		Type:    extensions.TypeDynamicModule,
+		Version: "v1.0.0",
+		Remote:  true,
 	}
 
-	// Case 1: Composer binary missing
-	_, err := GenerateFilterConfig(manifest, dirs, "")
-	require.ErrorContains(t, err, "composer binary not found")
+	// The module name uses the library name (with underscores, without lib prefix and .so extension)
+	libName := "test_dynamic_module"
 
-	// Case 2: Composer binary exists
-	composerPath := extensions.LocalCacheComposerDir(dirs, manifest.ComposerVersion, !manifest.Remote)
-	require.NoError(t, os.MkdirAll(composerPath, 0o750))
-	require.NoError(t, os.WriteFile(filepath.Join(composerPath, "libcomposer.so"), []byte("fake binary"), 0o600))
-
+	// Case 1: Generate config for Rust dynamic module
 	got, err := GenerateFilterConfig(manifest, dirs, "")
 	require.NoError(t, err)
 
@@ -160,8 +154,8 @@ func TestDynamicModuleFilterGenerator(t *testing.T) {
 					TypedConfig: func() *anypb.Any {
 						dymConfig := &dymhttpv3.DynamicModuleFilter{
 							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-								Name:         "composer",
-								LoadGlobally: true,
+								Name:         libName,
+								LoadGlobally: false,
 							},
 							FilterName: manifest.Name,
 						}
@@ -176,7 +170,7 @@ func TestDynamicModuleFilterGenerator(t *testing.T) {
 
 	checkProtos(t, want.HTTPFilters, got.HTTPFilters)
 
-	// Case 3: Success with config
+	// Case 2: Success with config
 	configJSON := `{"key":"value","nested":{"foo":"bar"}}`
 	got, err = GenerateFilterConfig(manifest, dirs, configJSON)
 	require.NoError(t, err, "GenerateFilterConfig with config failed")
@@ -189,8 +183,8 @@ func TestDynamicModuleFilterGenerator(t *testing.T) {
 					TypedConfig: func() *anypb.Any {
 						dymConfig := &dymhttpv3.DynamicModuleFilter{
 							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-								Name:         "composer",
-								LoadGlobally: true,
+								Name:         libName,
+								LoadGlobally: false,
 							},
 							FilterName: manifest.Name,
 							FilterConfig: func() *anypb.Any {

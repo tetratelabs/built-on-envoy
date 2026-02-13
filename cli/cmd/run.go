@@ -212,14 +212,22 @@ func loadLocalManifests(dirs *xdg.Directories, paths []string, build bool) ([]*e
 			return nil, fmt.Errorf("%w from %s: %w", errFailedToLoadLocalManifest, path, err)
 		}
 
-		if build && manifest.Type == "composer" {
-			// Rebuild the extension from the given path
-			if err := extensions.BuildExtensionFromPath(dirs, manifest, path); err != nil {
-				return nil, err
-			}
-			// Ensure libcomposer is built before running any extensions that may depend on it.
-			if err := extensions.CheckOrBuildLibComposer(dirs, false); err != nil {
-				return nil, err
+		if build {
+			switch manifest.Type {
+			case extensions.TypeComposer:
+				// Rebuild the extension from the given path
+				if err := extensions.BuildExtensionFromPath(dirs, manifest, path); err != nil {
+					return nil, err
+				}
+				// Ensure libcomposer is built before running any extensions that may depend on it.
+				if err := extensions.CheckOrBuildLibComposer(dirs, false); err != nil {
+					return nil, err
+				}
+			case extensions.TypeDynamicModule:
+				// Build dynamic module (currently supports Rust)
+				if err := extensions.CheckOrBuildDynamicModule(dirs, manifest, path); err != nil {
+					return nil, err
+				}
 			}
 		}
 

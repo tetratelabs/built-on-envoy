@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strings"
 
 	clusterv3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
@@ -122,15 +123,11 @@ func (w WasmFilterGenerator) GenerateFilterConfig(*extensions.Manifest, *xdg.Dir
 }
 
 // GenerateFilterConfig generates the filter configuration for Dynamic Module extensions.
-func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, dirs *xdg.Directories, config string) (*ExtensionResources, error) {
-	// TODO(wbpcode): For now, we only support Composer dynamic modules because all golang dynamic
-	// modules will be compiled into the same binary.
-	// Once we support other dynamic modules, we need to differentiate them here.
-	cachedComposerPath := extensions.LocalCacheComposerLib(dirs, manifest.Version, !manifest.Remote)
-	if _, err := os.Stat(cachedComposerPath); os.IsNotExist(err) {
-		// TODO(wbpcode): Download the composer binary from the URL specified in the manifest.
-		return nil, fmt.Errorf("composer binary not found at %s", cachedComposerPath)
-	}
+func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, _ *xdg.Directories, config string) (*ExtensionResources, error) {
+	// Convert manifest name to library name.
+	// Rust/Cargo converts dashes to underscores in library file names.
+	// For example, "ip-restriction" becomes "ip_restriction".
+	libName := strings.ReplaceAll(manifest.Name, "-", "_")
 
 	var anyConfig *anypb.Any
 
@@ -144,15 +141,17 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 		anyConfig, _ = anypb.New(configStringValue)
 	}
 
+	// Use the library name (with underscores) as the dynamic module config name.
+	// This is the identifier Envoy uses to reference the loaded module.
 	protoConfig := &dymhttpv3.DynamicModuleFilter{
 		DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-			Name:         "composer",
-			LoadGlobally: true,
+			Name:         libName,
+			LoadGlobally: false,
 		},
 		FilterName:   manifest.Name,
 		FilterConfig: anyConfig,
 	}
-	composerAny, err := anypb.New(protoConfig)
+	dynamicModuleAny, err := anypb.New(protoConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal dynamic module filter to Any: %w", err)
 	}
@@ -162,7 +161,7 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 			{
 				Name: manifest.Name,
 				ConfigType: &hcmv3.HttpFilter_TypedConfig{
-					TypedConfig: composerAny,
+					TypedConfig: dynamicModuleAny,
 				},
 			},
 		},

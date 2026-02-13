@@ -176,7 +176,7 @@ fn new_http_filter_config_fn<EC: EnvoyHttpFilterConfig, EHF: EnvoyHttpFilter>(
 ) -> Option<Box<dyn HttpFilterConfig<EHF>>> {
     let filter_config = std::str::from_utf8(filter_config).unwrap();
     match filter_name {
-        "ip_restriction" => FilterConfig::new(filter_config)
+        "ip-restriction" => FilterConfig::new(filter_config)
             .map(|config| Box::new(config) as Box<dyn HttpFilterConfig<EHF>>),
         _ => panic!("Unknown filter name: {filter_name}"),
     }

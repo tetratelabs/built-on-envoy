@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	funce "github.com/tetratelabs/func-e"
@@ -57,10 +58,15 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
-	// For now only golang dynamic modules are supported and will be built into same libcomposer.so.
-	// So, only need to expose path of libcomposer.so to Envoy.
-	// TODO(wbpcode): make this more general when other dynamic module types are supported.
-	err = os.Setenv("ENVOY_DYNAMIC_MODULES_SEARCH_PATH", dynamicModuleSearchPath(params))
+	// Create a temporary directory with hard links to all dynamic module libraries
+	// TODO(wbpcode): once Envoy support to specify lib path directly, we can remove this hack.
+	searchPath, cleanup, err := setupDynamicModuleSearchPath(params)
+	if err != nil {
+		return fmt.Errorf("failed to setup dynamic module search path: %w", err)
+	}
+	defer cleanup()
+
+	err = os.Setenv("ENVOY_DYNAMIC_MODULES_SEARCH_PATH", searchPath)
 	if err != nil {
 		return fmt.Errorf("failed to set ENVOY_DYNAMIC_MODULES_SEARCH_PATH: %w", err)
 	}
@@ -120,16 +126,60 @@ Press Ctrl+C to stop
 	return funce.Run(ctx, args, opts...)
 }
 
-// dynamicModuleSearchPath returns the path to search for dynamic modules based on the extensions
-// used in the config generation params.
-func dynamicModuleSearchPath(params ConfigGenerationParams) string {
-	localExtensions := false
+// setupDynamicModuleSearchPath creates a temporary directory and populates it with hard links
+// to all dynamic module libraries (both composer and Rust dynamic modules).
+// Returns the path to the temporary directory and a cleanup function.
+func setupDynamicModuleSearchPath(params ConfigGenerationParams) (string, func(), error) {
+	// Create a temporary directory under /tmp for dynamic module libraries
+	tempDir, err := os.MkdirTemp("/tmp", "boe-dynamic-modules-*")
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to create temporary directory: %w", err)
+	}
+
+	cleanup := func() {
+		_ = os.RemoveAll(tempDir)
+	}
+
+	// Collect all dynamic module libraries that need to be linked
+	var hasComposer bool
+	var composerIsLocal bool
+
 	for _, ext := range params.Extensions {
-		if ext.Type == "composer" && !ext.Remote {
-			localExtensions = true
-			break
+		switch ext.Type {
+		case extensions.TypeComposer:
+			hasComposer = true
+			if !ext.Remote {
+				composerIsLocal = true
+			}
+
+		case extensions.TypeDynamicModule:
+			// Get the path to the Rust dynamic module library
+			libPath := extensions.LocalCacheExtension(params.Dirs, ext)
+			if _, err := os.Stat(libPath); os.IsNotExist(err) {
+				cleanup()
+				return "", nil, fmt.Errorf("library not found at %s for extension %s", libPath, ext.Name)
+			}
+
+			// Create hard link in the temporary directory
+			linkPath := filepath.Join(tempDir, filepath.Base(libPath))
+			if err := os.Link(libPath, linkPath); err != nil {
+				cleanup()
+				return "", nil, fmt.Errorf("failed to create hard link for %s: %w", ext.Name, err)
+			}
 		}
 	}
 
-	return extensions.LocalCacheComposerDir(params.Dirs, extensions.LibComposerVersion, localExtensions)
+	// If there are composer extensions, link libcomposer.so as well
+	if hasComposer {
+		composerPath := extensions.LocalCacheComposerLib(params.Dirs, extensions.LibComposerVersion, composerIsLocal)
+		if _, err := os.Stat(composerPath); err == nil {
+			linkPath := filepath.Join(tempDir, filepath.Base(composerPath))
+			if err := os.Link(composerPath, linkPath); err != nil {
+				cleanup()
+				return "", nil, fmt.Errorf("failed to create hard link for libcomposer: %w", err)
+			}
+		}
+	}
+
+	return tempDir, cleanup, nil
 }
