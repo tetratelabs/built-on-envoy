@@ -27,6 +27,7 @@ func CreateBuildxBuilder(t *testing.T) string {
 	createBuilderCmd := exec.CommandContext(t.Context(), "docker", "buildx", "create",
 		"--name", builderName,
 		"--use",
+		"--driver", "docker-container",
 		"--driver-opt", "network=host",
 	)
 	output, err := createBuilderCmd.CombinedOutput()
