@@ -76,6 +76,9 @@ type ConditionalSchema struct {
 // ConditionIf represents the if condition.
 type ConditionIf struct {
 	Properties map[string]*ConditionProperty `json:"properties"`
+	Required   []string                      `json:"required"`
+	Not        *ConditionIf                  `json:"not"`
+	AllOf      []*ConditionIf                `json:"allOf"`
 }
 
 // ConditionProperty represents a property condition.
@@ -85,7 +88,8 @@ type ConditionProperty struct {
 
 // ConditionThen represents the then clause.
 type ConditionThen struct {
-	Required []string `json:"required"`
+	Required   []string       `json:"required"`
+	Properties map[string]any `json:"properties"`
 }
 
 // ConditionElse represents the else clause.
@@ -266,19 +270,10 @@ func convertProperty(name string, prop *Property, required bool, allOf []*Condit
 
 	// Check for conditional requirements in allOf
 	for _, cond := range allOf {
-		if cond.If != nil && cond.Then != nil {
-			for _, thenReq := range cond.Then.Required {
-				if thenReq == name {
-					// Find the condition
-					for condProp, condVal := range cond.If.Properties {
-						constraints = append(constraints, Constraint{
-							Name:  "Required when",
-							Value: fmt.Sprintf("`%s` is `%s`", condProp, condVal.Const),
-						})
-					}
-				}
-			}
+		if cond.If == nil || cond.Then == nil {
+			continue
 		}
+		constraints = append(constraints, conditionalConstraints(name, cond)...)
 	}
 
 	docProp.Constraints = constraints
@@ -320,6 +315,136 @@ func convertProperty(name string, prop *Property, required bool, allOf []*Condit
 	}
 
 	return docProp
+}
+
+// conditionalConstraints returns constraints for a property based on a conditional allOf rule.
+func conditionalConstraints(name string, cond *ConditionalSchema) []Constraint {
+	var constraints []Constraint
+
+	// Check if this property is required by the "then" clause
+	thenRequires := false
+	for _, r := range cond.Then.Required {
+		if r == name {
+			thenRequires = true
+			break
+		}
+	}
+
+	// Check if this property is forbidden by the "then" clause (property set to false)
+	thenForbids := false
+	if cond.Then.Properties != nil {
+		if v, ok := cond.Then.Properties[name]; ok {
+			if b, ok := v.(bool); ok && !b {
+				thenForbids = true
+			}
+		}
+	}
+
+	if !thenRequires && !thenForbids {
+		return nil
+	}
+
+	condDesc := describeCondition(cond.If)
+	if condDesc == "" {
+		return nil
+	}
+
+	if thenRequires {
+		constraints = append(constraints, Constraint{
+			Name:  "Required when",
+			Value: condDesc,
+		})
+	}
+	if thenForbids {
+		constraints = append(constraints, Constraint{
+			Name:  "Forbidden when",
+			Value: condDesc,
+		})
+	}
+
+	return constraints
+}
+
+// describeCondition returns a human-readable description of an if condition.
+func describeCondition(cif *ConditionIf) string {
+	if cif == nil {
+		return ""
+	}
+
+	// Handle "not" conditions: e.g. { "not": { "required": ["parent"] } }
+	if cif.Not != nil {
+		return describeNegatedCondition(cif.Not)
+	}
+
+	// Handle "allOf" compound conditions
+	if len(cif.AllOf) > 0 {
+		var parts []string
+		for _, sub := range cif.AllOf {
+			desc := describeCondition(sub)
+			if desc != "" {
+				parts = append(parts, desc)
+			}
+		}
+		if len(parts) == 0 {
+			return ""
+		}
+		return strings.Join(parts, " and ")
+	}
+
+	// Handle "required" conditions: e.g. { "required": ["parent"] }
+	if len(cif.Required) > 0 {
+		parts := make([]string, len(cif.Required))
+		for i, r := range cif.Required {
+			parts[i] = fmt.Sprintf("`%s` is set", r)
+		}
+		return strings.Join(parts, " and ")
+	}
+
+	// Handle "properties" with "const": e.g. { "properties": { "type": { "const": "lua" } } }
+	if len(cif.Properties) > 0 {
+		var parts []string
+		for prop, val := range cif.Properties {
+			parts = append(parts, fmt.Sprintf("`%s` is `%s`", prop, val.Const))
+		}
+		sort.Strings(parts)
+		return strings.Join(parts, " and ")
+	}
+
+	return ""
+}
+
+// describeNegatedCondition returns a human-readable description of a negated condition.
+// Instead of "not(`parent` is set)", it produces "`parent` is not set".
+func describeNegatedCondition(cif *ConditionIf) string {
+	if cif == nil {
+		return ""
+	}
+
+	// Negate "required" → "is not set"
+	if len(cif.Required) > 0 {
+		parts := make([]string, len(cif.Required))
+		for i, r := range cif.Required {
+			parts[i] = fmt.Sprintf("`%s` is not set", r)
+		}
+		return strings.Join(parts, " and ")
+	}
+
+	// Negate "properties.const" → "is not"
+	if len(cif.Properties) > 0 {
+		var parts []string
+		for prop, val := range cif.Properties {
+			parts = append(parts, fmt.Sprintf("`%s` is not `%s`", prop, val.Const))
+		}
+		sort.Strings(parts)
+		return strings.Join(parts, " and ")
+	}
+
+	// Fallback: wrap the positive description
+	inner := describeCondition(cif)
+	if inner == "" {
+		return ""
+	}
+	return "not(" + inner + ")"
 }
 
 // getTypeString returns a human-readable type string from a property.

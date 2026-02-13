@@ -20,6 +20,9 @@ const (
 	DefaultOCISource = "https://github.com/tetratelabs/built-on-envoy"
 	// OCIAnnotationExtensionType is the OCI annotation key for the extension type.
 	OCIAnnotationExtensionType = "io.tetratelabs.built-on-envoy.extension.type"
+	// OCIAnnotationComposerVersion is the OCI annotation key for the composer version that
+	// the extension depends on, if any.
+	OCIAnnotationComposerVersion = "io.tetratelabs.built-on-envoy.extension.composer_version"
 )
 
 // RepositoryName constructs the repository name for an extension based
@@ -49,17 +52,19 @@ func OCIAnnotationsForManifest(manifest *Manifest) map[string]string {
 		ocispec.AnnotationAuthors:     manifest.Author,
 		ocispec.AnnotationLicenses:    manifest.License,
 		OCIAnnotationExtensionType:    string(manifest.Type),
+		OCIAnnotationComposerVersion:  manifest.ComposerVersion,
 	}
 }
 
 // ManifestFromOCI converts an OCI manifest to an extension manifest.
 func ManifestFromOCI(manifest *ocispec.Manifest) *Manifest {
 	return &Manifest{
-		Name:        manifest.Annotations[ocispec.AnnotationTitle],
-		Description: manifest.Annotations[ocispec.AnnotationDescription],
-		Version:     manifest.Annotations[ocispec.AnnotationVersion],
-		Author:      manifest.Annotations[ocispec.AnnotationAuthors],
-		License:     manifest.Annotations[ocispec.AnnotationLicenses],
-		Type:        Type(manifest.Annotations[OCIAnnotationExtensionType]),
+		Name:            manifest.Annotations[ocispec.AnnotationTitle],
+		Description:     manifest.Annotations[ocispec.AnnotationDescription],
+		Version:         manifest.Annotations[ocispec.AnnotationVersion],
+		ComposerVersion: manifest.Annotations[OCIAnnotationComposerVersion],
+		Author:          manifest.Annotations[ocispec.AnnotationAuthors],
+		License:         manifest.Annotations[ocispec.AnnotationLicenses],
+		Type:            Type(manifest.Annotations[OCIAnnotationExtensionType]),
 	}
 }

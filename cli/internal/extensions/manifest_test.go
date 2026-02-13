@@ -16,12 +16,11 @@ import (
 )
 
 func TestAllManifestsAreValid(t *testing.T) {
-	for _, manifest := range Manifests {
-		assert.NoErrorf(t, ValidateManifest(manifest), "manifest: %s", manifest.Name)
-	}
+	_, err := loadManifests(manifestFS, true)
+	require.NoError(t, err)
 }
 
-func TestAllMAnifestsAreLoaded(t *testing.T) {
+func TestAllManifestsAreLoaded(t *testing.T) {
 	count := 0
 	err := fs.WalkDir(manifestFS, "manifests", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -46,6 +45,7 @@ func TestValidateComposerManifest(t *testing.T) {
 		{"composer_empty_version.yaml", "", true},
 		{"composer_invalid_version.yaml", "", true},
 		{"composer_missing_version.yaml", "", true},
+		{"composer_missing_composer_version.yaml", "", true},
 		{"composer_valid.yaml", "1.2.3", false},
 	}
 
@@ -53,9 +53,6 @@ func TestValidateComposerManifest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			manifestPath := filepath.Join("testdata", tt.name)
 			localManifest, err := LoadLocalManifest(manifestPath)
-			require.NoError(t, err)
-
-			err = ValidateManifest(localManifest)
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {
@@ -88,9 +85,6 @@ end
 		t.Run(tt.name, func(t *testing.T) {
 			manifestPath := filepath.Join("testdata", tt.name)
 			localManifest, err := LoadLocalManifest(manifestPath)
-			require.NoError(t, err)
-
-			err = ValidateManifest(localManifest)
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {
@@ -258,22 +252,17 @@ func TestValidateParentManifest(t *testing.T) {
 		wantErr bool
 	}{
 		{"parent_valid.yaml", false},
-		{"parent_valid_with_version.yaml", false},
-		{"parent_missing_version.yaml", true},
+		{"parent_invalid_type.yaml", true},
+		{"parent_missing.yaml", true},
+		{"parent_with_version.yaml", true},
+		{"parent_with_composer_version.yaml", true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			manifestPath := filepath.Join("testdata", tt.name)
-			localManifest, err := LoadLocalManifest(manifestPath)
-			require.NoError(t, err)
-
-			err = ValidateManifest(localManifest)
-			if tt.wantErr {
-				require.Error(t, err, "manifest: %s", localManifest.Name)
-			} else {
-				require.NoError(t, err, "manifest: %s", localManifest.Name)
-			}
+			_, err := LoadLocalManifest(manifestPath)
+			require.Equal(t, tt.wantErr, err != nil)
 		})
 	}
 }
@@ -304,7 +293,7 @@ examples: []
 		"manifests/ext1/manifest.yaml": &fstest.MapFile{Data: []byte(manifest)},
 		"manifests/ext2/manifest.yaml": &fstest.MapFile{Data: []byte(manifest)},
 	}
-	_, err := loadManifests(fsys)
+	_, err := loadManifests(fsys, false)
 	require.ErrorIs(t, err, ErrDuplicateManifestName)
 }
 

@@ -3,16 +3,20 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-name: parent-valid
-parent: composer
+name: test-extension
+version: 1.0.0
 categories:
   - Security
 author: Test Author
-description: A child extension that inherits parent version
+description: A test extension
 longDescription: |
-  This is a child extension.
+  This is a longer description of the test extension.
 type: composer
 tags:
   - test
 license: Apache-2.0
-examples: []
+examples:
+  - title: Basic usage
+    description: Run the extension
+    code: |
+      boe run --extension test-extension

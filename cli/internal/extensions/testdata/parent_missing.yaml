@@ -3,14 +3,13 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-name: parent-valid
-parent: composer
+name: no-parent-no-version
 categories:
   - Security
 author: Test Author
-description: A child extension that inherits parent version
+description: Extension without parent or version should fail
 longDescription: |
-  This is a child extension.
+  This extension has neither parent nor version.
 type: composer
 tags:
   - test

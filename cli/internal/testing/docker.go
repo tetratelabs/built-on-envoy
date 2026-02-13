@@ -8,6 +8,7 @@ package internaltesting
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"os/exec"
 	"testing"
 	"time"
@@ -15,10 +16,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// rnd is a random number generator used for creating unique builder names in tests.
+var rnd = rand.New(rand.NewSource(time.Now().UnixNano())) //nolint: gosec
+
 // CreateBuildxBuilder creates a new Docker Buildx builder instance with host network configuration for testing.
-func CreateBuildxBuilder(t *testing.T) {
+func CreateBuildxBuilder(t *testing.T) string {
 	// Create a new builder instance that uses the custom buildkit configuration and host network.
-	builderName := fmt.Sprintf("test-builder-%d", time.Now().Unix())
+	builderName := fmt.Sprintf("test-builder-%d", rnd.Int())
 	// #nosec G204
 	createBuilderCmd := exec.CommandContext(t.Context(), "docker", "buildx", "create",
 		"--name", builderName,
@@ -40,4 +44,6 @@ func CreateBuildxBuilder(t *testing.T) {
 			t.Logf("failed to remove buildx builder: %v", destroyBuilderErr)
 		}
 	})
+
+	return builderName
 }

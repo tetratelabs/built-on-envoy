@@ -194,6 +194,22 @@
 	color: inherit;
 }
 
+.long-description.prose pre.shiki {
+	padding: 16px 20px;
+	border-radius: 8px;
+	font-family: 'Monaco', 'Menlo', monospace;
+	font-size: 14px;
+	line-height: 1.6;
+	overflow-x: auto;
+	margin-bottom: 16px;
+}
+
+.long-description.prose pre.shiki code {
+	background: none;
+	padding: 0;
+	border: none;
+}
+
 .long-description.prose blockquote {
 	border-left: 4px solid var(--primary);
 	padding-left: 16px;
@@ -285,6 +301,22 @@
 	line-height: 1.6;
 	overflow-x: auto;
 	margin: 0;
+}
+
+.code-block-wrapper pre.shiki {
+	padding: 16px 20px;
+	border-radius: 8px;
+	font-family: 'Monaco', 'Menlo', monospace;
+	font-size: 14px;
+	line-height: 1.6;
+	overflow-x: auto;
+	margin: 0;
+}
+
+.code-block-wrapper pre.shiki code {
+	background: none;
+	padding: 0;
+	border: none;
 }
 
 .copy-btn {

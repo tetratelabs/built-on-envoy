@@ -3,14 +3,15 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-name: no-parent-no-version
+name: parent-invalid-type
+parent: composer
 categories:
   - Security
 author: Test Author
-description: Extension without parent or version should fail
+description: A child extension that inherits parent version
 longDescription: |
-  This extension has neither parent nor version.
-type: wasm
+  This is a child extension.
+type: dynamic_module
 tags:
   - test
 license: Apache-2.0

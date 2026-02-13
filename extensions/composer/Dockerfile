@@ -18,7 +18,7 @@ RUN go mod download all
 ARG BUILD_TAG=""
 # Build go shared library
 RUN CGO_ENABLED=1 go build -tags ${BUILD_TAG} -buildmode=c-shared -o libcomposer.so \
-    .
+    ./main
 
 FROM scratch AS final
 

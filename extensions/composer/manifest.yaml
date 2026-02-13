@@ -5,6 +5,7 @@
 
 name: composer
 version: 0.2.1
+composerVersion: 0.2.1
 categories:
   - Misc
 author: Tetrate
@@ -21,7 +22,7 @@ longDescription: |
 
   - **Full**: Includes all embedded plugins and the Go plugin loader.
   - **Lite**: Includes only the Go plugin loader for runtime-loaded plugins.
-type: dynamic_module
+type: composer
 tags:
   - go
   - dynamic-module

@@ -49,8 +49,11 @@ type (
 		ComposerVersion string `yaml:"composerVersion,omitempty" json:"composerVersion,omitempty"`
 		Lua             *Lua   `yaml:"lua,omitempty" json:"lua,omitempty"`
 
-		// Only used when loading manifests from a local path
+		// Path to the manifest file in the local filesystem.
 		Path string `yaml:"-" json:"-"`
+		// Remote indicates whether this manifest is from a remote extension.
+		// This is set by the extension Downloader when fetching remote manifests.
+		Remote bool `yaml:"-" json:"-"`
 	}
 
 	// Example represents an example usage of an extension.
@@ -153,20 +156,20 @@ func init() {
 		panic(fmt.Errorf("failed to compile manifest schema: %w", err))
 	}
 
-	Manifests, err = loadManifests(manifestFS)
+	Manifests, err = loadManifests(manifestFS, false)
 	if err != nil {
 		panic(err)
 	}
 }
 
 // loadManifests walks the filesystem and loads all manifest.yaml files.
-func loadManifests(fsys fs.FS) (map[string]*Manifest, error) {
+func loadManifests(fsys fs.FS, validate bool) (map[string]*Manifest, error) {
 	result := make(map[string]*Manifest)
 	err := fs.WalkDir(fsys, "manifests", func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || filepath.Base(path) != "manifest.yaml" {
 			return nil
 		}
-		m, err := loadManifest(fsys, path)
+		m, err := loadManifest(fsys, path, validate)
 		if err != nil {
 			return err
 		}
@@ -191,7 +194,7 @@ func loadManifests(fsys fs.FS) (map[string]*Manifest, error) {
 }
 
 // loadManifest loads a manifest from the given filesystem and path.
-func loadManifest(fsys fs.FS, path string) (*Manifest, error) {
+func loadManifest(fsys fs.FS, path string, validate bool) (*Manifest, error) {
 	f, err := fsys.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", ErrOpenManifestFile, path)
@@ -206,6 +209,12 @@ func loadManifest(fsys fs.FS, path string) (*Manifest, error) {
 	var m Manifest
 	if err := yaml.Unmarshal(data, &m); err != nil {
 		return nil, fmt.Errorf("%w: %s", ErrParseManifestFile, path)
+	}
+
+	if validate {
+		if err := ValidateManifest(&m); err != nil {
+			return nil, fmt.Errorf("validation failed for manifest %s: %w", path, err)
+		}
 	}
 
 	return &m, nil
@@ -242,7 +251,7 @@ func ManifestsForCatalog() []*Manifest {
 
 // LoadLocalManifest loads a manifest from the given file path.
 func LoadLocalManifest(path string) (*Manifest, error) {
-	m, err := loadManifest(os.DirFS(filepath.Dir(path)), filepath.Base(path))
+	m, err := loadManifest(os.DirFS(filepath.Dir(path)), filepath.Base(path), true)
 	if err != nil {
 		return nil, err
 	}

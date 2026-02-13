@@ -1,20 +1,20 @@
 ---
 layout: ../../../layouts/DocsLayout.astro
 title: Extension Manifest
-description: Schema for Built On Envoy extension manifest files
+description: Schema for Built On Envoy extension manifest files.
 ---
 
 import ToC from '../../../components/ToC.astro';
 
 # Extension Manifest
 
-Schema for Built On Envoy extension manifest files
+Schema for Built On Envoy extension manifest files.
 
 <ToC maxDepth="4"/>
 
 ## author
 
-Author or organization name
+Author or organization name.
 
 | | |
 |---|---|
@@ -26,7 +26,7 @@ Author or organization name
 
 ## categories
 
-Functional categories of the extension
+Functional categories of the extension.
 
 | | |
 |---|---|
@@ -38,19 +38,21 @@ Functional categories of the extension
 
 ## composerVersion
 
-Version of Built On Envoy Composer
+Version of Built On Envoy Composer. Required if type is `composer` unless the `parent` field is set.
 
 | | |
 |---|---|
 | **Type** | `string` |
 | **Required** | No |
 | **Pattern** | `^\d+\.\d+\.\d+$` |
+| **Forbidden when** | `parent` is set |
+| **Required when** | `type` is `composer` and `parent` is not set |
 
 
 
 ## description
 
-Short single-line description of the extension
+Short single-line description of the extension.
 
 | | |
 |---|---|
@@ -63,7 +65,7 @@ Short single-line description of the extension
 
 ## examples
 
-Usage examples for the extension
+Usage examples for the extension.
 
 | | |
 |---|---|
@@ -75,7 +77,7 @@ Usage examples for the extension
 
 ### examples.code
 
-Code snippet showing usage
+Code snippet showing usage.
 
 | | |
 |---|---|
@@ -86,7 +88,7 @@ Code snippet showing usage
 
 ### examples.description
 
-Explanation of what the example demonstrates
+Explanation of what the example demonstrates.
 
 | | |
 |---|---|
@@ -97,7 +99,7 @@ Explanation of what the example demonstrates
 
 ### examples.title
 
-Short title for the example
+Short title for the example.
 
 | | |
 |---|---|
@@ -110,7 +112,7 @@ Short title for the example
 
 ## extensionSet
 
-Whether this manifest defines a set of extensions
+Whether this manifest defines a set of extensions.
 
 | | |
 |---|---|
@@ -121,7 +123,7 @@ Whether this manifest defines a set of extensions
 
 ## featured
 
-Whether to feature this extension in UI/listings
+Whether to feature this extension in UI/listings.
 
 | | |
 |---|---|
@@ -132,7 +134,7 @@ Whether to feature this extension in UI/listings
 
 ## license
 
-SPDX license identifier
+SPDX license identifier.
 
 | | |
 |---|---|
@@ -144,7 +146,7 @@ SPDX license identifier
 
 ## longDescription
 
-Detailed multi-line description with markdown support
+Detailed multi-line description with markdown support.
 
 | | |
 |---|---|
@@ -156,7 +158,7 @@ Detailed multi-line description with markdown support
 
 ## lua
 
-Lua extension configuration
+Lua extension configuration.
 
 | | |
 |---|---|
@@ -169,7 +171,7 @@ Lua extension configuration
 
 ### lua.inline
 
-Inline Lua script code
+Inline Lua script code.
 
 | | |
 |---|---|
@@ -180,7 +182,7 @@ Inline Lua script code
 
 ### lua.path
 
-Path to the Lua script file
+Path to the Lua script file.
 
 | | |
 |---|---|
@@ -193,7 +195,7 @@ Path to the Lua script file
 
 ## maxEnvoyVersion
 
-Maximum compatible Envoy version
+Maximum compatible Envoy version.
 
 | | |
 |---|---|
@@ -205,7 +207,7 @@ Maximum compatible Envoy version
 
 ## minEnvoyVersion
 
-Minimum compatible Envoy version
+Minimum compatible Envoy version.
 
 | | |
 |---|---|
@@ -217,7 +219,7 @@ Minimum compatible Envoy version
 
 ## name
 
-Unique identifier for the extension
+Unique identifier for the extension.
 
 | | |
 |---|---|
@@ -230,7 +232,7 @@ Unique identifier for the extension
 
 ## parent
 
-Parent extension set whose version will be used. When set, the version field can be omitted.
+Parent extension set whose version will be used. When set, the `version` and `composerVersion` fields can't be set.
 
 | | |
 |---|---|
@@ -243,7 +245,7 @@ Parent extension set whose version will be used. When set, the version field can
 
 ## tags
 
-Searchable tags for categorization
+Searchable tags for categorization.
 
 | | |
 |---|---|
@@ -258,7 +260,7 @@ Searchable tags for categorization
 
 ## type
 
-Type of the extension
+Type of the extension.
 
 | | |
 |---|---|
@@ -270,12 +272,14 @@ Type of the extension
 
 ## version
 
-Semantic version of the extension
+Semantic version of the extension. Required unless the `parent` field is set.
 
 | | |
 |---|---|
 | **Type** | `string` |
 | **Required** | No |
 | **Pattern** | `^\d+\.\d+\.\d+$` |
+| **Forbidden when** | `parent` is set |
+| **Required when** | `parent` is not set |
 
 
