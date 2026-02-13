@@ -130,8 +130,8 @@ Press Ctrl+C to stop
 // to all dynamic module libraries (both composer and Rust dynamic modules).
 // Returns the path to the temporary directory and a cleanup function.
 func setupDynamicModuleSearchPath(params ConfigGenerationParams) (string, func(), error) {
-	// Create a temporary directory under /tmp for dynamic module libraries
-	tempDir, err := os.MkdirTemp("/tmp", "boe-dynamic-modules-*")
+	// Create a temporary directory for dynamic module libraries
+	tempDir, err := os.MkdirTemp("", "boe-dynamic-modules-*")
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to create temporary directory: %w", err)
 	}
