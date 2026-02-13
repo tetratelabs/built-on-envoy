@@ -134,6 +134,44 @@
 	}
 }
 
+@media (max-width: 768px) {
+	.prose h1 {
+		font-size: 32px;
+	}
+
+	.prose h2 {
+		font-size: 24px;
+	}
+
+	.prose h3 {
+		font-size: 20px;
+	}
+
+	.prose table {
+		width: 100%;
+		display: table;
+		table-layout: fixed;
+		word-wrap: break-word;
+	}
+
+	.prose pre {
+		font-size: 13px;
+		padding: 12px;
+		max-width: 100%;
+	}
+
+	.prose code {
+		font-size: 0.85em;
+		word-break: break-word;
+	}
+
+	.docs-main {
+		padding: 24px 16px;
+		min-width: 0;
+		overflow-x: hidden;
+	}
+}
+
 /* Prose Styles */
 
 .prose {

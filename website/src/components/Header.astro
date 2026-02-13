@@ -7,6 +7,17 @@ import { PROJECT_NAME, GITHUB_REPO } from '../constants';
 		<a href="/" class="header-content">
 			<img src="/logo.svg" alt="Envoy Logo" class="logo-icon" />
 		</a>
+		<button class="menu-toggle" aria-label="Toggle menu" aria-expanded="false">
+			<svg class="menu-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+				<line x1="3" y1="6" x2="21" y2="6" />
+				<line x1="3" y1="12" x2="21" y2="12" />
+				<line x1="3" y1="18" x2="21" y2="18" />
+			</svg>
+			<svg class="close-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+				<line x1="6" y1="6" x2="18" y2="18" />
+				<line x1="6" y1="18" x2="18" y2="6" />
+			</svg>
+		</button>
 		<nav>
 			<a href="/extensions">Extensions</a>
 			<a href="/docs">Docs</a>
@@ -18,3 +29,14 @@ import { PROJECT_NAME, GITHUB_REPO } from '../constants';
 		</nav>
 	</div>
 </header>
+
+<script>
+	const toggle = document.querySelector('.menu-toggle');
+	const nav = document.querySelector('header nav');
+	if (toggle && nav) {
+		toggle.addEventListener('click', () => {
+			const isOpen = nav.classList.toggle('open');
+			toggle.setAttribute('aria-expanded', String(isOpen));
+		});
+	}
+</script>

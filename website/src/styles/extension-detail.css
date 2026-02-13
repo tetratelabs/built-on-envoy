@@ -452,32 +452,91 @@
 
 /* Responsive Styles */
 @media (max-width: 1024px) {
-	.content-grid {
-		grid-template-columns: 1fr;
-		gap: 48px;
-	}
-
-	.sidebar {
-		order: -1;
-	}
-}
-
-@media (max-width: 768px) {
 	.extension-header {
 		flex-direction: column;
 		gap: 24px;
 	}
 
-	.extension-hero h1 {
-		font-size: 32px;
+	.extension-header-left {
+		flex-shrink: 1;
 	}
 
 	.extension-description {
-		font-size: 18px;
 		max-width: none;
+	}
+
+	.content-grid {
+		grid-template-columns: 1fr;
+		gap: 32px;
+	}
+
+	.sidebar {
+		order: 1;
+	}
+}
+
+@media (max-width: 768px) {
+	.extension-hero {
+		padding: 24px 0;
+	}
+
+	.extension-hero h1 {
+		font-size: 28px;
+	}
+
+	.extension-description {
+		font-size: 16px;
+	}
+
+	.extension-meta {
+		gap: 16px;
+	}
+
+	.extension-content {
+		padding: 40px 0;
+	}
+
+	.content-grid {
+		gap: 24px;
 	}
 
 	.content-section h2 {
 		font-size: 24px;
+	}
+
+	.sidebar-section {
+		padding: 16px;
+	}
+
+	.resource-links {
+		flex-direction: column;
+		padding: 0;
+	}
+
+	.resource-links li {
+		flex: none;
+	}
+
+	.example-block {
+		padding: 16px;
+	}
+
+	.main-content {
+		min-width: 0;
+		overflow-x: hidden;
+	}
+
+	.code-block-wrapper pre.shiki,
+	.long-description.prose pre,
+	.long-description.prose pre.shiki,
+	.code-block {
+		font-size: 12px;
+		padding: 12px;
+		max-width: 100%;
+	}
+
+	.long-description.prose code {
+		font-size: 12px;
+		word-break: break-word;
 	}
 }
