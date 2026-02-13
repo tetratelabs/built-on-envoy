@@ -75,6 +75,29 @@ func TestLuaLocalExtension(t *testing.T) {
 	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
 }
 
+func TestLocalDynamicModuleExtension(t *testing.T) {
+	extensionPath := "../../extensions/ip-restriction"
+	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin,
+		"--log-level", "dynamic_modules:debug",
+		"--local", extensionPath, "--config", `{"deny_addresses": ["192.168.1.50"]}`,
+	)
+
+	// Set X-Forwarded-For header to an IP address that should be denied by the ip-restriction extension.
+	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
+	checkDenied := func(r *http.Response) bool {
+		return r.StatusCode == http.StatusForbidden
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	t.Cleanup(cancel)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	require.NoError(t, err)
+	req.Header.Set("X-Forwarded-For", "192.168.1.50")
+
+	require.NoError(t, internaltesting.CheckRequest(req, checkDenied))
+}
+
 func TestLocalGoExtension(t *testing.T) {
 	dataDir := t.TempDir()
 

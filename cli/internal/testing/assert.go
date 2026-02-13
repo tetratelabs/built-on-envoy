@@ -44,7 +44,7 @@ func CheckGet(ctx context.Context, url string, condition func(r *http.Response) 
 	if err != nil {
 		return err
 	}
-	return checkRequest(req, condition)
+	return CheckRequest(req, condition)
 }
 
 // CheckPost performs an HTTP POST request to the given URL and checks if it satisfies the provided condition.
@@ -53,11 +53,11 @@ func CheckPost(ctx context.Context, url string, condition func(r *http.Response)
 	if err != nil {
 		return err
 	}
-	return checkRequest(req, condition)
+	return CheckRequest(req, condition)
 }
 
-// checkRequest checks if the given HTTP request succeeds according to the provided condition.
-func checkRequest(req *http.Request, condition func(r *http.Response) bool) error {
+// CheckRequest checks if the given HTTP request succeeds according to the provided condition.
+func CheckRequest(req *http.Request, condition func(r *http.Response) bool) error {
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
