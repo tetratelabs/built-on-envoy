@@ -80,8 +80,8 @@ Flags:
 
 func TestGenConfig(t *testing.T) {
 	clusterJSON := `{"name":"my-cluster","type":"STRICT_DNS","load_assignment":{"cluster_name":"my-cluster","endpoints":[{"lb_endpoints":[{"endpoint":{"address":{"socket_address":{"address":"example.com","port_value":443}}}}]}]}}`
-	clusterShort := `example.com:443`
 	clusterInsecureShort := `example.com:80`
+	clusterShort := `my-cluster=example.com:443`
 
 	tests := []struct {
 		name             string

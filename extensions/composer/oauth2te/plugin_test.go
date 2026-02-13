@@ -1,0 +1,326 @@
+// Copyright Built On Envoy
+// SPDX-License-Identifier: Apache-2.0
+// The full text of the Apache license is available in the LICENSE file at
+// the root of the repo.
+package oauth2te
+
+import (
+	"encoding/base64"
+	"net/http"
+	"net/url"
+	"testing"
+
+	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
+	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/fake"
+	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+)
+
+// testMetrics returns an oauth2teMetrics with all metrics enabled for testing.
+func testMetrics() *oauth2teMetrics {
+	return &oauth2teMetrics{
+		exchanges:          shared.MetricID(1),
+		hasExchanges:       true,
+		exchangeResults:    shared.MetricID(2),
+		hasExchangeResults: true,
+	}
+}
+
+func newMockFilterHandle(ctrl *gomock.Controller) *mocks.MockHttpFilterHandle {
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().IncrementCounterValue(gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().IncrementCounterValue(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	return mockHandle
+}
+
+func TestOnRequestHeaders(t *testing.T) {
+	t.Run("auth errors", func(t *testing.T) {
+		tests := []struct {
+			name    string
+			headers map[string][]string
+		}{
+			{"missing authorization", map[string][]string{}},
+			{"non-bearer auth", map[string][]string{"authorization": {"Basic xxx"}}},
+			{"empty bearer token", map[string][]string{"authorization": {"Bearer "}}},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				ctrl := gomock.NewController(t)
+				defer ctrl.Finish()
+				mockHandle := newMockFilterHandle(ctrl)
+				mockHandle.EXPECT().SendLocalResponse(uint32(http.StatusUnauthorized), gomock.Any(), gomock.Any(), gomock.Any())
+
+				f := &tokenExchangeFilter{handle: mockHandle, config: &tokenExchangeConfig{}, metrics: testMetrics()}
+				status := f.OnRequestHeaders(fake.NewFakeHeaderMap(tt.headers), false)
+				require.Equal(t, shared.HeadersStatusStop, status)
+			})
+		}
+	})
+
+	t.Run("valid token callout succeeds", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockHandle := newMockFilterHandle(ctrl)
+
+		cfg := &tokenExchangeConfig{
+			Cluster:               "sts_cluster",
+			TokenExchangeEndpoint: "/oauth2/token",
+			TokenExchangeHost:     "sts.example.com",
+			ClientID:              "my-client",
+			ClientSecret:          "my-secret",
+			SubjectTokenType:      defaultSubjectTokenType,
+			TimeoutMs:             5000,
+		}
+
+		var capturedCluster string
+		var capturedHeaders [][2]string
+		var capturedBody []byte
+		var capturedTimeout uint64
+
+		mockHandle.EXPECT().HttpCallout(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).Do(func(cluster string, headers [][2]string, body []byte, timeout uint64, cb shared.HttpCalloutCallback) {
+			capturedCluster = cluster
+			capturedHeaders = headers
+			capturedBody = body
+			capturedTimeout = timeout
+		}).Return(shared.HttpCalloutInitSuccess, uint64(1))
+
+		f := &tokenExchangeFilter{handle: mockHandle, config: cfg}
+		status := f.OnRequestHeaders(fake.NewFakeHeaderMap(map[string][]string{
+			"authorization": {"Bearer mytoken"},
+		}), false)
+		require.Equal(t, shared.HeadersStatusStopAllAndBuffer, status)
+
+		// Verify callout parameters.
+		require.Equal(t, "sts_cluster", capturedCluster)
+		require.Equal(t, uint64(5000), capturedTimeout)
+
+		// Verify headers.
+		require.Equal(t, "POST", headerValue(capturedHeaders, ":method"))
+		require.Equal(t, "/oauth2/token", headerValue(capturedHeaders, ":path"))
+		require.Equal(t, "sts.example.com", headerValue(capturedHeaders, "host"))
+		require.Equal(t, "application/x-www-form-urlencoded", headerValue(capturedHeaders, "content-type"))
+
+		expectedCreds := base64.StdEncoding.EncodeToString([]byte("my-client:my-secret"))
+		require.Equal(t, "Basic "+expectedCreds, headerValue(capturedHeaders, "authorization"))
+
+		// Verify body form values.
+		form, err := url.ParseQuery(string(capturedBody))
+		require.NoError(t, err)
+		require.Equal(t, grantTypeTokenExchange, form.Get("grant_type"))
+		require.Equal(t, "mytoken", form.Get("subject_token"))
+		require.Equal(t, defaultSubjectTokenType, form.Get("subject_token_type"))
+		require.Empty(t, form.Get("audience"))
+		require.Empty(t, form.Get("resource"))
+		require.Empty(t, form.Get("scope"))
+		require.Empty(t, form.Get("actor_token"))
+	})
+
+	t.Run("valid token with optional fields", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockHandle := newMockFilterHandle(ctrl)
+
+		cfg := &tokenExchangeConfig{
+			Cluster:               "sts_cluster",
+			TokenExchangeEndpoint: "/oauth2/token",
+			TokenExchangeHost:     "sts.example.com",
+			ClientID:              "my-client",
+			ClientSecret:          "my-secret",
+			SubjectTokenType:      defaultSubjectTokenType,
+			Audience:              "https://api.example.com",
+			Resource:              "https://api.example.com/v1",
+			Scope:                 "read write",
+			RequestedTokenType:    "urn:ietf:params:oauth:token-type:access_token",
+			ActorToken:            "actor-tok",
+			ActorTokenType:        "urn:ietf:params:oauth:token-type:access_token",
+			TimeoutMs:             5000,
+		}
+
+		var capturedBody []byte
+		mockHandle.EXPECT().HttpCallout(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).Do(func(_ string, _ [][2]string, body []byte, _ uint64, _ shared.HttpCalloutCallback) {
+			capturedBody = body
+		}).Return(shared.HttpCalloutInitSuccess, uint64(1))
+
+		f := &tokenExchangeFilter{handle: mockHandle, config: cfg}
+		status := f.OnRequestHeaders(fake.NewFakeHeaderMap(map[string][]string{
+			"authorization": {"Bearer mytoken"},
+		}), false)
+		require.Equal(t, shared.HeadersStatusStopAllAndBuffer, status)
+
+		form, err := url.ParseQuery(string(capturedBody))
+		require.NoError(t, err)
+		require.Equal(t, "https://api.example.com", form.Get("audience"))
+		require.Equal(t, "https://api.example.com/v1", form.Get("resource"))
+		require.Equal(t, "read write", form.Get("scope"))
+		require.Equal(t, "urn:ietf:params:oauth:token-type:access_token", form.Get("requested_token_type"))
+		require.Equal(t, "actor-tok", form.Get("actor_token"))
+		require.Equal(t, "urn:ietf:params:oauth:token-type:access_token", form.Get("actor_token_type"))
+	})
+
+	t.Run("callout init failure", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockHandle := newMockFilterHandle(ctrl)
+		mockHandle.EXPECT().SendLocalResponse(uint32(http.StatusBadGateway), gomock.Any(), gomock.Any(), gomock.Any())
+
+		mockHandle.EXPECT().HttpCallout(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).Return(shared.HttpCalloutInitClusterNotFound, uint64(0))
+
+		cfg := &tokenExchangeConfig{
+			Cluster:               "bad_cluster",
+			TokenExchangeEndpoint: "/t",
+			TokenExchangeHost:     "h",
+			ClientID:              "c",
+			ClientSecret:          "s",
+			SubjectTokenType:      defaultSubjectTokenType,
+			TimeoutMs:             5000,
+		}
+
+		f := &tokenExchangeFilter{handle: mockHandle, config: cfg}
+		status := f.OnRequestHeaders(fake.NewFakeHeaderMap(map[string][]string{
+			"authorization": {"Bearer tok"},
+		}), false)
+		require.Equal(t, shared.HeadersStatusStop, status)
+	})
+}
+
+func TestSTSCallback(t *testing.T) {
+
+	t.Run("successful exchange", func(t *testing.T) {
+		tests := []struct {
+			name string
+			body [][]byte
+		}{
+			{
+				"single chunk",
+				[][]byte{[]byte(`{"access_token":"new-token","token_type":"Bearer","issued_token_type":"urn:ietf:params:oauth:token-type:access_token"}`)},
+			},
+			{
+				"multi-chunk",
+				[][]byte{
+					[]byte(`{"access_token":"new-tok`),
+					[]byte(`en","token_type":"Bearer","issued_token_type":"urn:ietf:params:oauth:token-type:access_token"}`),
+				},
+			},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				ctrl := gomock.NewController(t)
+				defer ctrl.Finish()
+				mockHandle := newMockFilterHandle(ctrl)
+
+				reqHeaders := fake.NewFakeHeaderMap(map[string][]string{
+					"authorization": {"Bearer old-token"},
+				})
+				mockHandle.EXPECT().RequestHeaders().Return(reqHeaders)
+				mockHandle.EXPECT().ContinueRequest()
+
+				cb := &tokenExchangeCallback{handle: mockHandle}
+				cb.OnHttpCalloutDone(0, shared.HttpCalloutSuccess,
+					[][2]string{{":status", "200"}},
+					tt.body,
+				)
+				require.Equal(t, "Bearer new-token", reqHeaders.GetOne("authorization"))
+			})
+		}
+	})
+
+	t.Run("failed exchange", func(t *testing.T) {
+		tests := []struct {
+			name           string
+			result         shared.HttpCalloutResult
+			headers        [][2]string
+			body           [][]byte
+			expectedStatus int
+		}{
+			{
+				name:           "callout failure",
+				result:         shared.HttpCalloutReset,
+				headers:        nil,
+				body:           nil,
+				expectedStatus: http.StatusBadGateway,
+			},
+			{
+				name:           "missing status header",
+				result:         shared.HttpCalloutSuccess,
+				headers:        [][2]string{},
+				body:           nil,
+				expectedStatus: http.StatusBadGateway,
+			},
+			{
+				name:           "4xx with RFC error body",
+				result:         shared.HttpCalloutSuccess,
+				headers:        [][2]string{{":status", "403"}},
+				body:           [][]byte{[]byte(`{"error":"access_denied","error_description":"error description"}`)},
+				expectedStatus: http.StatusUnauthorized,
+			},
+			{
+				name:           "4xx with non-JSON body",
+				result:         shared.HttpCalloutSuccess,
+				headers:        [][2]string{{":status", "400"}},
+				body:           [][]byte{[]byte("bad request")},
+				expectedStatus: http.StatusUnauthorized,
+			},
+			{
+				name:           "5xx status",
+				result:         shared.HttpCalloutSuccess,
+				headers:        [][2]string{{":status", "500"}},
+				body:           [][]byte{[]byte("internal error")},
+				expectedStatus: http.StatusBadGateway,
+			},
+			{
+				name:           "invalid JSON body",
+				result:         shared.HttpCalloutSuccess,
+				headers:        [][2]string{{":status", "200"}},
+				body:           [][]byte{[]byte("{bad")},
+				expectedStatus: http.StatusBadGateway,
+			},
+			{
+				name:           "missing access_token",
+				result:         shared.HttpCalloutSuccess,
+				headers:        [][2]string{{":status", "200"}},
+				body:           [][]byte{[]byte(`{"token_type":"Bearer","issued_token_type":"urn:ietf:params:oauth:token-type:access_token"}`)},
+				expectedStatus: http.StatusBadGateway,
+			},
+			{
+				name:           "missing token_type",
+				result:         shared.HttpCalloutSuccess,
+				headers:        [][2]string{{":status", "200"}},
+				body:           [][]byte{[]byte(`{"access_token":"tok","issued_token_type":"urn:ietf:params:oauth:token-type:access_token"}`)},
+				expectedStatus: http.StatusBadGateway,
+			},
+			{
+				name:           "missing issued_token_type",
+				result:         shared.HttpCalloutSuccess,
+				headers:        [][2]string{{":status", "200"}},
+				body:           [][]byte{[]byte(`{"access_token":"tok","token_type":"Bearer"}`)},
+				expectedStatus: http.StatusBadGateway,
+			},
+			{
+				name:           "token_type N_A",
+				result:         shared.HttpCalloutSuccess,
+				headers:        [][2]string{{":status", "200"}},
+				body:           [][]byte{[]byte(`{"access_token":"tok","token_type":"N_A","issued_token_type":"urn:ietf:params:oauth:token-type:access_token"}`)},
+				expectedStatus: http.StatusBadGateway,
+			},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				ctrl := gomock.NewController(t)
+				defer ctrl.Finish()
+				mockHandle := newMockFilterHandle(ctrl)
+				mockHandle.EXPECT().SendLocalResponse(uint32(tt.expectedStatus), gomock.Any(), gomock.Any(), gomock.Any())
+
+				cb := &tokenExchangeCallback{handle: mockHandle}
+				cb.OnHttpCalloutDone(0, tt.result, tt.headers, tt.body)
+			})
+		}
+	})
+}
