@@ -6,8 +6,7 @@
 name: jwe-decrypt
 version: 0.0.1
 categories:
-  - Examples
-  - JWE
+  - Security
 author: Tetrate
 description: Go extension for JWE decryption.
 longDescription: |
@@ -15,6 +14,7 @@ longDescription: |
   extracts the JWE token from the configured header, decrypts it, and adds the decrypted
   payload as a new header or Envoy metadata key for downstream processing.
 type: composer
+featured: true
 composerVersion: 0.2.1
 tags:
   - go
