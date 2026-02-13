@@ -98,6 +98,14 @@ MULTI_OCI_ANNOTATIONS := \
 	$(subst --annotation ",--annotation "index$(comma)manifest:,$(BASE_OCI_ANNOTATIONS)) \
 	--annotation "index,manifest:io.tetratelabs.built-on-envoy.extension.artifact=binary"
 
+BUILDER_NAME := boe-builder
+.PHONY: create_builder
+create_builder:
+	@docker buildx inspect $(BUILDER_NAME) || \
+		docker buildx create --name $(BUILDER_NAME) \
+			--driver docker-container --driver-opt network=host \
+			--buildkitd-flags '--allow-insecure-entitlement network.host' --use
+
 .PHONY: build
 build:
 	CGO_ENABLED=1 go build -buildmode=c-shared -tags $(COMPOSER_BUILD_TAG) -o lib$(NAME).so ./main
@@ -129,9 +137,10 @@ build_image:
 # both amd64 and arm64 architectures, and push it to the registry.
 PLATFORMS ?= linux/arm64,linux/amd64
 .PHONY: push_image
-push_image: ## Build and push docker image for the plugin for cross-platform support
+push_image: create_builder  ## Build and push docker image for the plugin for cross-platform support
 	@echo "Building and pushing image..."
 	docker buildx build --platform=$(PLATFORMS) \
+		--builder $(BUILDER_NAME) \
 		--output type=registry,oci-mediatypes=true$(registry_output) \
 		--provenance=false \
 		$(MULTI_OCI_ANNOTATIONS) \
@@ -141,9 +150,10 @@ push_image: ## Build and push docker image for the plugin for cross-platform sup
 # Package source code into an image and push it to the registry.
 CODE_IMAGE := $(HUB)/$(NAME)-src:$(VERSION)$(IMAGE_NONCE)
 .PHONY: push_code
-push_code: ## Build and push source code image
+push_code: create_builder  ## Build and push source code image
 	@echo "Building and pushing source code image..."
 	docker buildx build \
+		--builder $(BUILDER_NAME) \
 		--output type=registry,oci-mediatypes=true$(registry_output) \
 		--provenance=false \
 		$(BASE_OCI_ANNOTATIONS) \

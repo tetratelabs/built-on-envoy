@@ -58,10 +58,19 @@ BASE_OCI_ANNOTATIONS := \
 	--annotation "io.tetratelabs.built-on-envoy.extension.type=$(TYPE)" \
 	--annotation "io.tetratelabs.built-on-envoy.extension.version=$(VERSION)"
 
+BUILDER_NAME := boe-builder
+.PHONY: create_builder
+create_builder:
+	@docker buildx inspect $(BUILDER_NAME) || \
+		docker buildx create --name $(BUILDER_NAME) \
+			--driver docker-container --driver-opt network=host \
+			--buildkitd-flags '--allow-insecure-entitlement network.host' --use
+
 .PHONY: push_lua
-push_lua:
+push_lua: create_builder
 	@echo "Building and pushing Lua extension image: $(IMAGE)"
 	@docker buildx build \
+		--builder $(BUILDER_NAME) \
 		--output type=registry,oci-mediatypes=true$(registry_output) \
 		--provenance=false \
 		$(BASE_OCI_ANNOTATIONS) \
