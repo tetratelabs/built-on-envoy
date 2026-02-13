@@ -38,13 +38,6 @@ HUB    := $(OCI_REGISTRY)/built-on-envoy
 IMAGE  := $(HUB)/extension-$(NAME):$(VERSION)$(IMAGE_NONCE)
 SOURCE := https://$(subst ghcr.io,github.com,$(HUB))
 
-ARCH := $(shell uname -m)
-ifeq ($(ARCH),x86_64)
-  ARCH := amd64
-else ifeq ($(ARCH),aarch64)
-  ARCH := arm64
-endif
-
 # Base OCI image annotations (shared by all image types)
 BASE_OCI_ANNOTATIONS := \
 	--annotation "org.opencontainers.image.source=$(SOURCE)" \
@@ -57,6 +50,16 @@ BASE_OCI_ANNOTATIONS := \
 	--annotation "org.opencontainers.image.authors=$(AUTHOR)" \
 	--annotation "io.tetratelabs.built-on-envoy.extension.type=$(TYPE)" \
 	--annotation "io.tetratelabs.built-on-envoy.extension.version=$(VERSION)"
+
+# Artifact type annotations
+BINARY_ARTIFACT := --annotation "io.tetratelabs.built-on-envoy.extension.artifact=binary"
+SOURCE_ARTIFACT := --annotation "io.tetratelabs.built-on-envoy.extension.artifact=source"
+
+# Multi-platform OCI annotations (with index,manifest prefix, for binary artifacts)
+comma := ,
+MULTI_OCI_ANNOTATIONS := \
+	$(subst --annotation ",--annotation "index$(comma)manifest:,$(BASE_OCI_ANNOTATIONS)) \
+	--annotation "index,manifest:io.tetratelabs.built-on-envoy.extension.artifact=binary"
 
 BUILDER_NAME := boe-builder
 .PHONY: create_builder
@@ -76,4 +79,30 @@ push_lua: create_builder
 		$(BASE_OCI_ANNOTATIONS) \
 		--build-arg EXTENSION_PATH=$(EXTENSION_PATH) \
 		--tag $(IMAGE) \
-		--file Dockerfile.lua ./$(EXTENSION_PATH)
+		--file Dockerfile.code ./$(EXTENSION_PATH)
+
+PLATFORMS ?= linux/arm64,linux/amd64
+.PHONY: push_rust
+push_rust: create_builder
+	@echo "Building and pushing Rust extension image for multiple architectures: $(IMAGE)"
+	@docker buildx build \
+		--builder $(BUILDER_NAME) \
+		--platform=$(PLATFORMS) \
+		--output type=registry,oci-mediatypes=true$(registry_output) \
+		--provenance=false \
+		$(MULTI_OCI_ANNOTATIONS) \
+		--tag $(IMAGE) \
+		--file Dockerfile.rust ./$(EXTENSION_PATH)
+
+CODE_IMAGE := $(HUB)/extension-src-$(NAME):$(VERSION)$(IMAGE_NONCE)
+.PHONY: push_code
+push_code: create_builder
+	@echo "Building and pushing Rust extension image (source code only): $(CODE_IMAGE)"
+	@docker buildx build \
+		--builder $(BUILDER_NAME) \
+		--output type=registry,oci-mediatypes=true$(registry_output) \
+		--provenance=false \
+		$(BASE_OCI_ANNOTATIONS) \
+		$(SOURCE_ARTIFACT) \
+		--tag $(CODE_IMAGE) \
+		--file Dockerfile.code ./$(EXTENSION_PATH)

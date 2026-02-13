@@ -25,13 +25,7 @@ func CheckOrBuildDynamicModule(dirs *xdg.Directories, manifest *Manifest, path s
 		return fmt.Errorf("unsupported dynamic module type: no Cargo.toml found in %s", path)
 	}
 
-	// Convert manifest name to library name.
-	// Rust/Cargo converts dashes to underscores in library file names.
-	// For example, a crate named "ip-restriction" produces "libip_restriction.so".
-	// This is a Rust naming convention - library identifiers cannot contain dashes.
-	libName := strings.ReplaceAll(manifest.Name, "-", "_")
-
-	// Check if the library already exists in cache
+	// Check if the library already exists in cache.
 	destLib := LocalCacheExtension(dirs, manifest)
 	if _, err := os.Stat(destLib); err == nil {
 		// Library already exists in cache
@@ -48,18 +42,23 @@ func CheckOrBuildDynamicModule(dirs *xdg.Directories, manifest *Manifest, path s
 			path, err, string(output))
 	}
 
+	// Rust/Cargo converts dashes to underscores in library file names internally.
+	// For example, a crate named "ip-restriction" produces "libip_restriction.so".
+	// We need to find this file and copy it with the original manifest name.
+	rustLibName := strings.ReplaceAll(manifest.Name, "-", "_")
+
 	// Find the built library in target/release
 	// Note: Cargo may build with platform-specific extension (.dylib on macOS), but we use .so
 	var srcLib string
 	for _, ext := range []string{"so", "dylib"} {
-		candidate := filepath.Join(path, "target", "release", fmt.Sprintf("lib%s.%s", libName, ext))
+		candidate := filepath.Join(path, "target", "release", fmt.Sprintf("lib%s.%s", rustLibName, ext))
 		if _, err := os.Stat(candidate); err == nil {
 			srcLib = candidate
 			break
 		}
 	}
 	if srcLib == "" {
-		return fmt.Errorf("built library not found at %s/target/release/lib%s.{so,dylib}", path, libName)
+		return fmt.Errorf("built library not found at %s/target/release/lib%s.{so,dylib}", path, rustLibName)
 	}
 
 	// Create the cache directory if it doesn't exist

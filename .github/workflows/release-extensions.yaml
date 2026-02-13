@@ -53,35 +53,52 @@ jobs:
           for manifest in $changed_manifests; do
             echo "Checking $manifest..."
             
-            # Extract extension name (directory name)
-            extension=$(echo "$manifest" | cut -d'/' -f2)
+            # Extract extension path (directory name)
+            ext_path=$(echo "$manifest" | cut -d'/' -f2)
+            
+            # Read name and type from manifest
+            ext_name=$(grep "^name:" "$manifest" | sed 's/name: *//' | tr -d '\r')
+            type=$(grep "^type:" "$manifest" | sed 's/type: *//' | tr -d '\r')
             
             # Get old and new versions
             # For new extensions, old_version will be empty string
             old_version=$(git show HEAD~1:"$manifest" 2>/dev/null | grep '^version:' | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"' || echo "")
             new_version=$(grep '^version:' "$manifest" | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"' || echo "")
             
-            echo "Extension: $extension"
+            # Detect language
+            lang=""
+            ext_dir="extensions/$ext_path"
+            if [ -f "$ext_dir/Cargo.toml" ]; then
+              lang="rust"
+            elif [ -f "$ext_dir/go.mod" ]; then
+              lang="go"
+            elif grep -q "^lua:" "$manifest"; then
+              lang="lua"
+            fi
+            
+            echo "Extension: $ext_name (type=$type, lang=$lang, path=$ext_path)"
             echo "Old version: ${old_version:-<new extension>}"
             echo "New version: $new_version"
             
             # Check if version changed or this is a new extension
-            # New extensions will have empty old_version and non-empty new_version
             if [ "$old_version" != "$new_version" ] && [ -n "$new_version" ]; then
               if [ -z "$old_version" ]; then
-                echo "New extension detected: $extension (version: $new_version)"
+                echo "New extension detected: $ext_name (version: $new_version)"
               else
-                echo "Version changed for $extension: $old_version -> $new_version"
+                echo "Version changed for $ext_name: $old_version -> $new_version"
               fi
               
-              # Get extension type
-              ext_type=$(grep '^type:' "$manifest" | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"' || echo "unknown")
-              
               # Add to changed extensions list
-              changed_extensions=$(echo "$changed_extensions" | jq -c --arg name "$extension" --arg type "$ext_type" --arg version "$new_version" '. += [{"name": $name, "type": $type, "version": $version}]')
+              changed_extensions=$(echo "$changed_extensions" | jq -c \
+                --arg name "$ext_name" \
+                --arg type "$type" \
+                --arg lang "$lang" \
+                --arg path "$ext_path" \
+                --arg version "$new_version" \
+                '. + [{name: $name, type: $type, language: $lang, path: $path, version: $version}]')
               has_changes="true"
             else
-              echo "No version change for $extension"
+              echo "No version change for $ext_name"
             fi
           done
           
@@ -115,18 +132,26 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Release Lua Extension
-        if: matrix.extension.type == 'lua'
+      - name: Release Rust Extension
+        if: matrix.extension.language == 'rust'
         env:
-          EXTENSION_PATH: ${{ matrix.extension.name }}
+          EXTENSION_PATH: ${{ matrix.extension.path }}
         run: |
-          echo "Releasing lua extension: ${{ matrix.extension.name }} (version: ${{ matrix.extension.version }})"
+          echo "Releasing Rust extension: ${{ matrix.extension.name }} (version: ${{ matrix.extension.version }})"
+          make -C extensions push_rust
+
+      - name: Release Lua Extension
+        if: matrix.extension.language == 'lua'
+        env:
+          EXTENSION_PATH: ${{ matrix.extension.path }}
+        run: |
+          echo "Releasing Lua extension: ${{ matrix.extension.name }} (version: ${{ matrix.extension.version }})"
           make -C extensions push_lua
 
       - name: Release Composer
         if: matrix.extension.name == 'composer'
         run: |
-          echo "Releasing composer extension (version: ${{ matrix.extension.version }})"
+          echo "Releasing Composer extension (version: ${{ matrix.extension.version }})"
           make -C extensions/composer push_image
       
       - name: Release Lite Composer

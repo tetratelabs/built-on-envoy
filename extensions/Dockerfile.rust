@@ -1,0 +1,46 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# Multi-stage build for Rust dynamic modules
+
+# Build stage
+FROM rust:1.84-bookworm AS builder
+
+# Install build dependencies
+RUN apt-get update && \
+    apt-get install -y clang libclang-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+
+# The extension source will be mounted at build time
+COPY . .
+
+# Build the Rust extension
+RUN cargo build --release --target-dir ./target
+
+# Copy the library from Rust output (with underscores) to original name (with dashes)
+RUN mkdir -p /output
+RUN ORIGINAL_NAME=$(grep "^name:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"'); \
+    RUST_LIB_NAME=$(echo "$ORIGINAL_NAME" | tr '-' '_'); \
+    cp ./target/release/lib${RUST_LIB_NAME}.so /output/lib${ORIGINAL_NAME}.so
+
+# Final stage - minimal image with just the compiled library
+FROM scratch AS final
+
+# Copy the compiled library from builder
+COPY --from=builder /output/*.so /
+
+
+
+
+
+
+
+
+
+
+
+

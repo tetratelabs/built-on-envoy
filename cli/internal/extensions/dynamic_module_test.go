@@ -43,14 +43,14 @@ func TestCheckOrBuildDynamicModule(t *testing.T) {
 	err = CheckOrBuildDynamicModule(fakeDirs, manifest, extensionPath)
 	require.NoError(t, err)
 
-	// Ensure the library is created with the correct name (dash to underscore conversion)
+	// Ensure the library is created with the correct name (original manifest name)
 	libPath := LocalCacheExtension(fakeDirs, manifest)
 	_, err = os.Stat(libPath)
 	require.NoError(t, err, "library should exist at %s", libPath)
 
-	// Verify it follows the Rust naming convention: ip-restriction -> libip_restriction.so
-	require.Contains(t, libPath, "libip_restriction.so",
-		"library should be named libip_restriction.so (dashes converted to underscores)")
+	// Verify it uses the original manifest name: ip-restriction -> libip-restriction.so
+	require.Contains(t, libPath, "libip-restriction.so",
+		"library should be named libip-restriction.so (original manifest name)")
 
 	// Run again to verify it uses the cached library and doesn't fail
 	err = CheckOrBuildDynamicModule(fakeDirs, manifest, extensionPath)

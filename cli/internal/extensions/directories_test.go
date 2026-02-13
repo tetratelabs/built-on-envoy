@@ -16,7 +16,7 @@ import (
 func TestLocalCacheManifest(t *testing.T) {
 	dirs := &xdg.Directories{DataHome: "/home/user/.local/share"}
 
-	require.Equal(t, "/home/user/.local/share/extensions/test/1.0.1/src/manifest.yaml",
+	require.Equal(t, "/home/user/.local/share/extensions/dym/test/1.0.1/src/manifest.yaml",
 		LocalCacheManifest(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: "dynamic_module"}))
 
 	require.Equal(t, "/home/user/.local/share/extensions/goplugin/test/1.0.1/src/manifest.yaml",
@@ -33,11 +33,11 @@ func TestLocalCacheExtensionDirs(t *testing.T) {
 	require.Equal(t, "/home/user/.local/share/extensions/dym/test/1.0.1/libtest.so",
 		LocalCacheExtension(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeDynamicModule}))
 
-	// Test dynamic_module with dashes in name (Rust convention: dashes -> underscores)
+	// Test dynamic_module with dashes in name (uses original name)
 	require.Equal(t, "/home/user/.local/share/extensions/dym/ip-restriction/1.0.0",
 		LocalCacheExtensionDir(dirs, &Manifest{Name: "ip-restriction", Version: "1.0.0", Type: TypeDynamicModule}))
 
-	require.Equal(t, "/home/user/.local/share/extensions/dym/ip-restriction/1.0.0/libip_restriction.so",
+	require.Equal(t, "/home/user/.local/share/extensions/dym/ip-restriction/1.0.0/libip-restriction.so",
 		LocalCacheExtension(dirs, &Manifest{Name: "ip-restriction", Version: "1.0.0", Type: TypeDynamicModule}))
 
 	// Test composer type

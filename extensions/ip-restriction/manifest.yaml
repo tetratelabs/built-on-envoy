@@ -10,7 +10,7 @@ categories:
   - Examples
 author: Tetrate
 featured: true
-description: IP-based access control using allowlists or denylists (first Rust dynamic module example)
+description: IP-based access control using allowlists or denylists
 longDescription: |
   This extension provides IP-based access control for your Envoy proxy using Rust and Envoy's
   dynamic module framework. It allows you to define allowlists or denylists of IP addresses,

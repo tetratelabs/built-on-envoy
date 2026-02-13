@@ -8,7 +8,6 @@ package extensions
 import (
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
@@ -37,17 +36,15 @@ func LocalCacheExtensionDir(dirs *xdg.Directories, manifest *Manifest) string {
 // LocalCacheExtension returns the local cache path for the extension library based on the manifest.
 // Returns the appropriate library file name for each extension type:
 // - composer: plugin.so (Go plugin)
-// - dynamic_module: lib<name>.so (Rust library with dash-to-underscore conversion)
+// - dynamic_module: lib<name>.so (uses original name from manifest)
 // - others: plugin.so (default)
 func LocalCacheExtension(dirs *xdg.Directories, manifest *Manifest) string {
 	dir := LocalCacheExtensionDir(dirs, manifest)
 
 	switch manifest.Type {
 	case TypeDynamicModule:
-		// Rust/Cargo converts dashes to underscores in library file names.
-		// For example, "ip-restriction" produces "libip_restriction.so".
-		libName := strings.ReplaceAll(manifest.Name, "-", "_")
-		return filepath.Join(dir, fmt.Sprintf("lib%s.so", libName))
+		// Use the original manifest name for the library
+		return filepath.Join(dir, fmt.Sprintf("lib%s.so", manifest.Name))
 	default:
 		// Default for composer and other types
 		return filepath.Join(dir, "plugin.so")
