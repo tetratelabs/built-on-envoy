@@ -75,13 +75,15 @@ func TestLuaLocalExtension(t *testing.T) {
 	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
 }
 
-func TestDynamicModuleRmoeteExtension(t *testing.T) {
+func TestDynamicModuleRemoteExtension(t *testing.T) {
 	internaltesting.SkipIfTestRegistryNotConfigured(t)
 
 	// Run the remote extension.
 	// This will resolve the latest tag of the extension, download it to
 	// the data directory, and execute it from there.
-	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin, "--log-level", "dynamic_modules:debug", "--extension", "ip-restriction")
+	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin, "--log-level",
+		"dynamic_modules:debug", "--extension", "ip-restriction",
+		"--config", `{"deny_addresses": ["192.168.1.50"]}`)
 
 	// Set X-Forwarded-For header to an IP address that should be denied by the ip-restriction extension.
 	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
