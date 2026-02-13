@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"strings"
 
 	clusterv3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
@@ -123,12 +122,9 @@ func (w WasmFilterGenerator) GenerateFilterConfig(*extensions.Manifest, *xdg.Dir
 }
 
 // GenerateFilterConfig generates the filter configuration for Dynamic Module extensions.
-func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, _ *xdg.Directories, config string) (*ExtensionResources, error) {
-	// Convert manifest name to library name.
-	// Rust/Cargo converts dashes to underscores in library file names.
-	// For example, "ip-restriction" becomes "ip_restriction".
-	libName := strings.ReplaceAll(manifest.Name, "-", "_")
-
+func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest,
+	_ *xdg.Directories, config string,
+) (*ExtensionResources, error) {
 	var anyConfig *anypb.Any
 
 	if config != "" {
@@ -145,7 +141,7 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 	// This is the identifier Envoy uses to reference the loaded module.
 	protoConfig := &dymhttpv3.DynamicModuleFilter{
 		DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-			Name:         libName,
+			Name:         manifest.Name,
 			LoadGlobally: false,
 		},
 		FilterName:   manifest.Name,
