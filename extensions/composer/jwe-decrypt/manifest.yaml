@@ -8,11 +8,20 @@ parent: composer
 categories:
   - Security
 author: Tetrate
-description: Go extension for JWE decryption.
+description: Decrypt JWE tokens and recover the inner JWT for Envoy to process
 longDescription: |
-  This extension implements JWE decryption in a Go extension for Envoy. The extension
-  extracts the JWE token from the configured header, decrypts it, and adds the decrypted
-  payload as a new header or Envoy metadata key for downstream processing.
+  This extension implements [JSON Web Encryption (JWE)](https://datatracker.ietf.org/doc/html/rfc7516)
+  decryption in a Go extension for Envoy. JWE is a standard defined in
+  [RFC 7516](https://datatracker.ietf.org/doc/html/rfc7516) that provides encrypted content
+  using JSON-based data structures, built on top of the
+  [JSON Web Algorithms (JWA)](https://datatracker.ietf.org/doc/html/rfc7518) and
+  [JSON Web Key (JWK)](https://datatracker.ietf.org/doc/html/rfc7517) specifications.
+
+  **JWT inside JWE** &mdash; For clients that encrypt a [JWT (RFC 7519)](https://datatracker.ietf.org/doc/html/rfc7519)
+  into a JWE token before sending it to the server, this extension decrypts the JWE and recovers the original
+  JWT so that Envoy's built-in
+  [JWT Authentication filter](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/jwt_authn_filter)
+  can read it, extract the token claims and use them for authorization.
 type: composer
 featured: true
 tags:
@@ -20,8 +29,22 @@ tags:
   - http
   - filter
   - jwe
+  - security
+  - encryption
 license: Apache-2.0
 examples:
+  - title: Decrypt and forward a Bearer token
+    description: |
+      Process a request with the `Authorization: Bearer <JWE compact token>` header,
+      decrypt the JWE token, and emit the decrypted payload back into the `Authorization`
+      header with the `Bearer` prefix restored.
+    code: |
+      boe run --extension jwe-decrypt --config '{
+        "key_file": "/path/to/private-key.pem",
+        "input_header": "Authorization",
+        "prefix": "Bearer ",
+        "output_header": "Authorization"
+      }'
   - title: Using inline key
     description: |
       To enable the JWE decryption extension to decrypt JWE tokens you will need to provide the private key

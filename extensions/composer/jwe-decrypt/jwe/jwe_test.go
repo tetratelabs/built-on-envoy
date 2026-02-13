@@ -16,11 +16,11 @@ import (
 // Test key paths
 
 func getTestPrivateKeyPath() string {
-	return filepath.Join("test", "private_key.pem")
+	return filepath.Join("testdata", "private_key.pem")
 }
 
 func getTestPublicKeyPath() string {
-	return filepath.Join("test", "public_key.pem")
+	return filepath.Join("testdata", "public_key.pem")
 }
 
 func readTestPrivateKey(t *testing.T) string {

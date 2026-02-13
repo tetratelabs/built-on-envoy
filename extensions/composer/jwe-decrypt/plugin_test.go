@@ -22,11 +22,11 @@ import (
 // Helper functions
 
 func getTestKeyPath() string {
-	return filepath.Join("jwe", "test", "private_key.pem")
+	return filepath.Join("jwe", "testdata", "private_key.pem")
 }
 
 func getTestPublicKeyPath() string {
-	return filepath.Join("jwe", "test", "public_key.pem")
+	return filepath.Join("jwe", "testdata", "public_key.pem")
 }
 
 func createTestJWE(t *testing.T, payload string) string {
