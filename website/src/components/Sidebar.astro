@@ -32,6 +32,34 @@ for (const yamlPath of yamlPaths) {
 
 <script>
 	document.addEventListener('DOMContentLoaded', () => {
+		const currentPath = window.location.pathname;
+		const isMobile = window.matchMedia('(max-width: 1024px)').matches;
+
+		// On mobile, collapse all sections by default
+		if (isMobile) {
+			const allSections = document.querySelectorAll('.docs-sidebar .sidebar-section');
+			allSections.forEach(section => {
+				const toggle = section.querySelector('.section-toggle');
+				section.setAttribute('aria-expanded', 'false');
+				toggle?.setAttribute('aria-expanded', 'false');
+			});
+		}
+
+		// Highlight current page (and expand its section on mobile)
+		const links = document.querySelectorAll('.sidebar-section a');
+		links.forEach(link => {
+			const linkPath = link.getAttribute('data-page');
+			if (linkPath === currentPath) {
+				link.classList.add('active');
+				if (isMobile) {
+					const section = link.closest('.sidebar-section');
+					const toggle = section?.querySelector('.section-toggle');
+					section?.setAttribute('aria-expanded', 'true');
+					toggle?.setAttribute('aria-expanded', 'true');
+				}
+			}
+		});
+
 		// Toggle sidebar sections
 		const toggleButtons = document.querySelectorAll('.section-toggle');
 		toggleButtons.forEach(button => {
@@ -41,16 +69,6 @@ for (const yamlPath of yamlPaths) {
 				button.setAttribute('aria-expanded', (!isExpanded).toString());
 				section?.setAttribute('aria-expanded', (!isExpanded).toString());
 			});
-		});
-
-		// Highlight current page
-		const currentPath = window.location.pathname;
-		const links = document.querySelectorAll('.sidebar-section a');
-		links.forEach(link => {
-			const linkPath = link.getAttribute('data-page');
-			if (linkPath === currentPath) {
-				link.classList.add('active');
-			}
 		});
 	});
 </script>

@@ -138,8 +138,16 @@
 
 /* Mobile breakpoint */
 @media (max-width: 768px) {
+	.page-hero {
+		padding: 48px 0 36px;
+	}
+
 	.page-hero h1 {
-		font-size: 36px;
+		font-size: 32px;
+	}
+
+	.page-hero .hero-subtitle {
+		font-size: 16px;
 	}
 
 	.filters {
@@ -149,5 +157,22 @@
 	.type-filter select,
 	.category-filter select {
 		width: 100%;
+		min-width: 0;
+	}
+
+	.extensions-catalog {
+		padding: 40px 0;
+	}
+
+	.extensions-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.category-section {
+		margin-bottom: 40px;
+	}
+
+	.category-title {
+		font-size: 22px;
 	}
 }

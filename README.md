@@ -12,7 +12,7 @@ A community-driven marketplace for Envoy Proxy extensions. Discover, run, and bu
 
 ## Project Overview
 
-**Built On Envoy** is designed to make extending ]Envoy Proxy](https://www.envoyproxy.io/) as simple as possible. It consists of:
+**Built On Envoy** is designed to make extending [Envoy Proxy](https://www.envoyproxy.io/) as simple as possible. It consists of:
 
 1. **Marketplace Repository**: A central place where the community can find and contribute extensions.
 2. **CLI Tool (`boe`)**: A command-line tool for discovering, running, and building extensions.
