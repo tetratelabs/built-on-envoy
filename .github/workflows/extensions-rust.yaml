@@ -1,0 +1,37 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: Rust Extensions
+
+on:
+  workflow_call:
+    inputs:
+      extensions:
+        description: 'JSON array of extensions to check'
+        required: true
+        type: string
+
+jobs:
+  rust-checks:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        extension: ${{ fromJson(inputs.extensions) }}
+    defaults:
+      run:
+        working-directory: extensions/${{ matrix.extension.path }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Format
+        run: cargo fmt --check
+      - name: Lint
+        run: cargo clippy -- -D warnings
+      - name: Build
+        run: cargo build --release
+      - name: Test
+        run: cargo test

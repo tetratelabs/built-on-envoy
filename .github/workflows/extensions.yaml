@@ -39,7 +39,8 @@ jobs:
     if: ${{ needs.changes.outputs.extensions == 'true' }}
     runs-on: ubuntu-latest
     outputs:
-      extensions: ${{ steps.discover.outputs.extensions }}
+      rust-extensions: ${{ steps.discover.outputs.rust-extensions }}
+      has-composer: ${{ steps.discover.outputs.has-composer }}
     steps:
       - uses: actions/checkout@v4
       - name: Discover extensions
@@ -52,13 +53,14 @@ jobs:
             # Skip if not a directory
             [ -d "$dir" ] || continue
             
-            ext_name=$(basename "$dir")
+            ext_path=$(basename "$dir")
             manifest="$dir/manifest.yaml"
             
             # Skip if no manifest
             [ -f "$manifest" ] || continue
             
-            # Read type from manifest
+            # Read name and type from manifest
+            ext_name=$(grep "^name:" "$manifest" | sed 's/name: *//' | tr -d '\r')
             type=$(grep "^type:" "$manifest" | sed 's/type: *//' | tr -d '\r')
             
             # Detect language
@@ -71,140 +73,50 @@ jobs:
               lang="lua"
             fi
             
-            echo "Found extension: $ext_name (type=$type, lang=$lang)"
+            echo "Found extension: $ext_name (type=$type, lang=$lang, path=$ext_path)"
             
             # Add to extensions array
             if [ -n "$lang" ]; then
-              extensions=$(echo "$extensions" | jq -c ". + [{\"name\": \"$ext_name\", \"type\": \"$type\", \"language\": \"$lang\", \"path\": \"$ext_name\"}]")
+              extensions=$(echo "$extensions" | jq -c \
+                --arg name "$ext_name" \
+                --arg type "$type" \
+                --arg lang "$lang" \
+                --arg path "$ext_path" \
+                '. + [{name: $name, type: $type, language: $lang, path: $path}]')
             fi
           done
           
-          echo "extensions=$extensions" >> $GITHUB_OUTPUT
-          echo "Extensions: $extensions"
+          # Filter Rust extensions
+          rust_extensions=$(echo "$extensions" | jq -c '[.[] | select(.language == "rust")]')
+          
+          # Check if composer extension exists
+          has_composer=$(echo "$extensions" | jq '[.[] | select(.name == "composer")] | length > 0')
+          
+          echo "rust-extensions=$rust_extensions" >> $GITHUB_OUTPUT
+          echo "has-composer=$has_composer" >> $GITHUB_OUTPUT
+          
+          echo "Rust extensions: $rust_extensions"
+          echo "Has composer: $has_composer"
 
-  # Rust extensions checks
-  rust-fmt:
+  rust-checks:
     needs: discover
-    if: ${{ contains(fromJson(needs.discover.outputs.extensions).*.language, 'rust') }}
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        extension: ${{ fromJson(needs.discover.outputs.extensions) }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-      - name: Check formatting
-        run: cargo fmt --check --manifest-path extensions/${{ matrix.extension.path }}/Cargo.toml
+    if: ${{ needs.discover.outputs.rust-extensions != '[]' }}
+    uses: ./.github/workflows/extensions-rust.yaml
+    with:
+      extensions: ${{ needs.discover.outputs.rust-extensions }}
 
-  rust-clippy:
+  go-checks:
     needs: discover
-    if: ${{ contains(fromJson(needs.discover.outputs.extensions).*.language, 'rust') }}
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        extension: ${{ fromJson(needs.discover.outputs.extensions) }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
-      - name: Run clippy
-        run: cargo clippy --manifest-path extensions/${{ matrix.extension.path }}/Cargo.toml -- -D warnings
-
-  rust-build:
-    needs: discover
-    if: ${{ contains(fromJson(needs.discover.outputs.extensions).*.language, 'rust') }}
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        extension: ${{ fromJson(needs.discover.outputs.extensions) }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Build
-        run: cargo build --manifest-path extensions/${{ matrix.extension.path }}/Cargo.toml --release
-
-  rust-test:
-    needs: discover
-    if: ${{ contains(fromJson(needs.discover.outputs.extensions).*.language, 'rust') }}
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        extension: ${{ fromJson(needs.discover.outputs.extensions) }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Run tests
-        run: cargo test --manifest-path extensions/${{ matrix.extension.path }}/Cargo.toml
-
-  # Go extensions checks (composer)
-  composer-build:
-    needs: discover
-    if: ${{ contains(fromJson(needs.discover.outputs.extensions).*.name, 'composer') }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: extensions/composer/go.mod
-          cache-dependency-path: extensions/composer/go.sum
-      - run: make -C extensions/composer build
-
-  composer-example:
-    needs: discover
-    if: ${{ contains(fromJson(needs.discover.outputs.extensions).*.name, 'composer') }}
-    runs-on: ubuntu-latest
-    env:
-      EXTENSION_PATH: example-go/standalone
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: extensions/composer/go.mod
-          cache-dependency-path: extensions/composer/go.sum
-      - run: make -C extensions/composer build_plugins
-
-  composer-test:
-    needs: discover
-    if: ${{ contains(fromJson(needs.discover.outputs.extensions).*.name, 'composer') }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: extensions/composer/go.mod
-          cache-dependency-path: extensions/composer/go.sum
-      - run: make -C extensions/composer test
-
-  composer-lint:
-    needs: discover
-    if: ${{ contains(fromJson(needs.discover.outputs.extensions).*.name, 'composer') }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: extensions/composer/go.mod
-          cache-dependency-path: extensions/composer/go.sum
-      - run: make -C extensions/composer format lint
+    if: ${{ needs.discover.outputs.has-composer == 'true' }}
+    uses: ./.github/workflows/extensions-go.yaml
 
   # Aggregate all the required jobs and make it easier to customize CI required jobs
   extensions-checks:
     runs-on: ubuntu-latest
     needs:
       - discover
-      - rust-fmt
-      - rust-clippy
-      - rust-build
-      - rust-test
-      - composer-build
-      - composer-example
-      - composer-test
-      - composer-lint
+      - rust-checks
+      - go-checks
     # We need this to run always to force-fail (and not skip) if any needed
     # job has failed. Otherwise, a skipped job will not fail the workflow.
     if: always()
