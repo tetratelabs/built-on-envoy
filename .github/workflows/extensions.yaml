@@ -90,11 +90,6 @@ jobs:
     strategy:
       matrix:
         extension: ${{ fromJson(needs.discover.outputs.extensions) }}
-        exclude:
-          - extension:
-              language: go
-          - extension:
-              language: lua
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -110,11 +105,6 @@ jobs:
     strategy:
       matrix:
         extension: ${{ fromJson(needs.discover.outputs.extensions) }}
-        exclude:
-          - extension:
-              language: go
-          - extension:
-              language: lua
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -130,11 +120,6 @@ jobs:
     strategy:
       matrix:
         extension: ${{ fromJson(needs.discover.outputs.extensions) }}
-        exclude:
-          - extension:
-              language: go
-          - extension:
-              language: lua
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -148,11 +133,6 @@ jobs:
     strategy:
       matrix:
         extension: ${{ fromJson(needs.discover.outputs.extensions) }}
-        exclude:
-          - extension:
-              language: go
-          - extension:
-              language: lua
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
