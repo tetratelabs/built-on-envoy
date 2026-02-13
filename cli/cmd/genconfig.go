@@ -30,8 +30,9 @@ type GenConfig struct {
 	// sep:"none" disables Kong's default comma-separated splitting for []string flags.
 	// JSON config values contain commas (e.g. {"a":"1","b":"2"}) which would otherwise
 	// be split into separate invalid fragments, causing protobuf unmarshal failures.
-	Configs []string `name:"config" sep:"none" help:"Optional JSON config string for extensions. Applied in order to combined --extension and --local flags."`
-	OCI     OCIFlags `embed:""`
+	Configs  []string `name:"config" sep:"none" help:"Optional JSON config string for extensions. Applied in order to combined --extension and --local flags."`
+	Clusters []string `name:"cluster" sep:"none" help:"Optional additional Envoy cluster. Supports JSON or short format (name=my-service.example.com:tlsPort)."`
+	OCI      OCIFlags `embed:""`
 
 	extensionPositions extensionPositions `kong:"-"` // Internal field: tracks the original position of extensions specified via both --extension and --local flags
 	output             io.Writer          `kong:"-"` // Internal field for testing
@@ -98,6 +99,7 @@ func (g *GenConfig) Run(ctx context.Context, dirs *xdg.Directories, logger *slog
 		Dirs:         dirs,
 		Extensions:   extensions,
 		Configs:      g.Configs,
+		Clusters:     g.Clusters,
 	}, renderer)
 	if err != nil {
 		return err

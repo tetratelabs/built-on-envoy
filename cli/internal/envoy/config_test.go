@@ -9,6 +9,7 @@ import (
 	"os"
 	"testing"
 
+	clusterv3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
@@ -64,6 +65,62 @@ func TestRenderMinimalConfigWithExtensions(t *testing.T) {
 
 	require.NoError(t, err)
 	require.YAMLEq(t, string(want), cfg)
+}
+
+func TestParseCluster(t *testing.T) {
+	tests := []struct {
+		name          string
+		spec          string
+		expectedError string
+		check         func(t *testing.T, c *clusterv3.Cluster)
+	}{
+		{
+			name: "short",
+			spec: "name=example.com:443",
+			check: func(t *testing.T, c *clusterv3.Cluster) {
+				require.Equal(t, "name", c.Name)
+				require.Equal(t, clusterv3.Cluster_STRICT_DNS, c.GetType())
+				ep := c.LoadAssignment.Endpoints[0].LbEndpoints[0].GetEndpoint()
+				require.Equal(t, "example.com", ep.Address.GetSocketAddress().Address)
+				require.Equal(t, uint32(443), ep.Address.GetSocketAddress().GetPortValue())
+				require.NotNil(t, c.TransportSocket, "short form should include TLS")
+			},
+		},
+		{
+			name: "JSON",
+			spec: `{"name":"svc","type":"STRICT_DNS","load_assignment":{"cluster_name":"svc"}}`,
+			check: func(t *testing.T, c *clusterv3.Cluster) {
+				require.Equal(t, "svc", c.Name)
+			},
+		},
+		{
+			name:          "short: invalid missing port",
+			spec:          "name=example.com",
+			expectedError: "invalid cluster short format: address example.com: missing port in address",
+		},
+		{
+			name:          "short: invalid bad port",
+			spec:          "name=example.com:abc",
+			expectedError: "invalid port in cluster short format: strconv.ParseUint: parsing \"abc\": invalid syntax",
+		},
+		{
+			name:          "JSON invalid",
+			spec:          `{"name":}`,
+			expectedError: "invalid JSON",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, err := parseCluster(tt.spec)
+			if tt.expectedError != "" {
+				require.ErrorContains(t, err, tt.expectedError)
+			} else {
+				require.NoError(t, err)
+				tt.check(t, c)
+			}
+		})
+	}
 }
 
 func mustReadManifest(t *testing.T, path string) *extensions.Manifest {

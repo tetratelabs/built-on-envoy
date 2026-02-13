@@ -9,6 +9,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
+	"strconv"
+	"strings"
 
 	accesslogv3 "github.com/envoyproxy/go-control-plane/envoy/config/accesslog/v3"
 	bootstrapv3 "github.com/envoyproxy/go-control-plane/envoy/config/bootstrap/v3"
@@ -44,6 +47,8 @@ type ConfigGenerationParams struct {
 	Extensions []*extensions.Manifest
 	// Configs specifies optional JSON config strings for each extension (by index).
 	Configs []string
+	// Clusters specifies additional Envoy cluster JSON strings to include in the configuration.
+	Clusters []string
 }
 
 // GeneratedConfigResources holds the generated Envoy resources for an extension.
@@ -124,10 +129,45 @@ func generateConfig(params ConfigGenerationParams) (GeneratedConfigResources, er
 		clusters = append(clusters, resources.Clusters...)
 	}
 
+	for i, clusterSpec := range params.Clusters {
+		cluster, err := parseCluster(clusterSpec)
+		if err != nil {
+			return GeneratedConfigResources{}, fmt.Errorf("failed to parse --cluster[%d]: %w", i, err)
+		}
+		clusters = append(clusters, cluster)
+	}
+
 	return GeneratedConfigResources{
 		HTTPFilters: filters,
 		Clusters:    clusters,
 	}, nil
+}
+
+// parseCluster parses a cluster specification. It supports:
+// - short format "name=host:port" that generates a STRICT_DNS cluster with TLS
+// - raw JSON for full control over the cluster configuration.
+func parseCluster(spec string) (*clusterv3.Cluster, error) {
+	if strings.HasPrefix(spec, "{") {
+		var cluster clusterv3.Cluster
+		if err := protojson.Unmarshal([]byte(spec), &cluster); err != nil {
+			return nil, fmt.Errorf("invalid JSON cluster spec: %w", err)
+		}
+		return &cluster, nil
+	}
+	// Fall back to short format parsing (name=host:port)
+	name, hostPort, found := strings.Cut(spec, "=")
+	if !found {
+		return nil, fmt.Errorf("invalid cluster spec %q: must be JSON or in the format name=host:port", spec)
+	}
+	host, portStr, err := net.SplitHostPort(hostPort)
+	if err != nil {
+		return nil, fmt.Errorf("invalid cluster short format: %w", err)
+	}
+	port, err := strconv.ParseUint(portStr, 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("invalid port in cluster short format: %w", err)
+	}
+	return buildTestUpstreamCluster(name, host, uint32(port))
 }
 
 // buildFullConfig creates the EnvoyConfiguration based on the provided parameters.

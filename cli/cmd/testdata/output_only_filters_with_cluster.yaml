@@ -1,0 +1,26 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+clusters:
+- load_assignment:
+    cluster_name: my-cluster
+    endpoints:
+    - lb_endpoints:
+      - endpoint:
+          address:
+            socket_address:
+              address: example.com
+              port_value: 443
+  name: my-cluster
+  type: STRICT_DNS
+http_filters:
+- name: test-lua
+  typed_config:
+    '@type': type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+    default_source_code:
+      inline_string: |
+        function envoy_on_request(request_handle)
+          request_handle:logInfo("Hello, World!")
+        end

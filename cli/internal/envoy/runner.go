@@ -45,6 +45,8 @@ type Runner struct {
 	Extensions []*extensions.Manifest
 	// Configs specifies optional JSON config strings for each extension (by index).
 	Configs []string
+	// Clusters specifies additional Envoy cluster JSON strings to include in the configuration.
+	Clusters []string
 }
 
 // Run starts Envoy using func-e as a library
@@ -56,6 +58,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		Dirs:         r.Dirs,
 		Extensions:   r.Extensions,
 		Configs:      r.Configs,
+		Clusters:     r.Clusters,
 	}
 	config, err := RenderConfig(params, FullConfigRenderer)
 	if err != nil {

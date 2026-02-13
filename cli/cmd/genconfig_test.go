@@ -55,6 +55,9 @@ Flags:
       --config=CONFIG              Optional JSON config string for extensions.
                                    Applied in order to combined --extension and
                                    --local flags.
+      --cluster=CLUSTER            Optional additional Envoy cluster.
+                                   Supports JSON or short format
+                                   (name=my-service.example.com:tlsPort).
       --registry="ghcr.io/tetratelabs/built-on-envoy"
                                    OCI registry URL for the extensions
                                    ($BOE_REGISTRY).
@@ -70,10 +73,14 @@ Flags:
 }
 
 func TestGenConfig(t *testing.T) {
+	clusterJSON := `{"name":"my-cluster","type":"STRICT_DNS","load_assignment":{"cluster_name":"my-cluster","endpoints":[{"lb_endpoints":[{"endpoint":{"address":{"socket_address":{"address":"example.com","port_value":443}}}}]}]}}`
+	clusterShort := `my-cluster=example.com:443`
+
 	tests := []struct {
 		name     string
 		minimal  bool
 		local    []string
+		clusters []string
 		wantFile string
 	}{
 		{
@@ -88,6 +95,34 @@ func TestGenConfig(t *testing.T) {
 			local:    []string{"testdata/input_lua_inline"},
 			wantFile: "testdata/output_full_config.yaml",
 		},
+		{
+			name:     "full config with JSON cluster",
+			minimal:  false,
+			local:    []string{"testdata/input_lua_inline"},
+			clusters: []string{clusterJSON},
+			wantFile: "testdata/output_full_config_with_cluster.yaml",
+		},
+		{
+			name:     "only filters with JSON cluster",
+			minimal:  true,
+			local:    []string{"testdata/input_lua_inline"},
+			clusters: []string{clusterJSON},
+			wantFile: "testdata/output_only_filters_with_cluster.yaml",
+		},
+		{
+			name:     "full config with shorthand cluster",
+			minimal:  false,
+			local:    []string{"testdata/input_lua_inline"},
+			clusters: []string{clusterShort},
+			wantFile: "testdata/output_full_config_with_shorthand_cluster.yaml",
+		},
+		{
+			name:     "only filters with shorthand cluster",
+			minimal:  true,
+			local:    []string{"testdata/input_lua_inline"},
+			clusters: []string{clusterShort},
+			wantFile: "testdata/output_only_filters_with_shorthand_cluster.yaml",
+		},
 	}
 
 	for _, tt := range tests {
@@ -98,6 +133,7 @@ func TestGenConfig(t *testing.T) {
 				AdminPort:  9901,
 				ListenPort: 10000,
 				Local:      tt.local,
+				Clusters:   tt.clusters,
 				output:     &buf,
 			}
 
@@ -121,9 +157,11 @@ func TestGenConfig(t *testing.T) {
 	}
 }
 
-func TestGenConfigMultipleConfigArgsWithCommas(t *testing.T) {
+func TestGenConfigMultipleArgsWithCommas(t *testing.T) {
 	config1 := `{"header":"value1","header2":"value2"}`
 	config2 := `{"another_config":"value3","yet_another_config":"value4"}`
+	cluster1 := `{"name":"cluster1","type":"STRICT_DNS","load_assignment":{"cluster_name":"cluster1"}}`
+	cluster2 := `{"name":"cluster2","type":"STRICT_DNS","load_assignment":{"cluster_name":"cluster2"}}`
 
 	var cli struct {
 		GenConfig GenConfig `cmd:"" help:"Generate Envoy configuration with specified extensions"`
@@ -138,7 +176,12 @@ func TestGenConfigMultipleConfigArgsWithCommas(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	_, err = parser.Parse([]string{"gen-config", "--config", config1, "--config", config2})
+	_, err = parser.Parse([]string{
+		"gen-config",
+		"--config", config1, "--config", config2,
+		"--cluster", cluster1, "--cluster", cluster2,
+	})
 	require.NoError(t, err)
 	require.Equal(t, []string{config1, config2}, cli.GenConfig.Configs)
+	require.Equal(t, []string{cluster1, cluster2}, cli.GenConfig.Clusters)
 }
