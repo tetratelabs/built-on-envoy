@@ -60,7 +60,7 @@ func (d *Downloader) DownloadExtension(ctx context.Context, name, version string
 
 	// If the Download dir contains the manifest (for lua extensions, for example), load it to get
 	// the full manifest with all extension data.
-	manifestPath := downloadDir + "/manifest.yaml"
+	manifestPath := LocalCacheManifest(d.Dirs, extensionManifest)
 	if _, err = os.Stat(manifestPath); err == nil {
 		m, err := LoadLocalManifest(manifestPath)
 		if err != nil {
