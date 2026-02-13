@@ -47,8 +47,7 @@ Arguments:
 Flags:
   -h, --help               Show context-sensitive help.
 
-      --type="composer"    Type of the extension. Currently only 'composer' is
-                           supported.
+      --type="composer"    Type of the extension.
       --path=STRING        Output directory for the extension. Defaults to the
                            extension name.
 `, internaltesting.WrapHelp(createHelp))
@@ -110,6 +109,61 @@ func TestCreate_Run(t *testing.T) {
 		assert.Contains(t, string(plugin), "x-"+name)
 		assert.Contains(t, string(plugin), "WellKnownHttpFilterConfigFactories")
 	}
+}
+
+func TestCreateRust_Run(t *testing.T) {
+	tmpDir := t.TempDir()
+	name := "my-rust-extension"
+
+	c := &Create{
+		Type: "dynamic_module_rust",
+		Name: name,
+		Path: tmpDir,
+	}
+
+	err := c.Run(&xdg.Directories{})
+	require.NoError(t, err)
+
+	repoPath := filepath.Join(tmpDir, name)
+	require.DirExists(t, repoPath)
+
+	files := []string{
+		"src/lib.rs",
+		"Cargo.toml",
+		"manifest.yaml",
+		".gitignore",
+		".dockerignore",
+		".cargo/config.toml",
+		"Dockerfile",
+		"Dockerfile.code",
+		"Makefile",
+	}
+	for _, f := range files {
+		require.FileExists(t, filepath.Join(repoPath, f), "expected file %s to exist", f)
+	}
+
+	// verify manifest.yaml content
+	// #nosec G304
+	manifest, err := os.ReadFile(filepath.Join(repoPath, "manifest.yaml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(manifest), "name: "+name)
+	assert.Contains(t, string(manifest), "type: dynamic_module")
+
+	// verify Cargo.toml content
+	// #nosec G304
+	cargo, err := os.ReadFile(filepath.Join(repoPath, "Cargo.toml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(cargo), `name = "`+name+`"`)
+	// Verify lib name conversion (hyphens to underscores)
+	assert.Contains(t, string(cargo), `name = "my_rust_extension"`)
+
+	// verify src/lib.rs content
+	// #nosec G304
+	libRs, err := os.ReadFile(filepath.Join(repoPath, "src/lib.rs"))
+	require.NoError(t, err)
+	assert.Contains(t, string(libRs), `"x-`+name+`"`)
+	assert.Contains(t, string(libRs), `"`+name+`"`)
+	assert.Contains(t, string(libRs), "declare_init_functions!")
 }
 
 func TestUnsupportedType(t *testing.T) {

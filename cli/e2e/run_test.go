@@ -124,6 +124,36 @@ func TestDynamicModuleLocalExtension(t *testing.T) {
 	require.NoError(t, internaltesting.CheckRequest(req, checkDenied))
 }
 
+func TestDynamicModuleCreateAndRun(t *testing.T) {
+	dataDir := t.TempDir()
+
+	// Create a brand new extension
+	process := internaltesting.RunCLI(t, cliBin, "create", "rust-e2e",
+		"--type", "dynamic_module_rust",
+		"--path", dataDir,
+	)
+	status, err := process.Wait()
+	require.NoError(t, err)
+	require.Equal(t, 0, status.ExitCode())
+
+	// Run the newly created extension
+	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin,
+		"--log-level", "dynamic_modules:debug",
+		"--local", dataDir+"/rust-e2e",
+	)
+
+	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
+	checkHeader := func(r *http.Response) bool {
+		headerValues, ok := r.Header[http.CanonicalHeaderKey("x-rust-e2e")]
+		return ok && headerValues[0] == "example"
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	t.Cleanup(cancel)
+
+	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
+}
+
 func TestLocalGoExtension(t *testing.T) {
 	dataDir := t.TempDir()
 

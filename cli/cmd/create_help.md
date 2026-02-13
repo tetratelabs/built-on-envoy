@@ -2,7 +2,7 @@ The create command generates a new extension template with the specified name an
 This is useful for getting started with developing a new extension for Built On Envoy.
 
 By default, it creates a `composer` type extension, which is an HTTP filter extension.
-The generated template includes boilerplate code, a manifest file, and a Makefile
+The generated template includes boilerplate code, a manifest file, and build configuration
 to help you build and install the extension.
 
 ## Examples
@@ -25,18 +25,42 @@ Create an extension with explicit type:
     boe create my-extension --type composer
     ```
 
+Create a Rust dynamic module extension:
+
+    ```shell
+    boe create my-extension --type dynamic_module_rust
+    ```
+
+## Extension Types
+
+    - **composer**: An HTTP filter extension using the Envoy dynamic modules SDK for Go.
+      Generates Go source files, Makefile, and Dockerfile for building and deploying.
+    
+    - **dynamic_module_rust**: An HTTP filter extension using the Envoy dynamic modules SDK for Rust.
+      Generates Rust source files and Cargo.toml for building a dynamic library.
+
 ## Generated Files
 
-The create command generates the following files in the extension directory:
+### For composer type:
 
     - **plugin.go**: The main Go source file with HTTP filter implementation boilerplate.
     - **manifest.yaml**: The extension manifest defining metadata and configuration.
     - **Makefile**: Build targets for compiling and installing the extension.
     - **go.mod**: Go module file with required dependencies.
+    - **Dockerfile**: Container image for the extension.
 
 After creation, the command automatically runs `go mod tidy` to fetch dependencies.
 
-## Extension Types
+### For dynamic_module_rust type:
 
-    - **composer**: An HTTP filter extension using the Envoy dynamic modules SDK for Go.
-    This is currently the only supported type.
+    - **src/lib.rs**: The main Rust source file with HTTP filter implementation boilerplate.
+    - **Cargo.toml**: Rust package configuration with required dependencies.
+    - **manifest.yaml**: The extension manifest defining metadata and configuration.
+    - **.gitignore**: Git ignore file for Rust build artifacts.
+    - **.dockerignore**: Docker ignore file for build artifacts.
+    - **.cargo/config.toml**: Cargo configuration for platform-specific build flags.
+    - **Dockerfile**: Multi-stage Dockerfile for building and packaging the extension.
+    - **Dockerfile.code**: Dockerfile for packaging source code only.
+    - **Makefile**: Build targets including push_image, and push_code.
+
+After creation, you can build the extension with `cargo build --release`.
