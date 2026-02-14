@@ -40,7 +40,7 @@ func CheckOrBuildDynamicModule(dirs *xdg.Directories, manifest *Manifest, path s
 	cmd.Stderr = os.Stderr
 	err := cmd.Run()
 	if err != nil {
-		return fmt.Errorf("failed to build Rust dynamic module from %s: %w\n",
+		return fmt.Errorf("failed to build Rust dynamic module from %s: %w",
 			path, err)
 	}
 

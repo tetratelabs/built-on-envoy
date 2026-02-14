@@ -71,7 +71,7 @@ test-e2e: GO_TEST_ARGS = -timeout 30m
 test-e2e: gen-code  ## Run the end-to-end tests
 	@$(MAKE) -C $(ROOT)/extensions/composer install
 	@echo "Run e2e tests"
-	@go test -v $(GO_TEST_ARGS) ./e2e/...
+	@go test $(GO_TEST_ARGS) ./e2e/...
 
 # This runs the unit tests for the codebase with coverage check.
 .PHONY: test-coverage
