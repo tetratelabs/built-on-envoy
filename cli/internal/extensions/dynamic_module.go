@@ -38,10 +38,10 @@ func CheckOrBuildDynamicModule(dirs *xdg.Directories, manifest *Manifest, path s
 	cmd.Dir = path
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	output, err := cmd.CombinedOutput()
+	err := cmd.Run()
 	if err != nil {
-		return fmt.Errorf("failed to build Rust dynamic module from %s: %w\nOutput: %s",
-			path, err, string(output))
+		return fmt.Errorf("failed to build Rust dynamic module from %s: %w\n",
+			path, err)
 	}
 
 	// Rust/Cargo converts dashes to underscores in library file names internally.
