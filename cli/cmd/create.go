@@ -22,7 +22,7 @@ var templateFS embed.FS
 
 // Create is a command to create a new extension template.
 type Create struct {
-	Type string `help:"Type of the extension. Currently only 'composer' is supported." default:"composer" enum:"composer"`
+	Type string `help:"Type of the extension." default:"composer" enum:"composer,dynamic_module_rust"`
 	Name string `arg:"" help:"Name of the extension."`
 	Path string `help:"Output directory for the extension. Defaults to the extension name." type:"path"`
 }
@@ -38,6 +38,8 @@ func (c *Create) Run(dirs *xdg.Directories) error {
 	switch c.Type {
 	case "composer":
 		return createComposerHTTPFilter(dirs, c.Path, c.Name)
+	case "dynamic_module_rust":
+		return createRustExtension(c.Path, c.Name)
 	default:
 		return fmt.Errorf("unsupported extension type: %s", c.Type)
 	}
@@ -65,6 +67,20 @@ func createComposerHTTPFilter(dirs *xdg.Directories, path, name string) error {
 		"standalone/main.go": "templates/create/main.go.tmpl",
 	}
 
+	createFilesErr := createFilesFromTemplate(files, data, repoPath)
+	if createFilesErr != nil {
+		return createFilesErr
+	}
+
+	cmd := exec.Command("go", "mod", "tidy")
+	cmd.Dir = repoPath
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to run 'go mod tidy': %w\n%s", err, string(output))
+	}
+	return nil
+}
+
+func createFilesFromTemplate(files map[string]string, data map[string]string, repoPath string) error {
 	for outputName, tmplPath := range files {
 		outputPath := filepath.Join(repoPath, outputName)
 
@@ -100,11 +116,30 @@ func createComposerHTTPFilter(dirs *xdg.Directories, path, name string) error {
 		}
 		fmt.Printf("Created %s\n", outputPath)
 	}
-
-	cmd := exec.Command("go", "mod", "tidy")
-	cmd.Dir = repoPath
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to run 'go mod tidy': %w\n%s", err, string(output))
-	}
 	return nil
+}
+
+func createRustExtension(path, name string) error {
+	repoPath := filepath.Join(path, name)
+
+	data := map[string]string{
+		"Name": name,
+		// Convert name to lib_name (replace hyphens with underscores for Rust crate name)
+		"LibName": extensions.RustLibNameFromName(name),
+	}
+
+	// Map of output filename to template filename
+	files := map[string]string{
+		"src/lib.rs":         "templates/create/rust/lib.rs.tmpl",
+		"Cargo.toml":         "templates/create/rust/Cargo.toml.tmpl",
+		"manifest.yaml":      "templates/create/rust/manifest.yaml.tmpl",
+		".gitignore":         "templates/create/rust/gitignore.tmpl",
+		".dockerignore":      "templates/create/rust/dockerignore.tmpl",
+		".cargo/config.toml": "templates/create/rust/cargo-config.toml.tmpl",
+		"Dockerfile":         "templates/create/rust/Dockerfile.tmpl",
+		"Dockerfile.code":    "templates/create/rust/Dockerfile.code.tmpl",
+		"Makefile":           "templates/create/rust/Makefile.tmpl",
+	}
+
+	return createFilesFromTemplate(files, data, repoPath)
 }

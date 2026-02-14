@@ -36,16 +36,18 @@ func CheckOrBuildDynamicModule(dirs *xdg.Directories, manifest *Manifest, path s
 	// #nosec G204
 	cmd := exec.Command("cargo", "build", "--release", "--target-dir", "./target")
 	cmd.Dir = path
-	output, err := cmd.CombinedOutput()
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err := cmd.Run()
 	if err != nil {
-		return fmt.Errorf("failed to build Rust dynamic module from %s: %w\nOutput: %s",
-			path, err, string(output))
+		return fmt.Errorf("failed to build Rust dynamic module from %s: %w",
+			path, err)
 	}
 
 	// Rust/Cargo converts dashes to underscores in library file names internally.
 	// For example, a crate named "ip-restriction" produces "libip_restriction.so".
 	// We need to find this file and copy it with the original manifest name.
-	rustLibName := strings.ReplaceAll(manifest.Name, "-", "_")
+	rustLibName := RustLibNameFromName(manifest.Name)
 
 	// Find the built library in target/release
 	// Note: Cargo may build with platform-specific extension (.dylib on macOS), but we use .so
@@ -73,6 +75,11 @@ func CheckOrBuildDynamicModule(dirs *xdg.Directories, manifest *Manifest, path s
 	}
 
 	return nil
+}
+
+// RustLibNameFromName converts the extension name to a valid Rust library name by replacing hyphens with underscores.
+func RustLibNameFromName(name string) string {
+	return strings.ReplaceAll(name, "-", "_")
 }
 
 // copyFile copies a file from src to dst

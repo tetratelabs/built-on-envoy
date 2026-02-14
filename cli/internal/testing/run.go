@@ -95,7 +95,7 @@ func RunEnvoy(t *testing.T, cliBin string, args ...string) (listenPort int, admi
 	// as we know there won't be other interfering child processes at that point.
 	require.Eventually(t, func() bool {
 		return isPortInUse(t.Context(), proxyPort)
-	}, 30*time.Second, 100*time.Millisecond, "Envoy did not start listening on port %d", proxyPort)
+	}, 90*time.Second, 100*time.Millisecond, "Envoy did not start listening on port %d", proxyPort)
 
 	adminClient, err := admin.NewAdminClient(t.Context(), process.Pid)
 	require.NoError(t, err)

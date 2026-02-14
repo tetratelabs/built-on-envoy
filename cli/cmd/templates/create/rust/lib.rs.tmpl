@@ -1,0 +1,161 @@
+// Copyright Built On Envoy
+// SPDX-License-Identifier: Apache-2.0
+// The full text of the Apache license is available in the LICENSE file at
+// the root of the repo.
+
+use envoy_proxy_dynamic_modules_rust_sdk::*;
+use serde::{Deserialize, Serialize};
+
+// The raw filter config that will be deserialized from the JSON configuration.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct RawFilterConfig {
+    #[serde(default)]
+    header_value: String,
+}
+
+impl Default for RawFilterConfig {
+    fn default() -> Self {
+        RawFilterConfig {
+            header_value: "example".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FilterConfig {
+    header_value: String,
+}
+
+impl FilterConfig {
+    pub fn new(filter_config: &str) -> Option<Self> {
+        let config: RawFilterConfig = if filter_config.is_empty() {
+            RawFilterConfig::default()
+        } else {
+            match serde_json::from_str(filter_config) {
+                Ok(cfg) => cfg,
+                Err(err) => {
+                    eprintln!("Error parsing filter config: {err}");
+                    return None;
+                }
+            }
+        };
+
+        Some(FilterConfig {
+            header_value: config.header_value,
+        })
+    }
+}
+
+impl<EHF: EnvoyHttpFilter> HttpFilterConfig<EHF> for FilterConfig {
+    fn new_http_filter(&self, _envoy: &mut EHF) -> Box<dyn HttpFilter<EHF>> {
+        Box::new(Filter {
+            filter_config: self.clone(),
+        })
+    }
+}
+
+pub struct Filter {
+    filter_config: FilterConfig,
+}
+
+impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for Filter {
+    fn on_request_headers(
+        &mut self,
+        envoy_filter: &mut EHF,
+        _end_stream: bool,
+    ) -> abi::envoy_dynamic_module_type_on_http_filter_request_headers_status {
+        // TODO: Implement your own custom logic here.
+        envoy_filter.set_request_header("x-{{ .Name }}", self.filter_config.header_value.as_bytes());
+        envoy_log_info!("{{ .Name }}: OnRequestHeaders called");
+        abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::Continue
+    }
+
+    fn on_request_body(
+        &mut self,
+        _envoy_filter: &mut EHF,
+        _end_stream: bool,
+    ) -> abi::envoy_dynamic_module_type_on_http_filter_request_body_status {
+        abi::envoy_dynamic_module_type_on_http_filter_request_body_status::Continue
+    }
+
+    fn on_request_trailers(
+        &mut self,
+        _envoy_filter: &mut EHF,
+    ) -> abi::envoy_dynamic_module_type_on_http_filter_request_trailers_status {
+        abi::envoy_dynamic_module_type_on_http_filter_request_trailers_status::Continue
+    }
+
+    fn on_response_headers(
+        &mut self,
+        envoy_filter: &mut EHF,
+        _end_stream: bool,
+    ) -> abi::envoy_dynamic_module_type_on_http_filter_response_headers_status {
+        // TODO: Implement your own custom logic here.
+        envoy_filter.set_response_header("x-{{ .Name }}", self.filter_config.header_value.as_bytes());
+        envoy_log_info!("{{ .Name }}: OnResponseHeaders called");
+        abi::envoy_dynamic_module_type_on_http_filter_response_headers_status::Continue
+    }
+
+    fn on_response_body(
+        &mut self,
+        _envoy_filter: &mut EHF,
+        _end_stream: bool,
+    ) -> abi::envoy_dynamic_module_type_on_http_filter_response_body_status {
+        abi::envoy_dynamic_module_type_on_http_filter_response_body_status::Continue
+    }
+
+    fn on_response_trailers(
+        &mut self,
+        _envoy_filter: &mut EHF,
+    ) -> abi::envoy_dynamic_module_type_on_http_filter_response_trailers_status {
+        abi::envoy_dynamic_module_type_on_http_filter_response_trailers_status::Continue
+    }
+
+    fn on_stream_complete(&mut self, _envoy_filter: &mut EHF) {
+        // This is called when the stream is complete, before the filter is dropped.
+        // Use this for cleanup or final processing.
+    }
+}
+
+fn init() -> bool {
+    true
+}
+
+#[allow(dead_code)]
+fn new_http_filter_config_fn<EC: EnvoyHttpFilterConfig, EHF: EnvoyHttpFilter>(
+    _envoy_filter_config: &mut EC,
+    filter_name: &str,
+    filter_config: &[u8],
+) -> Option<Box<dyn HttpFilterConfig<EHF>>> {
+    let filter_config = std::str::from_utf8(filter_config).unwrap_or("");
+    match filter_name {
+        "{{ .Name }}" => FilterConfig::new(filter_config)
+            .map(|config| Box::new(config) as Box<dyn HttpFilterConfig<EHF>>),
+        _ => panic!("Unknown filter name: {filter_name}"),
+    }
+}
+
+declare_init_functions!(init, new_http_filter_config_fn);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_new_filter_config() {
+        let filter_config = FilterConfig::new(
+            r#"{
+                "header_value": "test"
+            }"#,
+        );
+        assert!(filter_config.is_some());
+        assert_eq!(filter_config.unwrap().header_value, "test");
+    }
+
+    #[test]
+    fn test_new_filter_config_default() {
+        let filter_config = FilterConfig::new("");
+        assert!(filter_config.is_some());
+        assert_eq!(filter_config.unwrap().header_value, "example");
+    }
+}
