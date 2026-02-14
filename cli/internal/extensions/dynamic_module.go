@@ -36,6 +36,8 @@ func CheckOrBuildDynamicModule(dirs *xdg.Directories, manifest *Manifest, path s
 	// #nosec G204
 	cmd := exec.Command("cargo", "build", "--release", "--target-dir", "./target")
 	cmd.Dir = path
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to build Rust dynamic module from %s: %w\nOutput: %s",
