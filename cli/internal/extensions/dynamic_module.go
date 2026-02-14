@@ -45,7 +45,7 @@ func CheckOrBuildDynamicModule(dirs *xdg.Directories, manifest *Manifest, path s
 	// Rust/Cargo converts dashes to underscores in library file names internally.
 	// For example, a crate named "ip-restriction" produces "libip_restriction.so".
 	// We need to find this file and copy it with the original manifest name.
-	rustLibName := strings.ReplaceAll(manifest.Name, "-", "_")
+	rustLibName := RustLibNameFromName(manifest.Name)
 
 	// Find the built library in target/release
 	// Note: Cargo may build with platform-specific extension (.dylib on macOS), but we use .so
@@ -73,6 +73,10 @@ func CheckOrBuildDynamicModule(dirs *xdg.Directories, manifest *Manifest, path s
 	}
 
 	return nil
+}
+
+func RustLibNameFromName(name string) string {
+	return strings.ReplaceAll(name, "-", "_")
 }
 
 // copyFile copies a file from src to dst

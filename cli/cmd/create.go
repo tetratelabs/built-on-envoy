@@ -67,6 +67,20 @@ func createComposerHTTPFilter(dirs *xdg.Directories, path, name string) error {
 		"standalone/main.go": "templates/create/main.go.tmpl",
 	}
 
+	createFilesErr := createFilesFromTemplate(files, data, repoPath)
+	if createFilesErr != nil {
+		return createFilesErr
+	}
+
+	cmd := exec.Command("go", "mod", "tidy")
+	cmd.Dir = repoPath
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to run 'go mod tidy': %w\n%s", err, string(output))
+	}
+	return nil
+}
+
+func createFilesFromTemplate(files map[string]string, data map[string]string, repoPath string) error {
 	for outputName, tmplPath := range files {
 		outputPath := filepath.Join(repoPath, outputName)
 
@@ -102,29 +116,16 @@ func createComposerHTTPFilter(dirs *xdg.Directories, path, name string) error {
 		}
 		fmt.Printf("Created %s\n", outputPath)
 	}
-
-	cmd := exec.Command("go", "mod", "tidy")
-	cmd.Dir = repoPath
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to run 'go mod tidy': %w\n%s", err, string(output))
-	}
 	return nil
 }
 
 func createRustExtension(path, name string) error {
 	repoPath := filepath.Join(path, name)
 
-	// Convert name to lib_name (replace hyphens with underscores for Rust crate name)
-	libName := name
-	for i := 0; i < len(libName); i++ {
-		if libName[i] == '-' {
-			libName = libName[:i] + "_" + libName[i+1:]
-		}
-	}
-
 	data := map[string]string{
-		"Name":    name,
-		"LibName": libName,
+		"Name": name,
+		// Convert name to lib_name (replace hyphens with underscores for Rust crate name)
+		"LibName": extensions.RustLibNameFromName(name),
 	}
 
 	// Map of output filename to template filename
@@ -140,41 +141,5 @@ func createRustExtension(path, name string) error {
 		"Makefile":           "templates/create/rust/Makefile.tmpl",
 	}
 
-	for outputName, tmplPath := range files {
-		outputPath := filepath.Join(repoPath, outputName)
-
-		// Read template from embedded filesystem
-		tmplContent, err := templateFS.ReadFile(tmplPath)
-		if err != nil {
-			return fmt.Errorf("failed to read template %s: %w", tmplPath, err)
-		}
-		fileDir := filepath.Dir(outputPath)
-		if err = os.MkdirAll(fileDir, 0o750); err != nil {
-			return fmt.Errorf("failed to create directory %s: %w", fileDir, err)
-		}
-
-		// #nosec G304
-		f, err := os.Create(outputPath)
-		if err != nil {
-			return fmt.Errorf("failed to create file %s: %w", outputPath, err)
-		}
-		defer func() {
-			err = f.Close()
-			if err != nil {
-				fmt.Printf("Warning: failed to close file %s: %v\n", outputPath, err)
-			}
-		}()
-
-		t, err := template.New(outputName).Parse(string(tmplContent))
-		if err != nil {
-			return fmt.Errorf("failed to parse template for %s: %w", outputName, err)
-		}
-
-		if err := t.Execute(f, data); err != nil {
-			return fmt.Errorf("failed to execute template for %s: %w", outputName, err)
-		}
-		fmt.Printf("Created %s\n", outputPath)
-	}
-
-	return nil
+	return createFilesFromTemplate(files, data, repoPath)
 }

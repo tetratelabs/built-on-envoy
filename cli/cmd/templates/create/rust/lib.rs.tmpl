@@ -70,6 +70,21 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for Filter {
         abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::Continue
     }
 
+    fn on_request_body(
+        &mut self,
+        _envoy_filter: &mut EHF,
+        _end_stream: bool,
+    ) -> abi::envoy_dynamic_module_type_on_http_filter_request_body_status {
+        abi::envoy_dynamic_module_type_on_http_filter_request_body_status::Continue
+    }
+
+    fn on_request_trailers(
+        &mut self,
+        _envoy_filter: &mut EHF,
+    ) -> abi::envoy_dynamic_module_type_on_http_filter_request_trailers_status {
+        abi::envoy_dynamic_module_type_on_http_filter_request_trailers_status::Continue
+    }
+
     fn on_response_headers(
         &mut self,
         envoy_filter: &mut EHF,
@@ -79,6 +94,26 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for Filter {
         envoy_filter.set_response_header("x-{{ .Name }}", self.filter_config.header_value.as_bytes());
         envoy_log_info!("{{ .Name }}: OnResponseHeaders called");
         abi::envoy_dynamic_module_type_on_http_filter_response_headers_status::Continue
+    }
+
+    fn on_response_body(
+        &mut self,
+        _envoy_filter: &mut EHF,
+        _end_stream: bool,
+    ) -> abi::envoy_dynamic_module_type_on_http_filter_response_body_status {
+        abi::envoy_dynamic_module_type_on_http_filter_response_body_status::Continue
+    }
+
+    fn on_response_trailers(
+        &mut self,
+        _envoy_filter: &mut EHF,
+    ) -> abi::envoy_dynamic_module_type_on_http_filter_response_trailers_status {
+        abi::envoy_dynamic_module_type_on_http_filter_response_trailers_status::Continue
+    }
+
+    fn on_stream_complete(&mut self, _envoy_filter: &mut EHF) {
+        // This is called when the stream is complete, before the filter is dropped.
+        // Use this for cleanup or final processing.
     }
 }
 
