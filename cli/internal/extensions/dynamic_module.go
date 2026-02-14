@@ -75,6 +75,7 @@ func CheckOrBuildDynamicModule(dirs *xdg.Directories, manifest *Manifest, path s
 	return nil
 }
 
+// RustLibNameFromName converts the extension name to a valid Rust library name by replacing hyphens with underscores.
 func RustLibNameFromName(name string) string {
 	return strings.ReplaceAll(name, "-", "_")
 }
