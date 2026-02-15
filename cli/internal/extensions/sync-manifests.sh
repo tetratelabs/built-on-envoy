@@ -29,7 +29,7 @@ rsync -amq --include=*/ \
     "${ROOT}/extensions/" "${MANIFESTS_TARGET_DIR}/"
 
 # Extract libcomposer version from its manifest.yaml, cleaning up whitespaces, etc.
-echo "Extracting libcomposer version..."
+echo "Setting embedded libcomposer version..."
 
 grep -E "^version:" "${LIBCOMPOSER_VERSION_SRC}" | sed 's/[^:]*:[[:space:]]*//g' | tr -d '\n' > "${MANIFESTS_TARGET_DIR}/libcomposer-version.txt"
 

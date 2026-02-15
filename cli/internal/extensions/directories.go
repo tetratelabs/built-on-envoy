@@ -7,6 +7,7 @@ package extensions
 
 import (
 	"fmt"
+	"io/fs"
 	"path/filepath"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
@@ -51,18 +52,46 @@ func LocalCacheExtension(dirs *xdg.Directories, manifest *Manifest) string {
 	}
 }
 
+// LocalCacheComposerSourceArtifactDir returns the local cache directory for the composer
+// source artifact based on the manifest.
+func LocalCacheComposerSourceArtifactDir(dirs *xdg.Directories, manifest *Manifest) string {
+	return filepath.Join(dirs.DataHome, "extensions", "src", manifest.Name, manifest.Version)
+}
+
+// LocalCacheComposerExtensionSourceDir returns the local cache directory for the composer extension source code
+// based on the extension name. It looks for the manifest.yaml file in the composer source artifact directory
+// to find the matching extension name and returns its path.
+func LocalCacheComposerExtensionSourceDir(dirs *xdg.Directories, manifest *Manifest, name string) string {
+	base := LocalCacheComposerSourceArtifactDir(dirs, manifest)
+	var extensionPath string
+
+	_ = filepath.WalkDir(base, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.Name() == "manifest.yaml" {
+			m, err := LoadLocalManifest(path)
+			if err != nil {
+				return err
+			}
+
+			if m.Name == name {
+				extensionPath = filepath.Dir(path)
+				return filepath.SkipDir
+			}
+		}
+		return nil
+	})
+
+	return extensionPath
+}
+
 // LocalCacheComposerDir returns the local cache directory for the composer.
-func LocalCacheComposerDir(dirs *xdg.Directories, version string, localBuild bool) string {
-	// When localBuild is true, we return the path for the locally built composer lib.
-	// We keep the locally build composer separate from the binary downloaded one to avoid potential
-	// conflicts and allow parallel existence of both versions for testing and development purposes.
-	if localBuild {
-		return filepath.Join(dirs.DataHome, "extensions", "dym", "composer", "build", version)
-	}
+func LocalCacheComposerDir(dirs *xdg.Directories, version string) string {
 	return filepath.Join(dirs.DataHome, "extensions", "dym", "composer", version)
 }
 
 // LocalCacheComposerLib returns the local cache path for the composer lib.
-func LocalCacheComposerLib(dirs *xdg.Directories, version string, localBuild bool) string {
-	return filepath.Join(LocalCacheComposerDir(dirs, version, localBuild), "libcomposer.so")
+func LocalCacheComposerLib(dirs *xdg.Directories, version string) string {
+	return filepath.Join(LocalCacheComposerDir(dirs, version), "libcomposer.so")
 }

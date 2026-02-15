@@ -217,7 +217,7 @@ func TestComposerFilterGenerator(t *testing.T) {
 	require.ErrorContains(t, err, "composer binary not found")
 
 	// Create Composer binary
-	composerPath := extensions.LocalCacheComposerDir(dirs, manifest.ComposerVersion, !manifest.Remote)
+	composerPath := extensions.LocalCacheComposerDir(dirs, manifest.ComposerVersion)
 	require.NoError(t, os.MkdirAll(composerPath, 0o750))
 	require.NoError(t, os.WriteFile(filepath.Join(composerPath, "libcomposer.so"), []byte("fake binary"), 0o600))
 

@@ -3,15 +3,9 @@
 // The full text of the Apache license is available in the LICENSE file at
 // the root of the repo.
 
-// TODO(wbpcode): remove this once we have a solution to distribute pre-built
-// composer lib with the CLI binary.
-// Synchronize the composer lib so we can build it at any machine.
-//go:generate sh sync-composer.sh
-
 package extensions
 
 import (
-	"bytes"
 	"context"
 	_ "embed"
 	"fmt"
@@ -19,7 +13,6 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/tetratelabs/built-on-envoy/cli/internal/oci"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
@@ -31,55 +24,24 @@ import (
 //go:embed manifests/libcomposer-version.txt
 var LibComposerVersion string
 
-//go:embed extensions.tar.gz
-var composerExtenionsBytes []byte
-
-// CheckOrBuildLibComposer checks if the libcomposer.so exists in the dataHome directory.
-// If not, it builds the libcomposer from source.
-func CheckOrBuildLibComposer(dirs *xdg.Directories, buildPlugins bool) error {
-	// look for the cached local build of composer
-	libcomposer := LocalCacheComposerLib(dirs, LibComposerVersion, true)
-	if _, err := os.Stat(libcomposer); err == nil {
-		// libcomposer already exists
-		return nil
-	}
-
-	// Create temporary directory to extract the packaged extensions
-	tempDir, err := os.MkdirTemp("/tmp", "boe-composer-ext")
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = os.RemoveAll(tempDir)
-	}()
-
-	// Write the embedded tar to a temporary file
-	tarPath := filepath.Join(tempDir, "extensions.tar.gz")
-	err = os.WriteFile(tarPath, composerExtenionsBytes, 0o600)
-	if err != nil {
-		return err
-	}
-
-	composerSrcPath := filepath.Join(tempDir, "extensions")
-
-	// Create reader from the byte slice
-	dataReader := bytes.NewReader(composerExtenionsBytes)
-	err = oci.ExtractPackage(dataReader, composerSrcPath)
-	if err != nil {
-		return err
-	}
-
-	return buildLibComposer(dirs.DataHome, composerSrcPath, buildPlugins)
-}
-
 // CheckOrDownloadLibComposer checks if the libcomposer.so exists in the dataHome directory.
 // If not, it tries to download the pre-built libcomposer from OCI registry.
 func CheckOrDownloadLibComposer(ctx context.Context, downloader *Downloader, version string) error {
-	if _, err := os.Stat(LocalCacheComposerLib(downloader.Dirs, version, false)); err == nil {
+	if _, err := os.Stat(LocalCacheComposerLib(downloader.Dirs, version)); err == nil {
 		// libcomposer already exists
 		return nil
 	}
-	return downloader.DownloadComposer(ctx, version)
+	artifact, err := downloader.DownloadComposer(ctx, version)
+	if err != nil {
+		return fmt.Errorf("failed to download libcomposer: %w", err)
+	}
+
+	// If the downloaded artifact is a binary, we are done. If it's a source artifact, we need to build it.
+	if artifact.ArtifactType == ArtifactBinary {
+		return nil
+	}
+
+	return BuildLibComposer(downloader.Dirs.DataHome, artifact.Path, false)
 }
 
 // BuildExtensionFromPath builds the extension plugin from the given path and saves it to
@@ -108,12 +70,18 @@ func BuildExtensionFromPath(dirs *xdg.Directories, manifest *Manifest, path stri
 	return nil
 }
 
-func buildLibComposer(dataHome string, composerSrcPath string, buildPlugins bool) error {
-	// Build the libcomposer from source.
+// BuildLibComposer builds the libcomposer.so from source. The composer source code is expected
+// to be at composerSrcPath. The built libcomposer.so will be saved in the local cache directory for
+// composer to load.
+func BuildLibComposer(dataHome string, composerSrcPath string, buildPlugins bool) error {
+	if _, err := os.Stat(filepath.Join(composerSrcPath, "libcomposer.so")); err == nil {
+		// libcomposer already exists
+		return nil
+	}
 
+	// Build the libcomposer from source.
 	// #nosec G204
-	cmd := exec.Command("make", "-C",
-		"composer",
+	cmd := exec.Command("make",
 		"install",
 		"BOE_DATA_HOME="+dataHome,
 		"COMPOSER_LITE=true",
@@ -128,8 +96,7 @@ func buildLibComposer(dataHome string, composerSrcPath string, buildPlugins bool
 
 	if buildPlugins {
 		// #nosec G204
-		pluginsDir := exec.Command("make", "-C",
-			"composer",
+		pluginsDir := exec.Command("make",
 			"install_plugins",
 			"BOE_DATA_HOME="+dataHome,
 		)

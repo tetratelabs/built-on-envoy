@@ -3,21 +3,18 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-name: test
-version: 1.0.0
+name: test-composer
+parent: composer
 categories:
-  - Misc
+  - Mist
 author: Tetrate
-description: lua test
-longDescription: lua test
+description: ltest composer
+longDescription: test composer
 tags:
   - test
 license: Apache-2.0
-type: lua
-lua:
-  path: test.lua
 examples:
-  - title: Test Lua Extension
-    description: Enable the lua test extension
+  - title: Test composer
+    description: Test composer
     code: |
-      boe run --extension test
+      boe run --extension test-composer

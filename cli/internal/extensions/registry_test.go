@@ -58,6 +58,18 @@ func TestNameFromRepository(t *testing.T) {
 	}
 }
 
+func TestSourceRepositoryName(t *testing.T) {
+	manifest := &Manifest{Name: "test-extension", Type: TypeLua}
+	require.Equal(t,
+		"ghcr.io/tetratelabs/built-on-envoy/extension-src-test-extension",
+		SourceRepositoryName(DefaultOCIRegistry, manifest))
+
+	composerManifest := &Manifest{Name: "my-set", Type: TypeComposer}
+	require.Equal(t,
+		"ghcr.io/tetratelabs/built-on-envoy/composer-src",
+		SourceRepositoryName(DefaultOCIRegistry, composerManifest))
+}
+
 func TestOCIAnnotationsForManifest(t *testing.T) {
 	manifest := &Manifest{
 		Name:        "test-extension",

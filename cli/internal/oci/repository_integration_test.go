@@ -15,8 +15,6 @@ import (
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
-
-	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 
 func init() {
@@ -38,8 +36,6 @@ func newLocalRegistryRepositoryClient(t *testing.T) RepositoryClient {
 }
 
 func TestPullMultiArch(t *testing.T) {
-	builder := internaltesting.CreateBuildxBuilder(t)
-
 	// Create the multi-arch image
 	testRepo := fmt.Sprintf("%s/test-multiarch", registryAddr)
 	// #nosec G204

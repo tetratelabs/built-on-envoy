@@ -166,24 +166,41 @@ func (r *repositoryClient) fetchManifest(ctx context.Context, tag string, platfo
 		}
 
 		if !found {
-			return nil, ocispec.Descriptor{},
+			// If the manifest is not found, return the error but still return the index manifest, as it
+			// will contain the annotations that can be used to fallback to download the source artifact.
+			var manifest *ocispec.Manifest
+			manifest, err = r.decodeManifest(ctx, &desc)
+			if err != nil {
+				return nil, ocispec.Descriptor{}, err
+			}
+
+			return manifest, ocispec.Descriptor{},
 				fmt.Errorf("%w: %s/%s", ErrPlatformNotFound, platform.OS, platform.Architecture)
 		}
 	}
 
 	// Fetch the manifest
-	manifestReader, err := r.target.Fetch(ctx, desc)
+	manifest, err := r.decodeManifest(ctx, &desc)
 	if err != nil {
-		return nil, ocispec.Descriptor{}, fmt.Errorf("failed to fetch manifest: %w", err)
+		return nil, ocispec.Descriptor{}, err
+	}
+	return manifest, desc, nil
+}
+
+// decodeManifest fetches and decodes the manifest for the given descriptor.
+func (r *repositoryClient) decodeManifest(ctx context.Context, desc *ocispec.Descriptor) (*ocispec.Manifest, error) {
+	manifestReader, err := r.target.Fetch(ctx, *desc)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch manifest: %w", err)
 	}
 	defer func() { _ = manifestReader.Close() }()
 
 	var manifest ocispec.Manifest
 	if err = json.NewDecoder(manifestReader).Decode(&manifest); err != nil {
-		return nil, ocispec.Descriptor{}, fmt.Errorf("failed to decode manifest: %w", err)
+		return nil, fmt.Errorf("failed to decode manifest: %w", err)
 	}
 
-	return &manifest, desc, nil
+	return &manifest, nil
 }
 
 // Tags lists all tags in the repository.

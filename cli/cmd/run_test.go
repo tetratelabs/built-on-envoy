@@ -331,15 +331,17 @@ func TestSplitRef(t *testing.T) {
 }
 
 func TestLoadLocalManifests(t *testing.T) {
-	dirs := &xdg.Directories{DataHome: t.TempDir()}
+	downloader := &extensions.Downloader{
+		Dirs: &xdg.Directories{DataHome: t.TempDir()},
+	}
 	t.Run("empty paths", func(t *testing.T) {
-		manifests, err := loadLocalManifests(dirs, []string{}, false)
+		manifests, err := loadLocalManifests(t.Context(), downloader, []string{}, false)
 		require.NoError(t, err)
 		require.Empty(t, manifests)
 	})
 
 	t.Run("multiple valid paths", func(t *testing.T) {
-		manifests, err := loadLocalManifests(dirs, []string{"./testdata", "./testdata/push_pull"}, false)
+		manifests, err := loadLocalManifests(t.Context(), downloader, []string{"./testdata", "./testdata/push_pull"}, false)
 		require.NoError(t, err)
 		require.Len(t, manifests, 2)
 		require.Equal(t, "test-lua", manifests[0].Name)
@@ -347,13 +349,13 @@ func TestLoadLocalManifests(t *testing.T) {
 	})
 
 	t.Run("nonexistent path", func(t *testing.T) {
-		_, err := loadLocalManifests(dirs, []string{"/nonexistent/path"}, false)
+		_, err := loadLocalManifests(t.Context(), downloader, []string{"/nonexistent/path"}, false)
 		require.Error(t, err)
 		require.ErrorIs(t, err, errFailedToLoadLocalManifest)
 	})
 
 	t.Run("invalid path", func(t *testing.T) {
-		_, err := loadLocalManifests(dirs, []string{"./"}, false)
+		_, err := loadLocalManifests(t.Context(), downloader, []string{"./"}, false)
 		require.Error(t, err)
 		require.ErrorIs(t, err, errFailedToLoadLocalManifest)
 	})
@@ -362,7 +364,7 @@ func TestLoadLocalManifests(t *testing.T) {
 		// Create a temporary directory and create an template composer plugin with
 		// createComposerHTTPFilter.
 		tempDir := t.TempDir()
-		err := createComposerHTTPFilter(dirs, tempDir, "test_custom")
+		err := createComposerHTTPFilter(downloader.Dirs, tempDir, "test_custom")
 		require.NoError(t, err)
 
 		// Remove go.mod and go.sum to simulate invalid composer extension.
@@ -371,7 +373,7 @@ func TestLoadLocalManifests(t *testing.T) {
 		err = os.Remove(tempDir + "/test_custom/go.sum")
 		require.NoError(t, err)
 
-		_, err = loadLocalManifests(dirs, []string{tempDir + "/test_custom"}, true)
+		_, err = loadLocalManifests(t.Context(), downloader, []string{tempDir + "/test_custom"}, true)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "failed to run 'go mod tidy'")
 	})
@@ -380,10 +382,10 @@ func TestLoadLocalManifests(t *testing.T) {
 		// Create a temporary directory and create an template composer plugin with
 		// createComposerHTTPFilter.
 		tempDir := t.TempDir()
-		err := createComposerHTTPFilter(dirs, tempDir, "test_valid")
+		err := createComposerHTTPFilter(downloader.Dirs, tempDir, "test_valid")
 		require.NoError(t, err)
 
-		manifests, err := loadLocalManifests(dirs, []string{tempDir + "/test_valid"}, false)
+		manifests, err := loadLocalManifests(t.Context(), downloader, []string{tempDir + "/test_valid"}, false)
 		require.NoError(t, err)
 		require.Len(t, manifests, 1)
 		require.Equal(t, "test_valid", manifests[0].Name)
@@ -495,30 +497,30 @@ func TestValidateComposerCompat(t *testing.T) {
 		{
 			name: "no composer extensions",
 			extensions: []*extensions.Manifest{
-				{Name: "ext-1", Version: "1.0.0", Type: "http-filter"},
-				{Name: "ext-2", Version: "2.0.0", Type: "network-filter"},
+				{Name: "ext-1", Version: "1.0.0", Type: extensions.TypeDynamicModule},
+				{Name: "ext-2", Version: "2.0.0", Type: extensions.TypeLua},
 			},
 		},
 		{
 			name: "single composer extension",
 			extensions: []*extensions.Manifest{
-				{Name: "ext-1", Version: "1.0.0", Type: "composer", ComposerVersion: "1.2.3"},
-				{Name: "ext-2", Version: "2.0.0", Type: "http-filter"},
+				{Name: "ext-1", Version: "1.0.0", Type: extensions.TypeComposer, ComposerVersion: "1.2.3"},
+				{Name: "ext-2", Version: "2.0.0", Type: extensions.TypeDynamicModule},
 			},
 		},
 		{
 			name: "multiple composer extensions with same version",
 			extensions: []*extensions.Manifest{
-				{Name: "ext-1", Version: "1.0.0", Type: "composer", ComposerVersion: "1.2.3"},
-				{Name: "ext-2", Version: "2.0.0", Type: "composer", ComposerVersion: "1.2.3"},
+				{Name: "ext-1", Version: "1.0.0", Type: extensions.TypeComposer, ComposerVersion: "1.2.3"},
+				{Name: "ext-2", Version: "2.0.0", Type: extensions.TypeComposer, ComposerVersion: "1.2.3"},
 			},
 		},
 		{
 			name: "multiple composer extensions with different versions",
 			extensions: []*extensions.Manifest{
-				{Name: "ext-1", Version: "1.0.0", Type: "composer", ComposerVersion: "1.2.3"},
-				{Name: "ext-2", Version: "2.0.0", Type: "composer", ComposerVersion: "2.0.0"},
-				{Name: "ext-3", Version: "2.0.0", Type: "composer", ComposerVersion: "2.0.0"},
+				{Name: "ext-1", Version: "1.0.0", Type: extensions.TypeComposer, ComposerVersion: "1.2.3"},
+				{Name: "ext-2", Version: "2.0.0", Type: extensions.TypeComposer, ComposerVersion: "2.0.0"},
+				{Name: "ext-3", Version: "2.0.0", Type: extensions.TypeComposer, ComposerVersion: "2.0.0"},
 			},
 			wantErr: `incompatible composer versions found:
   - version 1.2.3 used by extensions: ext-1

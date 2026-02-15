@@ -169,12 +169,12 @@ func TestDownloadExtension(t *testing.T) {
 				},
 			}
 
-			manifest, err := d.DownloadExtension(t.Context(), "extension-myext", tt.version)
+			artifact, err := d.DownloadExtension(t.Context(), "extension-myext", tt.version)
 			require.ErrorIs(t, err, tt.wantErr)
 			if tt.wantErr == nil {
-				require.Equal(t, tt.wantName, manifest.Name)
-				require.Equal(t, tt.wantVersion, manifest.Version)
-				require.True(t, manifest.Remote)
+				require.Equal(t, tt.wantName, artifact.Manifest.Name)
+				require.Equal(t, tt.wantVersion, artifact.Manifest.Version)
+				require.True(t, artifact.Manifest.Remote)
 			}
 		})
 	}

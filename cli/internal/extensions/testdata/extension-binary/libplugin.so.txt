@@ -1,0 +1,4 @@
+// dummy file for testing
+
+COPY ./manifest.yaml /manifest.yaml
+COPY ./libplugin.so.txt /libplugin.so

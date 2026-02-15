@@ -3,21 +3,19 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-name: test
+name: test-dynamic-module
 version: 1.0.0
 categories:
   - Misc
 author: Tetrate
-description: lua test
-longDescription: lua test
+description: Dynamic module test
+longDescription: Dynamic module test
 tags:
   - test
 license: Apache-2.0
-type: lua
-lua:
-  path: test.lua
+type: dynamic_module
 examples:
-  - title: Test Lua Extension
-    description: Enable the lua test extension
+  - title: Test Dynamic Module
+    description: Test the dynamic module extension
     code: |
-      boe run --extension test
+      boe run --extension test-dynamic-module

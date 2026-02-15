@@ -113,9 +113,9 @@ build:
 .PHONY: install
 install: build
 	@echo "Installing $(NAME)..."
-	mkdir -p $(BOE_DATA_HOME)/extensions/dym/$(NAME)/build/$(VERSION); \
-	mv lib$(NAME).so $(BOE_DATA_HOME)/extensions/dym/$(NAME)/build/$(VERSION)/lib$(NAME).so;
-	@echo "Installed to $(BOE_DATA_HOME)/extensions/dym/$(NAME)/build"
+	mkdir -p $(BOE_DATA_HOME)/extensions/dym/$(NAME)/$(VERSION); \
+	mv lib$(NAME).so $(BOE_DATA_HOME)/extensions/dym/$(NAME)/$(VERSION)/lib$(NAME).so;
+	@echo "Installed to $(BOE_DATA_HOME)/extensions/dym/$(NAME)"
 
 # For single local platform build, we will add the OS and ARCH to the image tag to avoid confusion.
 # And we will not push it to the registry by default.

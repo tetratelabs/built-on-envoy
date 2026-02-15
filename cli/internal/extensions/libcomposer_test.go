@@ -20,14 +20,18 @@ func TestLibComposerVersion(t *testing.T) {
 		"ComposerVersion %q is not a valid semver", LibComposerVersion)
 }
 
-func TestCheckOrBuildLibComposer(t *testing.T) {
+func TestBuildLibComposer(t *testing.T) {
 	fakeDirs := &xdg.Directories{DataHome: t.TempDir()}
-	err := CheckOrBuildLibComposer(fakeDirs, true)
+	composerPath := "../../../extensions/composer"
+	err := BuildLibComposer(fakeDirs.DataHome, composerPath, true)
 	require.NoError(t, err)
 
 	// Ensure the libcomposer.so is created.
-	composerPath := LocalCacheComposerLib(fakeDirs, LibComposerVersion, true)
-	_, err = os.Stat(composerPath)
+	_, err = os.Stat(LocalCacheComposerLib(fakeDirs, LibComposerVersion))
+	require.NoError(t, err)
+
+	// Ensure plugins are built
+	_, err = os.Stat(LocalCacheExtension(fakeDirs, Manifests["example-go"]))
 	require.NoError(t, err)
 }
 

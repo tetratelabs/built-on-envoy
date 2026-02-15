@@ -16,7 +16,10 @@ import (
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 
-var registryAddr string
+var (
+	registryAddr string
+	builder      string
+)
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
@@ -27,7 +30,18 @@ func TestMain(m *testing.M) {
 	}
 	registryAddr = addr
 
+	var cleanup func()
+	builder, cleanup, err = internaltesting.CreateBuildxBuilder(ctx)
+	if err != nil {
+		_ = registryContainer.Terminate(ctx)
+		fmt.Fprintf(os.Stderr, "failed to create buildx builder: %v\n", err)
+		os.Exit(1)
+	}
+
 	code := m.Run()
+
 	_ = registryContainer.Terminate(ctx)
+	cleanup()
+
 	os.Exit(code)
 }

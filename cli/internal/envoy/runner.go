@@ -141,16 +141,13 @@ func setupDynamicModuleSearchPath(params ConfigGenerationParams) (string, func()
 	}
 
 	// Collect all dynamic module libraries that need to be linked
-	var hasComposer bool
-	var composerIsLocal bool
-
+	var composerVersion string
 	for _, ext := range params.Extensions {
 		switch ext.Type {
 		case extensions.TypeComposer:
-			hasComposer = true
-			if !ext.Remote {
-				composerIsLocal = true
-			}
+			// At this point all extensions are guaranteed to use the same version of
+			// composer.
+			composerVersion = ext.ComposerVersion
 
 		case extensions.TypeDynamicModule:
 			// Get the path to the Rust dynamic module library
@@ -170,8 +167,8 @@ func setupDynamicModuleSearchPath(params ConfigGenerationParams) (string, func()
 	}
 
 	// If there are composer extensions, link libcomposer.so as well
-	if hasComposer {
-		composerPath := extensions.LocalCacheComposerLib(params.Dirs, extensions.LibComposerVersion, composerIsLocal)
+	if composerVersion != "" {
+		composerPath := extensions.LocalCacheComposerLib(params.Dirs, composerVersion)
 		if _, err := os.Stat(composerPath); err == nil {
 			linkPath := filepath.Join(tempDir, filepath.Base(composerPath))
 			if err := os.Link(composerPath, linkPath); err != nil {

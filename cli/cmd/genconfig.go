@@ -70,7 +70,7 @@ func (g *GenConfig) Run(ctx context.Context, dirs *xdg.Directories) error {
 	if err != nil {
 		return err
 	}
-	local, err := loadLocalManifests(dirs, g.Local, false)
+	local, err := loadLocalManifests(ctx, downloader, g.Local, false)
 	if err != nil {
 		return err
 	}

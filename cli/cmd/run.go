@@ -12,11 +12,13 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/tetratelabs/built-on-envoy/cli/internal"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/envoy"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
@@ -103,7 +105,7 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories) error {
 		return err
 	}
 
-	local, err := loadLocalManifests(dirs, r.Local, true)
+	local, err := loadLocalManifests(ctx, downloader, r.Local, true)
 	if err != nil {
 		return err
 	}
@@ -125,9 +127,6 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories) error {
 		return err
 	}
 
-	// TODO(nacx): fix log to print all names
-	fmt.Printf("Starting Envoy %s with extensions: %v\n", r.EnvoyVersion, r.Local)
-
 	runner := &envoy.Runner{
 		EnvoyVersion:      r.EnvoyVersion,
 		DefaultLogLevel:   r.defaultLogLevel,
@@ -148,21 +147,62 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 	downloaded := make([]*extensions.Manifest, 0, len(refs))
 	for _, ext := range refs {
 		name, tag := splitRef(ext)
-		extension, err := downloader.DownloadExtension(ctx, name, tag)
+		artifact, err := downloader.DownloadExtension(ctx, name, tag)
 		if err != nil {
 			return nil, err
 		}
 
-		if extension.Type == "composer" {
-			// Ensure the composer is downloaded before running any extensions that may depend on it.
-			if err = extensions.CheckOrDownloadLibComposer(ctx, downloader, extension.ComposerVersion); err != nil {
-				return nil, fmt.Errorf("failed to download libcomposer %s for extension %s: %w",
-					extension.ComposerVersion, extension.Name, err)
+		switch artifact.ArtifactType {
+		case extensions.ArtifactBinary:
+			if artifact.Manifest.Type == extensions.TypeComposer {
+				// Ensure the composer is downloaded before running any extensions that may depend on it.
+				if err = extensions.CheckOrDownloadLibComposer(ctx, downloader, artifact.Manifest.ComposerVersion); err != nil {
+					return nil, fmt.Errorf("failed to download libcomposer %s for extension %s: %w",
+						artifact.Manifest.ComposerVersion, name, err)
+				}
 			}
-		}
+			downloaded = append(downloaded, artifact.Manifest)
 
-		downloaded = append(downloaded, extension)
+		case extensions.ArtifactSource:
+			if artifact.Manifest.Type == extensions.TypeComposer {
+				var manifest *extensions.Manifest
+				extensionSrc := extensions.LocalCacheComposerExtensionSourceDir(downloader.Dirs, artifact.Manifest, name)
+				if extensionSrc == "" {
+					return nil, fmt.Errorf("invalid source artifact for composer extension %s: missing expected source directory: %s", name, artifact.Path)
+				}
+				manifest, err = extensions.LoadLocalManifest(filepath.Join(extensionSrc, "manifest.yaml"))
+				if err != nil {
+					return nil, fmt.Errorf("failed to load manifest for composer extension %s from source artifact %q: %w",
+						name, extensionSrc, err)
+				}
+				manifest.Remote = true // Mark the manifest as remote since it is from a downloaded artifact
+
+				fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)
+
+				if err = extensions.BuildLibComposer(downloader.Dirs.DataHome, artifact.Path, false); err != nil {
+					return nil, fmt.Errorf("failed to build libcomposer %s for extension %s: %w",
+						artifact.Manifest.Version, name, err)
+				}
+				if err = extensions.BuildExtensionFromPath(downloader.Dirs, manifest, extensionSrc); err != nil {
+					return nil, fmt.Errorf("failed to build dynamic module for extension %s from source artifact: %w", name, err)
+				}
+
+				downloaded = append(downloaded, manifest)
+			} else {
+				if artifact.Manifest.Type == extensions.TypeDynamicModule {
+					fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)
+
+					if err = extensions.CheckOrBuildDynamicModule(downloader.Dirs, artifact.Manifest, artifact.Path); err != nil {
+						return nil, fmt.Errorf("failed to build dynamic module for extension %s from source artifact: %w", name, err)
+					}
+				}
+				downloaded = append(downloaded, artifact.Manifest)
+			}
+		default:
+			return nil, fmt.Errorf("unknown artifact type %q for extension %s", artifact.ArtifactType, name)
+		}
 	}
+
 	return downloaded, nil
 }
 
@@ -216,7 +256,7 @@ func parseLogLevels(logLevel string) (string, string, error) {
 var errFailedToLoadLocalManifest = errors.New("failed to load local manifest")
 
 // loadLocalManifests loads extension manifests from the specified local paths.
-func loadLocalManifests(dirs *xdg.Directories, paths []string, build bool) ([]*extensions.Manifest, error) {
+func loadLocalManifests(ctx context.Context, downloader *extensions.Downloader, paths []string, build bool) ([]*extensions.Manifest, error) {
 	manifests := make([]*extensions.Manifest, 0, len(paths))
 	for _, path := range paths {
 		manifest, err := extensions.LoadLocalManifest(path + "/manifest.yaml")
@@ -227,17 +267,17 @@ func loadLocalManifests(dirs *xdg.Directories, paths []string, build bool) ([]*e
 		if build {
 			switch manifest.Type {
 			case extensions.TypeComposer:
-				// Rebuild the extension from the given path
-				if err := extensions.BuildExtensionFromPath(dirs, manifest, path); err != nil {
+				fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, manifest.Name, internal.ANSIReset)
+				if err := extensions.BuildExtensionFromPath(downloader.Dirs, manifest, path); err != nil {
 					return nil, err
 				}
-				// Ensure libcomposer is built before running any extensions that may depend on it.
-				if err := extensions.CheckOrBuildLibComposer(dirs, false); err != nil {
+				if err := extensions.CheckOrDownloadLibComposer(ctx, downloader, manifest.ComposerVersion); err != nil {
 					return nil, err
 				}
 			case extensions.TypeDynamicModule:
+				fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, manifest.Name, internal.ANSIReset)
 				// Build dynamic module (currently supports Rust)
-				if err := extensions.CheckOrBuildDynamicModule(dirs, manifest, path); err != nil {
+				if err := extensions.CheckOrBuildDynamicModule(downloader.Dirs, manifest, path); err != nil {
 					return nil, err
 				}
 			}
@@ -275,10 +315,10 @@ func validateEnvoyCompat(envoyVersion string, extensions []*extensions.Manifest)
 }
 
 // validateComposerCompat validates that all extensions use the same composer version.
-func validateComposerCompat(extensions []*extensions.Manifest) error {
+func validateComposerCompat(manifests []*extensions.Manifest) error {
 	versions := make(map[string][]string)
-	for _, ext := range extensions {
-		if ext.Type == "composer" {
+	for _, ext := range manifests {
+		if ext.Type == extensions.TypeComposer {
 			versions[ext.ComposerVersion] = append(versions[ext.ComposerVersion], ext.Name)
 		}
 	}

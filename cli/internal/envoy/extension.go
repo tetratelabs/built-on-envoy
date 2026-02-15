@@ -166,7 +166,7 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 
 // GenerateFilterConfig generates the filter configuration for Composer extensions.
 func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, dirs *xdg.Directories, config string) (*ExtensionResources, error) {
-	cachedComposerPath := extensions.LocalCacheComposerLib(dirs, manifest.ComposerVersion, !manifest.Remote)
+	cachedComposerPath := extensions.LocalCacheComposerLib(dirs, manifest.ComposerVersion)
 	if _, err := os.Stat(cachedComposerPath); os.IsNotExist(err) {
 		// TODO(wbpcode): Download the composer binary from the URL specified in the manifest.
 		return nil, fmt.Errorf("composer binary not found at %s", cachedComposerPath)

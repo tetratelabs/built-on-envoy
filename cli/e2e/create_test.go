@@ -23,11 +23,7 @@ import (
 
 func TestCreateWithDockerSupport(t *testing.T) {
 	tmpDir := t.TempDir()
-
 	ctx := t.Context()
-
-	// Create a new builder instance that uses the custom buildkit configuration and host network.
-	internaltesting.CreateBuildxBuilder(t)
 
 	// Create a new extension
 	process := internaltesting.RunCLI(t, cliBin, "create", "test-docker", "--path", tmpDir)
@@ -112,11 +108,7 @@ func TestCreateWithDockerSupport(t *testing.T) {
 
 func TestCreateRustWithDockerSupport(t *testing.T) {
 	tmpDir := t.TempDir()
-
 	ctx := t.Context()
-
-	// Create a new builder instance that uses the custom buildkit configuration and host network.
-	internaltesting.CreateBuildxBuilder(t)
 
 	// Create a new extension
 	process := internaltesting.RunCLI(t, cliBin, "create", "test-docker", "--path", tmpDir,

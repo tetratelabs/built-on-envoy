@@ -77,6 +77,7 @@ push_lua: create_builder
 		--output type=registry,oci-mediatypes=true$(registry_output) \
 		--provenance=false \
 		$(BASE_OCI_ANNOTATIONS) \
+		$(SOURCE_ARTIFACT) \
 		--tag $(IMAGE) \
 		--file Dockerfile.code ./$(EXTENSION_PATH)
 
@@ -96,7 +97,9 @@ push_rust: create_builder
 CODE_IMAGE := $(HUB)/extension-src-$(NAME):$(VERSION)$(IMAGE_NONCE)
 .PHONY: push_code
 push_code: create_builder
-	@echo "Building and pushing Rust extension image (source code only): $(CODE_IMAGE)"
+	@echo "Building and pushing extension image (source code only): $(CODE_IMAGE)"
+# Make sure we don't include git-ignored build artifacts in the source images
+	@rm -f ./${EXTENSION_PATH}/target
 	@docker buildx build \
 		--builder $(BUILDER_NAME) \
 		--output type=registry,oci-mediatypes=true$(registry_output) \

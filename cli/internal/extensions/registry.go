@@ -18,11 +18,19 @@ const (
 	// Used when pushing to default registry so that artifacts are linked to the repo.
 	// See: https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#pushing-container-images
 	DefaultOCISource = "https://github.com/tetratelabs/built-on-envoy"
+
 	// OCIAnnotationExtensionType is the OCI annotation key for the extension type.
 	OCIAnnotationExtensionType = "io.tetratelabs.built-on-envoy.extension.type"
 	// OCIAnnotationComposerVersion is the OCI annotation key for the composer version that
 	// the extension depends on, if any.
 	OCIAnnotationComposerVersion = "io.tetratelabs.built-on-envoy.extension.composer_version"
+	// OCIAnnotationArtifact is the OCI annotation key for the extension artifact.
+	OCIAnnotationArtifact = "io.tetratelabs.built-on-envoy.extension.artifact"
+
+	// ArtifactBinary indicates the extension artifact is a binary.
+	ArtifactBinary = "binary"
+	// ArtifactSource indicates the extension artifact is source code.
+	ArtifactSource = "source"
 )
 
 // RepositoryName constructs the repository name for an extension based
@@ -42,6 +50,14 @@ func NameFromRepository(repository string) string {
 	return strings.TrimPrefix(lastPart, "extension-")
 }
 
+// SourceRepositoryName constructs the source repository name for an extension based on the manifest.
+func SourceRepositoryName(registry string, manifest *Manifest) string {
+	if manifest.Type == TypeComposer {
+		return registry + "/composer-src"
+	}
+	return registry + "/extension-src-" + manifest.Name
+}
+
 // OCIAnnotationsForManifest generates standard OCI image annotations
 // from the given extension manifest.
 func OCIAnnotationsForManifest(manifest *Manifest) map[string]string {
@@ -49,10 +65,10 @@ func OCIAnnotationsForManifest(manifest *Manifest) map[string]string {
 		ocispec.AnnotationTitle:       manifest.Name,
 		ocispec.AnnotationDescription: manifest.Description,
 		ocispec.AnnotationVersion:     manifest.Version,
+		OCIAnnotationComposerVersion:  manifest.ComposerVersion,
 		ocispec.AnnotationAuthors:     manifest.Author,
 		ocispec.AnnotationLicenses:    manifest.License,
 		OCIAnnotationExtensionType:    string(manifest.Type),
-		OCIAnnotationComposerVersion:  manifest.ComposerVersion,
 	}
 }
 

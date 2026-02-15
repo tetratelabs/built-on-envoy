@@ -95,6 +95,14 @@ end
 	}
 }
 
+func TestManifestsForCatalog(t *testing.T) {
+	manifests := ManifestsForCatalog()
+	require.Less(t, len(manifests), len(Manifests))
+	for _, m := range manifests {
+		require.Falsef(t, m.ExtensionSet, "manifest %s should not be included in catalog", m.Name)
+	}
+}
+
 func TestSupportsEnvoyVersion(t *testing.T) {
 	tests := []struct {
 		name            string
