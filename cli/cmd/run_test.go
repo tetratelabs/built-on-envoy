@@ -537,11 +537,11 @@ func newTestDownloader(dataHome string, mock *mockOCIClient) *extensions.Downloa
 func TestDownloadExtensions(t *testing.T) {
 	t.Run("empty refs returns empty list", func(t *testing.T) {
 		d := &extensions.Downloader{Dirs: &xdg.Directories{DataHome: t.TempDir()}}
-		manifests, err := downloadExtensions(t.Context(), d, nil)
+		manifests, err := downloadExtensions(t.Context(), d, nil, false)
 		require.NoError(t, err)
 		require.Empty(t, manifests)
 
-		manifests, err = downloadExtensions(t.Context(), d, []string{})
+		manifests, err = downloadExtensions(t.Context(), d, []string{}, false)
 		require.NoError(t, err)
 		require.Empty(t, manifests)
 	})
@@ -556,7 +556,7 @@ func TestDownloadExtensions(t *testing.T) {
 		}
 		d := newTestDownloader(t.TempDir(), mock)
 
-		manifests, err := downloadExtensions(t.Context(), d, []string{"my-lua-ext:1.0.0"})
+		manifests, err := downloadExtensions(t.Context(), d, []string{"my-lua-ext:1.0.0"}, false)
 		require.NoError(t, err)
 		require.Len(t, manifests, 1)
 		require.Equal(t, "my-lua-ext", manifests[0].Name)
@@ -574,7 +574,7 @@ func TestDownloadExtensions(t *testing.T) {
 		}
 		d := newTestDownloader(t.TempDir(), mock)
 
-		manifests, err := downloadExtensions(t.Context(), d, []string{"my-dym:2.0.0"})
+		manifests, err := downloadExtensions(t.Context(), d, []string{"my-dym:2.0.0"}, false)
 		require.NoError(t, err)
 		require.Len(t, manifests, 1)
 		require.Equal(t, "my-dym", manifests[0].Name)
@@ -600,7 +600,7 @@ func TestDownloadExtensions(t *testing.T) {
 		}
 		d := newTestDownloader(dataHome, mock)
 
-		manifests, err := downloadExtensions(t.Context(), d, []string{"my-composer-ext:1.0.0"})
+		manifests, err := downloadExtensions(t.Context(), d, []string{"my-composer-ext:1.0.0"}, false)
 		require.NoError(t, err)
 		require.Len(t, manifests, 1)
 		require.Equal(t, "my-composer-ext", manifests[0].Name)
@@ -616,7 +616,7 @@ func TestDownloadExtensions(t *testing.T) {
 		}
 		d := newTestDownloader(t.TempDir(), mock)
 
-		manifests, err := downloadExtensions(t.Context(), d, []string{"ext-a:1.0.0", "ext-b:2.0.0"})
+		manifests, err := downloadExtensions(t.Context(), d, []string{"ext-a:1.0.0", "ext-b:2.0.0"}, false)
 		require.NoError(t, err)
 		require.Len(t, manifests, 2)
 	})
@@ -632,7 +632,7 @@ func TestDownloadExtensions(t *testing.T) {
 		}
 		d := newTestDownloader(t.TempDir(), mock)
 
-		manifests, err := downloadExtensions(t.Context(), d, []string{"my-ext"})
+		manifests, err := downloadExtensions(t.Context(), d, []string{"my-ext"}, false)
 		require.NoError(t, err)
 		require.Len(t, manifests, 1)
 		require.Equal(t, "3.0.0", manifests[0].Version)
@@ -649,7 +649,7 @@ func TestDownloadExtensions(t *testing.T) {
 		}
 		d := newTestDownloader(t.TempDir(), mock)
 
-		_, err := downloadExtensions(t.Context(), d, []string{"bad-ext:1.0.0"})
+		_, err := downloadExtensions(t.Context(), d, []string{"bad-ext:1.0.0"}, false)
 		require.ErrorIs(t, err, errDownload)
 	})
 
@@ -663,7 +663,7 @@ func TestDownloadExtensions(t *testing.T) {
 		}
 		d := newTestDownloader(t.TempDir(), mock)
 
-		_, err := downloadExtensions(t.Context(), d, []string{"my-ext:1.0.0"})
+		_, err := downloadExtensions(t.Context(), d, []string{"my-ext:1.0.0"}, false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "unknown artifact type")
 	})
@@ -679,7 +679,7 @@ func TestDownloadExtensions(t *testing.T) {
 		}
 		d := newTestDownloader(t.TempDir(), mock)
 
-		_, err := downloadExtensions(t.Context(), d, []string{"my-composer-src:1.0.0"})
+		_, err := downloadExtensions(t.Context(), d, []string{"my-composer-src:1.0.0"}, false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "missing expected source directory")
 	})
@@ -694,7 +694,7 @@ func TestDownloadExtensions(t *testing.T) {
 		}
 		d := newTestDownloader(t.TempDir(), mock)
 
-		_, err := downloadExtensions(t.Context(), d, []string{"my-dym-src:1.0.0"})
+		_, err := downloadExtensions(t.Context(), d, []string{"my-dym-src:1.0.0"}, true)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "no Cargo.toml found")
 	})
@@ -709,7 +709,7 @@ func TestDownloadExtensions(t *testing.T) {
 		}
 		d := newTestDownloader(t.TempDir(), mock)
 
-		manifests, err := downloadExtensions(t.Context(), d, []string{"my-lua-src:1.0.0"})
+		manifests, err := downloadExtensions(t.Context(), d, []string{"my-lua-src:1.0.0"}, false)
 		require.NoError(t, err)
 		require.Len(t, manifests, 1)
 		require.Equal(t, "my-lua-src", manifests[0].Name)
@@ -732,7 +732,7 @@ func TestDownloadExtensions(t *testing.T) {
 			}, nil
 		})
 
-		_, err := downloadExtensions(t.Context(), d, []string{"ext-ok:1.0.0", "ext-fail:1.0.0"})
+		_, err := downloadExtensions(t.Context(), d, []string{"ext-ok:1.0.0", "ext-fail:1.0.0"}, false)
 		require.ErrorIs(t, err, errFail)
 	})
 }

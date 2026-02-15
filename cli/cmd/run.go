@@ -100,7 +100,7 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories) error {
 		Arch:     runtime.GOARCH,
 	}
 
-	downloaded, err := downloadExtensions(ctx, downloader, r.Extensions)
+	downloaded, err := downloadExtensions(ctx, downloader, r.Extensions, true)
 	if err != nil {
 		return err
 	}
@@ -143,7 +143,7 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories) error {
 }
 
 // downloadExtensions downloads the specified extensions using the provided downloader.
-func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, refs []string) ([]*extensions.Manifest, error) {
+func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, refs []string, build bool) ([]*extensions.Manifest, error) {
 	downloaded := make([]*extensions.Manifest, 0, len(refs))
 	for _, ext := range refs {
 		name, tag := splitRef(ext)
@@ -177,19 +177,20 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 				}
 				manifest.Remote = true // Mark the manifest as remote since it is from a downloaded artifact
 
-				fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)
-
-				if err = extensions.BuildLibComposer(downloader.Dirs.DataHome, artifact.Path, false); err != nil {
-					return nil, fmt.Errorf("failed to build libcomposer %s for extension %s: %w",
-						artifact.Manifest.Version, name, err)
-				}
-				if err = extensions.BuildExtensionFromPath(downloader.Dirs, manifest, extensionSrc); err != nil {
-					return nil, fmt.Errorf("failed to build dynamic module for extension %s from source artifact: %w", name, err)
+				if build {
+					fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)
+					if err = extensions.BuildLibComposer(downloader.Dirs.DataHome, artifact.Path, false); err != nil {
+						return nil, fmt.Errorf("failed to build libcomposer %s for extension %s: %w",
+							artifact.Manifest.Version, name, err)
+					}
+					if err = extensions.BuildExtensionFromPath(downloader.Dirs, manifest, extensionSrc); err != nil {
+						return nil, fmt.Errorf("failed to build dynamic module for extension %s from source artifact: %w", name, err)
+					}
 				}
 
 				downloaded = append(downloaded, manifest)
 			} else {
-				if artifact.Manifest.Type == extensions.TypeDynamicModule {
+				if artifact.Manifest.Type == extensions.TypeDynamicModule && build {
 					fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)
 
 					if err = extensions.CheckOrBuildDynamicModule(downloader.Dirs, artifact.Manifest, artifact.Path); err != nil {

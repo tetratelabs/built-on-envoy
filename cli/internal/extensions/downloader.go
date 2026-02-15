@@ -132,7 +132,7 @@ func (d *Downloader) download(
 		// If the manifest for the specific platform is not found, we can fallback to download
 		// the source artifact using the source repository.
 		extensionName := NameFromRepository(repository)
-		fmt.Printf("No artifact found for %q for platform %s/%s, "+
+		_, _ = fmt.Fprintf(os.Stderr, "No artifact found for %q for platform %s/%s, "+
 			"falling back to download source artifact and building locally\n", extensionName, d.OS, d.Arch)
 
 		extensionManifest := ManifestFromOCI(manifest)
