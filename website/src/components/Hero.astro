@@ -1,5 +1,17 @@
 ---
 import { CLI_NAME, WEBSITE } from '../constants';
+import { createHighlighter } from 'shiki';
+
+const highlighter = await createHighlighter({
+	themes: ['github-dark'],
+	langs: ['bash'],
+});
+
+const installCmd = `curl -sL ${WEBSITE}/install.sh | sh`;
+const runCmd = `${CLI_NAME} run --extension example-go --extension example-lua`;
+
+const installHtml = highlighter.codeToHtml(installCmd, { lang: 'bash', theme: 'github-dark' });
+const runHtml = highlighter.codeToHtml(runCmd, { lang: 'bash', theme: 'github-dark' });
 ---
 
 <section class="hero">
@@ -16,7 +28,7 @@ import { CLI_NAME, WEBSITE } from '../constants';
 		<div class="install-section">
 			<h3>Get Started</h3>
 			<div class="code-block">
-				<code>curl -sL {WEBSITE}/install.sh | sh</code>
+				<Fragment set:html={installHtml} />
 				<button class="copy-btn" aria-label="Copy command">
 					<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
 						<path d="M5.5 2.5h-3v11h7v-3m-4-8h7v7h-7v-7z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -26,7 +38,7 @@ import { CLI_NAME, WEBSITE } from '../constants';
 
 			<p class="install-note">Then run your first extension:</p>
 			<div class="code-block">
-				<code>{CLI_NAME} run --extension example-go --extension example-lua</code>
+				<Fragment set:html={runHtml} />
 				<button class="copy-btn" aria-label="Copy command">
 					<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
 						<path d="M5.5 2.5h-3v11h7v-3m-4-8h7v7h-7v-7z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>

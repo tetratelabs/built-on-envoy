@@ -301,6 +301,23 @@ header nav a:focus {
 	flex: 1;
 }
 
+.code-block pre.shiki {
+	background: none !important;
+	margin: 0;
+	padding: 0;
+	flex: 1;
+	overflow-x: auto;
+}
+
+.code-block pre.shiki code {
+	background: none;
+	padding: 0;
+	border: none;
+	color: inherit;
+	font-family: inherit;
+	font-size: inherit;
+}
+
 .copy-btn {
 	background: rgba(255, 255, 255, 0.1);
 	border: none;
