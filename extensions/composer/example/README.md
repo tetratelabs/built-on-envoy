@@ -8,26 +8,21 @@ This directory contains an example Go plugin for Envoy HTTP filters using the Co
 example/
 ├── embedded/            # Embedded packaging (compiled into Composer)
 │   ├── host.go
-│   └── manifest.yaml
-│   └── example.go       # Core plugin implementation
-│
-└── standalone/          # Standalone packaging (loaded at runtime)
-    ├── plugin.go
-    └── manifest.yaml
-    └── example.go       # Core plugin implementation
+├── standalone/          # Standalone packaging (loaded at runtime)
+|   ├── main.go
+└── manifest.yaml
+└── example.go           # Core plugin implementation
 ```
 
 ## Plugin Implementation
 
-The core plugin logic is in [example.go](./embedded/example.go). It implements an HTTP filter that demonstrates:
+The core plugin logic is in [example.go](./example.go). It implements an HTTP filter that demonstrates:
 
 - Reading and modifying request/response headers
 - Accessing request attributes and metadata
 - Modifying request and response bodies
 - Sending local replies
 - Working with Envoy metrics (counters, gauges, histograms)
-
-NOTE: To avoid introduce complex dependency, and also make the standalone plugin more like a real-world example, the core plugin implementation is duplicated in both `embedded/` and `standalone/` directories. In a real project, you would typically have a shared package that both packaging approaches import.
 
 ## Packaging Approaches
 
@@ -36,7 +31,7 @@ NOTE: To avoid introduce complex dependency, and also make the standalone plugin
 The plugin is compiled as a separate Go plugin binary (`.so` file) and loaded at runtime.
 
 **How it works:**
-- [standalone/plugin.go](standalone/plugin.go) exports `WellKnownHttpFilterConfigFactories()` as the entry point
+- [standalone/main.go](standalone/main.go) exports `WellKnownHttpFilterConfigFactories()` as the entry point
 - The Composer's [goplugin loader](../goplugin/goplugin.go) loads the `.so` file at runtime
 - Before loading, the loader validates that the plugin was built with the same Go version and matching dependency versions
 
@@ -59,8 +54,8 @@ The plugin is compiled directly into the Composer dynamic module binary.
 
 **How it works:**
 - [embedded/host.go](embedded/host.go) imports the plugin package and registers it with the SDK during initialization
-- The Composer's [main.go](../main.go) imports the embedded package, including it in the final binary
-- The plugin is registered under the name `example` (as defined in the plugin's factory map)
+- The Composer's [plugins.go](../plugins.go) imports the embedded package, including it in the final binary
+- The plugin is registered under the name `example-go` (as defined in the plugin's factory map)
 
 **Advantages:**
 - Guaranteed Go runtime compatibility (plugin and host are compiled together)
@@ -73,7 +68,7 @@ The plugin is compiled directly into the Composer dynamic module binary.
 
 **Usage:**
 ```bash
-boe run --extension example
+boe run --extension example-go
 ```
 
 ## Go Runtime Compatibility

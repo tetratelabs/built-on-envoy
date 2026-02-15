@@ -1,0 +1,107 @@
+---
+layout: ../../layouts/DocsLayout.astro
+title: Running Local Extensions
+description: How to create and run local extensions during development
+---
+
+import ToC from '../../components/ToC.astro';
+
+# Running Local Extensions
+
+This guide explains how to create an extension from a template, run it locally, and what you need installed on your machine to build each extension type.
+
+<ToC maxDepth="3"/>
+
+## Build Prerequisites
+
+When you run `boe run --local`, the CLI builds the extension from source before starting Envoy.
+The following sections describe what you need installed on your machine for each extension type.
+
+### Go (Composer) Extensions
+
+- Go 1.25.7 or later.
+- GNU Make
+
+### Rust Dynamic Module Extensions
+
+- **Rust toolchain (stable).** A working `cargo` and `rustc`.
+- **A C linker** - typically available through your system's default development tools (`Xcode Command Line Tools` on macOS, `build-essential` on Debian/Ubuntu).
+- **Git** - required by Cargo to fetch the SDK dependency from the Envoy GitHub repository.
+
+
+## Creating a Local Extension
+
+The `boe create` command generates a ready-to-use extension project from a template. It supports two extension types:
+
+- **composer** - A Go HTTP filter loaded at runtime by the Composer dynamic module (default).
+- **dynamic_module_rust** - A Rust HTTP filter compiled as a native dynamic module.
+
+### Creating a Go (Composer) Extension
+
+```bash
+boe create my-extension --path ~/src/extensions
+```
+
+This is equivalent to explicitly passing `--type composer`. The generated project structure looks like this:
+
+```
+my-extension/
+├── plugin.go           # Filter implementation
+├── manifest.yaml       # Extension metadata
+├── Makefile            # Build targets
+├── go.mod              # Go module file
+├── Dockerfile          # Container image for the extension
+├── Dockerfile.code     # Container image for packaging source code
+├── .dockerignore
+├── embedded/
+│   └── host.go         # Entry point for embedded builds
+└── standalone/
+    └── main.go         # Entry point for standalone plugin builds
+```
+
+After scaffolding, the command automatically runs `go mod tidy` to fetch dependencies.
+
+### Creating a Rust Dynamic Module Extension
+
+```bash
+boe create my-extension --type dynamic_module_rust --path ~/src/extensions
+```
+
+The generated project structure looks like this:
+
+```
+my-extension/
+├── src/
+│   └── lib.rs          # Filter implementation
+├── Cargo.toml          # Rust package configuration
+├── manifest.yaml       # Extension metadata
+├── Makefile            # Build targets
+├── Dockerfile          # Multi-stage Dockerfile for building and packaging
+├── Dockerfile.code     # Dockerfile for packaging source code
+├── .cargo/
+│   └── config.toml     # Platform-specific build flags
+├── .gitignore
+└── .dockerignore
+```
+
+## Running a Local Extension
+
+Use the `boe run` command with the `--local` flag to build and run an extension directly from a local directory. The CLI will automatically compile the extension, download the appropriate Envoy binary for your platform, and start a preconfigured proxy.
+
+```bash
+boe run --local ~/src/extensions/my-extension
+```
+
+By default, Envoy listens on port `10000` and proxies requests to https://httpbin.org, so you can immediately test your extension with `curl`:
+
+```bash
+curl -v http://localhost:10000/status/200
+```
+
+You can combine `--local` with other flags. For example, to enable debug logging for the dynamic modules subsystem:
+
+```bash
+boe run --local ~/src/extensions/my-extension --log-level dynamic_modules:debug
+```
+
+Or to run multiple extensions together (mixing local and remote):

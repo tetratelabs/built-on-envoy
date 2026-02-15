@@ -8,5 +8,9 @@ sections:
         href: /docs/getting-started
       - title: Extension Types
         href: /docs/extension-types
+      - title: Running Local Extensions
+        href: /docs/running-local-extensions
       - title: Writing Go Extensions
         href: /docs/writing-go-extensions
+      - title: Writing Rust Extensions
+        href: /docs/writing-rust-extensions

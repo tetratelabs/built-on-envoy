@@ -195,3 +195,28 @@ distributed and updated independently of the host.
 See the
 [Writing Go Extensions](/docs/writing-go-extensions) guide for a complete walkthrough of the
 filter API, lifecycle callbacks, and build process.
+
+## Rust Dynamic Module Extensions
+
+Rust extensions are compiled HTTP filters that run inside Envoy as native
+[Dynamic Modules](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/dynamic_modules).
+They use the [Rust SDK](https://github.com/envoyproxy/envoy/tree/main/source/extensions/dynamic_modules/sdk/rust)
+and are compiled to a C-compatible shared library that Envoy loads directly - no intermediate
+runtime or plugin loader is needed.
+
+**Manifest type:** `dynamic_module`
+
+```yaml
+name: my-rust-extension
+version: 0.1.0
+type: dynamic_module
+```
+
+### How it Works
+
+1. Your extension implements the `HttpFilterConfig` and `HttpFilter` traits from the Rust SDK.
+2. The crate is compiled with `cargo build --release` to produce a shared library (`.so` on Linux, `.dylib` on macOS).
+3. The `declare_init_functions!` macro wires up the init and filter-creation entry points that Envoy
+   expects from a dynamic module.
+4. At runtime, Envoy loads the shared library directly with no additional host module.
+

@@ -15,8 +15,7 @@ Go extensions are HTTP filters that run inside Envoy and can inspect and modify 
 
 ## Prerequisites
 
-- Go 1.25.7 or later.
-- The `boe` CLI installed ([Getting Started](/docs/getting-started))
+Refer to the [Running Local Extensions](/docs/running-local-extensions) page for the details about the build prerequisites.
 
 ## Quick Start
 
@@ -26,17 +25,7 @@ Create a new extension called `my-extension` in the `my-extension` directory wit
 boe create my-extension --path my-extension
 ```
 
-This generates a ready-to-use extension with all required files:
-
-```
-my-extension/
-├── plugin.go        # Your filter implementation
-├── manifest.yaml    # Extension metadata
-├── Makefile         # Build targets
-└── go.mod           # Go module file
-```
-
-Build and test it:
+This generates a ready-to-use extension with all required files. You can build and test it with:
 
 ```bash
 boe run --local my-extension/
@@ -393,15 +382,15 @@ curl -H "x-custom: value" http://localhost:10000/status/200
 
 ## Version Compatibility
 
-Go plugins have strict version requirements. See the [example-go](https://github.com/tetratelabs/built-on-envoy/tree/main/extensions/example-go/)
-README file in GitHub for further details about version compatibility and how the internals work.
+Go plugins have strict version requirements. See the [Extension types](/docs/extension-types) page for further details
+about version compatibility and how the internals work.
 
 The `composerVersion` in your manifest indicates which Composer version your plugin is compatible with.
 When the Composer loads your plugin, it validates these requirements.
 
 ## Complete Example
 
-For a complete example, refer to the [example-go](https://github.com/tetratelabs/built-on-envoy/tree/main/extensions/example-go/) extension in GitHub.
+For a complete example, refer to the [example-go](https://github.com/tetratelabs/built-on-envoy/tree/main/extensions/composer/example/) extension in GitHub.
 
 ## Next Steps
 
