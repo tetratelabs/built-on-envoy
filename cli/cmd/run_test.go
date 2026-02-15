@@ -8,14 +8,19 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"maps"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/alecthomas/kong"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
+	"github.com/tetratelabs/built-on-envoy/cli/internal/oci"
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
@@ -486,6 +491,250 @@ func TestRunMultipleConfigArgsWithCommas(t *testing.T) {
 	_, err = parser.Parse([]string{"run", "--config", config1, "--config", config2})
 	require.NoError(t, err)
 	require.Equal(t, []string{config1, config2}, cli.Run.Configs)
+}
+
+// mockOCIClient is a configurable mock for oci.RepositoryClient used in downloadExtensions tests.
+type mockOCIClient struct {
+	annotations map[string]string // Annotations returned by FetchManifest
+	tags        []string          // Tags returned by Tags()
+	pullErr     error             // Error returned by Pull
+}
+
+func (m *mockOCIClient) Push(context.Context, string, string, map[string]string) (string, error) {
+	return "", nil
+}
+
+func (m *mockOCIClient) Pull(context.Context, string, string, *ocispec.Platform) (*ocispec.Manifest, string, error) {
+	if m.pullErr != nil {
+		return nil, "", m.pullErr
+	}
+	return nil, "sha256:abc", nil
+}
+
+func (m *mockOCIClient) Tags(context.Context) ([]string, error) {
+	return m.tags, nil
+}
+
+func (m *mockOCIClient) FetchManifest(_ context.Context, tag string, _ *ocispec.Platform) (*ocispec.Manifest, error) {
+	ann := make(map[string]string)
+	maps.Copy(ann, m.annotations)
+	// Set version from tag if not explicitly set
+	if _, ok := ann[ocispec.AnnotationVersion]; !ok {
+		ann[ocispec.AnnotationVersion] = tag
+	}
+	return &ocispec.Manifest{Annotations: ann}, nil
+}
+
+// newTestDownloader creates a Downloader with the given mock client and data directory.
+func newTestDownloader(dataHome string, mock *mockOCIClient) *extensions.Downloader {
+	d := &extensions.Downloader{Dirs: &xdg.Directories{DataHome: dataHome}}
+	d.SetClientFactory(func(_, _, _ string, _ bool) (oci.RepositoryClient, error) {
+		return mock, nil
+	})
+	return d
+}
+
+func TestDownloadExtensions(t *testing.T) {
+	t.Run("empty refs returns empty list", func(t *testing.T) {
+		d := &extensions.Downloader{Dirs: &xdg.Directories{DataHome: t.TempDir()}}
+		manifests, err := downloadExtensions(t.Context(), d, nil)
+		require.NoError(t, err)
+		require.Empty(t, manifests)
+
+		manifests, err = downloadExtensions(t.Context(), d, []string{})
+		require.NoError(t, err)
+		require.Empty(t, manifests)
+	})
+
+	t.Run("binary lua extension", func(t *testing.T) {
+		mock := &mockOCIClient{
+			annotations: map[string]string{
+				ocispec.AnnotationTitle:               "my-lua-ext",
+				extensions.OCIAnnotationExtensionType: string(extensions.TypeLua),
+				extensions.OCIAnnotationArtifact:      extensions.ArtifactBinary,
+			},
+		}
+		d := newTestDownloader(t.TempDir(), mock)
+
+		manifests, err := downloadExtensions(t.Context(), d, []string{"my-lua-ext:1.0.0"})
+		require.NoError(t, err)
+		require.Len(t, manifests, 1)
+		require.Equal(t, "my-lua-ext", manifests[0].Name)
+		require.Equal(t, "1.0.0", manifests[0].Version)
+		require.True(t, manifests[0].Remote)
+	})
+
+	t.Run("binary dynamic module extension", func(t *testing.T) {
+		mock := &mockOCIClient{
+			annotations: map[string]string{
+				ocispec.AnnotationTitle:               "my-dym",
+				extensions.OCIAnnotationExtensionType: string(extensions.TypeDynamicModule),
+				extensions.OCIAnnotationArtifact:      extensions.ArtifactBinary,
+			},
+		}
+		d := newTestDownloader(t.TempDir(), mock)
+
+		manifests, err := downloadExtensions(t.Context(), d, []string{"my-dym:2.0.0"})
+		require.NoError(t, err)
+		require.Len(t, manifests, 1)
+		require.Equal(t, "my-dym", manifests[0].Name)
+		require.Equal(t, extensions.TypeDynamicModule, manifests[0].Type)
+	})
+
+	t.Run("binary composer extension", func(t *testing.T) {
+		dataHome := t.TempDir()
+		composerVersion := "0.1.0"
+
+		// Pre-create the libcomposer.so so CheckOrDownloadLibComposer succeeds without network.
+		composerDir := extensions.LocalCacheComposerDir(&xdg.Directories{DataHome: dataHome}, composerVersion)
+		require.NoError(t, os.MkdirAll(composerDir, 0o750))
+		require.NoError(t, os.WriteFile(filepath.Join(composerDir, "libcomposer.so"), []byte("fake"), 0o600))
+
+		mock := &mockOCIClient{
+			annotations: map[string]string{
+				ocispec.AnnotationTitle:                 "my-composer-ext",
+				extensions.OCIAnnotationExtensionType:   string(extensions.TypeComposer),
+				extensions.OCIAnnotationArtifact:        extensions.ArtifactBinary,
+				extensions.OCIAnnotationComposerVersion: composerVersion,
+			},
+		}
+		d := newTestDownloader(dataHome, mock)
+
+		manifests, err := downloadExtensions(t.Context(), d, []string{"my-composer-ext:1.0.0"})
+		require.NoError(t, err)
+		require.Len(t, manifests, 1)
+		require.Equal(t, "my-composer-ext", manifests[0].Name)
+		require.Equal(t, extensions.TypeComposer, manifests[0].Type)
+	})
+
+	t.Run("multiple extensions", func(t *testing.T) {
+		mock := &mockOCIClient{
+			annotations: map[string]string{
+				extensions.OCIAnnotationExtensionType: string(extensions.TypeLua),
+				extensions.OCIAnnotationArtifact:      extensions.ArtifactBinary,
+			},
+		}
+		d := newTestDownloader(t.TempDir(), mock)
+
+		manifests, err := downloadExtensions(t.Context(), d, []string{"ext-a:1.0.0", "ext-b:2.0.0"})
+		require.NoError(t, err)
+		require.Len(t, manifests, 2)
+	})
+
+	t.Run("ref without version defaults to latest", func(t *testing.T) {
+		mock := &mockOCIClient{
+			annotations: map[string]string{
+				ocispec.AnnotationTitle:               "my-ext",
+				extensions.OCIAnnotationExtensionType: string(extensions.TypeLua),
+				extensions.OCIAnnotationArtifact:      extensions.ArtifactBinary,
+			},
+			tags: []string{"3.0.0", "2.0.0", "1.0.0"},
+		}
+		d := newTestDownloader(t.TempDir(), mock)
+
+		manifests, err := downloadExtensions(t.Context(), d, []string{"my-ext"})
+		require.NoError(t, err)
+		require.Len(t, manifests, 1)
+		require.Equal(t, "3.0.0", manifests[0].Version)
+	})
+
+	t.Run("download error", func(t *testing.T) {
+		errDownload := errors.New("download failed")
+		mock := &mockOCIClient{
+			annotations: map[string]string{
+				extensions.OCIAnnotationExtensionType: string(extensions.TypeLua),
+				extensions.OCIAnnotationArtifact:      extensions.ArtifactBinary,
+			},
+			pullErr: errDownload,
+		}
+		d := newTestDownloader(t.TempDir(), mock)
+
+		_, err := downloadExtensions(t.Context(), d, []string{"bad-ext:1.0.0"})
+		require.ErrorIs(t, err, errDownload)
+	})
+
+	t.Run("unknown artifact type", func(t *testing.T) {
+		mock := &mockOCIClient{
+			annotations: map[string]string{
+				ocispec.AnnotationTitle:               "my-ext",
+				extensions.OCIAnnotationExtensionType: string(extensions.TypeLua),
+				extensions.OCIAnnotationArtifact:      "unknown-type",
+			},
+		}
+		d := newTestDownloader(t.TempDir(), mock)
+
+		_, err := downloadExtensions(t.Context(), d, []string{"my-ext:1.0.0"})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "unknown artifact type")
+	})
+
+	t.Run("source composer extension with missing source dir", func(t *testing.T) {
+		mock := &mockOCIClient{
+			annotations: map[string]string{
+				ocispec.AnnotationTitle:                 "my-composer-src",
+				extensions.OCIAnnotationExtensionType:   string(extensions.TypeComposer),
+				extensions.OCIAnnotationArtifact:        extensions.ArtifactSource,
+				extensions.OCIAnnotationComposerVersion: "0.1.0",
+			},
+		}
+		d := newTestDownloader(t.TempDir(), mock)
+
+		_, err := downloadExtensions(t.Context(), d, []string{"my-composer-src:1.0.0"})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "missing expected source directory")
+	})
+
+	t.Run("source dynamic module extension with no Cargo.toml", func(t *testing.T) {
+		mock := &mockOCIClient{
+			annotations: map[string]string{
+				ocispec.AnnotationTitle:               "my-dym-src",
+				extensions.OCIAnnotationExtensionType: string(extensions.TypeDynamicModule),
+				extensions.OCIAnnotationArtifact:      extensions.ArtifactSource,
+			},
+		}
+		d := newTestDownloader(t.TempDir(), mock)
+
+		_, err := downloadExtensions(t.Context(), d, []string{"my-dym-src:1.0.0"})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "no Cargo.toml found")
+	})
+
+	t.Run("source non-composer non-dynamic-module extension", func(t *testing.T) {
+		mock := &mockOCIClient{
+			annotations: map[string]string{
+				ocispec.AnnotationTitle:               "my-lua-src",
+				extensions.OCIAnnotationExtensionType: string(extensions.TypeLua),
+				extensions.OCIAnnotationArtifact:      extensions.ArtifactSource,
+			},
+		}
+		d := newTestDownloader(t.TempDir(), mock)
+
+		manifests, err := downloadExtensions(t.Context(), d, []string{"my-lua-src:1.0.0"})
+		require.NoError(t, err)
+		require.Len(t, manifests, 1)
+		require.Equal(t, "my-lua-src", manifests[0].Name)
+	})
+
+	t.Run("error stops processing remaining extensions", func(t *testing.T) {
+		callCount := 0
+		errFail := errors.New("fail on second")
+		d := &extensions.Downloader{Dirs: &xdg.Directories{DataHome: t.TempDir()}}
+		d.SetClientFactory(func(_, _, _ string, _ bool) (oci.RepositoryClient, error) {
+			callCount++
+			if callCount > 1 {
+				return &mockOCIClient{pullErr: errFail}, nil
+			}
+			return &mockOCIClient{
+				annotations: map[string]string{
+					extensions.OCIAnnotationExtensionType: string(extensions.TypeLua),
+					extensions.OCIAnnotationArtifact:      extensions.ArtifactBinary,
+				},
+			}, nil
+		})
+
+		_, err := downloadExtensions(t.Context(), d, []string{"ext-ok:1.0.0", "ext-fail:1.0.0"})
+		require.ErrorIs(t, err, errFail)
+	})
 }
 
 func TestValidateComposerCompat(t *testing.T) {

@@ -31,6 +31,12 @@ type Downloader struct {
 	newClient func(repository, username, password string, insecure bool) (oci.RepositoryClient, error)
 }
 
+// SetClientFactory sets a custom client factory function for the downloader.
+// This is intended for use in tests to inject mock OCI clients.
+func (d *Downloader) SetClientFactory(f func(repository, username, password string, insecure bool) (oci.RepositoryClient, error)) {
+	d.newClient = f
+}
+
 // DownloadedExtension represents a downloaded extension with its manifest and local path.
 type DownloadedExtension struct {
 	Manifest       *Manifest // The extension manifest with all metadata.
