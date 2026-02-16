@@ -129,7 +129,7 @@ Flags:
                                  to ~/.local/state/boe ($BOE_STATE_HOME)
       --runtime-dir=STRING       Ephemeral runtime files directory. Defaults to
                                  /tmp/boe-$UID ($BOE_RUNTIME_DIR)
-      --boe-log-level="debug"    Log level for the CLI. Defaults to info
+      --boe-log-level="debug"    Log level for the CLI. Defaults to debug
                                  ($BOE_LOG_LEVEL)
 
 Commands:

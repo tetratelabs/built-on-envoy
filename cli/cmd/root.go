@@ -39,7 +39,7 @@ type CLI struct {
 	DataHome    string `name:"data-home" env:"BOE_DATA_HOME" help:"Downloaded Envoy binaries directory. Defaults to ~/.local/share/boe" type:"path" default:"~/.local/share/boe"`
 	StateHome   string `name:"state-home" env:"BOE_STATE_HOME" help:"Persistent state and logs directory. Defaults to ~/.local/state/boe" type:"path" default:"~/.local/state/boe"`
 	RuntimeDir  string `name:"runtime-dir" env:"BOE_RUNTIME_DIR" help:"Ephemeral runtime files directory. Defaults to /tmp/boe-$UID" type:"path"`
-	BoeLogLevel string `name:"boe-log-level" env:"BOE_LOG_LEVEL" help:"Log level for the CLI. Defaults to info" enum:"debug,info,warn,error" default:"debug"`
+	BoeLogLevel string `name:"boe-log-level" env:"BOE_LOG_LEVEL" help:"Log level for the CLI. Defaults to debug" enum:"debug,info,warn,error" default:"debug"`
 }
 
 // BeforeApply is called by Kong before applying defaults to set XDG directory defaults.
