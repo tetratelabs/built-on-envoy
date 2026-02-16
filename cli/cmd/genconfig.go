@@ -92,7 +92,7 @@ func (g *GenConfig) Run(ctx context.Context, dirs *xdg.Directories, logger *slog
 		renderer = envoy.FullConfigRenderer
 	}
 
-	config, err := envoy.RenderConfig(envoy.ConfigGenerationParams{
+	config, err := envoy.RenderConfig(&envoy.ConfigGenerationParams{
 		Logger:       logger,
 		AdminPort:    g.AdminPort,
 		ListenerPort: g.ListenPort,

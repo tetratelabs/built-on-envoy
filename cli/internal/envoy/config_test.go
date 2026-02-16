@@ -20,7 +20,7 @@ func TestRenderDefaultConfig(t *testing.T) {
 	want, err := os.ReadFile("testdata/output_config.yaml")
 	require.NoError(t, err)
 
-	cfg, err := RenderConfig(ConfigGenerationParams{
+	cfg, err := RenderConfig(&ConfigGenerationParams{
 		Logger:       internaltesting.NewTLogger(t),
 		AdminPort:    9901,
 		ListenerPort: 10000,
@@ -37,7 +37,7 @@ func TestRenderConfigWithExtensions(t *testing.T) {
 		mustReadManifest(t, "testdata/input_lua_inline.yaml"),
 	}
 
-	cfg, err := RenderConfig(ConfigGenerationParams{
+	cfg, err := RenderConfig(&ConfigGenerationParams{
 		Logger:       internaltesting.NewTLogger(t),
 		AdminPort:    9901,
 		ListenerPort: 10000,
@@ -56,7 +56,7 @@ func TestRenderMinimalConfigWithExtensions(t *testing.T) {
 		mustReadManifest(t, "testdata/input_lua_inline.yaml"),
 	}
 
-	cfg, err := RenderConfig(ConfigGenerationParams{
+	cfg, err := RenderConfig(&ConfigGenerationParams{
 		Logger:       internaltesting.NewTLogger(t),
 		AdminPort:    9901,
 		ListenerPort: 10000,
