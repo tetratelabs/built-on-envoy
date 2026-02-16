@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -19,6 +20,8 @@ import (
 
 // Downloader represents an extension downloader with authentication options.
 type Downloader struct {
+	Logger *slog.Logger
+
 	Registry string
 	Username string
 	Password string
@@ -28,7 +31,7 @@ type Downloader struct {
 	Arch     string
 
 	// client factory function to allow mocking in tests.
-	newClient func(repository, username, password string, insecure bool) (oci.RepositoryClient, error)
+	newClient func(logger *slog.Logger, repository, username, password string, insecure bool) (oci.RepositoryClient, error)
 }
 
 // SetClientFactory sets a custom client factory function for the downloader.
@@ -47,6 +50,7 @@ type DownloadedExtension struct {
 
 // DownloadComposer downloads the composer from the specified repository and version into the downloadDir.
 func (d *Downloader) DownloadComposer(ctx context.Context, version string) (DownloadedExtension, error) {
+	d.Logger.Info("downloading composer", "repository", d.Registry, "version", version)
 	return d.download(ctx, d.Registry+"/composer-lite", version, func(manifest *ocispec.Manifest) string {
 		extensionManifest := ManifestFromOCI(manifest)
 		if isComposerSourceArtifact(manifest) {
@@ -61,6 +65,7 @@ func (d *Downloader) DownloadComposer(ctx context.Context, version string) (Down
 
 // DownloadExtension downloads the extension from the specified repository and tag into the downloadDir.
 func (d *Downloader) DownloadExtension(ctx context.Context, name, version string) (DownloadedExtension, error) {
+	d.Logger.Info("downloading extension", "repository", d.Registry, "name", name, "version", version)
 	repository := RepositoryName(d.Registry, name)
 
 	artifact, err := d.download(ctx, repository, version, func(manifest *ocispec.Manifest) string {
@@ -80,6 +85,7 @@ func (d *Downloader) DownloadExtension(ctx context.Context, name, version string
 	if !artifact.ComposerBundle {
 		manifestPath := LocalCacheManifest(d.Dirs, artifact.Manifest)
 		if _, err = os.Stat(manifestPath); err == nil {
+			d.Logger.Info("loading manifest from downloaded extension", "path", manifestPath)
 			m, err := LoadLocalManifest(manifestPath)
 			if err != nil {
 				return DownloadedExtension{},
@@ -106,7 +112,7 @@ func (d *Downloader) download(
 	if d.newClient == nil {
 		d.newClient = newOCIRepositoryClient
 	}
-	client, err := d.newClient(repository, d.Username, d.Password, d.Insecure)
+	client, err := d.newClient(d.Logger, repository, d.Username, d.Password, d.Insecure)
 	if err != nil {
 		return DownloadedExtension{}, fmt.Errorf("failed to create OCI client for %q: %w", repository, err)
 	}
@@ -116,6 +122,7 @@ func (d *Downloader) download(
 		if err != nil {
 			return DownloadedExtension{}, fmt.Errorf("failed to resolve latest tag for %q: %w", repository, err)
 		}
+		d.Logger.Info("resolved latest tag for repository", "repository", repository, "tag", version)
 	}
 
 	var platform *ocispec.Platform
@@ -179,7 +186,7 @@ func isComposerSourceArtifact(manifest *ocispec.Manifest) bool {
 }
 
 // newOCIRepositoryClient creates and assigns a new OCI client to the Push command.
-func newOCIRepositoryClient(repository, username, password string, insecure bool) (oci.RepositoryClient, error) {
+func newOCIRepositoryClient(logger *slog.Logger, repository, username, password string, insecure bool) (oci.RepositoryClient, error) {
 	opts := &oci.ClientOptions{PlainHTTP: insecure}
 	if username != "" || password != "" {
 		opts.Credentials = &oci.Credentials{
@@ -189,12 +196,12 @@ func newOCIRepositoryClient(repository, username, password string, insecure bool
 	}
 
 	// Instantiate the OCI client
-	repo, err := oci.NewRemoteRepository(repository, opts)
+	repo, err := oci.NewRemoteRepository(logger, repository, opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create repository: %w", err)
 	}
 
-	return oci.NewRepositoryClient(repo), nil
+	return oci.NewRepositoryClient(logger, repo), nil
 }
 
 var (

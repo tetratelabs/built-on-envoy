@@ -8,12 +8,14 @@ package extensions
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/oci"
+	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
@@ -160,8 +162,9 @@ func TestDownloadExtension(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			d := &Downloader{
-				Dirs: dirs,
-				newClient: func(_, _, _ string, _ bool) (oci.RepositoryClient, error) {
+				Logger: internaltesting.NewTLogger(t),
+				Dirs:   dirs,
+				newClient: func(_ *slog.Logger, _, _, _ string, _ bool) (oci.RepositoryClient, error) {
 					if tt.clientErr != nil {
 						return nil, tt.clientErr
 					}

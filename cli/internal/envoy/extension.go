@@ -7,6 +7,7 @@ package envoy
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path"
 
@@ -33,13 +34,13 @@ type (
 	}
 
 	// LuaFilterGenerator generates filter configuration for Lua extensions.
-	LuaFilterGenerator struct{}
+	LuaFilterGenerator struct{ Logger *slog.Logger }
 	// WasmFilterGenerator generates filter configuration for Wasm extensions.
-	WasmFilterGenerator struct{}
+	WasmFilterGenerator struct{ Logger *slog.Logger }
 	// DynamicModuleFilterGenerator generates filter configuration for Dynamic Module extensions.
-	DynamicModuleFilterGenerator struct{}
+	DynamicModuleFilterGenerator struct{ Logger *slog.Logger }
 	// ComposerFilterGenerator generates filter configuration for Composer extensions.
-	ComposerFilterGenerator struct{}
+	ComposerFilterGenerator struct{ Logger *slog.Logger }
 
 	// ExtensionResources holds the resources created by an extension.
 	ExtensionResources struct {
@@ -59,21 +60,24 @@ var (
 )
 
 // GenerateFilterConfig generates the filter configuration for the given extension manifest.
-func GenerateFilterConfig(manifest *extensions.Manifest, dirs *xdg.Directories, config string) (*ExtensionResources, error) {
+func GenerateFilterConfig(logger *slog.Logger, manifest *extensions.Manifest, dirs *xdg.Directories, config string) (*ExtensionResources, error) {
 	var generator ExtensionFilterGenerator
 
 	switch manifest.Type {
 	case extensions.TypeLua:
-		generator = LuaFilterGenerator{}
+		generator = LuaFilterGenerator{Logger: logger}
 	case extensions.TypeWasm:
-		generator = WasmFilterGenerator{}
+		generator = WasmFilterGenerator{Logger: logger}
 	case extensions.TypeDynamicModule:
-		generator = DynamicModuleFilterGenerator{}
+		generator = DynamicModuleFilterGenerator{Logger: logger}
 	case extensions.TypeComposer:
-		generator = ComposerFilterGenerator{}
+		generator = ComposerFilterGenerator{Logger: logger}
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedExtensionType, manifest.Type)
 	}
+
+	logger.Debug("generating filter config for extension", "name",
+		manifest.Name, "type", manifest.Type, "generator", fmt.Sprintf("%T", generator))
 
 	return generator.GenerateFilterConfig(manifest, dirs, config)
 }
@@ -82,6 +86,7 @@ func GenerateFilterConfig(manifest *extensions.Manifest, dirs *xdg.Directories, 
 func (l LuaFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, _ *xdg.Directories, _ string) (*ExtensionResources, error) {
 	var code string
 	if manifest.Lua.Path != "" {
+		l.Logger.Info("loading Lua code from file for extension", "extension", manifest.Name, "path", manifest.Lua.Path)
 		absPath := path.Join(path.Dir(manifest.Path), manifest.Lua.Path)
 		bytes, err := os.ReadFile(path.Clean(absPath))
 		if err != nil {
@@ -89,6 +94,7 @@ func (l LuaFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, 
 		}
 		code = string(bytes)
 	} else if manifest.Lua.Inline != "" {
+		l.Logger.Info("using inline Lua code for extension", "extension", manifest.Name)
 		code = manifest.Lua.Inline
 	}
 
@@ -125,6 +131,8 @@ func (w WasmFilterGenerator) GenerateFilterConfig(*extensions.Manifest, *xdg.Dir
 func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest,
 	_ *xdg.Directories, config string,
 ) (*ExtensionResources, error) {
+	d.Logger.Info("generating dynamic module filter config for extension", "name", manifest.Name, "config", config)
+
 	var anyConfig *anypb.Any
 
 	if config != "" {
@@ -166,6 +174,8 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 
 // GenerateFilterConfig generates the filter configuration for Composer extensions.
 func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, dirs *xdg.Directories, config string) (*ExtensionResources, error) {
+	c.Logger.Info("generating composer filter config for extension", "name", manifest.Name, "config", config)
+
 	cachedComposerPath := extensions.LocalCacheComposerLib(dirs, manifest.ComposerVersion)
 	if _, err := os.Stat(cachedComposerPath); os.IsNotExist(err) {
 		// TODO(wbpcode): Download the composer binary from the URL specified in the manifest.

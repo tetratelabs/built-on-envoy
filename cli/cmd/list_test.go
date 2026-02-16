@@ -49,7 +49,7 @@ func TestListCommand(t *testing.T) {
 	var buf bytes.Buffer
 	cmd := &List{output: &buf}
 
-	err := cmd.Run()
+	err := cmd.Run(internaltesting.NewTLogger(t))
 	require.NoError(t, err)
 
 	output := buf.String()
@@ -98,7 +98,7 @@ func TestListCommandAlphabeticalOrder(t *testing.T) {
 	var buf bytes.Buffer
 	cmd := &List{output: &buf}
 
-	err := cmd.Run()
+	err := cmd.Run(internaltesting.NewTLogger(t))
 	require.NoError(t, err)
 
 	output := buf.String()

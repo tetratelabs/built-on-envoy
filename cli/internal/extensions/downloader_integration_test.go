@@ -52,14 +52,15 @@ func TestMain(m *testing.M) {
 }
 
 func TestNewOCIRepositoryClient(t *testing.T) {
+	logger := internaltesting.NewTLogger(t)
 	t.Run("missing repo", func(t *testing.T) {
-		client, err := newOCIRepositoryClient(registryAddr, "", "", true)
+		client, err := newOCIRepositoryClient(logger, registryAddr, "", "", true)
 		require.Error(t, err)
 		require.Nil(t, client)
 	})
 
 	t.Run("can connect", func(t *testing.T) {
-		client, err := newOCIRepositoryClient(registryAddr+"/repo", "", "", true)
+		client, err := newOCIRepositoryClient(logger, registryAddr+"/repo", "", "", true)
 		require.NoError(t, err)
 		// We just want to test connectivity here so we expect a failure saying that
 		// the repo does not exist, but this is good enough for this test.
@@ -69,6 +70,8 @@ func TestNewOCIRepositoryClient(t *testing.T) {
 }
 
 func TestDownloadExtensionWithManifest(t *testing.T) {
+	logger := internaltesting.NewTLogger(t)
+
 	// Create the image
 	testRepo := fmt.Sprintf("%s/extension-test", registryAddr)
 	// #nosec G204
@@ -86,6 +89,7 @@ func TestDownloadExtensionWithManifest(t *testing.T) {
 	require.NoError(t, err)
 
 	downloader := &Downloader{
+		Logger:   logger,
 		Registry: registryAddr,
 		Dirs:     &xdg.Directories{DataHome: t.TempDir()},
 		Insecure: true,
@@ -103,6 +107,8 @@ func TestDownloadExtensionWithManifest(t *testing.T) {
 }
 
 func TestCheckOrDownloadComposer(t *testing.T) {
+	logger := internaltesting.NewTLogger(t)
+
 	// Create the image simulating to be composer
 	composerRepo := fmt.Sprintf("%s/composer-lite", registryAddr)
 	// #nosec G204
@@ -121,6 +127,7 @@ func TestCheckOrDownloadComposer(t *testing.T) {
 	require.NoError(t, err)
 
 	downloader := &Downloader{
+		Logger:   logger,
 		Registry: registryAddr,
 		Dirs:     &xdg.Directories{DataHome: t.TempDir()},
 		Insecure: true,

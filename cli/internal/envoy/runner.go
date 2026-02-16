@@ -9,6 +9,7 @@ package envoy
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -24,6 +25,8 @@ import (
 
 // Runner handles running Envoy via func-e
 type Runner struct {
+	Logger *slog.Logger
+
 	// EnvoyVersion specifies the Envoy version to run. If empty, func-e's default version is used.
 	EnvoyVersion string
 	// DefaultLogLevel specifies the base Envoy log level.
@@ -47,6 +50,7 @@ type Runner struct {
 // Run starts Envoy using func-e as a library
 func (r *Runner) Run(ctx context.Context) error {
 	params := ConfigGenerationParams{
+		Logger:       r.Logger,
 		AdminPort:    r.AdminPort,
 		ListenerPort: r.ListenPort,
 		Dirs:         r.Dirs,
@@ -65,6 +69,8 @@ func (r *Runner) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to setup dynamic module search path: %w", err)
 	}
 	defer cleanup()
+
+	r.Logger.Debug("setting up dynamic module search path", "path", searchPath)
 
 	err = os.Setenv("ENVOY_DYNAMIC_MODULES_SEARCH_PATH", searchPath)
 	if err != nil {
@@ -171,6 +177,9 @@ func setupDynamicModuleSearchPath(params ConfigGenerationParams) (string, func()
 		composerPath := extensions.LocalCacheComposerLib(params.Dirs, composerVersion)
 		if _, err := os.Stat(composerPath); err == nil {
 			linkPath := filepath.Join(tempDir, filepath.Base(composerPath))
+
+			params.Logger.Debug("linking libcomposer for composer extensions", "path", composerPath, "linkPath", linkPath)
+
 			if err := os.Link(composerPath, linkPath); err != nil {
 				cleanup()
 				return "", nil, fmt.Errorf("failed to create hard link for libcomposer: %w", err)

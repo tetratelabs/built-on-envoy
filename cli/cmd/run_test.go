@@ -290,7 +290,7 @@ func TestParseLogLevels(t *testing.T) {
 
 func TestRunInvalidConfig(t *testing.T) {
 	r := &Run{RunID: "///"}
-	require.Error(t, r.Run(t.Context(), &xdg.Directories{}))
+	require.Error(t, r.Run(t.Context(), &xdg.Directories{}, internaltesting.NewTLogger(t)))
 }
 
 func TestSplitRef(t *testing.T) {
@@ -336,17 +336,19 @@ func TestSplitRef(t *testing.T) {
 }
 
 func TestLoadLocalManifests(t *testing.T) {
+	logger := internaltesting.NewTLogger(t)
 	downloader := &extensions.Downloader{
-		Dirs: &xdg.Directories{DataHome: t.TempDir()},
+		Logger: logger,
+		Dirs:   &xdg.Directories{DataHome: t.TempDir()},
 	}
 	t.Run("empty paths", func(t *testing.T) {
-		manifests, err := loadLocalManifests(t.Context(), downloader, []string{}, false)
+		manifests, err := loadLocalManifests(t.Context(), logger, downloader, []string{}, false)
 		require.NoError(t, err)
 		require.Empty(t, manifests)
 	})
 
 	t.Run("multiple valid paths", func(t *testing.T) {
-		manifests, err := loadLocalManifests(t.Context(), downloader, []string{"./testdata", "./testdata/push_pull"}, false)
+		manifests, err := loadLocalManifests(t.Context(), logger, downloader, []string{"./testdata", "./testdata/push_pull"}, false)
 		require.NoError(t, err)
 		require.Len(t, manifests, 2)
 		require.Equal(t, "test-lua", manifests[0].Name)
@@ -354,13 +356,13 @@ func TestLoadLocalManifests(t *testing.T) {
 	})
 
 	t.Run("nonexistent path", func(t *testing.T) {
-		_, err := loadLocalManifests(t.Context(), downloader, []string{"/nonexistent/path"}, false)
+		_, err := loadLocalManifests(t.Context(), logger, downloader, []string{"/nonexistent/path"}, false)
 		require.Error(t, err)
 		require.ErrorIs(t, err, errFailedToLoadLocalManifest)
 	})
 
 	t.Run("invalid path", func(t *testing.T) {
-		_, err := loadLocalManifests(t.Context(), downloader, []string{"./"}, false)
+		_, err := loadLocalManifests(t.Context(), logger, downloader, []string{"./"}, false)
 		require.Error(t, err)
 		require.ErrorIs(t, err, errFailedToLoadLocalManifest)
 	})
@@ -369,7 +371,7 @@ func TestLoadLocalManifests(t *testing.T) {
 		// Create a temporary directory and create an template composer plugin with
 		// createComposerHTTPFilter.
 		tempDir := t.TempDir()
-		err := createComposerHTTPFilter(downloader.Dirs, tempDir, "test_custom")
+		err := createComposerHTTPFilter(logger, downloader.Dirs, tempDir, "test_custom")
 		require.NoError(t, err)
 
 		// Remove go.mod and go.sum to simulate invalid composer extension.
@@ -378,7 +380,7 @@ func TestLoadLocalManifests(t *testing.T) {
 		err = os.Remove(tempDir + "/test_custom/go.sum")
 		require.NoError(t, err)
 
-		_, err = loadLocalManifests(t.Context(), downloader, []string{tempDir + "/test_custom"}, true)
+		_, err = loadLocalManifests(t.Context(), logger, downloader, []string{tempDir + "/test_custom"}, true)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "failed to run 'go mod tidy'")
 	})
@@ -387,10 +389,10 @@ func TestLoadLocalManifests(t *testing.T) {
 		// Create a temporary directory and create an template composer plugin with
 		// createComposerHTTPFilter.
 		tempDir := t.TempDir()
-		err := createComposerHTTPFilter(downloader.Dirs, tempDir, "test_valid")
+		err := createComposerHTTPFilter(logger, downloader.Dirs, tempDir, "test_valid")
 		require.NoError(t, err)
 
-		manifests, err := loadLocalManifests(t.Context(), downloader, []string{tempDir + "/test_valid"}, false)
+		manifests, err := loadLocalManifests(t.Context(), logger, downloader, []string{tempDir + "/test_valid"}, false)
 		require.NoError(t, err)
 		require.Len(t, manifests, 1)
 		require.Equal(t, "test_valid", manifests[0].Name)
@@ -467,7 +469,7 @@ func TestRunIncomaptibleEnvoyVersion(t *testing.T) {
 	r.extensionPositions, err = saveExtensionPositions([]string{"--local", "./testdata/input_lua_inline"})
 	require.NoError(t, err)
 
-	err = r.Run(t.Context(), nil)
+	err = r.Run(t.Context(), nil, internaltesting.NewTLogger(t))
 	require.ErrorIs(t, err, errIncompatibleEnvoyVersion)
 }
 

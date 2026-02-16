@@ -8,6 +8,7 @@ package oci
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"oras.land/oras-go/v2/registry"
 	"oras.land/oras-go/v2/registry/remote"
@@ -21,20 +22,22 @@ type RegistryClient interface {
 
 // registryClient implements RegistryClient using an oras.Target for storage.
 type registryClient struct {
+	logger   *slog.Logger
 	registry registry.Registry
 }
 
 // NewRegistryClient creates a new RegistryClient for the specified target.
 // The target can be any oras.Target implementation, such as a remote registry
 // or an in-memory store.
-func NewRegistryClient(target registry.Registry) RegistryClient {
-	return &registryClient{registry: target}
+func NewRegistryClient(logger *slog.Logger, target registry.Registry) RegistryClient {
+	return &registryClient{logger: logger, registry: target}
 }
 
 // NewRemoteRegistry creates a new remote registry target for the specified reference.
 // The reference should be in the format "registry/namespace".
 // (e.g., "ghcr.io/myorg").
-func NewRemoteRegistry(reference string, opts *ClientOptions) (*remote.Registry, error) {
+func NewRemoteRegistry(logger *slog.Logger, reference string, opts *ClientOptions) (*remote.Registry, error) {
+	logger.Debug("creating remote registry client", "reference", reference)
 	registry, err := remote.NewRegistry(reference)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create repository: %w", err)
@@ -48,5 +51,6 @@ func NewRemoteRegistry(reference string, opts *ClientOptions) (*remote.Registry,
 
 // ListRepositories lists all repositories in the OCI registry.
 func (r *registryClient) ListRepositories(ctx context.Context) ([]string, error) {
+	r.logger.Debug("listing repositories in registry")
 	return registry.Repositories(ctx, r.registry)
 }

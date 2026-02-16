@@ -24,12 +24,13 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
+	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
 func TestGenerateFilterConfigUnsupportedType(t *testing.T) {
 	manifest := extensions.Manifest{Type: "unsupported_type"}
-	_, err := GenerateFilterConfig(&manifest, &xdg.Directories{}, "")
+	_, err := GenerateFilterConfig(internaltesting.NewTLogger(t), &manifest, &xdg.Directories{}, "")
 	require.ErrorIs(t, err, ErrUnsupportedExtensionType)
 }
 
@@ -39,7 +40,7 @@ func TestGenerateFilterConfigUnimplemented(t *testing.T) {
 	} {
 		t.Run(string(et), func(t *testing.T) {
 			manifest := extensions.Manifest{Type: et}
-			_, err := GenerateFilterConfig(&manifest, &xdg.Directories{}, "")
+			_, err := GenerateFilterConfig(internaltesting.NewTLogger(t), &manifest, &xdg.Directories{}, "")
 			require.ErrorIs(t, err, ErrUnimplemented)
 		})
 	}
@@ -119,7 +120,7 @@ end
 			localManifest, err := extensions.LoadLocalManifest(manifestPath)
 			require.NoError(t, err)
 
-			got, err := GenerateFilterConfig(localManifest, &xdg.Directories{}, "")
+			got, err := GenerateFilterConfig(internaltesting.NewTLogger(t), localManifest, &xdg.Directories{}, "")
 			require.ErrorIs(t, err, tt.wantErr)
 			if tt.wantErr != nil {
 				return
@@ -131,6 +132,7 @@ end
 }
 
 func TestDynamicModuleFilterGenerator(t *testing.T) {
+	logger := internaltesting.NewTLogger(t)
 	dirs := &xdg.Directories{DataHome: t.TempDir()}
 	manifest := &extensions.Manifest{
 		Name:    "test-dynamic-module",
@@ -140,7 +142,7 @@ func TestDynamicModuleFilterGenerator(t *testing.T) {
 	}
 
 	// Case 1: Generate config for Rust dynamic module
-	got, err := GenerateFilterConfig(manifest, dirs, "")
+	got, err := GenerateFilterConfig(logger, manifest, dirs, "")
 	require.NoError(t, err)
 
 	want := &ExtensionResources{
@@ -169,7 +171,7 @@ func TestDynamicModuleFilterGenerator(t *testing.T) {
 
 	// Case 2: Success with config
 	configJSON := `{"key":"value","nested":{"foo":"bar"}}`
-	got, err = GenerateFilterConfig(manifest, dirs, configJSON)
+	got, err = GenerateFilterConfig(logger, manifest, dirs, configJSON)
 	require.NoError(t, err, "GenerateFilterConfig with config failed")
 
 	wantWithConfig := &ExtensionResources{
@@ -203,6 +205,7 @@ func TestDynamicModuleFilterGenerator(t *testing.T) {
 }
 
 func TestComposerFilterGenerator(t *testing.T) {
+	logger := internaltesting.NewTLogger(t)
 	dirs := &xdg.Directories{DataHome: t.TempDir()}
 	manifest := &extensions.Manifest{
 		Name:            "test-composer",
@@ -213,7 +216,7 @@ func TestComposerFilterGenerator(t *testing.T) {
 	}
 
 	// Case 1: Composer binary missing
-	_, err := GenerateFilterConfig(manifest, dirs, "")
+	_, err := GenerateFilterConfig(logger, manifest, dirs, "")
 	require.ErrorContains(t, err, "composer binary not found")
 
 	// Create Composer binary
@@ -222,7 +225,7 @@ func TestComposerFilterGenerator(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(composerPath, "libcomposer.so"), []byte("fake binary"), 0o600))
 
 	// Case 2: Plugin binary missing
-	_, err = GenerateFilterConfig(manifest, dirs, "")
+	_, err = GenerateFilterConfig(logger, manifest, dirs, "")
 	require.ErrorContains(t, err, "go plugin binary not found")
 
 	// Create Plugin binary
@@ -231,7 +234,7 @@ func TestComposerFilterGenerator(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(pluginPath, "plugin.so"), []byte("fake binary"), 0o600))
 
 	// Case 3: Success without config
-	got, err := GenerateFilterConfig(manifest, dirs, "")
+	got, err := GenerateFilterConfig(logger, manifest, dirs, "")
 	require.NoError(t, err)
 
 	want := &ExtensionResources{
@@ -275,7 +278,7 @@ func TestComposerFilterGenerator(t *testing.T) {
 
 	// Case 4: Success with config
 	configJSON := `{"key":"value","nested":{"foo":"bar"}}`
-	got, err = GenerateFilterConfig(manifest, dirs, configJSON)
+	got, err = GenerateFilterConfig(logger, manifest, dirs, configJSON)
 	require.NoError(t, err, "GenerateFilterConfig with config failed")
 
 	wantWithConfig := &ExtensionResources{

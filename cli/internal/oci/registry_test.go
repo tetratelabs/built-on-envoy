@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2/registry"
+
+	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 
 type registryClientTest struct {
@@ -24,10 +26,11 @@ var testRepos = []string{"repo1", "repo2"}
 var registryClientTests = []registryClientTest{
 	{
 		name: "in-memory store",
-		newRegistryClient: func(*testing.T) RegistryClient {
-			return NewRegistryClient(&mockRegistry{
-				repos: testRepos,
-			})
+		newRegistryClient: func(t *testing.T) RegistryClient {
+			return NewRegistryClient(
+				internaltesting.NewTLogger(t),
+				&mockRegistry{repos: testRepos},
+			)
 		},
 	},
 }
@@ -46,7 +49,8 @@ func TestRegistryClient_ListRepositories(t *testing.T) {
 }
 
 func TestNewRemoteRegistry(t *testing.T) {
-	reg, err := NewRemoteRegistry("ghcr.io", nil)
+	logger := internaltesting.NewTLogger(t)
+	reg, err := NewRemoteRegistry(logger, "ghcr.io", nil)
 	require.NoError(t, err)
 	require.NotNil(t, reg)
 	assert.Equal(t, "ghcr.io", reg.Reference.Registry)
@@ -61,7 +65,8 @@ func TestNewRemoteRegistry_WithOptions(t *testing.T) {
 		PlainHTTP: true,
 	}
 
-	reg, err := NewRemoteRegistry("ghcr.io", opts)
+	logger := internaltesting.NewTLogger(t)
+	reg, err := NewRemoteRegistry(logger, "ghcr.io", opts)
 	require.NoError(t, err)
 	require.NotNil(t, reg)
 	assert.True(t, reg.PlainHTTP)
@@ -69,7 +74,8 @@ func TestNewRemoteRegistry_WithOptions(t *testing.T) {
 }
 
 func TestNewRemoteRegistry_InvalidReference(t *testing.T) {
-	_, err := NewRemoteRegistry("invalid/reference/format", nil)
+	logger := internaltesting.NewTLogger(t)
+	_, err := NewRemoteRegistry(logger, "invalid/reference/format", nil)
 	require.Error(t, err)
 }
 

@@ -109,7 +109,9 @@ func TestGenConfig(t *testing.T) {
 			cmd.extensionPositions, err = saveExtensionPositions(args)
 			require.NoError(t, err)
 
-			require.NoError(t, cmd.Run(t.Context(), &xdg.Directories{DataHome: t.TempDir()}))
+			logger := internaltesting.NewTLogger(t)
+			dirs := &xdg.Directories{DataHome: t.TempDir()}
+			require.NoError(t, cmd.Run(t.Context(), dirs, logger))
 
 			want, err := os.ReadFile(tt.wantFile)
 			require.NoError(t, err)

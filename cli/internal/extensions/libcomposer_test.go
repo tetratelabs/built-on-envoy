@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/mod/semver"
 
+	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
@@ -21,9 +22,10 @@ func TestLibComposerVersion(t *testing.T) {
 }
 
 func TestBuildLibComposer(t *testing.T) {
+	logger := internaltesting.NewTLogger(t)
 	fakeDirs := &xdg.Directories{DataHome: t.TempDir()}
 	composerPath := "../../../extensions/composer"
-	err := BuildLibComposer(fakeDirs.DataHome, composerPath, true)
+	err := BuildLibComposer(logger, fakeDirs.DataHome, composerPath, true)
 	require.NoError(t, err)
 
 	// Ensure the libcomposer.so is created.
@@ -36,13 +38,14 @@ func TestBuildLibComposer(t *testing.T) {
 }
 
 func TestBuildExtensionFromPath(t *testing.T) {
+	logger := internaltesting.NewTLogger(t)
 	extensionPath := "../../../extensions/composer/example"
 	fakeDirs := &xdg.Directories{DataHome: t.TempDir()}
 
 	manifest, err := LoadLocalManifest(extensionPath + "/manifest.yaml")
 	require.NoError(t, err)
 
-	err = BuildExtensionFromPath(fakeDirs, manifest, extensionPath)
+	err = BuildExtensionFromPath(logger, fakeDirs, manifest, extensionPath)
 	require.NoError(t, err)
 
 	// Ensure the plugin.so is created.

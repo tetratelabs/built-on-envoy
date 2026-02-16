@@ -10,9 +10,11 @@ import (
 	_ "embed"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"runtime"
 
+	"github.com/tetratelabs/built-on-envoy/cli/internal"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/envoy"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
@@ -50,13 +52,16 @@ func (g *GenConfig) BeforeResolve() error {
 }
 
 // Run executes the GenConfig command.
-func (g *GenConfig) Run(ctx context.Context, dirs *xdg.Directories) error {
+func (g *GenConfig) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logger) error {
+	logger.Debug("handling genconfig command", "cmd", internal.RedactSensitive(g))
+
 	out := g.output
 	if out == nil {
 		out = os.Stdout
 	}
 
 	downloader := &extensions.Downloader{
+		Logger:   logger,
 		Registry: g.OCI.Registry,
 		Username: g.OCI.Username,
 		Password: g.OCI.Password,
@@ -70,7 +75,7 @@ func (g *GenConfig) Run(ctx context.Context, dirs *xdg.Directories) error {
 	if err != nil {
 		return err
 	}
-	local, err := loadLocalManifests(ctx, downloader, g.Local, false)
+	local, err := loadLocalManifests(ctx, logger, downloader, g.Local, false)
 	if err != nil {
 		return err
 	}
@@ -87,6 +92,7 @@ func (g *GenConfig) Run(ctx context.Context, dirs *xdg.Directories) error {
 	}
 
 	config, err := envoy.RenderConfig(envoy.ConfigGenerationParams{
+		Logger:       logger,
 		AdminPort:    g.AdminPort,
 		ListenerPort: g.ListenPort,
 		Dirs:         dirs,

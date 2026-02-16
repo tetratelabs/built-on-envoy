@@ -6,11 +6,13 @@
 package oci
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"sort"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -43,20 +45,22 @@ type TargetWithTags interface {
 
 // repositoryClient implements RepositoryClient using an oras.Target for storage.
 type repositoryClient struct {
+	logger *slog.Logger
 	target TargetWithTags
 }
 
 // NewRepositoryClient creates a new RepositoryClient for the specified target.
 // The target can be any oras.Target implementation, such as a remote repository
 // or an in-memory store.
-func NewRepositoryClient(target TargetWithTags) RepositoryClient {
-	return &repositoryClient{target: target}
+func NewRepositoryClient(logger *slog.Logger, target TargetWithTags) RepositoryClient {
+	return &repositoryClient{logger: logger, target: target}
 }
 
 // NewRemoteRepository creates a new remote repository target for the specified reference.
 // The reference should be in the format "registry/namespace/name"
 // (e.g., "ghcr.io/myorg/myrepo").
-func NewRemoteRepository(reference string, opts *ClientOptions) (*remote.Repository, error) {
+func NewRemoteRepository(logger *slog.Logger, reference string, opts *ClientOptions) (*remote.Repository, error) {
+	logger.Debug("creating remote repository client", "reference", reference)
 	repo, err := remote.NewRepository(reference)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create repository: %w", err)
@@ -69,6 +73,8 @@ func NewRemoteRepository(reference string, opts *ClientOptions) (*remote.Reposit
 }
 
 func (r *repositoryClient) Push(ctx context.Context, path, tag string, annotations map[string]string) (string, error) {
+	r.logger.Debug("pushing artifact to registry", "path", path, "tag", tag, "annotations", annotations)
+
 	// Package the directory
 	pkgReader, err := PackageDirectory(path)
 	if err != nil {
@@ -104,6 +110,8 @@ func (r *repositoryClient) Push(ctx context.Context, path, tag string, annotatio
 }
 
 func (r *repositoryClient) Pull(ctx context.Context, tag, destPath string, platform *ocispec.Platform) (*ocispec.Manifest, string, error) {
+	r.logger.Debug("pulling artifact from registry", "tag", tag, "destPath", destPath, "platform", platformLogValue(platform))
+
 	manifest, desc, err := r.fetchManifest(ctx, tag, platform)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to get manifest: %w", err)
@@ -111,6 +119,7 @@ func (r *repositoryClient) Pull(ctx context.Context, tag, destPath string, platf
 
 	// Extract each layer
 	for _, layer := range manifest.Layers {
+		r.logger.Debug("extracting layer", "digest", layer.Digest.String(), "mediaType", layer.MediaType)
 		layerReader, err := r.target.Fetch(ctx, layer)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to fetch layer: %w", err)
@@ -131,13 +140,19 @@ var ErrPlatformNotFound = errors.New("no manifest found for specified platform")
 
 // fetchManifest retrieves and decodes the manifest for the specified tag.
 func (r *repositoryClient) fetchManifest(ctx context.Context, tag string, platform *ocispec.Platform) (*ocispec.Manifest, ocispec.Descriptor, error) {
+	r.logger.Debug("resolving manifest for tag", "tag", tag, "platform", platformLogValue(platform))
+
 	desc, err := r.target.Resolve(ctx, tag)
 	if err != nil {
 		return nil, ocispec.Descriptor{}, fmt.Errorf("failed to resolve tag: %w", err)
 	}
 
+	r.logger.Debug("resolved descriptor for tag", "digest", desc.Digest.String(), "mediaType", desc.MediaType)
+
 	// If it is an index (multi-arch artifact), fetch it to find the right manifest for the current platform
 	if platform != nil && desc.MediaType == ocispec.MediaTypeImageIndex {
+		r.logger.Debug("descriptor is an index, finding the platform-specific manifest", "platform", platformLogValue(platform))
+
 		var rc io.ReadCloser
 		rc, err = r.target.Fetch(ctx, desc)
 		if err != nil {
@@ -159,6 +174,7 @@ func (r *repositoryClient) fetchManifest(ctx context.Context, tag string, platfo
 		found := false
 		for _, m := range index.Manifests {
 			if m.Platform != nil && m.Platform.OS == platform.OS && m.Platform.Architecture == platform.Architecture {
+				r.logger.Debug("found matching manifest in index", "digest", m.Digest.String(), "mediaType", m.MediaType)
 				desc = m
 				found = true
 				break
@@ -175,7 +191,7 @@ func (r *repositoryClient) fetchManifest(ctx context.Context, tag string, platfo
 			}
 
 			return manifest, ocispec.Descriptor{},
-				fmt.Errorf("%w: %s/%s", ErrPlatformNotFound, platform.OS, platform.Architecture)
+				fmt.Errorf("%w: %s", ErrPlatformNotFound, platformLogValue(platform))
 		}
 	}
 
@@ -205,6 +221,8 @@ func (r *repositoryClient) decodeManifest(ctx context.Context, desc *ocispec.Des
 
 // Tags lists all tags in the repository.
 func (r *repositoryClient) Tags(ctx context.Context) ([]string, error) {
+	r.logger.Debug("listing tags in repository")
+
 	var tags []string
 	err := r.target.Tags(ctx, "", func(t []string) error {
 		tags = append(tags, t...)
@@ -226,4 +244,12 @@ func (r *repositoryClient) Tags(ctx context.Context) ([]string, error) {
 func (r *repositoryClient) FetchManifest(ctx context.Context, tag string, platform *ocispec.Platform) (*ocispec.Manifest, error) {
 	m, _, err := r.fetchManifest(ctx, tag, platform)
 	return m, err
+}
+
+// platformLogValue formats the platform information for logging, handling nil values gracefully.
+func platformLogValue(platform *ocispec.Platform) string {
+	if platform == nil {
+		return "any"
+	}
+	return cmp.Or(platform.OS, "-") + "/" + cmp.Or(platform.Architecture, "-")
 }

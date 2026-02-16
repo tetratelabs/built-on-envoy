@@ -10,6 +10,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"os"
 	"path/filepath"
@@ -52,7 +53,7 @@ type OCIFlags struct {
 	Registry string `name:"registry" env:"BOE_REGISTRY" help:"OCI registry URL for the extensions." default:"${default_registry}"`
 	Insecure bool   `name:"insecure" env:"BOE_REGISTRY_INSECURE" help:"Allow connecting to an insecure (HTTP) registry." default:"false"`
 	Username string `name:"username" env:"BOE_REGISTRY_USERNAME" help:"Username for the OCI registry."`
-	Password string `name:"password" env:"BOE_REGISTRY_PASSWORD" help:"Password for the OCI registry." type:"password"`
+	Password string `name:"password" env:"BOE_REGISTRY_PASSWORD" help:"Password for the OCI registry." type:"password" sensitive:"true"`
 }
 
 //go:embed run_help.md
@@ -89,8 +90,11 @@ func (r *Run) Validate() error {
 }
 
 // Run executes the run command
-func (r *Run) Run(ctx context.Context, dirs *xdg.Directories) error {
+func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logger) error {
+	logger.Debug("handling run command", "cmd", internal.RedactSensitive(r))
+
 	downloader := &extensions.Downloader{
+		Logger:   logger,
 		Registry: r.OCI.Registry,
 		Username: r.OCI.Username,
 		Password: r.OCI.Password,
@@ -105,7 +109,7 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories) error {
 		return err
 	}
 
-	local, err := loadLocalManifests(ctx, downloader, r.Local, true)
+	local, err := loadLocalManifests(ctx, logger, downloader, r.Local, true)
 	if err != nil {
 		return err
 	}
@@ -117,17 +121,20 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories) error {
 	// TODO(nacx): Find a way to eagerly get from func-e the Envoy version that will
 	// be used when r.EnvoyVersion is empty, without starting the download or run.
 	if r.EnvoyVersion != "" {
+		logger.Debug("validating Envoy version compatibility for extensions", "envoy_version", r.EnvoyVersion)
 		if err = validateEnvoyCompat(r.EnvoyVersion, extensions); err != nil {
 			return err
 		}
 	}
 
 	// Make sure all composer extensions use the same version of composer
+	logger.Debug("validating composer version compatibility for extensions")
 	if err = validateComposerCompat(extensions); err != nil {
 		return err
 	}
 
 	runner := &envoy.Runner{
+		Logger:            logger,
 		EnvoyVersion:      r.EnvoyVersion,
 		DefaultLogLevel:   r.defaultLogLevel,
 		ComponentLogLevel: r.componentLogLevel,
@@ -257,9 +264,11 @@ func parseLogLevels(logLevel string) (string, string, error) {
 var errFailedToLoadLocalManifest = errors.New("failed to load local manifest")
 
 // loadLocalManifests loads extension manifests from the specified local paths.
-func loadLocalManifests(ctx context.Context, downloader *extensions.Downloader, paths []string, build bool) ([]*extensions.Manifest, error) {
+func loadLocalManifests(ctx context.Context, logger *slog.Logger, downloader *extensions.Downloader, paths []string, build bool) ([]*extensions.Manifest, error) {
 	manifests := make([]*extensions.Manifest, 0, len(paths))
 	for _, path := range paths {
+		logger.Info("loading local extension manifest", "path", path)
+
 		manifest, err := extensions.LoadLocalManifest(path + "/manifest.yaml")
 		if err != nil {
 			return nil, fmt.Errorf("%w from %s: %w", errFailedToLoadLocalManifest, path, err)
@@ -269,6 +278,7 @@ func loadLocalManifests(ctx context.Context, downloader *extensions.Downloader, 
 			switch manifest.Type {
 			case extensions.TypeComposer:
 				fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, manifest.Name, internal.ANSIReset)
+				logger.Info("building local composer extension", "name", manifest.Name, "version", manifest.Version)
 				if err := extensions.BuildExtensionFromPath(downloader.Dirs, manifest, path); err != nil {
 					return nil, err
 				}
@@ -277,6 +287,7 @@ func loadLocalManifests(ctx context.Context, downloader *extensions.Downloader, 
 				}
 			case extensions.TypeDynamicModule:
 				fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, manifest.Name, internal.ANSIReset)
+				logger.Info("building local dynamic module extension", "name", manifest.Name, "version", manifest.Version)
 				// Build dynamic module (currently supports Rust)
 				if err := extensions.CheckOrBuildDynamicModule(downloader.Dirs, manifest, path); err != nil {
 					return nil, err
