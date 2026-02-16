@@ -6,7 +6,7 @@
 clusters:
 - dns_lookup_family: V4_ONLY
   load_assignment:
-    cluster_name: my-cluster
+    cluster_name: example.com:443
     endpoints:
     - lb_endpoints:
       - endpoint:
@@ -14,7 +14,7 @@ clusters:
             socket_address:
               address: example.com
               port_value: 443
-  name: my-cluster
+  name: example.com:443
   transport_socket:
     name: envoy.transport_sockets.tls
     typed_config:

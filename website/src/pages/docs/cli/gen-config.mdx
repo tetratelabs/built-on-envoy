@@ -49,10 +49,11 @@ Generate configuration providing dedicated JSON config to an extension:
     boe gen-config --local ~/src/my-extension --config '{"client_id":"my-id","client_secret":"my-secret"}'
     ```
 
-Generate configuration with an additional upstream cluster using the shorthand format `name=host:port`:
+Generate configuration with an additional upstream cluster using the shorthand format `host:port`.
+The cluster name is the short format string itself (e.g. `my-service.example.com:443`):
 
     ```shell
-    boe gen-config --local ~/src/my-extension --cluster name=my-service.example.com:tlsPort
+    boe gen-config --local ~/src/my-extension --cluster my-service.example.com:443
     ```
 
 For full control over the cluster configuration, raw JSON is also supported:
@@ -91,7 +92,7 @@ boe gen-config --help
 | `--extension` | Extensions to enable (in the format: "name" or "name:version"). | `[]string` | - | - | No |
 | `--local` | Path to a directory containing a local Extension to enable. | `[]string` | - | - | No |
 | `--config` | Optional JSON config string for extensions. Applied in order to combined --extension and --local flags. | `[]string` | - | - | No |
-| `--cluster` | Optional additional Envoy cluster. Supports JSON or short format (name=my-service.example.com:tlsPort). | `[]string` | - | - | No |
+| `--cluster` | Optional additional Envoy cluster. Supports JSON or short format (host:port). | `[]string` | - | - | No |
 | `--registry` | OCI registry URL for the extensions. | `string` | `ghcr.io/tetratelabs/built-on-envoy` | `BOE_REGISTRY` | No |
 | `--insecure` | Allow connecting to an insecure (HTTP) registry. | `bool` | `false` | `BOE_REGISTRY_INSECURE` | No |
 | `--username` | Username for the OCI registry. | `string` | - | `BOE_REGISTRY_USERNAME` | No |

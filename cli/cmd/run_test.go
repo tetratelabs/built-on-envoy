@@ -66,9 +66,8 @@ Flags:
       --config=CONFIG              Optional JSON config string for extensions.
                                    Applied in order to combined --extension and
                                    --local flags.
-      --cluster=CLUSTER            Optional additional Envoy cluster.
-                                   Supports JSON or short format
-                                   (name=my-service.example.com:tlsPort).
+      --cluster=CLUSTER            Optional additional Envoy cluster. Supports
+                                   JSON or short format (host:port).
       --registry="ghcr.io/tetratelabs/built-on-envoy"
                                    OCI registry URL for the extensions
                                    ($BOE_REGISTRY).

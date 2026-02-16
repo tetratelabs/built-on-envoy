@@ -76,9 +76,9 @@ func TestParseCluster(t *testing.T) {
 	}{
 		{
 			name: "short",
-			spec: "name=example.com:443",
+			spec: "example.com:443",
 			check: func(t *testing.T, c *clusterv3.Cluster) {
-				require.Equal(t, "name", c.Name)
+				require.Equal(t, "example.com:443", c.Name)
 				require.Equal(t, clusterv3.Cluster_STRICT_DNS, c.GetType())
 				ep := c.LoadAssignment.Endpoints[0].LbEndpoints[0].GetEndpoint()
 				require.Equal(t, "example.com", ep.Address.GetSocketAddress().Address)
@@ -95,12 +95,12 @@ func TestParseCluster(t *testing.T) {
 		},
 		{
 			name:          "short: invalid missing port",
-			spec:          "name=example.com",
-			expectedError: "invalid cluster short format: address example.com: missing port in address",
+			spec:          "example.com",
+			expectedError: "invalid cluster spec \"example.com\": must be JSON or in the format host:port",
 		},
 		{
 			name:          "short: invalid bad port",
-			spec:          "name=example.com:abc",
+			spec:          "example.com:abc",
 			expectedError: "invalid port in cluster short format: strconv.ParseUint: parsing \"abc\": invalid syntax",
 		},
 		{
