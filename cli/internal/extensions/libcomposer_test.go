@@ -25,7 +25,7 @@ func TestBuildLibComposer(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 	fakeDirs := &xdg.Directories{DataHome: t.TempDir()}
 	composerPath := "../../../extensions/composer"
-	err := BuildLibComposer(logger, fakeDirs.DataHome, composerPath, true)
+	err := BuildLibComposer(logger, fakeDirs, composerPath, LibComposerVersion, true)
 	require.NoError(t, err)
 
 	// Ensure the libcomposer.so is created.

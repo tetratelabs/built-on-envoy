@@ -177,6 +177,8 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 				if extensionSrc == "" {
 					return nil, fmt.Errorf("invalid source artifact for composer extension %s: missing expected source directory: %s", name, artifact.Path)
 				}
+				downloader.Logger.Info("loading downloaded extension manifest", "path", extensionSrc)
+
 				manifest, err = extensions.LoadLocalManifest(filepath.Join(extensionSrc, "manifest.yaml"))
 				if err != nil {
 					return nil, fmt.Errorf("failed to load manifest for composer extension %s from source artifact %q: %w",
@@ -186,11 +188,12 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 
 				if build {
 					fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)
-					if err = extensions.BuildLibComposer(downloader.Dirs.DataHome, artifact.Path, false); err != nil {
+					downloader.Logger.Info("building downloaded composer extension", "name", manifest.Name, "version", manifest.Version)
+					if err = extensions.BuildLibComposer(downloader.Logger, downloader.Dirs, artifact.Path, manifest.ComposerVersion, false); err != nil {
 						return nil, fmt.Errorf("failed to build libcomposer %s for extension %s: %w",
 							artifact.Manifest.Version, name, err)
 					}
-					if err = extensions.BuildExtensionFromPath(downloader.Dirs, manifest, extensionSrc); err != nil {
+					if err = extensions.BuildExtensionFromPath(downloader.Logger, downloader.Dirs, manifest, extensionSrc); err != nil {
 						return nil, fmt.Errorf("failed to build dynamic module for extension %s from source artifact: %w", name, err)
 					}
 				}
@@ -199,8 +202,9 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 			} else {
 				if artifact.Manifest.Type == extensions.TypeDynamicModule && build {
 					fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)
+					downloader.Logger.Info("building downloaded dynamic module extension", "name", artifact.Manifest.Name, "version", artifact.Manifest.Version)
 
-					if err = extensions.CheckOrBuildDynamicModule(downloader.Dirs, artifact.Manifest, artifact.Path); err != nil {
+					if err = extensions.CheckOrBuildDynamicModule(downloader.Logger, downloader.Dirs, artifact.Manifest, artifact.Path); err != nil {
 						return nil, fmt.Errorf("failed to build dynamic module for extension %s from source artifact: %w", name, err)
 					}
 				}
@@ -278,8 +282,8 @@ func loadLocalManifests(ctx context.Context, logger *slog.Logger, downloader *ex
 			switch manifest.Type {
 			case extensions.TypeComposer:
 				fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, manifest.Name, internal.ANSIReset)
-				logger.Info("building local composer extension", "name", manifest.Name, "version", manifest.Version)
-				if err := extensions.BuildExtensionFromPath(downloader.Dirs, manifest, path); err != nil {
+				downloader.Logger.Info("building local composer extension", "name", manifest.Name, "version", manifest.Version)
+				if err := extensions.BuildExtensionFromPath(downloader.Logger, downloader.Dirs, manifest, path); err != nil {
 					return nil, err
 				}
 				if err := extensions.CheckOrDownloadLibComposer(ctx, downloader, manifest.ComposerVersion); err != nil {
@@ -287,9 +291,9 @@ func loadLocalManifests(ctx context.Context, logger *slog.Logger, downloader *ex
 				}
 			case extensions.TypeDynamicModule:
 				fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, manifest.Name, internal.ANSIReset)
-				logger.Info("building local dynamic module extension", "name", manifest.Name, "version", manifest.Version)
+				downloader.Logger.Info("building local dynamic module extension", "name", manifest.Name, "version", manifest.Version)
 				// Build dynamic module (currently supports Rust)
-				if err := extensions.CheckOrBuildDynamicModule(downloader.Dirs, manifest, path); err != nil {
+				if err := extensions.CheckOrBuildDynamicModule(downloader.Logger, downloader.Dirs, manifest, path); err != nil {
 					return nil, err
 				}
 			}

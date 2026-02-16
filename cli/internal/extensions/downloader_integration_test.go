@@ -141,6 +141,8 @@ func TestCheckOrDownloadComposer(t *testing.T) {
 }
 
 func TestFallbackToSourceDynamicModule(t *testing.T) {
+	logger := internaltesting.NewTLogger(t)
+
 	// Push a platform-specific image
 	testRepo := fmt.Sprintf("%s/extension-test-dynamic-module", registryAddr)
 	// #nosec G204
@@ -160,6 +162,7 @@ func TestFallbackToSourceDynamicModule(t *testing.T) {
 	require.NoError(t, err)
 
 	downloader := &Downloader{
+		Logger:   logger,
 		Registry: registryAddr,
 		Dirs:     &xdg.Directories{DataHome: t.TempDir()},
 		Insecure: true,
@@ -200,6 +203,8 @@ func TestFallbackToSourceDynamicModule(t *testing.T) {
 }
 
 func TestFallbackToSourceComposer(t *testing.T) {
+	logger := internaltesting.NewTLogger(t)
+
 	// Push a platform-specific image
 	testRepo := fmt.Sprintf("%s/extension-test-composer", registryAddr)
 	// #nosec G204
@@ -220,6 +225,7 @@ func TestFallbackToSourceComposer(t *testing.T) {
 	require.NoError(t, err)
 
 	downloader := &Downloader{
+		Logger:   logger,
 		Registry: registryAddr,
 		Dirs:     &xdg.Directories{DataHome: t.TempDir()},
 		Insecure: true,

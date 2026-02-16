@@ -12,7 +12,6 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
-	"path/filepath"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
@@ -25,11 +24,11 @@ import (
 //go:embed manifests/libcomposer-version.txt
 var LibComposerVersion string
 
-// CheckOrDownloadLibComposer checks if the libcomposer.so exists in the dataHome directory.
+// CheckOrDownloadLibComposer checks if the libcomposer.so exists in the local cache directory.
 // If not, it tries to download the pre-built libcomposer from OCI registry.
 func CheckOrDownloadLibComposer(ctx context.Context, downloader *Downloader, version string) error {
 	if _, err := os.Stat(LocalCacheComposerLib(downloader.Dirs, version)); err == nil {
-		// libcomposer already exists
+		downloader.Logger.Debug("libcomposer already exists in local cache. skipping download", "version", version)
 		return nil
 	}
 	artifact, err := downloader.DownloadComposer(ctx, version)
@@ -42,7 +41,7 @@ func CheckOrDownloadLibComposer(ctx context.Context, downloader *Downloader, ver
 		return nil
 	}
 
-	return BuildLibComposer(downloader.Dirs.DataHome, artifact.Path, false)
+	return BuildLibComposer(downloader.Logger, downloader.Dirs, artifact.Path, version, false)
 }
 
 // BuildExtensionFromPath builds the extension plugin from the given path and saves it to
@@ -63,7 +62,7 @@ func BuildExtensionFromPath(logger *slog.Logger, dirs *xdg.Directories, manifest
 	// #nosec G204
 	cmd = exec.Command("go", "build", "-buildmode=plugin", "-o", dest, "./standalone")
 	cmd.Dir = path
-	logger.Debug("building local extension", "path", path, "cmd", cmd.String())
+	logger.Debug("building local extension", "version", manifest.Version, "path", path, "cmd", cmd.String())
 	output, err = cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to build local extension from %s: %w\nOutput: %s",
@@ -76,9 +75,9 @@ func BuildExtensionFromPath(logger *slog.Logger, dirs *xdg.Directories, manifest
 // BuildLibComposer builds the libcomposer.so from source. The composer source code is expected
 // to be at composerSrcPath. The built libcomposer.so will be saved in the local cache directory for
 // composer to load.
-func BuildLibComposer(logger *slog.Logger, dataHome string, composerSrcPath string, buildPlugins bool) error {
-	if _, err := os.Stat(filepath.Join(composerSrcPath, "libcomposer.so")); err == nil {
-		// libcomposer already exists
+func BuildLibComposer(logger *slog.Logger, dirs *xdg.Directories, composerSrcPath string, version string, buildPlugins bool) error {
+	if _, err := os.Stat(LocalCacheComposerLib(dirs, version)); err == nil {
+		logger.Debug("libcomposer already exists in local cache. skipping build", "version", version)
 		return nil
 	}
 
@@ -86,12 +85,12 @@ func BuildLibComposer(logger *slog.Logger, dataHome string, composerSrcPath stri
 	// #nosec G204
 	cmd := exec.Command("make",
 		"install",
-		"BOE_DATA_HOME="+dataHome,
+		"BOE_DATA_HOME="+dirs.DataHome,
 		"COMPOSER_LITE=true",
 	)
 	cmd.Dir = composerSrcPath
 
-	logger.Debug("building libcomposer from source", "cmd", cmd.String())
+	logger.Debug("building libcomposer from source", "version", version, "cmd", cmd.String())
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -101,9 +100,9 @@ func BuildLibComposer(logger *slog.Logger, dataHome string, composerSrcPath stri
 
 	if buildPlugins {
 		// #nosec G204
-		pluginsDir := exec.Command("make",
+		pluginsBuild := exec.Command("make",
 			"install_plugins",
-			"BOE_DATA_HOME="+dataHome,
+			"BOE_DATA_HOME="+dirs.DataHome,
 		)
 		pluginsBuild.Dir = composerSrcPath
 

@@ -36,7 +36,7 @@ type Downloader struct {
 
 // SetClientFactory sets a custom client factory function for the downloader.
 // This is intended for use in tests to inject mock OCI clients.
-func (d *Downloader) SetClientFactory(f func(repository, username, password string, insecure bool) (oci.RepositoryClient, error)) {
+func (d *Downloader) SetClientFactory(f func(logger *slog.Logger, repository, username, password string, insecure bool) (oci.RepositoryClient, error)) {
 	d.newClient = f
 }
 

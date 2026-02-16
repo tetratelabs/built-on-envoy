@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"os"
 	"path/filepath"
@@ -528,9 +529,10 @@ func (m *mockOCIClient) FetchManifest(_ context.Context, tag string, _ *ocispec.
 }
 
 // newTestDownloader creates a Downloader with the given mock client and data directory.
-func newTestDownloader(dataHome string, mock *mockOCIClient) *extensions.Downloader {
-	d := &extensions.Downloader{Dirs: &xdg.Directories{DataHome: dataHome}}
-	d.SetClientFactory(func(_, _, _ string, _ bool) (oci.RepositoryClient, error) {
+func newTestDownloader(t *testing.T, dataHome string, mock *mockOCIClient) *extensions.Downloader {
+	logger := internaltesting.NewTLogger(t)
+	d := &extensions.Downloader{Logger: logger, Dirs: &xdg.Directories{DataHome: dataHome}}
+	d.SetClientFactory(func(_ *slog.Logger, _, _, _ string, _ bool) (oci.RepositoryClient, error) {
 		return mock, nil
 	})
 	return d
@@ -538,7 +540,10 @@ func newTestDownloader(dataHome string, mock *mockOCIClient) *extensions.Downloa
 
 func TestDownloadExtensions(t *testing.T) {
 	t.Run("empty refs returns empty list", func(t *testing.T) {
-		d := &extensions.Downloader{Dirs: &xdg.Directories{DataHome: t.TempDir()}}
+		d := &extensions.Downloader{
+			Logger: internaltesting.NewTLogger(t),
+			Dirs:   &xdg.Directories{DataHome: t.TempDir()},
+		}
 		manifests, err := downloadExtensions(t.Context(), d, nil, false)
 		require.NoError(t, err)
 		require.Empty(t, manifests)
@@ -556,7 +561,7 @@ func TestDownloadExtensions(t *testing.T) {
 				extensions.OCIAnnotationArtifact:      extensions.ArtifactBinary,
 			},
 		}
-		d := newTestDownloader(t.TempDir(), mock)
+		d := newTestDownloader(t, t.TempDir(), mock)
 
 		manifests, err := downloadExtensions(t.Context(), d, []string{"my-lua-ext:1.0.0"}, false)
 		require.NoError(t, err)
@@ -574,7 +579,7 @@ func TestDownloadExtensions(t *testing.T) {
 				extensions.OCIAnnotationArtifact:      extensions.ArtifactBinary,
 			},
 		}
-		d := newTestDownloader(t.TempDir(), mock)
+		d := newTestDownloader(t, t.TempDir(), mock)
 
 		manifests, err := downloadExtensions(t.Context(), d, []string{"my-dym:2.0.0"}, false)
 		require.NoError(t, err)
@@ -600,7 +605,7 @@ func TestDownloadExtensions(t *testing.T) {
 				extensions.OCIAnnotationComposerVersion: composerVersion,
 			},
 		}
-		d := newTestDownloader(dataHome, mock)
+		d := newTestDownloader(t, dataHome, mock)
 
 		manifests, err := downloadExtensions(t.Context(), d, []string{"my-composer-ext:1.0.0"}, false)
 		require.NoError(t, err)
@@ -616,7 +621,7 @@ func TestDownloadExtensions(t *testing.T) {
 				extensions.OCIAnnotationArtifact:      extensions.ArtifactBinary,
 			},
 		}
-		d := newTestDownloader(t.TempDir(), mock)
+		d := newTestDownloader(t, t.TempDir(), mock)
 
 		manifests, err := downloadExtensions(t.Context(), d, []string{"ext-a:1.0.0", "ext-b:2.0.0"}, false)
 		require.NoError(t, err)
@@ -632,7 +637,7 @@ func TestDownloadExtensions(t *testing.T) {
 			},
 			tags: []string{"3.0.0", "2.0.0", "1.0.0"},
 		}
-		d := newTestDownloader(t.TempDir(), mock)
+		d := newTestDownloader(t, t.TempDir(), mock)
 
 		manifests, err := downloadExtensions(t.Context(), d, []string{"my-ext"}, false)
 		require.NoError(t, err)
@@ -649,7 +654,7 @@ func TestDownloadExtensions(t *testing.T) {
 			},
 			pullErr: errDownload,
 		}
-		d := newTestDownloader(t.TempDir(), mock)
+		d := newTestDownloader(t, t.TempDir(), mock)
 
 		_, err := downloadExtensions(t.Context(), d, []string{"bad-ext:1.0.0"}, false)
 		require.ErrorIs(t, err, errDownload)
@@ -663,7 +668,7 @@ func TestDownloadExtensions(t *testing.T) {
 				extensions.OCIAnnotationArtifact:      "unknown-type",
 			},
 		}
-		d := newTestDownloader(t.TempDir(), mock)
+		d := newTestDownloader(t, t.TempDir(), mock)
 
 		_, err := downloadExtensions(t.Context(), d, []string{"my-ext:1.0.0"}, false)
 		require.Error(t, err)
@@ -679,7 +684,7 @@ func TestDownloadExtensions(t *testing.T) {
 				extensions.OCIAnnotationComposerVersion: "0.1.0",
 			},
 		}
-		d := newTestDownloader(t.TempDir(), mock)
+		d := newTestDownloader(t, t.TempDir(), mock)
 
 		_, err := downloadExtensions(t.Context(), d, []string{"my-composer-src:1.0.0"}, false)
 		require.Error(t, err)
@@ -694,7 +699,7 @@ func TestDownloadExtensions(t *testing.T) {
 				extensions.OCIAnnotationArtifact:      extensions.ArtifactSource,
 			},
 		}
-		d := newTestDownloader(t.TempDir(), mock)
+		d := newTestDownloader(t, t.TempDir(), mock)
 
 		_, err := downloadExtensions(t.Context(), d, []string{"my-dym-src:1.0.0"}, true)
 		require.Error(t, err)
@@ -709,7 +714,7 @@ func TestDownloadExtensions(t *testing.T) {
 				extensions.OCIAnnotationArtifact:      extensions.ArtifactSource,
 			},
 		}
-		d := newTestDownloader(t.TempDir(), mock)
+		d := newTestDownloader(t, t.TempDir(), mock)
 
 		manifests, err := downloadExtensions(t.Context(), d, []string{"my-lua-src:1.0.0"}, false)
 		require.NoError(t, err)
@@ -721,7 +726,7 @@ func TestDownloadExtensions(t *testing.T) {
 		callCount := 0
 		errFail := errors.New("fail on second")
 		d := &extensions.Downloader{Dirs: &xdg.Directories{DataHome: t.TempDir()}}
-		d.SetClientFactory(func(_, _, _ string, _ bool) (oci.RepositoryClient, error) {
+		d.SetClientFactory(func(_ *slog.Logger, _, _, _ string, _ bool) (oci.RepositoryClient, error) {
 			callCount++
 			if callCount > 1 {
 				return &mockOCIClient{pullErr: errFail}, nil
