@@ -151,6 +151,7 @@ func (d *Downloader) download(
 		// Create a downloader for the source artifact without the platforms so it does not
 		// try to fetch a multiarch artifact.
 		srcDownloader := &Downloader{
+			Logger:    d.Logger,
 			Registry:  d.Registry,
 			Username:  d.Username,
 			Password:  d.Password,

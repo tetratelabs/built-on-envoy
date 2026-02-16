@@ -725,7 +725,10 @@ func TestDownloadExtensions(t *testing.T) {
 	t.Run("error stops processing remaining extensions", func(t *testing.T) {
 		callCount := 0
 		errFail := errors.New("fail on second")
-		d := &extensions.Downloader{Dirs: &xdg.Directories{DataHome: t.TempDir()}}
+		d := &extensions.Downloader{
+			Logger: internaltesting.NewTLogger(t),
+			Dirs:   &xdg.Directories{DataHome: t.TempDir()},
+		}
 		d.SetClientFactory(func(_ *slog.Logger, _, _, _ string, _ bool) (oci.RepositoryClient, error) {
 			callCount++
 			if callCount > 1 {
