@@ -96,7 +96,7 @@ func TestParseCluster(t *testing.T) {
 		{
 			name:          "short: invalid missing port",
 			spec:          "example.com",
-			expectedError: "invalid cluster spec \"example.com\": must be JSON or in the format host:port",
+			expectedError: "invalid cluster spec \"example.com\": must be JSON or in the format host:tlsPort",
 		},
 		{
 			name:          "short: invalid bad port",

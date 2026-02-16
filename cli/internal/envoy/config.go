@@ -144,8 +144,8 @@ func generateConfig(params *ConfigGenerationParams) (GeneratedConfigResources, e
 }
 
 // parseCluster parses a cluster specification. It supports:
-//   - short format "host:port" that generates a STRICT_DNS cluster with TLS.
-//     The cluster name is derived as "host:port".
+//   - short format "host:tlsPort" that generates a STRICT_DNS cluster with TLS.
+//     The cluster name is derived as "host:tlsPort".
 //   - raw JSON for full control over the cluster configuration.
 func parseCluster(spec string) (*clusterv3.Cluster, error) {
 	if strings.HasPrefix(spec, "{") {
@@ -155,10 +155,10 @@ func parseCluster(spec string) (*clusterv3.Cluster, error) {
 		}
 		return &cluster, nil
 	}
-	// Fall back to short format parsing (host:port)
+	// Fall back to short format parsing (host:tlsPort)
 	host, portStr, err := net.SplitHostPort(spec)
 	if err != nil {
-		return nil, fmt.Errorf("invalid cluster spec %q: must be JSON or in the format host:port", spec)
+		return nil, fmt.Errorf("invalid cluster spec %q: must be JSON or in the format host:tlsPort", spec)
 	}
 	port, err := strconv.ParseUint(portStr, 10, 32)
 	if err != nil {

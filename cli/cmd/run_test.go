@@ -67,7 +67,7 @@ Flags:
                                    Applied in order to combined --extension and
                                    --local flags.
       --cluster=CLUSTER            Optional additional Envoy cluster. Supports
-                                   JSON or short format (host:port).
+                                   JSON or short format (host:tlsPort).
       --registry="ghcr.io/tetratelabs/built-on-envoy"
                                    OCI registry URL for the extensions
                                    ($BOE_REGISTRY).

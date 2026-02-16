@@ -41,7 +41,7 @@ Generate configuration providing dedicated JSON config to an extension:
     boe gen-config --local ~/src/my-extension --config '{"client_id":"my-id","client_secret":"my-secret"}'
     ```
 
-Generate configuration with an additional upstream cluster using the shorthand format `host:port`.
+Generate configuration with an additional upstream cluster using the shorthand format `host:tlsPort`.
 The cluster name is the short format string itself (e.g. `my-service.example.com:443`):
 
     ```shell
