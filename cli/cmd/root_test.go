@@ -143,6 +143,9 @@ Commands:
   create <name> [flags]
     Create a new extension template
 
+  clean [flags]
+    Clean cache directories
+
 Run "boe <command> --help" for more information on a command.
 `
 	require.Equal(t, expected, buf.String())

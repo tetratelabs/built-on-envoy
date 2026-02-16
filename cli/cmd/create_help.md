@@ -38,29 +38,3 @@ Create a Rust dynamic module extension:
     
     - **dynamic_module_rust**: An HTTP filter extension using the Envoy dynamic modules SDK for Rust.
       Generates Rust source files and Cargo.toml for building a dynamic library.
-
-## Generated Files
-
-### For composer type:
-
-    - **plugin.go**: The main Go source file with HTTP filter implementation boilerplate.
-    - **manifest.yaml**: The extension manifest defining metadata and configuration.
-    - **Makefile**: Build targets for compiling and installing the extension.
-    - **go.mod**: Go module file with required dependencies.
-    - **Dockerfile**: Container image for the extension.
-
-After creation, the command automatically runs `go mod tidy` to fetch dependencies.
-
-### For dynamic_module_rust type:
-
-    - **src/lib.rs**: The main Rust source file with HTTP filter implementation boilerplate.
-    - **Cargo.toml**: Rust package configuration with required dependencies.
-    - **manifest.yaml**: The extension manifest defining metadata and configuration.
-    - **.gitignore**: Git ignore file for Rust build artifacts.
-    - **.dockerignore**: Docker ignore file for build artifacts.
-    - **.cargo/config.toml**: Cargo configuration for platform-specific build flags.
-    - **Dockerfile**: Multi-stage Dockerfile for building and packaging the extension.
-    - **Dockerfile.code**: Dockerfile for packaging source code only.
-    - **Makefile**: Build targets including push_image, and push_code.
-
-After creation, you can build the extension with `cargo build --release`.

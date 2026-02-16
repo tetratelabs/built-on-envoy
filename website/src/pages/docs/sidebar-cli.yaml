@@ -4,6 +4,8 @@
 sections:
   - title: CLI Commands
     items:
+      - title: clean
+        href: /docs/cli/clean
       - title: create
         href: /docs/cli/create
       - title: gen-config

@@ -1,5 +1,6 @@
 The list command displays all available Envoy extensions.
-It provides a quick overview of what extensions you can use when running Envoy or generatingconfigurations, along with the versions available for each extension.
+It provides a quick overview of what extensions you can use when running Envoy or generating configurations,
+along with the versions available for each extension.
 
 This command is useful for discovering which extensions are available before using them
 with the `run` or `gen-config` commands.

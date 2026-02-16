@@ -31,6 +31,7 @@ type CLI struct {
 	Run       Run       `cmd:"" help:"Run Envoy with extensions"`
 	GenConfig GenConfig `cmd:"" help:"Generate Envoy configuration with extensions"`
 	Create    Create    `cmd:"" help:"Create a new extension template"`
+	Clean     Clean     `cmd:"" help:"Clean cache directories"`
 
 	// Global XDG flags
 	ConfigHome string `name:"config-home" env:"BOE_CONFIG_HOME" help:"Configuration files directory. Defaults to ~/.config/boe" type:"path" default:"~/.config/boe"`

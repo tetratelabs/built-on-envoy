@@ -1,0 +1,53 @@
+---
+layout: ../../../layouts/DocsLayout.astro
+title: clean
+description: Clean cache directories
+---
+
+# boe clean
+
+The clean command removes cached files and directories used by the CLI.
+This is useful to free disk space or to reset the CLI state when troubleshooting issues.
+
+By default, no directories are cleaned unless you specify which caches to remove.
+Use `--all` to clean everything, or use individual flags to selectively clean specific caches.
+
+## Examples
+
+Clean all cache directories:
+
+    ```shell
+    boe clean --all                 # Clean all cache directories
+    boe clean --extension-cache     # Clean only the extension cache
+    boe clean --state-cache         # Clean the state cache
+    ```
+
+## Cache Directories
+
+    - **extension-cache**: Downloaded extensions stored in the data home directory ($BOE_DATA_HOME/extensions or ~/.local/share/boe/extensions).
+    - **config-cache**: User-specific configuration files ($BOE_CONFIG_HOME or ~/.config/boe).
+    - **data-cache**: User-specific data files ($BOE_DATA_HOME or ~/.local/share/boe).
+    - **state-cache**: Persistent state and logs ($BOE_STATE_HOME or ~/.local/state/boe).
+    - **runtime-cache**: Ephemeral runtime files ($BOE_RUNTIME_DIR or /tmp/boe-$UID).
+
+
+## Usage details
+
+```shell
+boe clean [flags]
+boe clean --help
+```
+
+
+
+## Flags
+
+| Name | Description | Type | Default | Env Var | Required |
+|------|-------------|------|---------|-----|----------|
+| `--all` | Clean all cache directories. | `bool` | `false` | - | No |
+| `--extension-cache` | Clean the extension cache directory. | `bool` | `false` | - | No |
+| `--config-cache` | Clean the config cache directory. | `bool` | `false` | - | No |
+| `--data-cache` | Clean the data cache directory. | `bool` | `false` | - | No |
+| `--state-cache` | Clean the state cache directory. | `bool` | `false` | - | No |
+| `--runtime-cache` | Clean the runtime cache directory. | `bool` | `false` | - | No |
+
