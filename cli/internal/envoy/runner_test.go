@@ -13,11 +13,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
+	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
 func TestRunner_Run_ConfigError(t *testing.T) {
 	r := &Runner{
+		Logger: internaltesting.NewTLogger(t),
 		Dirs: &xdg.Directories{
 			DataHome: t.TempDir(),
 		},
@@ -46,6 +48,7 @@ func TestRunner_Run_ContextCanceled(t *testing.T) {
 	cancel() // Cancel immediately
 
 	r := &Runner{
+		Logger:     internaltesting.NewTLogger(t),
 		Dirs:       &xdg.Directories{DataHome: t.TempDir()},
 		Extensions: []*extensions.Manifest{ext},
 		ListenPort: 10000,

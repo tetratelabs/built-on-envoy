@@ -117,18 +117,20 @@ func TestParseCmdRootHelp(t *testing.T) {
 Built On Envoy CLI - Discover, run, and build custom filters with zero friction
 
 Flags:
-  -h, --help                  Show context-sensitive help.
+  -h, --help                     Show context-sensitive help.
       --config-home="~/.config/boe"
-                              Configuration files directory. Defaults to
-                              ~/.config/boe ($BOE_CONFIG_HOME)
+                                 Configuration files directory. Defaults to
+                                 ~/.config/boe ($BOE_CONFIG_HOME)
       --data-home="~/.local/share/boe"
-                              Downloaded Envoy binaries directory. Defaults to
-                              ~/.local/share/boe ($BOE_DATA_HOME)
+                                 Downloaded Envoy binaries directory. Defaults
+                                 to ~/.local/share/boe ($BOE_DATA_HOME)
       --state-home="~/.local/state/boe"
-                              Persistent state and logs directory. Defaults to
-                              ~/.local/state/boe ($BOE_STATE_HOME)
-      --runtime-dir=STRING    Ephemeral runtime files directory. Defaults to
-                              /tmp/boe-$UID ($BOE_RUNTIME_DIR)
+                                 Persistent state and logs directory. Defaults
+                                 to ~/.local/state/boe ($BOE_STATE_HOME)
+      --runtime-dir=STRING       Ephemeral runtime files directory. Defaults to
+                                 /tmp/boe-$UID ($BOE_RUNTIME_DIR)
+      --boe-log-level="debug"    Log level for the CLI. Defaults to debug
+                                 ($BOE_LOG_LEVEL)
 
 Commands:
   list [flags]

@@ -54,9 +54,10 @@ Flags:
 
 func TestCleanAll(t *testing.T) {
 	dirs := newTestDirs(t)
+	logger := internaltesting.NewTLogger(t)
 	cmd := &Clean{All: true}
 
-	require.NoError(t, cmd.Run(dirs))
+	require.NoError(t, cmd.Run(dirs, logger))
 
 	require.NoDirExists(t, filepath.Join(dirs.DataHome, "extensions"))
 	require.NoDirExists(t, dirs.ConfigHome)
@@ -67,9 +68,10 @@ func TestCleanAll(t *testing.T) {
 
 func TestCleanExtensionCache(t *testing.T) {
 	dirs := newTestDirs(t)
+	logger := internaltesting.NewTLogger(t)
 	cmd := &Clean{ExtensionCache: true}
 
-	require.NoError(t, cmd.Run(dirs))
+	require.NoError(t, cmd.Run(dirs, logger))
 
 	require.NoDirExists(t, filepath.Join(dirs.DataHome, "extensions"))
 	// Other directories should still exist.
@@ -80,9 +82,10 @@ func TestCleanExtensionCache(t *testing.T) {
 
 func TestCleanConfigCache(t *testing.T) {
 	dirs := newTestDirs(t)
+	logger := internaltesting.NewTLogger(t)
 	cmd := &Clean{ConfigCache: true}
 
-	require.NoError(t, cmd.Run(dirs))
+	require.NoError(t, cmd.Run(dirs, logger))
 
 	require.NoDirExists(t, dirs.ConfigHome)
 	// Other directories should still exist.
@@ -93,9 +96,10 @@ func TestCleanConfigCache(t *testing.T) {
 
 func TestCleanDataCache(t *testing.T) {
 	dirs := newTestDirs(t)
+	logger := internaltesting.NewTLogger(t)
 	cmd := &Clean{DataCache: true}
 
-	require.NoError(t, cmd.Run(dirs))
+	require.NoError(t, cmd.Run(dirs, logger))
 
 	require.NoDirExists(t, dirs.DataHome)
 	// Other directories should still exist.
@@ -106,9 +110,10 @@ func TestCleanDataCache(t *testing.T) {
 
 func TestCleanStateCache(t *testing.T) {
 	dirs := newTestDirs(t)
+	logger := internaltesting.NewTLogger(t)
 	cmd := &Clean{StateCache: true}
 
-	require.NoError(t, cmd.Run(dirs))
+	require.NoError(t, cmd.Run(dirs, logger))
 
 	require.NoDirExists(t, dirs.StateHome)
 	// Other directories should still exist.
@@ -119,9 +124,10 @@ func TestCleanStateCache(t *testing.T) {
 
 func TestCleanRuntimeCache(t *testing.T) {
 	dirs := newTestDirs(t)
+	logger := internaltesting.NewTLogger(t)
 	cmd := &Clean{RuntimeCache: true}
 
-	require.NoError(t, cmd.Run(dirs))
+	require.NoError(t, cmd.Run(dirs, logger))
 
 	require.NoDirExists(t, dirs.RuntimeDir)
 	// Other directories should still exist.
@@ -132,9 +138,10 @@ func TestCleanRuntimeCache(t *testing.T) {
 
 func TestCleanNoFlags(t *testing.T) {
 	dirs := newTestDirs(t)
+	logger := internaltesting.NewTLogger(t)
 	cmd := &Clean{}
 
-	require.NoError(t, cmd.Run(dirs))
+	require.NoError(t, cmd.Run(dirs, logger))
 
 	// All directories should still exist when no flags are set.
 	require.DirExists(t, dirs.ConfigHome)
@@ -145,9 +152,10 @@ func TestCleanNoFlags(t *testing.T) {
 
 func TestCleanMultipleFlags(t *testing.T) {
 	dirs := newTestDirs(t)
+	logger := internaltesting.NewTLogger(t)
 	cmd := &Clean{ConfigCache: true, RuntimeCache: true}
 
-	require.NoError(t, cmd.Run(dirs))
+	require.NoError(t, cmd.Run(dirs, logger))
 
 	require.NoDirExists(t, dirs.ConfigHome)
 	require.NoDirExists(t, dirs.RuntimeDir)
@@ -166,8 +174,9 @@ func TestCleanNonExistentDirectories(t *testing.T) {
 		RuntimeDir: filepath.Join(t.TempDir(), "nonexistent", "runtime"),
 	}
 	cmd := &Clean{All: true}
+	logger := internaltesting.NewTLogger(t)
 
-	require.NoError(t, cmd.Run(dirs))
+	require.NoError(t, cmd.Run(dirs, logger))
 }
 
 // newTestDirs creates temporary XDG directories populated with a marker file

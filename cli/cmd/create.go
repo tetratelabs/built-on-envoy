@@ -8,9 +8,12 @@ package cmd
 import (
 	"embed"
 	"fmt"
+	"log/slog"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"text/template"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
@@ -34,18 +37,20 @@ var createHelp string
 func (c *Create) Help() string { return createHelp }
 
 // Run executes the create command.
-func (c *Create) Run(dirs *xdg.Directories) error {
+func (c *Create) Run(dirs *xdg.Directories, logger *slog.Logger) error {
+	logger.Debug("handling create command", "cmd", c)
+
 	switch c.Type {
 	case "composer":
-		return createComposerHTTPFilter(dirs, c.Path, c.Name)
+		return createComposerHTTPFilter(logger, dirs, c.Path, c.Name)
 	case "dynamic_module_rust":
-		return createRustExtension(c.Path, c.Name)
+		return createRustExtension(logger, c.Path, c.Name)
 	default:
 		return fmt.Errorf("unsupported extension type: %s", c.Type)
 	}
 }
 
-func createComposerHTTPFilter(dirs *xdg.Directories, path, name string) error {
+func createComposerHTTPFilter(logger *slog.Logger, dirs *xdg.Directories, path, name string) error {
 	repoPath := filepath.Join(path, name)
 
 	data := map[string]string{
@@ -67,13 +72,17 @@ func createComposerHTTPFilter(dirs *xdg.Directories, path, name string) error {
 		"standalone/main.go": "templates/create/main.go.tmpl",
 	}
 
+	logger.Info("creating composer extension", "name", name, "path", repoPath, "files", slices.Collect(maps.Keys(files)))
+
 	createFilesErr := createFilesFromTemplate(files, data, repoPath)
 	if createFilesErr != nil {
 		return createFilesErr
 	}
-
 	cmd := exec.Command("go", "mod", "tidy")
 	cmd.Dir = repoPath
+
+	logger.Info("running 'go mod tidy' to initialize the module dependencies")
+
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to run 'go mod tidy': %w\n%s", err, string(output))
 	}
@@ -119,7 +128,7 @@ func createFilesFromTemplate(files map[string]string, data map[string]string, re
 	return nil
 }
 
-func createRustExtension(path, name string) error {
+func createRustExtension(logger *slog.Logger, path, name string) error {
 	repoPath := filepath.Join(path, name)
 
 	data := map[string]string{
@@ -140,6 +149,8 @@ func createRustExtension(path, name string) error {
 		"Dockerfile.code":    "templates/create/rust/Dockerfile.code.tmpl",
 		"Makefile":           "templates/create/rust/Makefile.tmpl",
 	}
+
+	logger.Info("creating Rust dynamic module extension", "name", name, "path", repoPath, "files", slices.Collect(maps.Keys(files)))
 
 	return createFilesFromTemplate(files, data, repoPath)
 }

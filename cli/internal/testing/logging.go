@@ -7,8 +7,11 @@ package internaltesting
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
+	"log/slog"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -83,4 +86,52 @@ func DumpLogsOnFail(t testing.TB, labels ...string) OutBuffers {
 	})
 
 	return buffers
+}
+
+// TLogHandler is a slog.Handler that writes logs to a testing.T instance, allowing log capture in tests.
+type TLogHandler struct {
+	t     *testing.T
+	attrs []slog.Attr
+	group string
+}
+
+// NewTLogger creates a new slog.Logger that writes to the provided testing.T instance with the specified log level.
+func NewTLogger(t *testing.T) *slog.Logger {
+	t.Helper()
+	return slog.New(&TLogHandler{t: t})
+}
+
+// Enabled always returns true to capture all log levels.
+func (h *TLogHandler) Enabled(context.Context, slog.Level) bool { return true }
+
+// Handle formats the log record and writes it to the testing.T instance.
+func (h *TLogHandler) Handle(_ context.Context, r slog.Record) error { //nolint:gocritic
+	attrs := make([]slog.Attr, 0, r.NumAttrs())
+
+	// Collect record attributes
+	r.Attrs(func(a slog.Attr) bool {
+		attrs = append(attrs, a)
+		return true
+	})
+
+	var msg strings.Builder
+	_, _ = fmt.Fprintf(&msg, "[%s] %s", r.Level.String(), r.Message)
+	for _, a := range append(h.attrs, attrs...) {
+		_, _ = fmt.Fprintf(&msg, " %s=%v", a.Key, a.Value.Any())
+	}
+
+	h.t.Log(msg.String())
+	return nil
+}
+
+// WithAttrs returns a new TLogHandler with the provided attributes added to the existing ones.
+func (h *TLogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	newAttrs := append(append([]slog.Attr{}, h.attrs...), attrs...)
+	return &TLogHandler{t: h.t, attrs: newAttrs, group: h.group}
+}
+
+// WithGroup returns a new TLogHandler with the provided group name. Grouping is not implemented in this handler,
+// but the method is provided to satisfy the slog.Handler interface.
+func (h *TLogHandler) WithGroup(name string) slog.Handler {
+	return &TLogHandler{t: h.t, attrs: h.attrs, group: name}
 }

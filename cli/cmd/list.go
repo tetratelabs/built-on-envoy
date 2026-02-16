@@ -9,6 +9,7 @@ import (
 	_ "embed"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"slices"
 	"strings"
@@ -29,7 +30,9 @@ var listHelp string
 func (l *List) Help() string { return listHelp }
 
 // Run executes the list command
-func (l *List) Run() error {
+func (l *List) Run(logger *slog.Logger) error {
+	logger.Debug("handling list command", "cmd", l)
+
 	out := l.output
 	if out == nil {
 		out = os.Stdout

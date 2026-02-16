@@ -7,6 +7,7 @@ package extensions
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,7 +19,7 @@ import (
 // CheckOrBuildDynamicModule checks if a dynamic module library exists in the cache.
 // If not, it builds the dynamic module from the given path.
 // Currently supports Rust dynamic modules (identified by Cargo.toml).
-func CheckOrBuildDynamicModule(dirs *xdg.Directories, manifest *Manifest, path string) error {
+func CheckOrBuildDynamicModule(logger *slog.Logger, dirs *xdg.Directories, manifest *Manifest, path string) error {
 	// Check if this is a Rust dynamic module (currently the only supported type)
 	cargoTomlPath := filepath.Join(path, "Cargo.toml")
 	if _, err := os.Stat(cargoTomlPath); os.IsNotExist(err) {
@@ -29,6 +30,7 @@ func CheckOrBuildDynamicModule(dirs *xdg.Directories, manifest *Manifest, path s
 	destLib := LocalCacheExtension(dirs, manifest)
 	if _, err := os.Stat(destLib); err == nil {
 		// Library already exists in cache
+		logger.Debug("dynamic module library already exists in cache, skipping build", "path", destLib)
 		return nil
 	}
 
@@ -38,6 +40,9 @@ func CheckOrBuildDynamicModule(dirs *xdg.Directories, manifest *Manifest, path s
 	cmd.Dir = path
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+
+	logger.Debug("building Rust dynamic module", "cmd", cmd.String())
+
 	err := cmd.Run()
 	if err != nil {
 		return fmt.Errorf("failed to build Rust dynamic module from %s: %w",
@@ -63,6 +68,8 @@ func CheckOrBuildDynamicModule(dirs *xdg.Directories, manifest *Manifest, path s
 		return fmt.Errorf("built library not found at %s/target/release/lib%s.{so,dylib}", path, rustLibName)
 	}
 
+	logger.Debug("built Rust dynamic module library", "lib", srcLib)
+
 	// Create the cache directory if it doesn't exist
 	cacheDir := LocalCacheExtensionDir(dirs, manifest)
 	if err := os.MkdirAll(cacheDir, 0o750); err != nil {
@@ -73,6 +80,8 @@ func CheckOrBuildDynamicModule(dirs *xdg.Directories, manifest *Manifest, path s
 	if err := copyFile(srcLib, destLib); err != nil {
 		return fmt.Errorf("failed to copy library from %s to %s: %w", srcLib, destLib, err)
 	}
+
+	logger.Debug("dynamic module library copied to cache", "path", destLib)
 
 	return nil
 }

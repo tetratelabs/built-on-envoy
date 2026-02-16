@@ -15,6 +15,8 @@ import (
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
+
+	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 
 func init() {
@@ -26,16 +28,20 @@ func init() {
 
 func newLocalRegistryRepositoryClient(t *testing.T) RepositoryClient {
 	// Create a remote repository and client
+	logger := internaltesting.NewTLogger(t)
 	repoRef := fmt.Sprintf("%s/test/extension", registryAddr)
-	repo, err := NewRemoteRepository(repoRef, &ClientOptions{
+	repo, err := NewRemoteRepository(logger, repoRef, &ClientOptions{
 		PlainHTTP: true, // Local registry doesn't use TLS
 	})
 	require.NoError(t, err)
 
-	return NewRepositoryClient(repo)
+	return NewRepositoryClient(logger, repo)
 }
 
 func TestPullMultiArch(t *testing.T) {
+	logger := internaltesting.NewTLogger(t)
+	builder := internaltesting.CreateBuildxBuilderForTest(t)
+
 	// Create the multi-arch image
 	testRepo := fmt.Sprintf("%s/test-multiarch", registryAddr)
 	// #nosec G204
@@ -50,9 +56,9 @@ func TestPullMultiArch(t *testing.T) {
 	t.Logf("docker buildx output: %s", string(output))
 	require.NoError(t, err)
 
-	repo, err := NewRemoteRepository(testRepo, &ClientOptions{PlainHTTP: true})
+	repo, err := NewRemoteRepository(logger, testRepo, &ClientOptions{PlainHTTP: true})
 	require.NoError(t, err)
-	client := NewRepositoryClient(repo)
+	client := NewRepositoryClient(logger, repo)
 
 	tests := []struct {
 		name     string

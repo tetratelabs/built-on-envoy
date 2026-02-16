@@ -71,7 +71,7 @@ func TestCreate_Run(t *testing.T) {
 
 	// This might fail if network is not available due to `go mod tidy`
 	// failing to fetch dependencies.
-	err := c.Run(&xdg.Directories{})
+	err := c.Run(&xdg.Directories{}, internaltesting.NewTLogger(t))
 	if err != nil {
 		// Attempt to differentiate network error from logic error if possible,
 		// but for now we'll just fail the test if the command fails.
@@ -121,7 +121,7 @@ func TestCreateRust_Run(t *testing.T) {
 		Path: tmpDir,
 	}
 
-	err := c.Run(&xdg.Directories{})
+	err := c.Run(&xdg.Directories{}, internaltesting.NewTLogger(t))
 	require.NoError(t, err)
 
 	repoPath := filepath.Join(tmpDir, name)
@@ -172,7 +172,7 @@ func TestUnsupportedType(t *testing.T) {
 		Name: "test-extension",
 	}
 
-	err := c.Run(&xdg.Directories{})
+	err := c.Run(&xdg.Directories{}, internaltesting.NewTLogger(t))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported extension type")
 }

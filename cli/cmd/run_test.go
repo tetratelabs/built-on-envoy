@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"os"
 	"path/filepath"
@@ -290,7 +291,7 @@ func TestParseLogLevels(t *testing.T) {
 
 func TestRunInvalidConfig(t *testing.T) {
 	r := &Run{RunID: "///"}
-	require.Error(t, r.Run(t.Context(), &xdg.Directories{}))
+	require.Error(t, r.Run(t.Context(), &xdg.Directories{}, internaltesting.NewTLogger(t)))
 }
 
 func TestSplitRef(t *testing.T) {
@@ -336,17 +337,19 @@ func TestSplitRef(t *testing.T) {
 }
 
 func TestLoadLocalManifests(t *testing.T) {
+	logger := internaltesting.NewTLogger(t)
 	downloader := &extensions.Downloader{
-		Dirs: &xdg.Directories{DataHome: t.TempDir()},
+		Logger: logger,
+		Dirs:   &xdg.Directories{DataHome: t.TempDir()},
 	}
 	t.Run("empty paths", func(t *testing.T) {
-		manifests, err := loadLocalManifests(t.Context(), downloader, []string{}, false)
+		manifests, err := loadLocalManifests(t.Context(), logger, downloader, []string{}, false)
 		require.NoError(t, err)
 		require.Empty(t, manifests)
 	})
 
 	t.Run("multiple valid paths", func(t *testing.T) {
-		manifests, err := loadLocalManifests(t.Context(), downloader, []string{"./testdata", "./testdata/push_pull"}, false)
+		manifests, err := loadLocalManifests(t.Context(), logger, downloader, []string{"./testdata", "./testdata/push_pull"}, false)
 		require.NoError(t, err)
 		require.Len(t, manifests, 2)
 		require.Equal(t, "test-lua", manifests[0].Name)
@@ -354,13 +357,13 @@ func TestLoadLocalManifests(t *testing.T) {
 	})
 
 	t.Run("nonexistent path", func(t *testing.T) {
-		_, err := loadLocalManifests(t.Context(), downloader, []string{"/nonexistent/path"}, false)
+		_, err := loadLocalManifests(t.Context(), logger, downloader, []string{"/nonexistent/path"}, false)
 		require.Error(t, err)
 		require.ErrorIs(t, err, errFailedToLoadLocalManifest)
 	})
 
 	t.Run("invalid path", func(t *testing.T) {
-		_, err := loadLocalManifests(t.Context(), downloader, []string{"./"}, false)
+		_, err := loadLocalManifests(t.Context(), logger, downloader, []string{"./"}, false)
 		require.Error(t, err)
 		require.ErrorIs(t, err, errFailedToLoadLocalManifest)
 	})
@@ -369,7 +372,7 @@ func TestLoadLocalManifests(t *testing.T) {
 		// Create a temporary directory and create an template composer plugin with
 		// createComposerHTTPFilter.
 		tempDir := t.TempDir()
-		err := createComposerHTTPFilter(downloader.Dirs, tempDir, "test_custom")
+		err := createComposerHTTPFilter(logger, downloader.Dirs, tempDir, "test_custom")
 		require.NoError(t, err)
 
 		// Remove go.mod and go.sum to simulate invalid composer extension.
@@ -378,7 +381,7 @@ func TestLoadLocalManifests(t *testing.T) {
 		err = os.Remove(tempDir + "/test_custom/go.sum")
 		require.NoError(t, err)
 
-		_, err = loadLocalManifests(t.Context(), downloader, []string{tempDir + "/test_custom"}, true)
+		_, err = loadLocalManifests(t.Context(), logger, downloader, []string{tempDir + "/test_custom"}, true)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "failed to run 'go mod tidy'")
 	})
@@ -387,10 +390,10 @@ func TestLoadLocalManifests(t *testing.T) {
 		// Create a temporary directory and create an template composer plugin with
 		// createComposerHTTPFilter.
 		tempDir := t.TempDir()
-		err := createComposerHTTPFilter(downloader.Dirs, tempDir, "test_valid")
+		err := createComposerHTTPFilter(logger, downloader.Dirs, tempDir, "test_valid")
 		require.NoError(t, err)
 
-		manifests, err := loadLocalManifests(t.Context(), downloader, []string{tempDir + "/test_valid"}, false)
+		manifests, err := loadLocalManifests(t.Context(), logger, downloader, []string{tempDir + "/test_valid"}, false)
 		require.NoError(t, err)
 		require.Len(t, manifests, 1)
 		require.Equal(t, "test_valid", manifests[0].Name)
@@ -467,7 +470,7 @@ func TestRunIncomaptibleEnvoyVersion(t *testing.T) {
 	r.extensionPositions, err = saveExtensionPositions([]string{"--local", "./testdata/input_lua_inline"})
 	require.NoError(t, err)
 
-	err = r.Run(t.Context(), nil)
+	err = r.Run(t.Context(), nil, internaltesting.NewTLogger(t))
 	require.ErrorIs(t, err, errIncompatibleEnvoyVersion)
 }
 
@@ -526,9 +529,10 @@ func (m *mockOCIClient) FetchManifest(_ context.Context, tag string, _ *ocispec.
 }
 
 // newTestDownloader creates a Downloader with the given mock client and data directory.
-func newTestDownloader(dataHome string, mock *mockOCIClient) *extensions.Downloader {
-	d := &extensions.Downloader{Dirs: &xdg.Directories{DataHome: dataHome}}
-	d.SetClientFactory(func(_, _, _ string, _ bool) (oci.RepositoryClient, error) {
+func newTestDownloader(t *testing.T, dataHome string, mock *mockOCIClient) *extensions.Downloader {
+	logger := internaltesting.NewTLogger(t)
+	d := &extensions.Downloader{Logger: logger, Dirs: &xdg.Directories{DataHome: dataHome}}
+	d.SetClientFactory(func(_ *slog.Logger, _, _, _ string, _ bool) (oci.RepositoryClient, error) {
 		return mock, nil
 	})
 	return d
@@ -536,7 +540,10 @@ func newTestDownloader(dataHome string, mock *mockOCIClient) *extensions.Downloa
 
 func TestDownloadExtensions(t *testing.T) {
 	t.Run("empty refs returns empty list", func(t *testing.T) {
-		d := &extensions.Downloader{Dirs: &xdg.Directories{DataHome: t.TempDir()}}
+		d := &extensions.Downloader{
+			Logger: internaltesting.NewTLogger(t),
+			Dirs:   &xdg.Directories{DataHome: t.TempDir()},
+		}
 		manifests, err := downloadExtensions(t.Context(), d, nil, false)
 		require.NoError(t, err)
 		require.Empty(t, manifests)
@@ -554,7 +561,7 @@ func TestDownloadExtensions(t *testing.T) {
 				extensions.OCIAnnotationArtifact:      extensions.ArtifactBinary,
 			},
 		}
-		d := newTestDownloader(t.TempDir(), mock)
+		d := newTestDownloader(t, t.TempDir(), mock)
 
 		manifests, err := downloadExtensions(t.Context(), d, []string{"my-lua-ext:1.0.0"}, false)
 		require.NoError(t, err)
@@ -572,7 +579,7 @@ func TestDownloadExtensions(t *testing.T) {
 				extensions.OCIAnnotationArtifact:      extensions.ArtifactBinary,
 			},
 		}
-		d := newTestDownloader(t.TempDir(), mock)
+		d := newTestDownloader(t, t.TempDir(), mock)
 
 		manifests, err := downloadExtensions(t.Context(), d, []string{"my-dym:2.0.0"}, false)
 		require.NoError(t, err)
@@ -598,7 +605,7 @@ func TestDownloadExtensions(t *testing.T) {
 				extensions.OCIAnnotationComposerVersion: composerVersion,
 			},
 		}
-		d := newTestDownloader(dataHome, mock)
+		d := newTestDownloader(t, dataHome, mock)
 
 		manifests, err := downloadExtensions(t.Context(), d, []string{"my-composer-ext:1.0.0"}, false)
 		require.NoError(t, err)
@@ -614,7 +621,7 @@ func TestDownloadExtensions(t *testing.T) {
 				extensions.OCIAnnotationArtifact:      extensions.ArtifactBinary,
 			},
 		}
-		d := newTestDownloader(t.TempDir(), mock)
+		d := newTestDownloader(t, t.TempDir(), mock)
 
 		manifests, err := downloadExtensions(t.Context(), d, []string{"ext-a:1.0.0", "ext-b:2.0.0"}, false)
 		require.NoError(t, err)
@@ -630,7 +637,7 @@ func TestDownloadExtensions(t *testing.T) {
 			},
 			tags: []string{"3.0.0", "2.0.0", "1.0.0"},
 		}
-		d := newTestDownloader(t.TempDir(), mock)
+		d := newTestDownloader(t, t.TempDir(), mock)
 
 		manifests, err := downloadExtensions(t.Context(), d, []string{"my-ext"}, false)
 		require.NoError(t, err)
@@ -647,7 +654,7 @@ func TestDownloadExtensions(t *testing.T) {
 			},
 			pullErr: errDownload,
 		}
-		d := newTestDownloader(t.TempDir(), mock)
+		d := newTestDownloader(t, t.TempDir(), mock)
 
 		_, err := downloadExtensions(t.Context(), d, []string{"bad-ext:1.0.0"}, false)
 		require.ErrorIs(t, err, errDownload)
@@ -661,7 +668,7 @@ func TestDownloadExtensions(t *testing.T) {
 				extensions.OCIAnnotationArtifact:      "unknown-type",
 			},
 		}
-		d := newTestDownloader(t.TempDir(), mock)
+		d := newTestDownloader(t, t.TempDir(), mock)
 
 		_, err := downloadExtensions(t.Context(), d, []string{"my-ext:1.0.0"}, false)
 		require.Error(t, err)
@@ -677,7 +684,7 @@ func TestDownloadExtensions(t *testing.T) {
 				extensions.OCIAnnotationComposerVersion: "0.1.0",
 			},
 		}
-		d := newTestDownloader(t.TempDir(), mock)
+		d := newTestDownloader(t, t.TempDir(), mock)
 
 		_, err := downloadExtensions(t.Context(), d, []string{"my-composer-src:1.0.0"}, false)
 		require.Error(t, err)
@@ -692,7 +699,7 @@ func TestDownloadExtensions(t *testing.T) {
 				extensions.OCIAnnotationArtifact:      extensions.ArtifactSource,
 			},
 		}
-		d := newTestDownloader(t.TempDir(), mock)
+		d := newTestDownloader(t, t.TempDir(), mock)
 
 		_, err := downloadExtensions(t.Context(), d, []string{"my-dym-src:1.0.0"}, true)
 		require.Error(t, err)
@@ -707,7 +714,7 @@ func TestDownloadExtensions(t *testing.T) {
 				extensions.OCIAnnotationArtifact:      extensions.ArtifactSource,
 			},
 		}
-		d := newTestDownloader(t.TempDir(), mock)
+		d := newTestDownloader(t, t.TempDir(), mock)
 
 		manifests, err := downloadExtensions(t.Context(), d, []string{"my-lua-src:1.0.0"}, false)
 		require.NoError(t, err)
@@ -718,8 +725,11 @@ func TestDownloadExtensions(t *testing.T) {
 	t.Run("error stops processing remaining extensions", func(t *testing.T) {
 		callCount := 0
 		errFail := errors.New("fail on second")
-		d := &extensions.Downloader{Dirs: &xdg.Directories{DataHome: t.TempDir()}}
-		d.SetClientFactory(func(_, _, _ string, _ bool) (oci.RepositoryClient, error) {
+		d := &extensions.Downloader{
+			Logger: internaltesting.NewTLogger(t),
+			Dirs:   &xdg.Directories{DataHome: t.TempDir()},
+		}
+		d.SetClientFactory(func(_ *slog.Logger, _, _, _ string, _ bool) (oci.RepositoryClient, error) {
 			callCount++
 			if callCount > 1 {
 				return &mockOCIClient{pullErr: errFail}, nil

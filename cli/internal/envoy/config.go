@@ -8,6 +8,7 @@ package envoy
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	accesslogv3 "github.com/envoyproxy/go-control-plane/envoy/config/accesslog/v3"
 	bootstrapv3 "github.com/envoyproxy/go-control-plane/envoy/config/bootstrap/v3"
@@ -31,6 +32,8 @@ import (
 
 // ConfigGenerationParams holds parameters for generating the Envoy config.
 type ConfigGenerationParams struct {
+	// Logger is used for logging during config generation.
+	Logger *slog.Logger
 	// AdminPort is the port for Envoy admin interface.
 	AdminPort uint32
 	// ListenerPort is the port where Envoy listens for incoming traffic.
@@ -66,6 +69,8 @@ func RenderConfig(params ConfigGenerationParams, renderer ConfigRenderer) (strin
 
 // FullConfigRenderer is a default ConfigRenderer that generates the full Envoy configuration with listeners, clusters, and admin interface.
 func FullConfigRenderer(params ConfigGenerationParams, gen GeneratedConfigResources) (string, error) {
+	params.Logger.Info("rendering full Envoy config")
+
 	cfg, err := buildFullConfig(params.AdminPort, params.ListenerPort, gen.HTTPFilters, gen.Clusters)
 	if err != nil {
 		return "", fmt.Errorf("failed to build config: %w", err)
@@ -78,7 +83,9 @@ func FullConfigRenderer(params ConfigGenerationParams, gen GeneratedConfigResour
 }
 
 // MinimalConfigRenderer is a ConfigRenderer that generates a minimal Envoy configuration containing only the generated HTTP filters and clusters.
-func MinimalConfigRenderer(_ ConfigGenerationParams, gen GeneratedConfigResources) (string, error) {
+func MinimalConfigRenderer(params ConfigGenerationParams, gen GeneratedConfigResources) (string, error) {
+	params.Logger.Info("rendering minimal Envoy config")
+
 	filterConfigs, err := protoListToAny(gen.HTTPFilters)
 	if err != nil {
 		return "", fmt.Errorf("failed to serialize filter configs: %w", err)
@@ -109,7 +116,7 @@ func generateConfig(params ConfigGenerationParams) (GeneratedConfigResources, er
 		if i < len(params.Configs) {
 			config = params.Configs[i]
 		}
-		resources, err := GenerateFilterConfig(ext, params.Dirs, config)
+		resources, err := GenerateFilterConfig(params.Logger, ext, params.Dirs, config)
 		if err != nil {
 			return GeneratedConfigResources{}, fmt.Errorf("failed to generate filter config for extension %q: %w", ext.Name, err)
 		}

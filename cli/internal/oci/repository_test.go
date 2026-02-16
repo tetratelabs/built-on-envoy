@@ -15,6 +15,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2/content/memory"
+
+	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 
 type repoClientTest struct {
@@ -25,10 +27,11 @@ type repoClientTest struct {
 var repoClientTests = []repoClientTest{
 	{
 		name: "in-memory store",
-		newRepoClient: func(*testing.T) RepositoryClient {
-			return NewRepositoryClient(&memoryWithTags{
-				Store: memory.New(),
-			})
+		newRepoClient: func(t *testing.T) RepositoryClient {
+			return NewRepositoryClient(
+				internaltesting.NewTLogger(t),
+				&memoryWithTags{Store: memory.New()},
+			)
 		},
 	},
 }
@@ -167,7 +170,7 @@ func TestRepositoryClient_Push_NonExistentPath(t *testing.T) {
 
 func TestNewRemoteRepository(t *testing.T) {
 	// Test creating a repository without options
-	repo, err := NewRemoteRepository("ghcr.io/myorg/myrepo", nil)
+	repo, err := NewRemoteRepository(internaltesting.NewTLogger(t), "ghcr.io/myorg/myrepo", nil)
 	require.NoError(t, err)
 	require.NotNil(t, repo)
 	assert.Equal(t, "ghcr.io", repo.Reference.Registry)
@@ -183,7 +186,7 @@ func TestNewRemoteRepository_WithOptions(t *testing.T) {
 		PlainHTTP: true,
 	}
 
-	repo, err := NewRemoteRepository("ghcr.io/myorg/myrepo", opts)
+	repo, err := NewRemoteRepository(internaltesting.NewTLogger(t), "ghcr.io/myorg/myrepo", opts)
 	require.NoError(t, err)
 	require.NotNil(t, repo)
 	assert.True(t, repo.PlainHTTP)
@@ -191,7 +194,7 @@ func TestNewRemoteRepository_WithOptions(t *testing.T) {
 }
 
 func TestNewRemoteRepository_InvalidReference(t *testing.T) {
-	_, err := NewRemoteRepository("invalid:reference:format", nil)
+	_, err := NewRemoteRepository(internaltesting.NewTLogger(t), "invalid:reference:format", nil)
 	require.Error(t, err)
 }
 

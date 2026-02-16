@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 
 func init() {
@@ -22,27 +24,27 @@ func init() {
 }
 
 func newLocalRegistryClient(t *testing.T) RegistryClient {
-	// Populate the test repos
+	logger := internaltesting.NewTLogger(t)
 	srcDir := t.TempDir()
 
 	// Populate the test repos
 	for _, repoName := range testRepos {
 		repoRef := fmt.Sprintf("%s/%s", registryAddr, repoName)
-		repo, err := NewRemoteRepository(repoRef, &ClientOptions{
+		repo, err := NewRemoteRepository(logger, repoRef, &ClientOptions{
 			PlainHTTP: true, // Local registry doesn't use TLS
 		})
 		require.NoError(t, err)
-		repoClient := NewRepositoryClient(repo)
+		repoClient := NewRepositoryClient(logger, repo)
 
 		_, err = repoClient.Push(t.Context(), srcDir, "test", nil)
 		require.NoError(t, err)
 	}
 
 	// Create a remote registry and client
-	registry, err := NewRemoteRegistry(registryAddr, &ClientOptions{
+	registry, err := NewRemoteRegistry(logger, registryAddr, &ClientOptions{
 		PlainHTTP: true, // Local registry doesn't use TLS
 	})
 	require.NoError(t, err)
 
-	return NewRegistryClient(registry)
+	return NewRegistryClient(logger, registry)
 }

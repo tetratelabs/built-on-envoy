@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
+	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 
 func TestRenderDefaultConfig(t *testing.T) {
@@ -19,6 +20,7 @@ func TestRenderDefaultConfig(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg, err := RenderConfig(ConfigGenerationParams{
+		Logger:       internaltesting.NewTLogger(t),
 		AdminPort:    9901,
 		ListenerPort: 10000,
 	}, FullConfigRenderer)
@@ -35,6 +37,7 @@ func TestRenderConfigWithExtensions(t *testing.T) {
 	}
 
 	cfg, err := RenderConfig(ConfigGenerationParams{
+		Logger:       internaltesting.NewTLogger(t),
 		AdminPort:    9901,
 		ListenerPort: 10000,
 		Extensions:   extensionManifests,
@@ -53,6 +56,7 @@ func TestRenderMinimalConfigWithExtensions(t *testing.T) {
 	}
 
 	cfg, err := RenderConfig(ConfigGenerationParams{
+		Logger:       internaltesting.NewTLogger(t),
 		AdminPort:    9901,
 		ListenerPort: 10000,
 		Extensions:   extensionManifests,

@@ -12,10 +12,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
 func TestCheckOrBuildDynamicModule_Unsupported(t *testing.T) {
+	logger := internaltesting.NewTLogger(t)
 	fakeDirs := &xdg.Directories{DataHome: t.TempDir()}
 	tempDir := t.TempDir()
 
@@ -26,13 +28,14 @@ func TestCheckOrBuildDynamicModule_Unsupported(t *testing.T) {
 	}
 
 	// Test with directory that has no Cargo.toml (unsupported type)
-	err := CheckOrBuildDynamicModule(fakeDirs, manifest, tempDir)
+	err := CheckOrBuildDynamicModule(logger, fakeDirs, manifest, tempDir)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unsupported dynamic module type")
 	require.Contains(t, err.Error(), "no Cargo.toml found")
 }
 
 func TestCheckOrBuildDynamicModule(t *testing.T) {
+	logger := internaltesting.NewTLogger(t)
 	extensionPath := "../../../extensions/ip-restriction"
 	fakeDirs := &xdg.Directories{DataHome: t.TempDir()}
 
@@ -40,7 +43,7 @@ func TestCheckOrBuildDynamicModule(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, TypeDynamicModule, manifest.Type)
 
-	err = CheckOrBuildDynamicModule(fakeDirs, manifest, extensionPath)
+	err = CheckOrBuildDynamicModule(logger, fakeDirs, manifest, extensionPath)
 	require.NoError(t, err)
 
 	// Ensure the library is created with the correct name (original manifest name)
@@ -53,7 +56,7 @@ func TestCheckOrBuildDynamicModule(t *testing.T) {
 		"library should be named libip-restriction.so (original manifest name)")
 
 	// Run again to verify it uses the cached library and doesn't fail
-	err = CheckOrBuildDynamicModule(fakeDirs, manifest, extensionPath)
+	err = CheckOrBuildDynamicModule(logger, fakeDirs, manifest, extensionPath)
 	require.NoError(t, err, "should not fail when library is already cached")
 }
 
