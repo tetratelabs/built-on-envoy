@@ -16,7 +16,7 @@ const highlighter = await createHighlighter({
 // Custom marked renderer that uses Shiki for code blocks
 const renderer = new marked.Renderer();
 renderer.code = function ({ text, lang }: { text: string; lang?: string }) {
-	const language = lang || 'plaintext';
+	const language = lang || 'shell';
 	try {
 		return highlighter.codeToHtml(text, { lang: language, theme: 'github-dark' });
 	} catch {
