@@ -11,9 +11,11 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"syscall"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
@@ -73,6 +75,38 @@ func TestLuaLocalExtension(t *testing.T) {
 	t.Cleanup(cancel)
 
 	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
+}
+
+func TestDockerRemoteDockerExtension(t *testing.T) {
+	internaltesting.SkipIfTestRegistryNotConfigured(t)
+
+	// Run the remote extension in Docker.
+	proc := internaltesting.RunCLI(t, cliBin, "run",
+		"--docker", "--envoy-version", "1.37.0",
+		"--listen-port", "11000",
+		"--log-level", "dynamic_modules:debug",
+		"--extension", "example-go")
+
+	t.Cleanup(func() {
+		_ = proc.Signal(syscall.SIGTERM)
+		_, _ = proc.Wait()
+	})
+
+	require.Eventually(t, func() bool {
+		return internaltesting.IsPortInUse(t.Context(), 11000)
+	}, 2*time.Minute, 200*time.Millisecond, "Envoy did not start listening on port %d", 11000)
+
+	url := "http://localhost:11000/status/200"
+	checkHeader := func(r *http.Response) bool {
+		return r.Header.Get("x-example-response-header") == "example-value"
+	}
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+		defer cancel()
+
+		assert.NoError(c, internaltesting.CheckGet(ctx, url, checkHeader))
+	}, 2*time.Minute, 200*time.Millisecond)
 }
 
 func TestDynamicModuleRemoteExtension(t *testing.T) {

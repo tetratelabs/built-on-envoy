@@ -113,13 +113,16 @@ jobs:
       TEST_BOE_REGISTRY: ghcr.io/tetratelabs/built-on-envoy
       TEST_BOE_REGISTRY_USERNAME: ${{ github.actor }}
       TEST_BOE_REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+      DOCKER_BUILD_ARGS: --load
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: docker/setup-buildx-action@v3
       - uses: actions/setup-go@v5
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
+      - run: make docker
       - run: make test-e2e
 
   lint:

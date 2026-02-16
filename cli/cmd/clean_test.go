@@ -7,14 +7,17 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/alecthomas/kong"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tetratelabs/built-on-envoy/cli/internal/envoy"
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
@@ -48,6 +51,7 @@ Flags:
       --data-cache         Clean the data cache directory.
       --state-cache        Clean the state cache directory.
       --runtime-cache      Clean the runtime cache directory.
+      --docker             Clean the Docker volume used as a cache.
 `, internaltesting.WrapHelp(cleanHelp))
 	require.Equal(t, expected, buf.String())
 }
@@ -57,7 +61,7 @@ func TestCleanAll(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 	cmd := &Clean{All: true}
 
-	require.NoError(t, cmd.Run(dirs, logger))
+	require.NoError(t, cmd.Run(t.Context(), dirs, logger))
 
 	require.NoDirExists(t, filepath.Join(dirs.DataHome, "extensions"))
 	require.NoDirExists(t, dirs.ConfigHome)
@@ -71,7 +75,7 @@ func TestCleanExtensionCache(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 	cmd := &Clean{ExtensionCache: true}
 
-	require.NoError(t, cmd.Run(dirs, logger))
+	require.NoError(t, cmd.Run(t.Context(), dirs, logger))
 
 	require.NoDirExists(t, filepath.Join(dirs.DataHome, "extensions"))
 	// Other directories should still exist.
@@ -85,7 +89,7 @@ func TestCleanConfigCache(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 	cmd := &Clean{ConfigCache: true}
 
-	require.NoError(t, cmd.Run(dirs, logger))
+	require.NoError(t, cmd.Run(t.Context(), dirs, logger))
 
 	require.NoDirExists(t, dirs.ConfigHome)
 	// Other directories should still exist.
@@ -99,7 +103,7 @@ func TestCleanDataCache(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 	cmd := &Clean{DataCache: true}
 
-	require.NoError(t, cmd.Run(dirs, logger))
+	require.NoError(t, cmd.Run(t.Context(), dirs, logger))
 
 	require.NoDirExists(t, dirs.DataHome)
 	// Other directories should still exist.
@@ -113,7 +117,7 @@ func TestCleanStateCache(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 	cmd := &Clean{StateCache: true}
 
-	require.NoError(t, cmd.Run(dirs, logger))
+	require.NoError(t, cmd.Run(t.Context(), dirs, logger))
 
 	require.NoDirExists(t, dirs.StateHome)
 	// Other directories should still exist.
@@ -127,7 +131,7 @@ func TestCleanRuntimeCache(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 	cmd := &Clean{RuntimeCache: true}
 
-	require.NoError(t, cmd.Run(dirs, logger))
+	require.NoError(t, cmd.Run(t.Context(), dirs, logger))
 
 	require.NoDirExists(t, dirs.RuntimeDir)
 	// Other directories should still exist.
@@ -141,7 +145,7 @@ func TestCleanNoFlags(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 	cmd := &Clean{}
 
-	require.NoError(t, cmd.Run(dirs, logger))
+	require.NoError(t, cmd.Run(t.Context(), dirs, logger))
 
 	// All directories should still exist when no flags are set.
 	require.DirExists(t, dirs.ConfigHome)
@@ -155,7 +159,7 @@ func TestCleanMultipleFlags(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 	cmd := &Clean{ConfigCache: true, RuntimeCache: true}
 
-	require.NoError(t, cmd.Run(dirs, logger))
+	require.NoError(t, cmd.Run(t.Context(), dirs, logger))
 
 	require.NoDirExists(t, dirs.ConfigHome)
 	require.NoDirExists(t, dirs.RuntimeDir)
@@ -176,7 +180,32 @@ func TestCleanNonExistentDirectories(t *testing.T) {
 	cmd := &Clean{All: true}
 	logger := internaltesting.NewTLogger(t)
 
-	require.NoError(t, cmd.Run(dirs, logger))
+	require.NoError(t, cmd.Run(t.Context(), dirs, logger))
+}
+
+func TestCleanDockerCache(t *testing.T) {
+	// Replace the real Docker volume remover with a fake to avoid running real Docker commands.
+	original := removeDockerVolume
+	t.Cleanup(func() { removeDockerVolume = original })
+
+	var capturedVolume string
+	removeDockerVolume = func(_ context.Context, volume string) error {
+		capturedVolume = volume
+		return nil
+	}
+
+	dirs := newTestDirs(t)
+	logger := internaltesting.NewTLogger(t)
+	cmd := &Clean{Docker: true}
+
+	require.NoError(t, cmd.Run(t.Context(), dirs, logger))
+	assert.Equal(t, envoy.ContainerCacheVolumeName, capturedVolume)
+
+	// Local directories should not be affected.
+	require.DirExists(t, dirs.ConfigHome)
+	require.DirExists(t, dirs.DataHome)
+	require.DirExists(t, dirs.StateHome)
+	require.DirExists(t, dirs.RuntimeDir)
 }
 
 // newTestDirs creates temporary XDG directories populated with a marker file

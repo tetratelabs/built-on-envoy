@@ -45,7 +45,7 @@ func RunEnvoy(t *testing.T, cliBin string, args ...string) (listenPort int, admi
 	// Wait up to 10 seconds for both ports to be free.
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
-	for isPortInUse(ctx, proxyPort) {
+	for IsPortInUse(ctx, proxyPort) {
 		select {
 		case <-ctx.Done():
 			require.FailNow(t, "Ports still in use after timeout",
@@ -79,10 +79,6 @@ func RunEnvoy(t *testing.T, cliBin string, args ...string) (listenPort int, admi
 		if _, err := process.Wait(); err != nil {
 			t.Logf("Failed to wait for boe process to exit: %v", err)
 		}
-		// Delete the hard-coded path to certs defined in Envoy AI Gateway
-		if err := os.RemoveAll("/tmp/envoy-gateway/certs"); err != nil {
-			t.Logf("Failed to delete envoy gateway certs: %v", err)
-		}
 	})
 
 	t.Logf("Waiting for boe to start (Envoy listening on %d)...", proxyPort)
@@ -94,7 +90,7 @@ func RunEnvoy(t *testing.T, cliBin string, args ...string) (listenPort int, admi
 	// on the first run, so we wait first for Envoy to be listening on the proxy port, then cehck the admin server
 	// as we know there won't be other interfering child processes at that point.
 	require.Eventually(t, func() bool {
-		return isPortInUse(t.Context(), proxyPort)
+		return IsPortInUse(t.Context(), proxyPort)
 	}, 90*time.Second, 100*time.Millisecond, "Envoy did not start listening on port %d", proxyPort)
 
 	adminClient, err := admin.NewAdminClient(t.Context(), process.Pid)
@@ -137,8 +133,8 @@ func RunCLI(t *testing.T, cliBin string, args ...string) *os.Process {
 	return cmd.Process
 }
 
-// Function to check if a port is in use (returns true if listening).
-func isPortInUse(ctx context.Context, port int) bool {
+// IsPortInUse checks if a port is in use (returns true if listening).
+func IsPortInUse(ctx context.Context, port int) bool {
 	dialer := net.Dialer{Timeout: 100 * time.Millisecond}
 	conn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort("127.0.0.1", fmt.Sprintf("%d", port)))
 	if err == nil {

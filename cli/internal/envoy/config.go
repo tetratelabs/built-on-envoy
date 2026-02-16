@@ -69,7 +69,12 @@ func RenderConfig(params *ConfigGenerationParams, renderer ConfigRenderer) (stri
 	if err != nil {
 		return "", fmt.Errorf("failed to generate config resources: %w", err)
 	}
-	return renderer(params, gen)
+	rendered, err := renderer(params, gen)
+	if err != nil {
+		return "", fmt.Errorf("failed to render config: %w", err)
+	}
+	params.Logger.Debug("generated Envoy config", "config", rendered)
+	return rendered, nil
 }
 
 // FullConfigRenderer is a default ConfigRenderer that generates the full Envoy configuration with listeners, clusters, and admin interface.

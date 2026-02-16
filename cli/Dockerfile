@@ -3,42 +3,59 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-# Pre-download Envoy for using func-e. This reduces latency and avoids
-# needing to declare a volume for the Envoy binary, which is tricky in Docker
-# Compose v2 because volumes end up owned by root.
-FROM golang:1.25 AS envoy-downloader
+FROM debian:12.13-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install minimal required build deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    clang \
+    libclang-dev \
+    llvm \
+    curl \
+    make \
+    git \
+    gcc \
+    g++ \
+    libc6-dev \
+    pkg-config \
+    libssl-dev \
+    gosu \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a non-root user and install Go and Rust with that user, so that
+# later on the user can build extensions without permission issues.
+# Wer don't switch to the boe user here, we'll do that in the entrypoint so that
+# the permissions for the /var/boe mounted named volume can be properly set.
+RUN groupadd -g 10001 boe && useradd -u 10001 -g boe -m -s /usr/sbin/nologin boe
+
+# Configure the build cache directories to persist data across runs.
+# The /var/boe directory is mounted as a volume when running the CLI in Docker mode.
+ENV GOMODCACHE=/var/boe/go/pkg/mod \
+    GOCACHE=/var/boe/go-build \
+    CARGO_TARGET_DIR=/var/boe/cargo-target \
+    RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/go/bin:/usr/local/cargo/bin:$PATH
+
+
 ARG TARGETOS
 ARG TARGETARCH
+ARG GO_VERSION=1.25.7
 
-# Download Envoy binary to boe_DATA_HOME for the nonroot user
-WORKDIR /build
-RUN go install github.com/tetratelabs/func-e/cmd/func-e@latest && \
-    FUNC_E_DATA_HOME=/home/nonroot/.local/share/boe func-e --platform ${TARGETOS}/${TARGETARCH} run --version \
-    # Create directories for the nonroot user
-    && mkdir -p /home/nonroot \
-    && chown -R 65532:65532 /home/nonroot \
-    && chmod -R 755 /home/nonroot
+# Install Go
+RUN curl -fsSL https://go.dev/dl/go${GO_VERSION}.${TARGETOS}-${TARGETARCH}.tar.gz \
+    | tar -C /usr/local -xz
 
-FROM gcr.io/distroless/base-nossl-debian13:nonroot
-ARG TARGETOS
-ARG TARGETARCH
+# Install Rust (minimal profile)
+RUN curl https://sh.rustup.rs -sSf \
+    | sh -s -- -y --profile minimal --default-toolchain stable
+RUN chown -R boe:boe $RUSTUP_HOME $CARGO_HOME
 
-# Copy pre-downloaded Envoy binary and EG certs directory
-COPY --from=envoy-downloader /home/nonroot /home/nonroot
-COPY ./out/boe-${TARGETOS}-${TARGETARCH} /app
+# Install the CLI
+COPY --chown=boe:boe ./out/boe-${TARGETOS}-${TARGETARCH} /boe
+COPY --chown=boe:boe ./entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-USER nonroot:nonroot
-
-# Set BOE_RUN_ID=0 for predictable file paths in containers.
-# This creates the following directory structure:
-#   ~/.config/boe/                     - XDG config (e.g., envoy-version preference)
-#   ~/.local/share/boe/                - XDG data (downloaded Envoy binaries via func-e)
-#   ~/.local/state/boe/runs/0/         - XDG state (boe.log)
-#   ~/.local/state/boe/envoy-runs/0/   - XDG state (func-e stdout.log, stderr.log)
-#   /tmp/boe-0/                        - XDG runtime (uds.sock, admin-address.txt)
-ENV BOE_RUN_ID=0
-
-ENTRYPOINT ["/app"]
-
-# Default CMD for boe - uses boe_RUN_ID from environment
-CMD ["run"]
+ENTRYPOINT ["/entrypoint.sh"]

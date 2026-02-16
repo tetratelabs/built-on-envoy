@@ -13,10 +13,9 @@ OUTPUT_DIR ?= out
 BINARY_NAME ?= boe
 
 # Arguments for Docker builds.
-OCI_REGISTRY           ?= docker.io/tetratelabs
-OCI_REPOSITORY_PREFIX  ?= ${OCI_REGISTRY}/built-on-envoy
+OCI_REGISTRY           ?= ghcr.io/tetratelabs/built-on-envoy
+IMAGE_NAME	           ?= built-on-envoy-cli
 ENABLE_MULTI_PLATFORMS ?= false
-IMAGE_NAME	           ?= cli
 TAG                    ?= latest
 
 # Arguments for go test. This can be used, for example, to run specific tests via
@@ -130,7 +129,7 @@ docker: PLATFORMS = --platform linux/amd64,linux/arm64
 endif
 docker:  ## Build the Docker iamge
 	@$(MAKE) build GOOS_LIST="linux" GOARCH_LIST="$(GOARCH_LIST)"
-	docker buildx build . -t $(OCI_REPOSITORY_PREFIX)-$(IMAGE_NAME):$(TAG) $(PLATFORMS) $(DOCKER_BUILD_ARGS)
+	docker buildx build . -t $(OCI_REGISTRY)/$(IMAGE_NAME):$(TAG) $(PLATFORMS) $(DOCKER_BUILD_ARGS)
 
 ##@ Code Quality
 

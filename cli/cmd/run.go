@@ -35,13 +35,14 @@ type Run struct {
 	RunID        string   `name:"run-id" env:"BOE_RUN_ID" help:"Run identifier for this invocation. Defaults to timestamp-based ID or $BOE_RUN_ID. Use '0' for Docker/Kubernetes."`
 	ListenPort   uint32   `help:"Port for Envoy listener to accept incoming traffic." default:"10000"`
 	AdminPort    uint32   `help:"Port for Envoy admin interface." default:"9901"`
-	Extensions   []string `name:"extension" help:"Extensions to enable (in the format: \"name\" or \"name:version\")." sep:","`
-	Local        []string `name:"local" help:"Path to a directory containing a local Extension to enable." type:"existingdir" sep:","`
+	Extensions   []string `name:"extension" help:"Extensions to enable (in the format: \"name\" or \"name:version\")."`
+	Local        []string `name:"local" sep:"none" help:"Path to a directory containing a local Extension to enable." type:"existingdir"`
 	// sep:"none" disables Kong's default comma-separated splitting for []string flags.
 	// JSON config values contain commas (e.g. {"a":"1","b":"2"}) which would otherwise
 	// be split into separate invalid fragments, causing protobuf unmarshal failures.
 	Configs  []string `name:"config" sep:"none" help:"Optional JSON config string for extensions. Applied in order to combined --extension and --local flags."`
 	Clusters []string `name:"cluster" sep:"none" help:"Optional additional Envoy cluster. Supports JSON or short format (host:tlsPort)."`
+	Docker   bool     `help:"Run Envoy as a Docker container instead of using func-e." default:"false"`
 	OCI      OCIFlags `embed:""`
 
 	extensionPositions extensionPositions `kong:"-"` // Internal field: tracks the original position of extensions specified via both --extension and --local flags
@@ -93,6 +94,18 @@ func (r *Run) Validate() error {
 // Run executes the run command
 func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logger) error {
 	logger.Debug("handling run command", "cmd", internal.RedactSensitive(r))
+	if r.Docker {
+		runner := &envoy.RunnerDocker{
+			Logger:          logger,
+			Registry:        r.OCI.Registry,
+			ListenPort:      r.ListenPort,
+			AdminPort:       r.AdminPort,
+			Dirs:            dirs,
+			Arch:            runtime.GOARCH,
+			LocalExtensions: r.Local,
+		}
+		return runner.Run(ctx)
+	}
 
 	downloader := &extensions.Downloader{
 		Logger:   logger,
@@ -134,7 +147,7 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 		return err
 	}
 
-	runner := &envoy.Runner{
+	runner := &envoy.RunnerFuncE{
 		Logger:            logger,
 		EnvoyVersion:      r.EnvoyVersion,
 		DefaultLogLevel:   r.defaultLogLevel,
@@ -156,6 +169,7 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 	downloaded := make([]*extensions.Manifest, 0, len(refs))
 	for _, ext := range refs {
 		name, tag := splitRef(ext)
+		fmt.Printf("→ %sFetching %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)
 		artifact, err := downloader.DownloadExtension(ctx, name, tag)
 		if err != nil {
 			return nil, err
