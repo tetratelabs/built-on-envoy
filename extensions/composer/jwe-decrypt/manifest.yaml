@@ -33,6 +33,199 @@ tags:
   - encryption
 license: Apache-2.0
 examples:
+  - title: Quickstart
+    description: |
+      In order to decrypt JWE tokens, you will need to provide the private key that matches the public key used for encryption. You
+      can generate a key pair using OpenSSL with the following command:
+
+      ```cmd
+      openssl genpkey -algorithm RSA -out private-key.pem -pkeyopt rsa_keygen_bits:2048
+      openssl rsa -pubout -in private-key.pem -out public-key.pem
+      ```
+
+      If you need a test JWT token, you can use free services like [jwt.io](https://jwt.io/) to create a sample JWT token, or run some
+      small code, for example, in Golang:
+
+      ```go
+      package main
+
+      import (
+        "crypto/rsa"
+        "crypto/x509"
+        "encoding/pem"
+        "flag"
+        "fmt"
+        "log"
+        "os"
+        "time"
+
+        "github.com/lestrrat-go/jwx/v3/jwa"
+        "github.com/lestrrat-go/jwx/v3/jwe"
+        "github.com/lestrrat-go/jwx/v3/jwk"
+        "github.com/lestrrat-go/jwx/v3/jwt"
+      )
+
+      func main() {
+        var (
+          privKeyFile   string
+          publicKeyFile string
+        )
+
+        flag.StringVar(&privKeyFile, "privkey", "", "path to private key file")
+        flag.StringVar(&publicKeyFile, "pubkey", "", "path to public key file")
+        flag.Parse()
+
+        if privKeyFile == "" || publicKeyFile == "" {
+          log.Fatalf("missing required -privkey or -pubkey argument\n")
+        }
+
+        // Parse the private key
+        b, err := os.ReadFile(privKeyFile)
+        if err != nil {
+          log.Fatalf("failed to read key file: %s\n", err)
+        }
+        privPemBlock, _ := pem.Decode(b)
+        if privPemBlock == nil {
+          log.Fatalf("failed to parse PEM block containing the key")
+        }
+        parsedKey, err := x509.ParsePKCS8PrivateKey(privPemBlock.Bytes)
+        if err != nil {
+          log.Fatalf("failed to parse PKCS8 private key: %s", err)
+        }
+        privateKey, ok := parsedKey.(*rsa.PrivateKey)
+        if !ok {
+          log.Fatalf("unable to parse RSA private key")
+        }
+        priv, err := jwk.Import(privateKey)
+        if err != nil {
+          log.Fatalf("failed to import private key: %s", err)
+        }
+
+        // Generate a new JWT token
+        t := jwt.New()
+        t.Set(jwt.SubjectKey, `SampleJWT`)
+        t.Set(jwt.AudienceKey, `BoE Users`)
+        t.Set(jwt.IssuedAtKey, time.Unix(time.Now().Unix(), 0))
+        t.Set(`privateClaimKey`, `Hello, World!`)
+
+        // Sign the token with the private key
+        signed, err := jwt.Sign(t, jwt.WithKey(jwa.RS256(), priv))
+        if err != nil {
+          log.Printf("failed to sign token: %s", err)
+          return
+        }
+
+        fmt.Printf("Signed JWT token:\n%s\n", signed)
+
+        // Parse the public key
+        b, err = os.ReadFile(publicKeyFile)
+        if err != nil {
+          log.Fatalf("failed to read key file: %s\n", err)
+        }
+        pubPemBlock, _ := pem.Decode(b)
+        if pubPemBlock == nil {
+          log.Fatalf("failed to parse PEM block containing the key")
+        }
+        pub, err := x509.ParsePKIXPublicKey(pubPemBlock.Bytes)
+        if err != nil {
+          log.Fatalf("failed to parse PKIX public key: %s", err)
+        }
+        publicKey, ok := pub.(*rsa.PublicKey)
+        if !ok {
+          log.Fatalf("unable to parse RSA public key")
+        }
+        pubJWK, err := jwk.Import(publicKey)
+        if err != nil {
+          log.Fatalf("failed to import public key: %s", err)
+        }
+
+        // Encrypt the token with the public key
+        encrypted, err := jwe.Encrypt(signed, jwe.WithKey(jwa.RSA_OAEP(), pubJWK))
+        if err != nil {
+          log.Printf("failed to encrypt token: %s", err)
+          return
+        }
+
+        fmt.Printf("Encrypted JWT token:\n%s\n", encrypted)
+      }
+      ```
+
+      You can save the snippet above in a `main.go` file then run it:
+
+      ```cmd
+      go run main.go -key /path/to/private-key.pem
+      ```
+
+      This will print a sample JWT token signed with the private key, and the encrypted JWE token.
+
+      ```cmd
+      ❯ go run main.go -privkey /path/to/private_key.pem -pubkey /path/to/public_key.pem
+      Signed JWT token:
+      eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOlsiQm9FIFVzZXJzIl0sImlhdCI6MTc3MTI1NTU2NCwicHJpdmF0Z
+      UNsYWltS2V5IjoiSGVsbG8sIFdvcmxkISIsInN1YiI6IlNhbXBsZUpXVCJ9.Gx8GzN4cQZDbgz9RbTyARbQX5LJ1FAggyYH2LG
+      oxR5pXGGpO4m1bHmqQABRJaP-oCFwfXsX1aiA9WoN6Fxy5JdDNtAZpu7uR5u_PD2Cw24u_quRB-s_LeWYEwwftoDfnzEQfJeKa
+      ppWbq9VCvk9Axg5sE-EnLPekhfo0gYhnn4TX-fg_v50AuvBSvXCR6WiIQn79TBIKPUe1UEFZz5kzgQXGWUR3SgczYqRGo0oqAM
+      l7YLiviUUt--Jr0ozYkSA3j7_3ZqLEdyUqRxTe54gRSIym2HRiaSA75Fd12JJWF26YqzsoJ1anw1X037nRpetmV1_ANbOwcmUX
+      TgIqL5NILA
+      Encrypted JWT token:
+      eyJhbGciOiJSU0EtT0FFUCIsImVuYyI6IkEyNTZHQ00ifQ.RAoMRS1jCu-ix7vOXLO6p79DOhknQG6P5Rl_3VedJxQarQH_onQ
+      pQtPGJ35qSSMT2hfjTkaMc6REpK-CrPhMF3Vi-upy2ZvuiXcyAM1ZA7RjAqJkmTNGqBkxFFEeuUcq9FTDan8q9IsHk-rdUAPu_
+      -W8Yw6-26XqJNYc1tXeEmspUsWiENE_x2SbEWbEFG2ynJDMmp9z2aVWUnvJgkun_YKLgspMhX11tG69ebF2mFfZFQ79JZJkTux
+      b4ZTwNH14d0b0YbVHDhpX_-TBtajMrxMIauRhPFhW_zoo2DzRoL58H1DVHpdsZJwrTb6OmDdc7xToISeSuh56699Ojig3_A.GF
+      caQQnNzuDU4l1g.13ZmSJyGwsRKo4gbCyZ3CZs39funjQyxj79bqDQP-s31FA3kqCt6xRTtuqTuWxeABr9pz4ndRJJiBzZy_IU
+      mznrVwvLiUekEOsyeOF5q300p35gP2Dc4mCb_bSCE-pNSdCBxkERh6somRod3n_zlnZ50eyUfZt5NpasdtKbPyB9MfM36dlTsD
+      NKEkERpDL48BG0D7Zp3dm7cfBKy1XF5guj4mZPuVZyPd6_MJywxglsJXMFNfHytd_SRz7QODUyee7MH6vBAYJdRSyOK9gjrA_L
+      FXjPUV-ExSQbMNXOdCoINYCZcukBK1QZwL5ZvVpK6OlydXTvgWJv7xnKoyhQRiU_ujwavwzcPR5WCAhk84lWmgzEf8nJDxqw-0
+      k-X7SNG58akLQLtTkFsQ3qoD8seJ34qxq3OgVyzZr5T1RcWGuUw2q_4t6AAhQprX3s7hRT7K4IHNWnCUxJYHQ_u4p_XYPZF0es
+      -COynxhXDjr7Wwirqdso-rQcihC3oQL0MYvvW5jsHNBZe4HehQKsHRcX5aN6LSsQJepLGrwU4M2dMxMz3YOtJ9bM4gp-Cruopk
+      cXO75_YuFzNEuqu7FtzG_4dni4haINllkFQStAQ-czi-_oVt-5zfMpqfMe-rz-eS16PcexCYLlQVUkLSW8PkIuzSuhARyU.8rK
+      U7tzG9NiNU0I6pAfX4Q
+      ```
+
+      You can then run the JWE decryption extension in Envoy to decrypt the JWE token and recover the original JWT token. You will need
+      to run Envoy providing the necessary configuration, for instance:
+
+      ```cmd
+      boe run --extension jwe-decrypt --config '{
+        "key_file": "/path/to/private-key.pem",
+        "input_header": "authorization",
+        "prefix": "Bearer ",
+        "output_header": "authorization"
+      }'
+      ```
+
+      In this case, the extension will look for the JWE token in the `Authorization` header, decrypt it using the private key, and emit
+      the decrypted JWT token back into the `Authorization` header with the `Bearer` prefix restored. Envoy's JWT Authentication filter
+      can then read the decrypted JWT token from the `Authorization` header and process it as usual.
+
+      ```cmd
+      ❯ curl http://localhost:10000/headers -H 'Authorization: Bearer eyJhbGciOiJSU0EtT0FFUCIsImVuYyI6IkEyNTZHQ00ifQ.RAoMRS1jCu-ix7vOXL
+      O6p79DOhknQG6P5Rl_3VedJxQarQH_onQpQtPGJ35qSSMT2hfjTkaMc6REpK-CrPhMF3Vi-upy2ZvuiXcyAM1ZA7RjAqJkmTNGqBkxFFEeuUcq9FTDan8q9IsHk-rdUAP
+      u_-W8Yw6-26XqJNYc1tXeEmspUsWiENE_x2SbEWbEFG2ynJDMmp9z2aVWUnvJgkun_YKLgspMhX11tG69ebF2mFfZFQ79JZJkTuxb4ZTwNH14d0b0YbVHDhpX_-TBtajM
+      rxMIauRhPFhW_zoo2DzRoL58H1DVHpdsZJwrTb6OmDdc7xToISeSuh56699Ojig3_A.GFcaQQnNzuDU4l1g.13ZmSJyGwsRKo4gbCyZ3CZs39funjQyxj79bqDQP-s31F
+      A3kqCt6xRTtuqTuWxeABr9pz4ndRJJiBzZy_IUmznrVwvLiUekEOsyeOF5q300p35gP2Dc4mCb_bSCE-pNSdCBxkERh6somRod3n_zlnZ50eyUfZt5NpasdtKbPyB9MfM
+      36dlTsDNKEkERpDL48BG0D7Zp3dm7cfBKy1XF5guj4mZPuVZyPd6_MJywxglsJXMFNfHytd_SRz7QODUyee7MH6vBAYJdRSyOK9gjrA_LFXjPUV-ExSQbMNXOdCoINYCZ
+      cukBK1QZwL5ZvVpK6OlydXTvgWJv7xnKoyhQRiU_ujwavwzcPR5WCAhk84lWmgzEf8nJDxqw-0k-X7SNG58akLQLtTkFsQ3qoD8seJ34qxq3OgVyzZr5T1RcWGuUw2q_4
+      t6AAhQprX3s7hRT7K4IHNWnCUxJYHQ_u4p_XYPZF0es-COynxhXDjr7Wwirqdso-rQcihC3oQL0MYvvW5jsHNBZe4HehQKsHRcX5aN6LSsQJepLGrwU4M2dMxMz3YOtJ9
+      bM4gp-CruopkcXO75_YuFzNEuqu7FtzG_4dni4haINllkFQStAQ-czi-_oVt-5zfMpqfMe-rz-eS16PcexCYLlQVUkLSW8PkIuzSuhARyU.8rKU7tzG9NiNU0I6pAfX4Q'
+      {
+        "headers": {
+          "Accept": "*/*",
+          "Authorization": "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOlsiQm9FIFVzZXJzIl0sImlhdCI6MTc3MTI1NTU2NCwicHJpdmF0ZUN
+      sYWltS2V5IjoiSGVsbG8sIFdvcmxkISIsInN1YiI6IlNhbXBsZUpXVCJ9.Gx8GzN4cQZDbgz9RbTyARbQX5LJ1FAggyYH2LGoxR5pXGGpO4m1bHmqQABRJaP-oCFwfXsX
+      1aiA9WoN6Fxy5JdDNtAZpu7uR5u_PD2Cw24u_quRB-s_LeWYEwwftoDfnzEQfJeKappWbq9VCvk9Axg5sE-EnLPekhfo0gYhnn4TX-fg_v50AuvBSvXCR6WiIQn79TBIK
+      PUe1UEFZz5kzgQXGWUR3SgczYqRGo0oqAMl7YLiviUUt--Jr0ozYkSA3j7_3ZqLEdyUqRxTe54gRSIym2HRiaSA75Fd12JJWF26YqzsoJ1anw1X037nRpetmV1_ANbOwc
+      mUXTgIqL5NILA",
+          "Host": "localhost",
+          "User-Agent": "curl/8.13.0",
+          "X-Amzn-Trace-Id": "Root=1-69933906-43c5ac60421eeeb57f50a55e",
+          "X-Envoy-Expected-Rq-Timeout-Ms": "15000"
+        }
+      }
+      ```
+
+      You can see that the JWE token in the `Authorization` header in the `curl` command has been decrypted and replaced with the original JWT token,
+      which can then be processed by Envoy's JWT Authentication filter or any other filter that needs to read the JWT token.
   - title: Decrypt and forward a Bearer token
     description: |
       Process a request with the `Authorization: Bearer <JWE compact token>` header,

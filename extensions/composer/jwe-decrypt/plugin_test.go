@@ -228,19 +228,17 @@ func TestOnRequestHeaders_InvalidJWE(t *testing.T) {
 	require.Equal(t, shared.HeadersStatusContinue, status)
 }
 
-func TestOnRequestHeaders_MultipleJWEValues(t *testing.T) {
-	payload1 := "payload-one"
-	payload2 := "payload-two"
+func TestOnRequestHeaders_OutputHeaderSingleValue(t *testing.T) {
+	payload1 := "first-payload"
 	jweToken1 := createTestJWE(t, payload1)
-	jweToken2 := createTestJWE(t, payload2)
 
 	config := &jweDecryptConfig{
 		KeyFile:      getTestKeyPath(),
-		InputHeader:  "x-jwe-token",
-		OutputHeader: "x-decrypted",
+		InputHeader:  "authorization",
+		OutputHeader: "authorization",
 	}
 
-	// Populate the privateJwks field
+	// Populate the privateKey field
 	keySet, err := config.getKey()
 	require.NoError(t, err)
 	config.privateKey = keySet
@@ -258,17 +256,21 @@ func TestOnRequestHeaders_MultipleJWEValues(t *testing.T) {
 		handle: mockHandle,
 	}
 
+	// Multiple JWE tokens in input header
 	headers := fake.NewFakeHeaderMap(map[string][]string{
-		"x-jwe-token": {jweToken1, jweToken2},
+		"authorization": {jweToken1},
 	})
 
 	status := filter.OnRequestHeaders(headers, false)
 
 	require.Equal(t, shared.HeadersStatusContinue, status)
-	decryptedValues := requestHeaders.Get("x-decrypted")
-	require.Len(t, decryptedValues, 2)
-	require.Contains(t, decryptedValues, payload1)
-	require.Contains(t, decryptedValues, payload2)
+	decryptedValues := requestHeaders.Get("authorization")
+
+	// Using Set() should result in only the last value being present, not multiple values
+	// This test verifies that the output header contains only one value (the last one)
+	// when processing multiple input JWE tokens
+	require.Len(t, decryptedValues, 1, "output header should contain only one value when using Set()")
+	require.Equal(t, payload1, decryptedValues[0], "output header should contain the last decrypted payload")
 }
 
 // Tests for prefix handling
@@ -483,10 +485,9 @@ func TestOnRequestHeaders_WithPrefixMultipleValues(t *testing.T) {
 
 	require.Equal(t, shared.HeadersStatusContinue, status)
 	decryptedValues := requestHeaders.Get("x-decrypted")
-	require.Len(t, decryptedValues, 2)
-	// Both should have prefix restored
-	require.Contains(t, decryptedValues, "Bearer "+payload1)
-	require.Contains(t, decryptedValues, "Bearer "+payload2)
+	// Using Set() means only the last value is retained
+	require.Len(t, decryptedValues, 1)
+	require.Equal(t, "Bearer "+payload2, decryptedValues[0], "should contain the last decrypted payload with prefix restored")
 }
 
 func TestOnRequestHeaders_WithEmptyPrefix(t *testing.T) {

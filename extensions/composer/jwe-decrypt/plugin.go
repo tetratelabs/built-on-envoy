@@ -83,7 +83,7 @@ func (f *jweDecryptHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool
 		}
 
 		if f.config.OutputHeader != "" {
-			f.handle.RequestHeaders().Add(f.config.OutputHeader, string(payload))
+			f.handle.RequestHeaders().Set(f.config.OutputHeader, string(payload))
 		}
 		if f.config.OutputMetadataKey != "" {
 			f.handle.SetMetadata("jwe-decrypt", f.config.OutputMetadataKey, payload)
