@@ -12,6 +12,8 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 	fake "github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/fake"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
@@ -28,16 +30,12 @@ func Test_DisableWaf(t *testing.T) {
 
 	// convert config to bytes
 	configBytes, err := json.Marshal(config)
-	if err != nil {
-		t.Fatalf("failed to marshal config: %v", err)
-	}
+	require.NoError(t, err, "failed to marshal config")
 
 	configFactory := wafPluginConfigFactory{}
 	configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	wafPluginFactory, err := configFactory.Create(configHandle, configBytes)
-	if err != nil {
-		t.Fatalf("failed to create WAF plugin factory: %v", err)
-	}
+	require.NoError(t, err, "failed to create WAF plugin factory")
 
 	t.Run("WAF disabled should skip processing", func(t *testing.T) {
 		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
@@ -45,9 +43,7 @@ func Test_DisableWaf(t *testing.T) {
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
-		if !ok {
-			t.Fatalf("failed to cast plugin to wafPlugin")
-		}
+		require.True(t, ok, "failed to cast plugin to wafPlugin")
 
 		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
 			":authority":   {"example.com:8080"},
@@ -59,26 +55,20 @@ func Test_DisableWaf(t *testing.T) {
 		})
 
 		headerStatus := wafPlugin.OnRequestHeaders(fakeHeaderMap, false)
-		if headerStatus != shared.HeadersStatusContinue {
-			t.Errorf("expected header status to continue when WAF is disabled but got %v",
-				headerStatus)
-		}
+		assert.Equal(t, shared.HeadersStatusContinue, headerStatus,
+			"expected header status to continue when WAF is disabled")
 
 		bodyBuffer := fake.NewFakeBodyBuffer([]byte(`{"name":"test","value":123}`))
 		bodyStatus := wafPlugin.OnRequestBody(bodyBuffer, false)
-		if bodyStatus != shared.BodyStatusContinue {
-			t.Errorf("expected body status to continue when WAF is disabled but got %v",
-				bodyStatus)
-		}
+		assert.Equal(t, shared.BodyStatusContinue, bodyStatus,
+			"expected body status to continue when WAF is disabled")
 
 		trailers := fake.NewFakeHeaderMap(map[string][]string{
 			"grpc-status": {"0"},
 		})
 		trailerStatus := wafPlugin.OnRequestTrailers(trailers)
-		if trailerStatus != shared.TrailersStatusContinue {
-			t.Errorf("expected trailer status to continue when WAF is disabled but got %v",
-				trailerStatus)
-		}
+		assert.Equal(t, shared.TrailersStatusContinue, trailerStatus,
+			"expected trailer status to continue when WAF is disabled")
 
 		pluginHandle.EXPECT().RequestHeaders().Return(fakeHeaderMap)
 		responseHeaders := fake.NewFakeHeaderMap(map[string][]string{
@@ -86,26 +76,20 @@ func Test_DisableWaf(t *testing.T) {
 			"content-type": {"application/json"},
 		})
 		headerStatus = wafPlugin.OnResponseHeaders(responseHeaders, false)
-		if headerStatus != shared.HeadersStatusContinue {
-			t.Errorf("expected response header status to continue when WAF is disabled but got %v",
-				headerStatus)
-		}
+		assert.Equal(t, shared.HeadersStatusContinue, headerStatus,
+			"expected response header status to continue when WAF is disabled")
 
 		responseBodyBuffer := fake.NewFakeBodyBuffer([]byte(`{"result":"success"}`))
 		bodyStatus = wafPlugin.OnResponseBody(responseBodyBuffer, false)
-		if bodyStatus != shared.BodyStatusContinue {
-			t.Errorf("expected response body status to continue when WAF is disabled but got %v",
-				bodyStatus)
-		}
+		assert.Equal(t, shared.BodyStatusContinue, bodyStatus,
+			"expected response body status to continue when WAF is disabled")
 
 		responseTrailers := fake.NewFakeHeaderMap(map[string][]string{
 			"grpc-status": {"0"},
 		})
 		trailerStatus = wafPlugin.OnResponseTrailers(responseTrailers)
-		if trailerStatus != shared.TrailersStatusContinue {
-			t.Errorf("expected response trailer status to continue when WAF is disabled but got %v",
-				trailerStatus)
-		}
+		assert.Equal(t, shared.TrailersStatusContinue, trailerStatus,
+			"expected response trailer status to continue when WAF is disabled")
 
 		// Ensure destroy is called.
 		wafPlugin.OnDestroy()
@@ -120,9 +104,7 @@ func Test_DisableWaf(t *testing.T) {
 
 		// To simplify the test, we can call the getSourceAddress directly.
 		wafPlugin, ok := plugin.(*wafPlugin)
-		if !ok {
-			t.Fatalf("failed to cast plugin to wafPlugin")
-		}
+		require.True(t, ok, "failed to cast plugin to wafPlugin")
 
 		var address string
 		var port int
@@ -130,34 +112,29 @@ func Test_DisableWaf(t *testing.T) {
 		// No attribute set, should return default.
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return("", false)
 		address, port = wafPlugin.getSourceAddress()
-		if address != "127.0.0.1" || port != 80 {
-			t.Errorf("expected default address but got address %s and port %d", address, port)
-		}
+		assert.Equal(t, "127.0.0.1", address, "expected default address")
+		assert.Equal(t, 80, port, "expected default port")
 
 		// No port should return default.
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(
 			"127.0.0.1", true)
 		address, port = wafPlugin.getSourceAddress()
-		if address != "127.0.0.1" || port != 80 {
-			t.Errorf("expected default port but got address %s and port %d", address, port)
-		}
+		assert.Equal(t, "127.0.0.1", address, "expected default address")
+		assert.Equal(t, 80, port, "expected default port")
 
 		// Invalid port.
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(
 			"127.0.0.1:xyz", true)
 		address, port = wafPlugin.getSourceAddress()
-		if address != "127.0.0.1" || port != 80 {
-			t.Errorf("expected default address but got address %s and port %d", address, port)
-		}
+		assert.Equal(t, "127.0.0.1", address, "expected default address")
+		assert.Equal(t, 80, port, "expected default port")
 
 		// Valid address and port.
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(
 			"127.0.0.7:8080", true)
 		address, port = wafPlugin.getSourceAddress()
-		if address != "127.0.0.7" || port != 8080 {
-			t.Errorf("expected address 127.0.0.7 and port 8080 but got address %s and port %d",
-				address, port)
-		}
+		assert.Equal(t, "127.0.0.7", address, "expected address 127.0.0.7")
+		assert.Equal(t, 8080, port, "expected port 8080")
 
 		// Ensure destroy is called.
 		wafPlugin.OnDestroy()
@@ -172,26 +149,20 @@ func Test_DisableWaf(t *testing.T) {
 
 		// To simplify the test, we can call the getRequestProtocol directly.
 		wafPlugin, ok := plugin.(*wafPlugin)
-		if !ok {
-			t.Fatalf("failed to cast plugin to wafPlugin")
-		}
+		require.True(t, ok, "failed to cast plugin to wafPlugin")
 
 		var protocol string
 
 		// No attribute set, should return default.
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return("", false)
 		protocol = wafPlugin.getRequestProtocol()
-		if protocol != "HTTP/1.1" {
-			t.Errorf("expected default protocol HTTP/1.1 but got %s", protocol)
-		}
+		assert.Equal(t, "HTTP/1.1", protocol, "expected default protocol HTTP/1.1")
 
 		// Attribute set.
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
 			"HTTP/2", true)
 		protocol = wafPlugin.getRequestProtocol()
-		if protocol != "HTTP/2" {
-			t.Errorf("expected protocol HTTP/2 but got %s", protocol)
-		}
+		assert.Equal(t, "HTTP/2", protocol, "expected protocol HTTP/2")
 
 		// Ensure destroy is called.
 		wafPlugin.OnDestroy()
@@ -214,16 +185,12 @@ func Test_RequestOnlyWaf(t *testing.T) {
 
 	// convert config to bytes
 	configBytes, err := json.Marshal(config)
-	if err != nil {
-		t.Fatalf("failed to marshal config: %v", err)
-	}
+	require.NoError(t, err, "failed to marshal config")
 
 	configFactory := wafPluginConfigFactory{}
 	configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	wafPluginFactory, err := configFactory.Create(configHandle, configBytes)
-	if err != nil {
-		t.Fatalf("failed to create WAF plugin factory: %v", err)
-	}
+	require.NoError(t, err, "failed to create WAF plugin factory")
 
 	t.Run("Header only request", func(t *testing.T) {
 		// Header only request.
@@ -245,18 +212,12 @@ func Test_RequestOnlyWaf(t *testing.T) {
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
-		if !ok {
-			t.Fatalf("failed to cast plugin to wafPlugin")
-		}
+		require.True(t, ok, "failed to cast plugin to wafPlugin")
 
 		headerStatus := wafPlugin.OnRequestHeaders(fakeHeaderMap, true)
-		if headerStatus != shared.HeadersStatusContinue {
-			t.Errorf("expected header status to continue for header only request but got %v",
-				headerStatus)
-		}
-		if wafPlugin.isUpgrade {
-			t.Errorf("expected isUpgrade to be false for non-upgrade request")
-		}
+		assert.Equal(t, shared.HeadersStatusContinue, headerStatus,
+			"expected header status to continue for header only request")
+		assert.False(t, wafPlugin.isUpgrade, "expected isUpgrade to be false for non-upgrade request")
 
 		// Ensure destroy is called.
 		wafPlugin.OnDestroy()
@@ -284,33 +245,22 @@ func Test_RequestOnlyWaf(t *testing.T) {
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
-		if !ok {
-			t.Fatalf("failed to cast plugin to wafPlugin")
-		}
+		require.True(t, ok, "failed to cast plugin to wafPlugin")
 
 		headerStatus := wafPlugin.OnRequestHeaders(fakeHeaderMap, false)
-		if headerStatus != shared.HeadersStatusContinue {
-			t.Fatalf("expected header status to continue for upgrade request but got %v",
-				headerStatus)
-		}
-		if !wafPlugin.isUpgrade {
-			t.Fatalf("expected isUpgrade to be true for upgrade request")
-		}
+		require.Equal(t, shared.HeadersStatusContinue, headerStatus,
+			"expected header status to continue for upgrade request")
+		require.True(t, wafPlugin.isUpgrade, "expected isUpgrade to be true for upgrade request")
 
 		bodyBuffer := fake.NewFakeBodyBuffer([]byte(`{"name":"test","value":123}`))
 		bodyStatus := wafPlugin.OnRequestBody(bodyBuffer, false)
-
-		if bodyStatus != shared.BodyStatusContinue {
-			t.Fatalf("expected body status to continue for upgrade request but got %v",
-				bodyStatus)
-		}
+		require.Equal(t, shared.BodyStatusContinue, bodyStatus,
+			"expected body status to continue for upgrade request")
 
 		bodyBuffer2 := fake.NewFakeBodyBuffer([]byte{})
 		bodyStatus = wafPlugin.OnRequestBody(bodyBuffer2, true)
-		if bodyStatus != shared.BodyStatusContinue {
-			t.Fatalf("expected final body status to continue for upgrade request but got %v",
-				bodyStatus)
-		}
+		require.Equal(t, shared.BodyStatusContinue, bodyStatus,
+			"expected final body status to continue for upgrade request")
 
 		// Ensure destroy is called.
 		wafPlugin.OnDestroy()
@@ -336,33 +286,23 @@ func Test_RequestOnlyWaf(t *testing.T) {
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
-		if !ok {
-			t.Fatalf("failed to cast plugin to wafPlugin")
-		}
+		require.True(t, ok, "failed to cast plugin to wafPlugin")
 
 		headerStatus := wafPlugin.OnRequestHeaders(fakeHeaderMap, false)
-		if headerStatus != shared.HeadersStatusStop {
-			t.Fatalf("expected header status to stop for request with body but got %v",
-				headerStatus)
-		}
-		if wafPlugin.isUpgrade {
-			t.Fatalf("expected isUpgrade to be false for non-upgrade request")
-		}
+		require.Equal(t, shared.HeadersStatusStop, headerStatus,
+			"expected header status to stop for request with body")
+		require.False(t, wafPlugin.isUpgrade, "expected isUpgrade to be false for non-upgrade request")
 
 		bodyBuffer := fake.NewFakeBodyBuffer([]byte(`{"name":"test","value":123}`))
 		bodyStatus := wafPlugin.OnRequestBody(bodyBuffer, false)
-		if bodyStatus != shared.BodyStatusStopAndBuffer {
-			t.Fatalf("expected body status to stop and buffer for request body but got %v",
-				bodyStatus)
-		}
+		require.Equal(t, shared.BodyStatusStopAndBuffer, bodyStatus,
+			"expected body status to stop and buffer for request body")
 
 		// Final body processing.
 		bodyBuffer2 := fake.NewFakeBodyBuffer([]byte{})
 		bodyStatus = wafPlugin.OnRequestBody(bodyBuffer2, true)
-		if bodyStatus != shared.BodyStatusContinue {
-			t.Errorf("expected no immediate response from WAF for simple request body but got %v",
-				bodyStatus)
-		}
+		assert.Equal(t, shared.BodyStatusContinue, bodyStatus,
+			"expected no immediate response from WAF for simple request body")
 
 		// Ensure destroy is called.
 		wafPlugin.OnDestroy()
@@ -387,34 +327,24 @@ func Test_RequestOnlyWaf(t *testing.T) {
 			"127.0.0.1:8080", true)
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
-		if !ok {
-			t.Fatalf("failed to cast plugin to wafPlugin")
-		}
+		require.True(t, ok, "failed to cast plugin to wafPlugin")
 
 		headerStatus := wafPlugin.OnRequestHeaders(fakeHeaderMap, false)
-		if headerStatus != shared.HeadersStatusStop {
-			t.Fatalf("expected header status to stop for request with body but got %v",
-				headerStatus)
-		}
-		if wafPlugin.isUpgrade {
-			t.Fatalf("expected isUpgrade to be false for non-upgrade request")
-		}
+		require.Equal(t, shared.HeadersStatusStop, headerStatus,
+			"expected header status to stop for request with body")
+		require.False(t, wafPlugin.isUpgrade, "expected isUpgrade to be false for non-upgrade request")
 
 		bodyBuffer := fake.NewFakeBodyBuffer([]byte(`{"name":"test","value":123}`))
 		bodyStatus := wafPlugin.OnRequestBody(bodyBuffer, false)
-		if bodyStatus != shared.BodyStatusStopAndBuffer {
-			t.Fatalf("expected body status to stop and buffer for request body but got %v",
-				bodyStatus)
-		}
+		require.Equal(t, shared.BodyStatusStopAndBuffer, bodyStatus,
+			"expected body status to stop and buffer for request body")
 
 		trailers := fake.NewFakeHeaderMap(map[string][]string{
 			"grpc-status": {"0"},
 		})
 		trailerStatus := wafPlugin.OnRequestTrailers(trailers)
-		if trailerStatus != shared.TrailersStatusContinue {
-			t.Errorf("expected no immediate response from WAF for simple request trailers but got %v",
-				trailerStatus)
-		}
+		assert.Equal(t, shared.TrailersStatusContinue, trailerStatus,
+			"expected no immediate response from WAF for simple request trailers")
 
 		// Ensure destroy is called.
 		wafPlugin.OnDestroy()
@@ -437,35 +367,27 @@ func Test_RequestOnlyWaf(t *testing.T) {
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
-		if !ok {
-			t.Fatalf("failed to cast plugin to wafPlugin")
-		}
+		require.True(t, ok, "failed to cast plugin to wafPlugin")
 
 		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
 			":status":      {"200"},
 			"content-type": {"application/json"},
 		})
 		headerStatus := wafPlugin.OnResponseHeaders(fakeHeaderMap, false)
-		if headerStatus != shared.HeadersStatusContinue {
-			t.Errorf("expected response headers to be no-op in request only mode but got %v",
-				headerStatus)
-		}
+		assert.Equal(t, shared.HeadersStatusContinue, headerStatus,
+			"expected response headers to be no-op in request only mode")
 
 		bodyBuffer := fake.NewFakeBodyBuffer([]byte(`{"result":"success"}`))
 		bodyStatus := wafPlugin.OnResponseBody(bodyBuffer, false)
-		if bodyStatus != shared.BodyStatusContinue {
-			t.Errorf("expected response body to be no-op in request only mode but got %v",
-				bodyStatus)
-		}
+		assert.Equal(t, shared.BodyStatusContinue, bodyStatus,
+			"expected response body to be no-op in request only mode")
 
 		trailers := fake.NewFakeHeaderMap(map[string][]string{
 			"grpc-status": {"0"},
 		})
 		trailerStatus := wafPlugin.OnResponseTrailers(trailers)
-		if trailerStatus != shared.TrailersStatusContinue {
-			t.Errorf("expected response trailers to be no-op in request only mode but got %v",
-				trailerStatus)
-		}
+		assert.Equal(t, shared.TrailersStatusContinue, trailerStatus,
+			"expected response trailers to be no-op in request only mode")
 
 		// Ensure destroy is called.
 		wafPlugin.OnDestroy()
@@ -488,16 +410,12 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 
 	// convert config to bytes
 	configBytes, err := json.Marshal(config)
-	if err != nil {
-		t.Fatalf("failed to marshal config: %v", err)
-	}
+	require.NoError(t, err, "failed to marshal config")
 
 	configFactory := wafPluginConfigFactory{}
 	configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	wafPluginFactory, err := configFactory.Create(configHandle, configBytes)
-	if err != nil {
-		t.Fatalf("failed to create WAF plugin factory: %v", err)
-	}
+	require.NoError(t, err, "failed to create WAF plugin factory")
 
 	t.Run("Request should be no-op in response only mode", func(t *testing.T) {
 		// Request should be no-op in response only mode.
@@ -506,9 +424,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
-		if !ok {
-			t.Fatalf("failed to cast plugin to wafPlugin")
-		}
+		require.True(t, ok, "failed to cast plugin to wafPlugin")
 
 		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
 			":authority":   {"example.com:8080"},
@@ -520,26 +436,20 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 		})
 
 		headerStatus := wafPlugin.OnRequestHeaders(fakeHeaderMap, false)
-		if headerStatus != shared.HeadersStatusContinue {
-			t.Errorf("expected header status to continue in response only mode but got %v",
-				headerStatus)
-		}
+		assert.Equal(t, shared.HeadersStatusContinue, headerStatus,
+			"expected header status to continue in response only mode")
 
 		bodyBuffer := fake.NewFakeBodyBuffer([]byte(`{"name":"test","value":123}`))
 		bodyStatus := wafPlugin.OnRequestBody(bodyBuffer, false)
-		if bodyStatus != shared.BodyStatusContinue {
-			t.Errorf("expected body status to continue in response only mode but got %v",
-				bodyStatus)
-		}
+		assert.Equal(t, shared.BodyStatusContinue, bodyStatus,
+			"expected body status to continue in response only mode")
 
 		trailers := fake.NewFakeHeaderMap(map[string][]string{
 			"grpc-status": {"0"},
 		})
 		trailerStatus := wafPlugin.OnRequestTrailers(trailers)
-		if trailerStatus != shared.TrailersStatusContinue {
-			t.Errorf("expected trailer status to continue in response only mode but got %v",
-				trailerStatus)
-		}
+		assert.Equal(t, shared.TrailersStatusContinue, trailerStatus,
+			"expected trailer status to continue in response only mode")
 
 		// Ensure destroy is called.
 		wafPlugin.OnDestroy()
@@ -564,19 +474,15 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
-		if !ok {
-			t.Fatalf("failed to cast plugin to wafPlugin")
-		}
+		require.True(t, ok, "failed to cast plugin to wafPlugin")
 
 		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
 			":status":      {"200"},
 			"content-type": {"application/json"},
 		})
 		headerStatus := wafPlugin.OnResponseHeaders(fakeHeaderMap, true)
-		if headerStatus != shared.HeadersStatusContinue {
-			t.Errorf("expected response header status to continue for header only response but got %v",
-				headerStatus)
-		}
+		assert.Equal(t, shared.HeadersStatusContinue, headerStatus,
+			"expected response header status to continue for header only response")
 
 		// Ensure destroy is called.
 		wafPlugin.OnDestroy()
@@ -602,9 +508,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
-		if !ok {
-			t.Fatalf("failed to cast plugin to wafPlugin")
-		}
+		require.True(t, ok, "failed to cast plugin to wafPlugin")
 
 		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
 			":status":      {"101"},
@@ -613,28 +517,19 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 			"upgrade":      {"websocket"},
 		})
 		headerStatus := wafPlugin.OnResponseHeaders(fakeHeaderMap, false)
-		if headerStatus != shared.HeadersStatusContinue {
-			t.Fatalf("expected response header status to continue for upgrade response but got %v",
-				headerStatus)
-		}
-		if !wafPlugin.isUpgrade {
-			t.Fatalf("expected isUpgrade to be true for upgrade response")
-		}
+		require.Equal(t, shared.HeadersStatusContinue, headerStatus,
+			"expected response header status to continue for upgrade response")
+		require.True(t, wafPlugin.isUpgrade, "expected isUpgrade to be true for upgrade response")
 
 		bodyBuffer := fake.NewFakeBodyBuffer([]byte(`{"result":"success"}`))
 		bodyStatus := wafPlugin.OnResponseBody(bodyBuffer, false)
-
-		if bodyStatus != shared.BodyStatusContinue {
-			t.Fatalf("expected response body status to continue for upgrade response but got %v",
-				bodyStatus)
-		}
+		require.Equal(t, shared.BodyStatusContinue, bodyStatus,
+			"expected response body status to continue for upgrade response")
 
 		bodyBuffer2 := fake.NewFakeBodyBuffer([]byte{})
 		bodyStatus = wafPlugin.OnResponseBody(bodyBuffer2, true)
-		if bodyStatus != shared.BodyStatusContinue {
-			t.Fatalf("expected final response body status to continue for upgrade response but got %v",
-				bodyStatus)
-		}
+		require.Equal(t, shared.BodyStatusContinue, bodyStatus,
+			"expected final response body status to continue for upgrade response")
 
 		// Ensure destroy is called.
 		wafPlugin.OnDestroy()
@@ -659,34 +554,26 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
-		if !ok {
-			t.Fatalf("failed to cast plugin to wafPlugin")
-		}
+		require.True(t, ok, "failed to cast plugin to wafPlugin")
 
 		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
 			":status":      {"200"},
 			"content-type": {"application/json"},
 		})
 		headerStatus := wafPlugin.OnResponseHeaders(fakeHeaderMap, false)
-		if headerStatus != shared.HeadersStatusStop {
-			t.Fatalf("expected response header status to stop for response with body but got %v",
-				headerStatus)
-		}
+		require.Equal(t, shared.HeadersStatusStop, headerStatus,
+			"expected response header status to stop for response with body")
 
 		bodyBuffer := fake.NewFakeBodyBuffer([]byte(`{"result":"success"}`))
 		bodyStatus := wafPlugin.OnResponseBody(bodyBuffer, false)
-		if bodyStatus != shared.BodyStatusStopAndBuffer {
-			t.Fatalf("expected response body status to stop and buffer for response body but got %v",
-				bodyStatus)
-		}
+		require.Equal(t, shared.BodyStatusStopAndBuffer, bodyStatus,
+			"expected response body status to stop and buffer for response body")
 
 		// Final body processing.
 		bodyBuffer2 := fake.NewFakeBodyBuffer([]byte{})
 		bodyStatus = wafPlugin.OnResponseBody(bodyBuffer2, true)
-		if bodyStatus != shared.BodyStatusContinue {
-			t.Errorf("expected no immediate response from WAF for simple response body but got %v",
-				bodyStatus)
-		}
+		assert.Equal(t, shared.BodyStatusContinue, bodyStatus,
+			"expected no immediate response from WAF for simple response body")
 
 		// Ensure destroy is called.
 		wafPlugin.OnDestroy()
@@ -711,35 +598,27 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
-		if !ok {
-			t.Fatalf("failed to cast plugin to wafPlugin")
-		}
+		require.True(t, ok, "failed to cast plugin to wafPlugin")
 
 		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
 			":status":      {"200"},
 			"content-type": {"application/json"},
 		})
 		headerStatus := wafPlugin.OnResponseHeaders(fakeHeaderMap, false)
-		if headerStatus != shared.HeadersStatusStop {
-			t.Fatalf("expected response header status to stop for response with body but got %v",
-				headerStatus)
-		}
+		require.Equal(t, shared.HeadersStatusStop, headerStatus,
+			"expected response header status to stop for response with body")
 
 		bodyBuffer := fake.NewFakeBodyBuffer([]byte(`{"result":"success"}`))
 		bodyStatus := wafPlugin.OnResponseBody(bodyBuffer, false)
-		if bodyStatus != shared.BodyStatusStopAndBuffer {
-			t.Fatalf("expected response body status to stop and buffer for response body but got %v",
-				bodyStatus)
-		}
+		require.Equal(t, shared.BodyStatusStopAndBuffer, bodyStatus,
+			"expected response body status to stop and buffer for response body")
 
 		trailers := fake.NewFakeHeaderMap(map[string][]string{
 			"grpc-status": {"0"},
 		})
 		trailerStatus := wafPlugin.OnResponseTrailers(trailers)
-		if trailerStatus != shared.TrailersStatusContinue {
-			t.Errorf("expected no immediate response from WAF for simple response trailers but got %v",
-				trailerStatus)
-		}
+		assert.Equal(t, shared.TrailersStatusContinue, trailerStatus,
+			"expected no immediate response from WAF for simple response trailers")
 
 		// Ensure destroy is called.
 		wafPlugin.OnDestroy()
@@ -764,33 +643,25 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
-		if !ok {
-			t.Fatalf("failed to cast plugin to wafPlugin")
-		}
+		require.True(t, ok, "failed to cast plugin to wafPlugin")
 
 		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
 			":status":      {"200"},
 			"content-type": {"text/event-stream"},
 		})
 		headerStatus := wafPlugin.OnResponseHeaders(fakeHeaderMap, false)
-		if headerStatus != shared.HeadersStatusContinue {
-			t.Fatalf("expected response header status to continue for SSE response but got %v",
-				headerStatus)
-		}
+		require.Equal(t, shared.HeadersStatusContinue, headerStatus,
+			"expected response header status to continue for SSE response")
 
 		bodyBuffer := fake.NewFakeBodyBuffer([]byte("data: event1\n\n"))
 		bodyStatus := wafPlugin.OnResponseBody(bodyBuffer, false)
-		if bodyStatus != shared.BodyStatusContinue {
-			t.Fatalf("expected response body status to continue for SSE response but got %v",
-				bodyStatus)
-		}
+		require.Equal(t, shared.BodyStatusContinue, bodyStatus,
+			"expected response body status to continue for SSE response")
 
 		bodyBuffer2 := fake.NewFakeBodyBuffer([]byte("data: event2\n\n"))
 		bodyStatus = wafPlugin.OnResponseBody(bodyBuffer2, false)
-		if bodyStatus != shared.BodyStatusContinue {
-			t.Fatalf("expected response body status to continue for SSE response but got %v",
-				bodyStatus)
-		}
+		require.Equal(t, shared.BodyStatusContinue, bodyStatus,
+			"expected response body status to continue for SSE response")
 
 		// Ensure destroy is called.
 		wafPlugin.OnDestroy()
@@ -814,16 +685,12 @@ func Test_FullWaf(t *testing.T) {
 
 	// convert config to bytes
 	configBytes, err := json.Marshal(config)
-	if err != nil {
-		t.Fatalf("failed to marshal config: %v", err)
-	}
+	require.NoError(t, err, "failed to marshal config")
 
 	configFactory := wafPluginConfigFactory{}
 	configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	wafPluginFactory, err := configFactory.Create(configHandle, configBytes)
-	if err != nil {
-		t.Fatalf("failed to create WAF plugin factory: %v", err)
-	}
+	require.NoError(t, err, "failed to create WAF plugin factory")
 
 	t.Run("Full WAF request and response processing", func(t *testing.T) {
 		// Full WAF request and response processing.
@@ -832,9 +699,7 @@ func Test_FullWaf(t *testing.T) {
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
-		if !ok {
-			t.Fatalf("failed to cast plugin to wafPlugin")
-		}
+		require.True(t, ok, "failed to cast plugin to wafPlugin")
 
 		// Request processing.
 		fakeRequestHeaders := fake.NewFakeHeaderMap(map[string][]string{
@@ -851,25 +716,19 @@ func Test_FullWaf(t *testing.T) {
 			"127.0.0.1:8080", true)
 
 		headerStatus := wafPlugin.OnRequestHeaders(fakeRequestHeaders, false)
-		if headerStatus != shared.HeadersStatusStop {
-			t.Fatalf("expected request header status to stop in full WAF mode but got %v",
-				headerStatus)
-		}
+		require.Equal(t, shared.HeadersStatusStop, headerStatus,
+			"expected request header status to stop in full WAF mode")
 
 		bodyBuffer := fake.NewFakeBodyBuffer([]byte(`{"name":"fulltest","value":456}`))
 		bodyStatus := wafPlugin.OnRequestBody(bodyBuffer, false)
-		if bodyStatus != shared.BodyStatusStopAndBuffer {
-			t.Fatalf("expected request body status to stop and buffer in full WAF mode but got %v",
-				bodyStatus)
-		}
+		require.Equal(t, shared.BodyStatusStopAndBuffer, bodyStatus,
+			"expected request body status to stop and buffer in full WAF mode")
 
 		// Final request body processing.
 		bodyBuffer2 := fake.NewFakeBodyBuffer([]byte{})
 		bodyStatus = wafPlugin.OnRequestBody(bodyBuffer2, true)
-		if bodyStatus != shared.BodyStatusContinue {
-			t.Errorf("expected no immediate response from WAF for full request body but got %v",
-				bodyStatus)
-		}
+		assert.Equal(t, shared.BodyStatusContinue, bodyStatus,
+			"expected no immediate response from WAF for full request body")
 
 		// Response processing.
 		pluginHandle.EXPECT().RequestHeaders().Return(fakeRequestHeaders)
@@ -878,27 +737,21 @@ func Test_FullWaf(t *testing.T) {
 			"content-type": {"application/json"},
 		})
 		headerStatus = wafPlugin.OnResponseHeaders(fakeResponseHeaders, false)
-		if headerStatus != shared.HeadersStatusStop {
-			t.Fatalf("expected response header status to stop in full WAF mode but got %v",
-				headerStatus)
-		}
+		require.Equal(t, shared.HeadersStatusStop, headerStatus,
+			"expected response header status to stop in full WAF mode")
 
 		responseBodyBuffer := fake.NewFakeBodyBuffer([]byte(`{"result":"fullsuccess"}`))
 		bodyStatus = wafPlugin.OnResponseBody(responseBodyBuffer, false)
-		if bodyStatus != shared.BodyStatusStopAndBuffer {
-			t.Fatalf("expected response body status to stop and buffer in full WAF mode but got %v",
-				bodyStatus)
-		}
+		require.Equal(t, shared.BodyStatusStopAndBuffer, bodyStatus,
+			"expected response body status to stop and buffer in full WAF mode")
 
 		// Trailers processing.
 		trailers := fake.NewFakeHeaderMap(map[string][]string{
 			"grpc-status": {"0"},
 		})
 		trailerStatus := wafPlugin.OnResponseTrailers(trailers)
-		if trailerStatus != shared.TrailersStatusContinue {
-			t.Errorf("expected no immediate response from WAF for full response trailers but got %v",
-				trailerStatus)
-		}
+		assert.Equal(t, shared.TrailersStatusContinue, trailerStatus,
+			"expected no immediate response from WAF for full response trailers")
 
 		// Ensure destroy is called.
 		wafPlugin.OnDestroy()
