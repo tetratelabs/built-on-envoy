@@ -35,6 +35,9 @@ license: Apache-2.0
 examples:
   - title: Quickstart
     description: |
+      In this example, we will generate a JWE token containing a JWT token as the payload, and then use the JWE decryption extension
+      in Envoy to decrypt the JWE token and recover the original JWT token.
+    code: |
       In order to decrypt JWE tokens, you will need to provide the private key that matches the public key used for encryption. You
       can generate a key pair using OpenSSL with the following command:
 
