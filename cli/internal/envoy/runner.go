@@ -207,7 +207,7 @@ func setupDynamicModuleSearchPath(params *ConfigGenerationParams) (string, func(
 
 const (
 	// dockerImage the image to use to run BOE in Docker.
-	dockerImage = "built-on-envoy-cli"
+	dockerImage = "boe"
 	// ContainerCacheVolumeName is the name of the Docker volume used to persist cache and other data across runs.
 	ContainerCacheVolumeName = "boe-cache"
 	// containerVolumeDir is the base directory for all volumes in the container.

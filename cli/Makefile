@@ -3,20 +3,14 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-# Read any local configuration. This is an optional, local git-ignored file that can be used
-# to set any value commonly used for development. This helps not having to set the overrides
-# in the command line every time
--include .makerc
-
 # Arguments for builds.
 OUTPUT_DIR ?= out
-BINARY_NAME ?= boe
+NAME       ?= boe
 
 # Arguments for Docker builds.
-OCI_REGISTRY           ?= ghcr.io/tetratelabs/built-on-envoy
-IMAGE_NAME	           ?= built-on-envoy-cli
-ENABLE_MULTI_PLATFORMS ?= false
-TAG                    ?= latest
+OCI_REGISTRY ?= ghcr.io/tetratelabs/built-on-envoy
+TAG          ?= latest
+COMMIT_SHA   := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
 
 # Arguments for go test. This can be used, for example, to run specific tests via
 # `GO_TEST_ARGS="-run TestName/foo/etc -v -race"`
@@ -26,6 +20,22 @@ GO_TEST_ARGS ?=
 # the main go.mod is not polluted with tool dependencies.
 ROOT     := $(shell git rev-parse --show-toplevel)
 GO_TOOL  := go tool -modfile=$(ROOT)/cli/tools/go.mod
+
+# Base OCI image annotations (shared by all image types)
+BASE_OCI_ANNOTATIONS := \
+	--annotation "org.opencontainers.image.source=https://$(subst ghcr.io,github.com,$(OCI_REGISTRY))" \
+	--annotation "org.opencontainers.image.licenses=Apache-2.0" \
+	--annotation "org.opencontainers.image.title=$(NAME)" \
+	--annotation "org.opencontainers.image.version=$(TAG)" \
+	--annotation "org.opencontainers.image.description=Built On Envoy CLI" \
+	--annotation "org.opencontainers.image.created=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+	--annotation "org.opencontainers.image.revision=$(COMMIT_SHA)" \
+	--annotation "org.opencontainers.image.authors=Tetrate" \
+
+# Multi-platform OCI annotations (with index,manifest prefix, for binary artifacts)
+comma := ,
+MULTI_OCI_ANNOTATIONS := \
+	$(subst --annotation ",--annotation "index$(comma)manifest:,$(BASE_OCI_ANNOTATIONS)) \
 
 ##@ Build
 
@@ -44,8 +54,8 @@ build: gen-code  ## Build a binary for the given OS and architectures
 		for goarch in $(GOARCH_LIST); do \
 			echo "-> Building for $$goos/$$goarch"; \
 			CGO_ENABLED=0 GOOS=$$goos GOARCH=$$goarch go build \
-				-o $(OUTPUT_DIR)/$(BINARY_NAME)-$$goos-$$goarch .; \
-			echo "<- Built $(OUTPUT_DIR)/$(BINARY_NAME)-$$goos-$$goarch"; \
+				-o $(OUTPUT_DIR)/$(NAME)-$$goos-$$goarch .; \
+			echo "<- Built $(OUTPUT_DIR)/$(NAME)-$$goos-$$goarch"; \
 		done; \
 	done
 
@@ -103,33 +113,41 @@ gen-docs:  ## Generate documentation
 
 ##@ Docker
 
-# Builds the Docker image for the CLI.
-#
-# By default, this will build for the current GOARCH and linux.
-# To build for multiple platforms, set the ENABLE_MULTI_PLATFORMS variable to true.
-#
-# Example:
-# - `make docker ENABLE_MULTI_PLATFORMS=true`
-#
-# Also, DOCKER_BUILD_ARGS can be set to pass additional arguments to the docker build command.
-#
-# Example:
-# - `make docker ENABLE_MULTI_PLATFORMS=true DOCKER_BUILD_ARGS="--push"` to push the image to the registry.
-# - `make docker ENABLE_MULTI_PLATFORMS=true DOCKER_BUILD_ARGS="--load"` to load the image after building.
-#
-# By default, the image tag is set to `latest`. `TAG` can be set to a different value.
-#
-# Example:
-# - `make docker TAG=v1.2.3`
-#
-.PHONY: docker
-ifeq ($(ENABLE_MULTI_PLATFORMS),true)
-docker: GOARCH_LIST = amd64 arm64
-docker: PLATFORMS = --platform linux/amd64,linux/arm64
+registry_output :=
+ifeq ($(INSECURE_REGISTRY),true)
+  registry_output := ",registry.insecure=true"
 endif
-docker:  ## Build the Docker iamge
+
+BUILDER_NAME := boe-builder
+.PHONY: create_builder
+create_builder:
+	@docker buildx inspect $(BUILDER_NAME) || \
+		docker buildx create --name $(BUILDER_NAME) \
+			--driver docker-container --driver-opt network=host \
+			--buildkitd-flags '--allow-insecure-entitlement network.host' --use
+
+.PHONY: build_image
+build_image:  ## Build the Docker image
 	@$(MAKE) build GOOS_LIST="linux" GOARCH_LIST="$(GOARCH_LIST)"
-	docker buildx build . -t $(OCI_REGISTRY)/$(IMAGE_NAME):$(TAG) $(PLATFORMS) $(DOCKER_BUILD_ARGS)
+	docker buildx build \
+		--output type=docker,oci-mediatypes=true \
+		--provenance=false \
+		$(BASE_OCI_ANNOTATIONS) \
+		-t $(OCI_REGISTRY)/$(NAME):$(TAG) \
+		-f ./Dockerfile .
+
+.PHONY: push_image
+push_image: GOARCH_LIST = amd64 arm64
+push_image: PLATFORMS = linux/amd64,linux/arm64
+push_image: create_builder  ## Push the Docker image to the registry
+	@$(MAKE) build GOOS_LIST="linux" GOARCH_LIST="$(GOARCH_LIST)"
+	docker buildx build --platform=$(PLATFORMS) \
+		--builder $(BUILDER_NAME) \
+		--output type=registry,oci-mediatypes=true$(registry_output) \
+		--provenance=false \
+		$(MULTI_OCI_ANNOTATIONS) \
+		-t $(OCI_REGISTRY)/$(NAME):$(TAG) \
+		-f ./Dockerfile .
 
 ##@ Code Quality
 

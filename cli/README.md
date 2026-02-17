@@ -52,10 +52,10 @@ make check
 
 ```bash
 # Build Docker image
-make docker DOCKER_BUILD_ARGS="--load"
+make build_image
 
 # Multi-platform build
-make docker ENABLE_MULTI_PLATFORMS=true DOCKER_BUILD_ARGS="--load"
+make push_image
 ```
 
 ## Project Structure
@@ -75,4 +75,4 @@ cli/
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `GO_TEST_ARGS` | Extra args for `go test` | `make test GO_TEST_ARGS="-run TestRun -v"` |
-| `TAG` | Docker image tag | `make docker TAG=v1.0.0` |
+| `TAG` | Docker image tag | `make build_image TAG=v1.0.0` |

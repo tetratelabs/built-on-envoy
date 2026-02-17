@@ -127,7 +127,7 @@ build_image:
 		$(BASE_OCI_ANNOTATIONS) \
 		$(BINARY_ARTIFACT) \
 		--build-arg BUILD_TAG=$(COMPOSER_BUILD_TAG) \
-		-t $(IMAGE)-linux-$(ARCH) \
+		-t $(IMAGE)-$(OS)-$(ARCH) \
 		-f ./Dockerfile .
 
 # For default push operation, we will also prefer to build a multi-platform image to support

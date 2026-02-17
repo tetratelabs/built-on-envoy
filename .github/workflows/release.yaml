@@ -18,8 +18,6 @@ env:
   GOPROXY: https://proxy.golang.org
   GOOS_LIST: linux darwin
   GOARCH_LIST: amd64 arm64
-  ENABLE_MULTI_PLATFORMS: true
-  DOCKER_BUILD_ARGS: --push
 
 jobs:
   publish:
@@ -51,7 +49,7 @@ jobs:
           echo "TAG=${{ inputs.tag }}" >> "$GITHUB_ENV"
       
       - run: make build
-      - run: make docker
+      - run: make push_image
 
       # If it is an RC, upload the release bundle as an artifact, as we won't be generating
       # a GitHub release for RCs.
