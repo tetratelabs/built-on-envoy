@@ -9,4 +9,4 @@ export const EXTENSIONS_PATH = 'extensions';
 
 export const WEBSITE = 'https://builtonenvoy.io';
 
-export const SLACK = 'https://tetr8.io/tetrate-community';
+export const SLACK = 'https://tetrate-community.slack.com/archives/C0AG8GLT41E';
