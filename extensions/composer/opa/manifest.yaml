@@ -1,0 +1,213 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: opa
+parent: composer
+categories:
+  - Security
+author: Tetrate
+description: Inline OPA policy evaluation for HTTP request authorization
+longDescription: |
+  This extension implements [Open Policy Agent (OPA)](https://www.openpolicyagent.org/)
+  policy evaluation as an inline Envoy HTTP filter. It replaces the traditional ext_authz
+  pattern by running the OPA Go library directly within the filter, making authorization
+  decisions on each request without a separate OPA sidecar or server.
+
+  **Key Features:**
+
+  - **Inline Rego evaluation**: Load and evaluate Rego policy files directly in the Envoy
+    data path using OPA's Go library. No separate OPA server required.
+  - **ext_authz inspired input**: Constructs an OPA input document from request attributes
+    (method, path, headers, source/destination addresses) inspired by the
+    [OPA-Envoy plugin](https://github.com/open-policy-agent/opa-envoy-plugin).
+    Supports both boolean (allow/deny) and structured object responses with custom HTTP status
+    codes, headers, and response bodies.
+  - **Dry-run mode**: Log authorization decisions without enforcing them, useful for testing
+    policies in production.
+  - **Fail-open mode**: Allow requests through when policy evaluation encounters an error,
+    instead of returning a 500 response.
+  - **mTLS and SPIFFE identity**: Access client certificate attributes including SPIFFE IDs
+    (URI SANs), DNS SANs, and certificate subject for identity-based authorization.
+  - **Configurable decision path**: Query any rule path in the policy (default: `envoy.authz.allow`).
+
+  **Input Document Structure:**
+
+  Requests are parsed and transformed into a structured `input` document that is passed to the OPA
+  policy for evaluation. The following `input` document shows an example of the structure that is
+  passed to the OPA policy on each request:
+
+  ```json
+  {
+    "attributes": {
+      "request": {
+        "http": {
+          "method":   "GET",               // HTTP method
+          "path":     "/api/v1/resource",  // Full path including query string
+          "host":     "example.com",       // Host header (:authority)
+          "scheme":   "https",             // URL scheme (default: "http")
+          "protocol": "HTTP/1.1",          // Request protocol (default: "HTTP/1.1")
+          "headers": {                     // Request headers (excluding pseudo-headers)
+            "authorization": "Bearer ...",
+            "content-type": "application/json"
+          }
+        }
+      },
+      "source": {
+        "address": "10.0.0.1:5000",       // Client address (ip:port)
+        "certificate": {                   // Peer certificate (mTLS connections)
+          "uri_san":       "spiffe://cluster.local/ns/default/sa/client",
+          "dns_san":       "client.default.svc.cluster.local",
+          "subject":       "CN=client,O=example",
+          "sha256_digest": "abc123..."
+        }
+      },
+      "destination": {
+        "address": "10.0.0.2:443"         // Server address (ip:port)
+      },
+      "connection": {
+        "tls_version": "TLSv1.3"          // TLS version
+      }
+    },
+    "parsed_path":  ["api", "v1", "resource"],  // Path segments
+    "parsed_query": {"key": ["value"]}          // Parsed query parameters
+  }
+  ```
+type: composer
+featured: true
+tags:
+  - go
+  - http
+  - filter
+  - opa
+  - security
+  - authorization
+  - policy
+  - spiffe
+  - mtls
+license: Apache-2.0
+examples:
+  - title: Basic Authorization
+    description: |
+      Run the OPA extension with a simple Rego policy that allows or denies
+      requests based on the request path. Create a policy file and reference
+      it in the configuration.
+    code: |
+      # Create a simple policy file
+      cat > /tmp/policy.rego << 'EOF'
+      package envoy.authz
+
+      default allow := false
+
+      allow if {
+        input.parsed_path[0] == "public"
+      }
+      EOF
+
+      # Run the extension
+      boe run --extension opa --config '{
+        "policy_file": "/tmp/policy.rego"
+      }'
+
+      # Test allowed request
+      curl http://localhost:10000/public/resource
+      # => 200 OK (proxied to upstream)
+
+      # Test denied request
+      curl http://localhost:10000/private/resource
+      # => 403 Forbidden
+  - title: Custom Deny Response
+    description: |
+      Use a policy that returns a structured object with custom HTTP status,
+      headers, and body when denying a request.
+    code: |
+      cat > /tmp/policy.rego << 'EOF'
+      package envoy.authz
+
+      default allow := {"allowed": false, "http_status": 401, "body": "Unauthorized"}
+
+      allow := {"allowed": true} if {
+        token := input.attributes.request.http.headers.authorization
+        startswith(token, "Bearer ")
+      }
+      EOF
+
+      boe run --extension opa --config '{
+        "policy_file": "/tmp/policy.rego"
+      }'
+  - title: JWT Token Verification
+    description: |
+      Use a policy that decodes JWT tokens using OPA's built-in
+      `io.jwt.decode` function. This example decodes a JWT token,
+      checks the subject claim, and forwards the user's role as a
+      request header to the upstream service.
+    code: |
+      cat > /tmp/policy.rego << 'EOF'
+      package envoy.authz
+
+      import rego.v1
+
+      default allow := {"allowed": false, "http_status": 401, "body": "Unauthorized"}
+
+      allow := {"allowed": true, "headers": {"x-jwt-role": payload.role}} if {
+        auth_header := input.attributes.request.http.headers.authorization
+        startswith(auth_header, "Bearer ")
+        token := substring(auth_header, 7, -1)
+        [_, payload, _] := io.jwt.decode(token)
+        payload.sub == "my-subject"
+      }
+      EOF
+
+      boe run --extension opa --config '{
+        "policy_file": "/tmp/policy.rego"
+      }'
+
+      # Test with a valid JWT
+      curl -H "Authorization: Bearer <token>" http://localhost:10000/api/resource
+      # => 200 OK (upstream receives x-jwt-role header)
+
+      # Test without a token
+      curl http://localhost:10000/api/resource
+      # => 401 Unauthorized
+  - title: SPIFFE Identity Authorization
+    description: |
+      Use a policy that authorizes requests based on the client's SPIFFE identity
+      from an mTLS connection. The SPIFFE ID is available at
+      `input.attributes.source.certificate.uri_san`.
+    code: |
+      cat > /tmp/policy.rego << 'EOF'
+      package envoy.authz
+
+      default allow := false
+
+      # Allow requests from trusted workloads
+      allow if {
+        spiffe_id := input.attributes.source.certificate.uri_san
+        startswith(spiffe_id, "spiffe://cluster.local/ns/production/")
+      }
+      EOF
+
+      boe run --extension opa --config '{
+        "policy_file": "/tmp/policy.rego"
+      }'
+  - title: Dry-Run Mode
+    description: |
+      Enable dry-run mode to log authorization decisions without enforcing them.
+      Useful for testing new policies in production without blocking traffic.
+    code: |
+      boe run --extension opa --config '{
+        "policy_file": "/tmp/policy.rego",
+        "dry_run": true
+      }'
+  - title: Fail-Open Mode
+    description: |
+      Enable fail-open mode to allow requests through when policy evaluation
+      encounters an error, instead of returning a 500 response. Useful for
+      non-critical authorization checks where availability is prioritized
+      over enforcement.
+    code: |
+      boe run --extension opa --config '{
+        "policy_file": "/tmp/policy.rego",
+        "fail_open": true
+      }'

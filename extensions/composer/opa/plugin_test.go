@@ -1,0 +1,943 @@
+// Copyright Built On Envoy
+// SPDX-License-Identifier: Apache-2.0
+// The full text of the Apache license is available in the LICENSE file at
+// the root of the repo.
+
+package opa
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
+	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/fake"
+	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+)
+
+// Helper to create a temporary policy file for testing.
+func createTestPolicyFile(t *testing.T, policy string) string {
+	t.Helper()
+	f, err := os.CreateTemp(t.TempDir(), "policy-*.rego")
+	require.NoError(t, err)
+	_, err = f.WriteString(policy)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+	return f.Name()
+}
+
+// Tests for OPAHttpFilterConfigFactory.Create
+
+func TestConfigFactory_Create_ValidConfig(t *testing.T) {
+	policy := `package envoy.authz
+default allow := false
+`
+	policyFile := createTestPolicyFile(t, policy)
+
+	configJSON, err := json.Marshal(opaConfig{PolicyFile: policyFile})
+	require.NoError(t, err)
+
+	factory := &OPAHttpFilterConfigFactory{}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	filterFactory, err := factory.Create(mockHandle, configJSON)
+	require.NoError(t, err)
+	require.NotNil(t, filterFactory)
+}
+
+func TestConfigFactory_Create_EmptyConfig(t *testing.T) {
+	factory := &OPAHttpFilterConfigFactory{}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	filterFactory, err := factory.Create(mockHandle, []byte{})
+	require.Error(t, err)
+	require.Nil(t, filterFactory)
+	require.Contains(t, err.Error(), "empty config")
+}
+
+func TestConfigFactory_Create_InvalidJSON(t *testing.T) {
+	factory := &OPAHttpFilterConfigFactory{}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	filterFactory, err := factory.Create(mockHandle, []byte("{invalid"))
+	require.Error(t, err)
+	require.Nil(t, filterFactory)
+}
+
+func TestConfigFactory_Create_MissingPolicyFile(t *testing.T) {
+	configJSON, err := json.Marshal(opaConfig{})
+	require.NoError(t, err)
+
+	factory := &OPAHttpFilterConfigFactory{}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	filterFactory, err := factory.Create(mockHandle, configJSON)
+	require.Error(t, err)
+	require.Nil(t, filterFactory)
+	require.Contains(t, err.Error(), "policy_file is required")
+}
+
+func TestConfigFactory_Create_PolicyFileNotFound(t *testing.T) {
+	configJSON, err := json.Marshal(opaConfig{PolicyFile: "/nonexistent/policy.rego"})
+	require.NoError(t, err)
+
+	factory := &OPAHttpFilterConfigFactory{}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	filterFactory, err := factory.Create(mockHandle, configJSON)
+	require.Error(t, err)
+	require.Nil(t, filterFactory)
+	require.Contains(t, err.Error(), "failed to read policy file")
+}
+
+func TestConfigFactory_Create_InvalidRego(t *testing.T) {
+	policyFile := createTestPolicyFile(t, "this is not valid rego {{{")
+
+	configJSON, err := json.Marshal(opaConfig{PolicyFile: policyFile})
+	require.NoError(t, err)
+
+	factory := &OPAHttpFilterConfigFactory{}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	filterFactory, err := factory.Create(mockHandle, configJSON)
+	require.Error(t, err)
+	require.Nil(t, filterFactory)
+	require.Contains(t, err.Error(), "failed to compile policy")
+}
+
+func TestConfigFactory_Create_DefaultDecisionPath(t *testing.T) {
+	policy := `package envoy.authz
+default allow := false
+`
+	policyFile := createTestPolicyFile(t, policy)
+
+	cfg := opaConfig{PolicyFile: policyFile}
+	configJSON, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	factory := &OPAHttpFilterConfigFactory{}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	filterFactory, err := factory.Create(mockHandle, configJSON)
+	require.NoError(t, err)
+	require.NotNil(t, filterFactory)
+
+	opaFactory, ok := filterFactory.(*opaHttpFilterFactory)
+	require.True(t, ok)
+	require.Equal(t, "envoy.authz.allow", opaFactory.config.DecisionPath)
+}
+
+func TestConfigFactory_Create_CustomDecisionPath(t *testing.T) {
+	policy := `package custom.policy
+default verdict := false
+`
+	policyFile := createTestPolicyFile(t, policy)
+
+	cfg := opaConfig{PolicyFile: policyFile, DecisionPath: "custom.policy.verdict"}
+	configJSON, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	factory := &OPAHttpFilterConfigFactory{}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	filterFactory, err := factory.Create(mockHandle, configJSON)
+	require.NoError(t, err)
+	require.NotNil(t, filterFactory)
+
+	opaFactory, ok := filterFactory.(*opaHttpFilterFactory)
+	require.True(t, ok)
+	require.Equal(t, "custom.policy.verdict", opaFactory.config.DecisionPath)
+}
+
+// Helper to create a filter for testing.
+func createTestFilter(t *testing.T, policy string, cfg opaConfig) (*opaHttpFilter, *mocks.MockHttpFilterHandle) {
+	t.Helper()
+
+	if cfg.PolicyFile == "" {
+		cfg.PolicyFile = createTestPolicyFile(t, policy)
+	}
+
+	configJSON, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	factory := &OPAHttpFilterConfigFactory{}
+
+	ctrl := gomock.NewController(t)
+	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockConfigHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	filterFactory, err := factory.Create(mockConfigHandle, configJSON)
+	require.NoError(t, err)
+
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return("HTTP/1.1", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return("127.0.0.1:5000", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDDestinationAddress).Return("127.0.0.1:80", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionUriSanPeerCertificate).Return("", false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionDnsSanPeerCertificate).Return("", false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate).Return("", false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return("", false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return("", false).AnyTimes()
+
+	filter := filterFactory.Create(mockHandle)
+	opaFilter, ok := filter.(*opaHttpFilter)
+	require.True(t, ok)
+
+	return opaFilter, mockHandle
+}
+
+// Tests for OnRequestHeaders
+
+func TestOnRequestHeaders_AllowBoolean(t *testing.T) {
+	policy := `package envoy.authz
+default allow := false
+allow if { input.parsed_path[0] == "public" }
+`
+	filter, _ := createTestFilter(t, policy, opaConfig{})
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":    {"GET"},
+		":path":      {"/public/resource"},
+		":authority": {"example.com"},
+		":scheme":    {"http"},
+	})
+
+	status := filter.OnRequestHeaders(headers, true)
+	require.Equal(t, shared.HeadersStatusContinue, status)
+}
+
+func TestOnRequestHeaders_DenyBoolean(t *testing.T) {
+	policy := `package envoy.authz
+default allow := false
+allow if { input.parsed_path[0] == "public" }
+`
+	filter, mockHandle := createTestFilter(t, policy, opaConfig{})
+	mockHandle.EXPECT().SendLocalResponse(
+		uint32(403),
+		gomock.Any(),
+		[]byte("Forbidden"),
+		"opa_denied",
+	)
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":    {"GET"},
+		":path":      {"/private/resource"},
+		":authority": {"example.com"},
+		":scheme":    {"http"},
+	})
+
+	status := filter.OnRequestHeaders(headers, true)
+	require.Equal(t, shared.HeadersStatusStop, status)
+}
+
+func TestOnRequestHeaders_AllowObjectWithHeaders(t *testing.T) {
+	policy := `package envoy.authz
+allow := {"allowed": true, "headers": {"x-user": "admin"}}
+`
+	filter, mockHandle := createTestFilter(t, policy, opaConfig{})
+
+	requestHeaders := fake.NewFakeHeaderMap(map[string][]string{})
+	mockHandle.EXPECT().RequestHeaders().Return(requestHeaders).AnyTimes()
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":    {"GET"},
+		":path":      {"/api/resource"},
+		":authority": {"example.com"},
+		":scheme":    {"http"},
+	})
+
+	status := filter.OnRequestHeaders(headers, true)
+	require.Equal(t, shared.HeadersStatusContinue, status)
+	require.Equal(t, "admin", requestHeaders.GetOne("x-user"))
+}
+
+func TestOnRequestHeaders_DenyObjectWithCustomStatus(t *testing.T) {
+	policy := `package envoy.authz
+default allow := {"allowed": false, "http_status": 401, "body": "Unauthorized", "headers": {"www-authenticate": "Bearer"}}
+`
+	filter, mockHandle := createTestFilter(t, policy, opaConfig{})
+
+	var capturedStatus uint32
+	var capturedBody []byte
+	var capturedHeaders [][2]string
+	mockHandle.EXPECT().SendLocalResponse(
+		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Eq("opa_denied"),
+	).Do(func(status uint32, headers [][2]string, body []byte, _ string) {
+		capturedStatus = status
+		capturedBody = body
+		capturedHeaders = headers
+	})
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":    {"GET"},
+		":path":      {"/api/resource"},
+		":authority": {"example.com"},
+		":scheme":    {"http"},
+	})
+
+	status := filter.OnRequestHeaders(headers, true)
+	require.Equal(t, shared.HeadersStatusStop, status)
+	require.Equal(t, uint32(401), capturedStatus)
+	require.Equal(t, []byte("Unauthorized"), capturedBody)
+	require.Len(t, capturedHeaders, 1)
+	require.Equal(t, "www-authenticate", capturedHeaders[0][0])
+	require.Equal(t, "Bearer", capturedHeaders[0][1])
+}
+
+func TestOnRequestHeaders_DryRunAllow(t *testing.T) {
+	policy := `package envoy.authz
+default allow := true
+`
+	filter, _ := createTestFilter(t, policy, opaConfig{DryRun: true})
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":    {"GET"},
+		":path":      {"/api/resource"},
+		":authority": {"example.com"},
+		":scheme":    {"http"},
+	})
+
+	status := filter.OnRequestHeaders(headers, true)
+	require.Equal(t, shared.HeadersStatusContinue, status)
+}
+
+func TestOnRequestHeaders_DryRunDeny(t *testing.T) {
+	policy := `package envoy.authz
+default allow := false
+`
+	// In dry-run mode, even denied requests should continue.
+	filter, _ := createTestFilter(t, policy, opaConfig{DryRun: true})
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":    {"GET"},
+		":path":      {"/private/resource"},
+		":authority": {"example.com"},
+		":scheme":    {"http"},
+	})
+
+	status := filter.OnRequestHeaders(headers, true)
+	require.Equal(t, shared.HeadersStatusContinue, status)
+}
+
+// Tests for parsePath
+
+func TestParsePath_Simple(t *testing.T) {
+	segments, query := parsePath("/api/users/123")
+	require.Equal(t, []string{"api", "users", "123"}, segments)
+	require.Empty(t, query)
+}
+
+func TestParsePath_WithQuery(t *testing.T) {
+	segments, query := parsePath("/api/search?q=test&page=1")
+	require.Equal(t, []string{"api", "search"}, segments)
+	require.Equal(t, []string{"test"}, query["q"])
+	require.Equal(t, []string{"1"}, query["page"])
+}
+
+func TestParsePath_EmptyQuery(t *testing.T) {
+	segments, query := parsePath("/api")
+	require.Equal(t, []string{"api"}, segments)
+	require.Empty(t, query)
+}
+
+func TestParsePath_MultiValueQuery(t *testing.T) {
+	segments, query := parsePath("/api?tag=a&tag=b")
+	require.Equal(t, []string{"api"}, segments)
+	require.Equal(t, []string{"a", "b"}, query["tag"])
+}
+
+// Tests for interpretResult
+
+func TestInterpretResult_BooleanTrue(t *testing.T) {
+	policy := `package test
+allow := true
+`
+	policyFile := createTestPolicyFile(t, policy)
+	cfg := opaConfig{PolicyFile: policyFile, DecisionPath: "test.allow"}
+	configJSON, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	factory := &OPAHttpFilterConfigFactory{}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	filterFactory, err := factory.Create(mockHandle, configJSON)
+	require.NoError(t, err)
+
+	mockFilterHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockFilterHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockFilterHandle.EXPECT().GetAttributeString(gomock.Any()).Return("", false).AnyTimes()
+
+	filter := filterFactory.Create(mockFilterHandle).(*opaHttpFilter)
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method": {"GET"},
+		":path":   {"/"},
+	})
+
+	status := filter.OnRequestHeaders(headers, true)
+	require.Equal(t, shared.HeadersStatusContinue, status)
+}
+
+func TestInterpretResult_BooleanFalse(t *testing.T) {
+	policy := `package test
+allow := false
+`
+	policyFile := createTestPolicyFile(t, policy)
+	cfg := opaConfig{PolicyFile: policyFile, DecisionPath: "test.allow"}
+	configJSON, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	factory := &OPAHttpFilterConfigFactory{}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	filterFactory, err := factory.Create(mockHandle, configJSON)
+	require.NoError(t, err)
+
+	mockFilterHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockFilterHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockFilterHandle.EXPECT().GetAttributeString(gomock.Any()).Return("", false).AnyTimes()
+	mockFilterHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "opa_denied")
+
+	filter := filterFactory.Create(mockFilterHandle).(*opaHttpFilter)
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method": {"GET"},
+		":path":   {"/"},
+	})
+
+	status := filter.OnRequestHeaders(headers, true)
+	require.Equal(t, shared.HeadersStatusStop, status)
+}
+
+// Tests for buildInput
+
+func TestBuildInput_BasicRequest(t *testing.T) {
+	policy := `package envoy.authz
+default allow := true
+`
+	filter, _ := createTestFilter(t, policy, opaConfig{})
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":       {"POST"},
+		":path":         {"/api/users?role=admin"},
+		":authority":    {"example.com"},
+		":scheme":       {"https"},
+		"authorization": {"Bearer token123"},
+		"content-type":  {"application/json"},
+	})
+
+	input := filter.buildInput(headers)
+
+	// Check top-level structure.
+	attrs, ok := input["attributes"].(map[string]any)
+	require.True(t, ok)
+
+	req, ok := attrs["request"].(map[string]any)
+	require.True(t, ok)
+
+	http, ok := req["http"].(map[string]any)
+	require.True(t, ok)
+
+	require.Equal(t, "POST", http["method"])
+	require.Equal(t, "/api/users?role=admin", http["path"])
+	require.Equal(t, "example.com", http["host"])
+	require.Equal(t, "https", http["scheme"])
+	require.Equal(t, "HTTP/1.1", http["protocol"])
+
+	// Check headers exclude pseudo-headers.
+	httpHeaders, ok := http["headers"].(map[string]string)
+	require.True(t, ok)
+	require.Equal(t, "Bearer token123", httpHeaders["authorization"])
+	require.Equal(t, "application/json", httpHeaders["content-type"])
+	require.NotContains(t, httpHeaders, ":method")
+	require.NotContains(t, httpHeaders, ":path")
+	require.NotContains(t, httpHeaders, ":authority")
+	require.NotContains(t, httpHeaders, ":scheme")
+
+	// Check source and destination.
+	source, ok := attrs["source"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "127.0.0.1:5000", source["address"])
+
+	cert, ok := source["certificate"].(map[string]any)
+	require.True(t, ok)
+	require.Empty(t, cert["uri_san"])
+	require.Empty(t, cert["dns_san"])
+	require.Empty(t, cert["subject"])
+	require.Empty(t, cert["sha256_digest"])
+
+	dest, ok := attrs["destination"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "127.0.0.1:80", dest["address"])
+
+	// Check connection attributes.
+	conn, ok := attrs["connection"].(map[string]any)
+	require.True(t, ok)
+	require.Empty(t, conn["tls_version"])
+
+	// Check parsed_path.
+	parsedPath, ok := input["parsed_path"].([]string)
+	require.True(t, ok)
+	require.Equal(t, []string{"api", "users"}, parsedPath)
+
+	// Check parsed_query.
+	parsedQuery, ok := input["parsed_query"].(map[string][]string)
+	require.True(t, ok)
+	require.Equal(t, []string{"admin"}, parsedQuery["role"])
+}
+
+func TestBuildInput_MTLSAttributes(t *testing.T) {
+	policy := `package envoy.authz
+default allow := true
+`
+	policyFile := createTestPolicyFile(t, policy)
+	cfg := opaConfig{PolicyFile: policyFile}
+	configJSON, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	factory := &OPAHttpFilterConfigFactory{}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockConfigHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	filterFactory, err := factory.Create(mockConfigHandle, configJSON)
+	require.NoError(t, err)
+
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return("HTTP/2", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return("10.0.0.1:5000", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDDestinationAddress).Return("10.0.0.2:443", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionUriSanPeerCertificate).Return("spiffe://cluster.local/ns/default/sa/client", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionDnsSanPeerCertificate).Return("client.default.svc.cluster.local", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate).Return("CN=client,O=example", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return("TLSv1.3", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return("abc123def456", true).AnyTimes()
+
+	filter := filterFactory.Create(mockHandle).(*opaHttpFilter)
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":    {"GET"},
+		":path":      {"/api/resource"},
+		":authority": {"example.com"},
+		":scheme":    {"https"},
+	})
+
+	input := filter.buildInput(headers)
+
+	attrs, ok := input["attributes"].(map[string]any)
+	require.True(t, ok)
+
+	// Check source certificate attributes.
+	source, ok := attrs["source"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "10.0.0.1:5000", source["address"])
+
+	cert, ok := source["certificate"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "spiffe://cluster.local/ns/default/sa/client", cert["uri_san"])
+	require.Equal(t, "client.default.svc.cluster.local", cert["dns_san"])
+	require.Equal(t, "CN=client,O=example", cert["subject"])
+	require.Equal(t, "abc123def456", cert["sha256_digest"])
+
+	// Check connection attributes.
+	conn, ok := attrs["connection"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "TLSv1.3", conn["tls_version"])
+}
+
+func TestOnRequestHeaders_PolicyUsesSPIFFE(t *testing.T) {
+	policy := `package envoy.authz
+default allow := false
+allow if {
+  input.attributes.source.certificate.uri_san == "spiffe://cluster.local/ns/default/sa/trusted"
+}
+`
+	policyFile := createTestPolicyFile(t, policy)
+	cfg := opaConfig{PolicyFile: policyFile}
+	configJSON, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	factory := &OPAHttpFilterConfigFactory{}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockConfigHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	filterFactory, err := factory.Create(mockConfigHandle, configJSON)
+	require.NoError(t, err)
+
+	// Test with trusted SPIFFE identity - should allow.
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return("HTTP/2", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return("10.0.0.1:5000", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDDestinationAddress).Return("10.0.0.2:443", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionUriSanPeerCertificate).Return("spiffe://cluster.local/ns/default/sa/trusted", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionDnsSanPeerCertificate).Return("", false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate).Return("", false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return("TLSv1.3", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return("", false).AnyTimes()
+
+	filter := filterFactory.Create(mockHandle).(*opaHttpFilter)
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":    {"GET"},
+		":path":      {"/api/resource"},
+		":authority": {"example.com"},
+		":scheme":    {"https"},
+	})
+
+	status := filter.OnRequestHeaders(headers, true)
+	require.Equal(t, shared.HeadersStatusContinue, status)
+}
+
+func TestOnRequestHeaders_PolicyUsesSPIFFE_Denied(t *testing.T) {
+	policy := `package envoy.authz
+default allow := false
+allow if {
+  input.attributes.source.certificate.uri_san == "spiffe://cluster.local/ns/default/sa/trusted"
+}
+`
+	policyFile := createTestPolicyFile(t, policy)
+	cfg := opaConfig{PolicyFile: policyFile}
+	configJSON, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	factory := &OPAHttpFilterConfigFactory{}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockConfigHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	filterFactory, err := factory.Create(mockConfigHandle, configJSON)
+	require.NoError(t, err)
+
+	// Test with untrusted SPIFFE identity - should deny.
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return("HTTP/2", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return("10.0.0.1:5000", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDDestinationAddress).Return("10.0.0.2:443", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionUriSanPeerCertificate).Return("spiffe://cluster.local/ns/default/sa/untrusted", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionDnsSanPeerCertificate).Return("", false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate).Return("", false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return("TLSv1.3", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return("", false).AnyTimes()
+	mockHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "opa_denied")
+
+	filter := filterFactory.Create(mockHandle).(*opaHttpFilter)
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":    {"GET"},
+		":path":      {"/api/resource"},
+		":authority": {"example.com"},
+		":scheme":    {"https"},
+	})
+
+	status := filter.OnRequestHeaders(headers, true)
+	require.Equal(t, shared.HeadersStatusStop, status)
+}
+
+// Tests for WellKnownHttpFilterConfigFactories
+
+func TestWellKnownHttpFilterConfigFactories(t *testing.T) {
+	factories := WellKnownHttpFilterConfigFactories()
+
+	require.NotNil(t, factories)
+	require.Len(t, factories, 1)
+	require.Contains(t, factories, "opa")
+
+	factory, ok := factories["opa"].(*OPAHttpFilterConfigFactory)
+	require.True(t, ok)
+	require.NotNil(t, factory)
+}
+
+// Tests for opaHttpFilterFactory.Create
+
+func TestFilterFactory_Create(t *testing.T) {
+	policy := `package envoy.authz
+default allow := false
+`
+	policyFile := createTestPolicyFile(t, policy)
+	cfg := opaConfig{PolicyFile: policyFile}
+	configJSON, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	factory := &OPAHttpFilterConfigFactory{}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockConfigHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	filterFactory, err := factory.Create(mockConfigHandle, configJSON)
+	require.NoError(t, err)
+
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	filter := filterFactory.Create(mockHandle)
+
+	require.NotNil(t, filter)
+	opaFilter, ok := filter.(*opaHttpFilter)
+	require.True(t, ok)
+	require.Equal(t, mockHandle, opaFilter.handle)
+}
+
+// Test that policy can access request headers for authorization.
+func TestOnRequestHeaders_PolicyUsesHeaders(t *testing.T) {
+	policy := `package envoy.authz
+default allow := false
+allow if {
+  token := input.attributes.request.http.headers.authorization
+  token == "Bearer valid-token"
+}
+`
+	filter, _ := createTestFilter(t, policy, opaConfig{})
+
+	// With valid token - should allow.
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":       {"GET"},
+		":path":         {"/api/resource"},
+		":authority":    {"example.com"},
+		":scheme":       {"http"},
+		"authorization": {"Bearer valid-token"},
+	})
+
+	status := filter.OnRequestHeaders(headers, true)
+	require.Equal(t, shared.HeadersStatusContinue, status)
+}
+
+func TestOnRequestHeaders_PolicyUsesHeaders_Denied(t *testing.T) {
+	policy := `package envoy.authz
+default allow := false
+allow if {
+  token := input.attributes.request.http.headers.authorization
+  token == "Bearer valid-token"
+}
+`
+	filter, mockHandle := createTestFilter(t, policy, opaConfig{})
+	mockHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "opa_denied")
+
+	// With invalid token - should deny.
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":       {"GET"},
+		":path":         {"/api/resource"},
+		":authority":    {"example.com"},
+		":scheme":       {"http"},
+		"authorization": {"Bearer invalid-token"},
+	})
+
+	status := filter.OnRequestHeaders(headers, true)
+	require.Equal(t, shared.HeadersStatusStop, status)
+}
+
+// Test policy with method-based rules.
+func TestOnRequestHeaders_PolicyUsesMethod(t *testing.T) {
+	policy := `package envoy.authz
+default allow := false
+allow if { input.attributes.request.http.method == "GET" }
+`
+	filter, mockHandle := createTestFilter(t, policy, opaConfig{})
+	mockHandle.EXPECT().SendLocalResponse(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	// GET should be allowed.
+	getHeaders := fake.NewFakeHeaderMap(map[string][]string{
+		":method":    {"GET"},
+		":path":      {"/api/resource"},
+		":authority": {"example.com"},
+	})
+	require.Equal(t, shared.HeadersStatusContinue, filter.OnRequestHeaders(getHeaders, true))
+
+	// POST should be denied (new filter instance needed since the mock may have been called).
+	filter2, mockHandle2 := createTestFilter(t, policy, opaConfig{})
+	mockHandle2.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "opa_denied")
+
+	postHeaders := fake.NewFakeHeaderMap(map[string][]string{
+		":method":    {"POST"},
+		":path":      {"/api/resource"},
+		":authority": {"example.com"},
+	})
+	require.Equal(t, shared.HeadersStatusStop, filter2.OnRequestHeaders(postHeaders, true))
+}
+
+// Test policy that verifies a JWT token using OPA's built-in io.jwt.decode_verify.
+func TestOnRequestHeaders_PolicyVerifiesJWT(t *testing.T) {
+	// This policy verifies an HS256 JWT, checks the issuer, and extracts the role claim.
+	// The secret "test-secret-key" is embedded in the policy for testing purposes.
+	policy := `package envoy.authz
+
+import rego.v1
+
+default allow := {"allowed": false, "http_status": 401, "body": "Unauthorized"}
+
+allow := {"allowed": true, "headers": {"x-jwt-role": payload.role}} if {
+  auth_header := input.attributes.request.http.headers.authorization
+  startswith(auth_header, "Bearer ")
+  token := substring(auth_header, 7, -1)
+  [valid, _, payload] := io.jwt.decode_verify(token, {
+    "secret": "test-secret-key",
+    "alg": "HS256",
+  })
+  valid == true
+  payload.iss == "test-issuer"
+}
+`
+	// Valid JWT: {"sub":"user123","role":"admin","iss":"test-issuer","exp":9999999999}, signed with "test-secret-key".
+	validToken := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyMTIzIiwicm9sZSI6ImFkbWluIiwiaXNzIjoidGVzdC1pc3N1ZXIiLCJleHAiOjk5OTk5OTk5OTl9.AgWMvlXsikFYopkQ8xnqsmshOU7BrydgwdGNQBE3rog"
+
+	// Expired JWT: {"sub":"user456","role":"viewer","iss":"test-issuer","exp":1000000000}, signed with "test-secret-key".
+	expiredToken := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyNDU2Iiwicm9sZSI6InZpZXdlciIsImlzcyI6InRlc3QtaXNzdWVyIiwiZXhwIjoxMDAwMDAwMDAwfQ.CqWHLAH26GMiRdAtPaNbU2S0nCQg1k-aG0IfICVNuMU"
+
+	// Wrong-secret JWT: {"sub":"user789","role":"admin","iss":"test-issuer","exp":9999999999}, signed with "wrong-secret".
+	wrongSecretToken := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyNzg5Iiwicm9sZSI6ImFkbWluIiwiaXNzIjoidGVzdC1pc3N1ZXIiLCJleHAiOjk5OTk5OTk5OTl9.jqjuxP5_6wpMg-HrVnLMoIIXLFgWyGTO9BWhGxZOa_M"
+
+	t.Run("valid JWT is allowed and role header is set", func(t *testing.T) {
+		filter, mockHandle := createTestFilter(t, policy, opaConfig{})
+		requestHeaders := fake.NewFakeHeaderMap(map[string][]string{})
+		mockHandle.EXPECT().RequestHeaders().Return(requestHeaders).AnyTimes()
+
+		headers := fake.NewFakeHeaderMap(map[string][]string{
+			":method":       {"GET"},
+			":path":         {"/api/resource"},
+			":authority":    {"example.com"},
+			":scheme":       {"https"},
+			"authorization": {"Bearer " + validToken},
+		})
+
+		status := filter.OnRequestHeaders(headers, true)
+		require.Equal(t, shared.HeadersStatusContinue, status)
+		require.Equal(t, "admin", requestHeaders.GetOne("x-jwt-role"))
+	})
+
+	t.Run("expired JWT is denied", func(t *testing.T) {
+		filter, mockHandle := createTestFilter(t, policy, opaConfig{})
+
+		var capturedStatus uint32
+		var capturedBody []byte
+		mockHandle.EXPECT().SendLocalResponse(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Eq("opa_denied"),
+		).Do(func(status uint32, _ [][2]string, body []byte, _ string) {
+			capturedStatus = status
+			capturedBody = body
+		})
+
+		headers := fake.NewFakeHeaderMap(map[string][]string{
+			":method":       {"GET"},
+			":path":         {"/api/resource"},
+			":authority":    {"example.com"},
+			":scheme":       {"https"},
+			"authorization": {"Bearer " + expiredToken},
+		})
+
+		status := filter.OnRequestHeaders(headers, true)
+		require.Equal(t, shared.HeadersStatusStop, status)
+		require.Equal(t, uint32(401), capturedStatus)
+		require.Equal(t, []byte("Unauthorized"), capturedBody)
+	})
+
+	t.Run("wrong secret JWT is denied", func(t *testing.T) {
+		filter, mockHandle := createTestFilter(t, policy, opaConfig{})
+
+		var capturedStatus uint32
+		mockHandle.EXPECT().SendLocalResponse(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Eq("opa_denied"),
+		).Do(func(status uint32, _ [][2]string, _ []byte, _ string) {
+			capturedStatus = status
+		})
+
+		headers := fake.NewFakeHeaderMap(map[string][]string{
+			":method":       {"GET"},
+			":path":         {"/api/resource"},
+			":authority":    {"example.com"},
+			":scheme":       {"https"},
+			"authorization": {"Bearer " + wrongSecretToken},
+		})
+
+		status := filter.OnRequestHeaders(headers, true)
+		require.Equal(t, shared.HeadersStatusStop, status)
+		require.Equal(t, uint32(401), capturedStatus)
+	})
+
+	t.Run("missing authorization header is denied", func(t *testing.T) {
+		filter, mockHandle := createTestFilter(t, policy, opaConfig{})
+
+		mockHandle.EXPECT().SendLocalResponse(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Eq("opa_denied"),
+		)
+
+		headers := fake.NewFakeHeaderMap(map[string][]string{
+			":method":    {"GET"},
+			":path":      {"/api/resource"},
+			":authority": {"example.com"},
+			":scheme":    {"https"},
+		})
+
+		status := filter.OnRequestHeaders(headers, true)
+		require.Equal(t, shared.HeadersStatusStop, status)
+	})
+}
+
+// Test with an absolute path to a non-existent rego file to trigger read error in ConfigFactory.
+func TestConfigFactory_Create_PolicyFileReadError(t *testing.T) {
+	nonExistent := filepath.Join(t.TempDir(), "does-not-exist.rego")
+	cfg := opaConfig{PolicyFile: nonExistent}
+	configJSON, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	factory := &OPAHttpFilterConfigFactory{}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	filterFactory, err := factory.Create(mockHandle, configJSON)
+	require.Error(t, err)
+	require.Nil(t, filterFactory)
+}

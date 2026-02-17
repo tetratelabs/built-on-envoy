@@ -11,5 +11,6 @@ import (
 	// Go plugin to loader other composer plugins that be compiled into separate shared libraries.
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/goplugin"
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/jwe-decrypt/embedded" // JWE decryption plugin.
+	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/opa/embedded"         // OPA authorization plugin.
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/waf/embedded"         // WAF plugin.
 )
