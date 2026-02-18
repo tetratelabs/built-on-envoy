@@ -34,6 +34,8 @@ ignore:
   # Covered in integration tests.
   - cli/main.go
   - cli/internal/envoy/runner.go
+  # This is only for code generation at build time
+  - cli/internal/codegen/main.go
   # These are test-only libraries.
   - cli/internal/testing/
   # Do not aim for coverage on extensions, which are not part of the core codebase and may have different maintainers.
