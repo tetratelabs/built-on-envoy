@@ -55,30 +55,30 @@ type policyResponse struct {
 	body       string
 }
 
-func (f *opaHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) shared.HeadersStatus {
-	input := f.buildInput(headers)
-	f.handle.Log(shared.LogLevelDebug, "opa: evaluating policy for %s %s",
+func (o *opaHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) shared.HeadersStatus {
+	input := o.buildInput(headers)
+	o.handle.Log(shared.LogLevelDebug, "opa: evaluating policy for %s %s",
 		headers.GetOne(":method"), headers.GetOne(":path"))
 
-	rs, err := f.config.preparedQuery.Eval(
+	rs, err := o.config.preparedQuery.Eval(
 		context.Background(),
 		rego.EvalInput(input),
 	)
 	if err != nil {
-		if f.config.FailOpen {
-			f.handle.Log(shared.LogLevelError, "opa: policy evaluation error (fail_open enabled): %s", err.Error())
+		if o.config.FailOpen {
+			o.handle.Log(shared.LogLevelError, "opa: policy evaluation error (fail_open enabled): %s", err.Error())
 			return shared.HeadersStatusContinue
 		}
-		f.handle.Log(shared.LogLevelError, "opa: policy evaluation error: %s", err.Error())
-		f.handle.SendLocalResponse(500, nil, []byte("Internal Server Error"), "opa_eval_error")
+		o.handle.Log(shared.LogLevelError, "opa: policy evaluation error: %s", err.Error())
+		o.handle.SendLocalResponse(500, nil, []byte("Internal Server Error"), "opa_eval_error")
 		return shared.HeadersStatusStop
 	}
 
 	allowed, resp := interpretResult(rs)
-	f.handle.Log(shared.LogLevelDebug, "opa: decision: allowed=%v", allowed)
+	o.handle.Log(shared.LogLevelDebug, "opa: decision: allowed=%v", allowed)
 
-	if f.config.DryRun {
-		f.handle.Log(shared.LogLevelInfo, "opa: dry-run decision: allowed=%v", allowed)
+	if o.config.DryRun {
+		o.handle.Log(shared.LogLevelInfo, "opa: dry-run decision: allowed=%v", allowed)
 		return shared.HeadersStatusContinue
 	}
 
@@ -95,8 +95,8 @@ func (f *opaHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) share
 		if body == "" {
 			body = "Forbidden"
 		}
-		f.handle.Log(shared.LogLevelDebug, "opa: denying request with status %d", status)
-		f.handle.SendLocalResponse(
+		o.handle.Log(shared.LogLevelDebug, "opa: denying request with status %d", status)
+		o.handle.SendLocalResponse(
 			uint32(status), //nolint:gosec
 			responseHeaders,
 			[]byte(body),
@@ -107,15 +107,15 @@ func (f *opaHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) share
 
 	// If allowed and policy returned headers, add them to the request.
 	for k, v := range resp.headers {
-		f.handle.Log(shared.LogLevelDebug, "opa: adding header %s=%s", k, v)
-		f.handle.RequestHeaders().Set(k, v)
+		o.handle.Log(shared.LogLevelDebug, "opa: adding header %s=%s", k, v)
+		o.handle.RequestHeaders().Set(k, v)
 	}
 
 	return shared.HeadersStatusContinue
 }
 
 // buildInput constructs the input document for OPA evaluation based on request headers and attributes.
-func (f *opaHttpFilter) buildInput(headers shared.HeaderMap) map[string]any {
+func (o *opaHttpFilter) buildInput(headers shared.HeaderMap) map[string]any {
 	var (
 		method = headers.GetOne(":method")
 		path   = headers.GetOne(":path")
@@ -123,7 +123,7 @@ func (f *opaHttpFilter) buildInput(headers shared.HeaderMap) map[string]any {
 		scheme = cmp.Or(headers.GetOne(":scheme"), "http")
 	)
 	parsedPath, parsedQuery := parsePath(path)
-	protocol, _ := f.handle.GetAttributeString(shared.AttributeIDRequestProtocol)
+	protocol, _ := o.handle.GetAttributeString(shared.AttributeIDRequestProtocol)
 	protocol = cmp.Or(protocol, "HTTP/1.1")
 
 	// Build headers map excluding pseudo-headers.
@@ -137,14 +137,14 @@ func (f *opaHttpFilter) buildInput(headers shared.HeaderMap) map[string]any {
 	}
 
 	var (
-		sourceAddr, _ = f.handle.GetAttributeString(shared.AttributeIDSourceAddress)
-		destAddr, _   = f.handle.GetAttributeString(shared.AttributeIDDestinationAddress)
+		sourceAddr, _ = o.handle.GetAttributeString(shared.AttributeIDSourceAddress)
+		destAddr, _   = o.handle.GetAttributeString(shared.AttributeIDDestinationAddress)
 		// Extract connection/TLS attributes for mTLS-aware policies.
-		uriSanPeer, _   = f.handle.GetAttributeString(shared.AttributeIDConnectionUriSanPeerCertificate)
-		dnsSanPeer, _   = f.handle.GetAttributeString(shared.AttributeIDConnectionDnsSanPeerCertificate)
-		subjectPeer, _  = f.handle.GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate)
-		tlsVersion, _   = f.handle.GetAttributeString(shared.AttributeIDConnectionTlsVersion)
-		sha256Digest, _ = f.handle.GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest)
+		uriSanPeer, _   = o.handle.GetAttributeString(shared.AttributeIDConnectionUriSanPeerCertificate)
+		dnsSanPeer, _   = o.handle.GetAttributeString(shared.AttributeIDConnectionDnsSanPeerCertificate)
+		subjectPeer, _  = o.handle.GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate)
+		tlsVersion, _   = o.handle.GetAttributeString(shared.AttributeIDConnectionTlsVersion)
+		sha256Digest, _ = o.handle.GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest)
 		// TODO(nacx): The ABI does not expose a method to get Boolean attributes
 		// mtls, _         = f.handle.GetAttributeBool(shared.AttributeIDConnectionMtls)
 	)
@@ -260,8 +260,8 @@ type opaHttpFilterFactory struct { //nolint:revive
 	config *opaParsedConfig
 }
 
-func (f *opaHttpFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
-	return &opaHttpFilter{handle: handle, config: f.config}
+func (o *opaHttpFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
+	return &opaHttpFilter{handle: handle, config: o.config}
 }
 
 // OPAHttpFilterConfigFactory is the configuration factory for the HTTP filter.
@@ -270,7 +270,7 @@ type OPAHttpFilterConfigFactory struct { //nolint:revive
 }
 
 // Create parses the JSON configuration and creates a factory for the HTTP filter.
-func (f *OPAHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
+func (o *OPAHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
 	if len(config) == 0 {
 		handle.Log(shared.LogLevelError, "opa: empty config")
 		return nil, fmt.Errorf("empty config")
