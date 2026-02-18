@@ -33,11 +33,10 @@ test:
 # It is intended to be used in CI environments to ensure that each image
 # built gets a unique tag.
 IMAGE_NONCE  ?=
-OCI_REGISTRY ?= ghcr.io/tetratelabs
-INSECURE_REGISTRY ?= false
+OCI_REGISTRY ?= ghcr.io/tetratelabsAAA
 
 registry_output :=
-ifeq ($(INSECURE_REGISTRY),true)
+ifeq ($(BOE_REGISTRY_INSECURE),true)
   registry_output := ",registry.insecure=true"
 endif
 
@@ -54,7 +53,7 @@ AUTHOR           := $(shell grep "^author:" manifest.yaml | sed 's/[^:]*:[[:spac
 COMPOSER_VERSION := $(VERSION)
 LICENSE          := Apache-2.0
 
-HUB    := $(OCI_REGISTRY)/built-on-envoy
+HUB    := $(or $(BOE_REGISTRY),$(OCI_REGISTRY)/built-on-envoy)
 IMAGE  := $(HUB)/$(NAME):$(VERSION)$(IMAGE_NONCE)
 SOURCE := https://$(subst ghcr.io,github.com,$(HUB))
 

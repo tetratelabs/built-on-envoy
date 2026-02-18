@@ -219,12 +219,6 @@ func TestPassthroughEnvVars(t *testing.T) {
 
 			result := passthroughEnvVars()
 			assert.ElementsMatch(t, tt.expected, result)
-
-			// if tt.expected == nil {
-			// 	assert.Nil(t, result)
-			// } else {
-			// 	assert.ElementsMatch(t, tt.expected, result)
-			// }
 		})
 	}
 }

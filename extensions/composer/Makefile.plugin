@@ -12,10 +12,9 @@
 # built gets a unique tag.
 IMAGE_NONCE  ?=
 OCI_REGISTRY ?= ghcr.io/tetratelabs
-INSECURE_REGISTRY ?= false
 
 registry_output :=
-ifeq ($(INSECURE_REGISTRY),true)
+ifeq ($(BOE_REGISTRY_INSECURE),true)
   registry_output := ",registry.insecure=true"
 endif
 

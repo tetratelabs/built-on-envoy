@@ -4,13 +4,15 @@
 sections:
   - title: Guides
     items:
-      - title: Getting Started
+      - title: Getting started
         href: /docs/getting-started
-      - title: Extension Types
+      - title: Extension types
         href: /docs/extension-types
-      - title: Running Local Extensions
+      - title: Running local extensions
         href: /docs/running-local-extensions
-      - title: Writing Go Extensions
+      - title: Writing Go extensions
         href: /docs/writing-go-extensions
-      - title: Writing Rust Extensions
+      - title: Writing Rust extensions
         href: /docs/writing-rust-extensions
+      - title: Using a custom registry
+        href: /docs/custom-registry
