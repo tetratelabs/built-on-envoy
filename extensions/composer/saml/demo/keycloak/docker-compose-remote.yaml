@@ -1,0 +1,30 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+services:
+  init:
+    image: curlimages/curl
+    user: root
+    volumes:
+      - shared:/opt/keycloak/data/import:rw
+    entrypoint: curl -v https://github.com/tetratelabs/built-on-envoy/raw/main/extensions/composer/saml/demo/keycloak/realm-export.json -o /opt/keycloak/data/import/realm-export.json
+
+  keycloak:
+    depends_on:
+      init:
+        condition: service_completed_successfully
+
+    image: quay.io/keycloak/keycloak:26.0
+    command: start-dev --import-realm
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports:
+      - "8080:8080"
+    volumes:
+      - shared:/opt/keycloak/data/import/realm-export.json:ro
+
+volumes:
+  shared:
