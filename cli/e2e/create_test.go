@@ -82,7 +82,7 @@ func TestCreateWithDockerSupport(t *testing.T) {
 	t.Run("makefile_push_target", func(t *testing.T) {
 		// #nosec G204
 		makeCmd := exec.CommandContext(ctx, "make", "push_image",
-			fmt.Sprintf("OCI_REGISTRY=%s", registryAddr), "INSECURE_REGISTRY=true")
+			fmt.Sprintf("OCI_REGISTRY=%s", registryAddr), "BOE_REGISTRY_INSECURE=true")
 		makeCmd.Dir = extensionDir
 		output, err := makeCmd.CombinedOutput()
 		t.Logf("make push_image output: %s", string(output))
@@ -95,7 +95,7 @@ func TestCreateWithDockerSupport(t *testing.T) {
 	t.Run("makefile_code_target", func(t *testing.T) {
 		// #nosec G204
 		makeCmd := exec.CommandContext(ctx, "make", "push_code",
-			fmt.Sprintf("OCI_REGISTRY=%s", registryAddr), "INSECURE_REGISTRY=true")
+			fmt.Sprintf("OCI_REGISTRY=%s", registryAddr), "BOE_REGISTRY_INSECURE=true")
 		makeCmd.Dir = extensionDir
 		output, err := makeCmd.CombinedOutput()
 		t.Logf("make push_code output: %s", string(output))
@@ -145,7 +145,7 @@ func TestCreateRustWithDockerSupport(t *testing.T) {
 	// t.Run("makefile_push_target", func(t *testing.T) {
 	// 	// #nosec G204
 	// 	makeCmd := exec.CommandContext(ctx, "make", "push_image",
-	// 		fmt.Sprintf("OCI_REGISTRY=%s", registryAddr), "INSECURE_REGISTRY=true")
+	// 		fmt.Sprintf("OCI_REGISTRY=%s", registryAddr), "BOE_REGISTRY_INSECURE=true")
 	// 	makeCmd.Dir = extensionDir
 	// 	output, err := makeCmd.CombinedOutput()
 	// 	t.Logf("make push_image output: %s", string(output))
@@ -158,7 +158,7 @@ func TestCreateRustWithDockerSupport(t *testing.T) {
 	t.Run("makefile_code_target", func(t *testing.T) {
 		// #nosec G204
 		makeCmd := exec.CommandContext(ctx, "make", "push_code",
-			fmt.Sprintf("OCI_REGISTRY=%s", registryAddr), "INSECURE_REGISTRY=true")
+			fmt.Sprintf("OCI_REGISTRY=%s", registryAddr), "BOE_REGISTRY_INSECURE=true")
 		makeCmd.Dir = extensionDir
 		output, err := makeCmd.CombinedOutput()
 		t.Logf("make push_code output: %s", string(output))

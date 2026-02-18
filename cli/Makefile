@@ -8,7 +8,7 @@ OUTPUT_DIR ?= out
 NAME       ?= boe
 
 # Arguments for Docker builds.
-OCI_REGISTRY ?= ghcr.io/tetratelabs/built-on-envoy
+OCI_REGISTRY ?= $(or $(BOE_REGISTRY),ghcr.io/tetratelabs/built-on-envoy)
 TAG          ?= latest
 COMMIT_SHA   := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
 
@@ -114,7 +114,7 @@ gen-docs:  ## Generate documentation
 ##@ Docker
 
 registry_output :=
-ifeq ($(INSECURE_REGISTRY),true)
+ifeq ($(BOE_REGISTRY_INSECURE),true)
   registry_output := ",registry.insecure=true"
 endif
 

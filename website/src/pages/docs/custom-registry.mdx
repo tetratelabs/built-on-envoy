@@ -1,0 +1,93 @@
+---
+layout: ../../layouts/DocsLayout.astro
+title: Using a custom registry
+description: Configure boe to use a private or internal OCI registry for extensions
+---
+
+import ToC from '../../components/ToC.astro';
+
+# Using a custom registry
+
+By default, the `boe` CLI fetches extensions from the public registry at `ghcr.io/tetratelabs/built-on-envoy`.
+In corporate or air-gapped environments you may need to host extensions in an internal OCI registry instead.
+This guide explains how to configure `boe` to use a custom registry and how to publish extensions to it.
+
+<ToC maxDepth="3"/>
+
+## Configuring the CLI
+
+Point `boe` to your internal registry by setting the `BOE_REGISTRY` environment variable.
+All commands that interact with the registry (`run`, `gen-config`) will use it automatically:
+
+```bash
+export BOE_REGISTRY=registry.internal.example.com/envoy-extensions
+```
+
+If the registry requires authentication, provide credentials via environment variables:
+
+```bash
+export BOE_REGISTRY_USERNAME=my-user
+export BOE_REGISTRY_PASSWORD=my-token
+```
+
+You can also pass these values as CLI flags:
+
+```bash
+boe run --registry registry.internal.example.com/envoy-extensions \
+        --username my-user \
+        --password my-token \
+        ...
+```
+
+### Insecure (HTTP) registries
+
+If the registry does not support TLS (for example, a local development registry), enable
+insecure mode:
+
+```bash
+export BOE_REGISTRY_INSECURE=true
+```
+
+Or with the `--insecure` flag:
+
+```bash
+boe run --registry localhost:5000/extensions --insecure --extension example-lua
+```
+
+## Publishing extensions to a custom registry
+
+Extensions are packaged as standard OCI artifacts, so any OCI-compliant registry can host them.
+
+The extension scaffolding generates `Makefiles` that automate building and pushing extension artifacts.
+Set the `BOE_REGISTRY` variable when invoking `make` to target your registry.
+
+> ⚠️ It is important to use the provided `Makefiles` to push the extensions. They will take care of
+> setting a set of **annotations and metadata that are needed by the `boe` tool**. If the annotations
+> are not properly configured in the pushed artifacts, the `boe` cli may not work as expected.
+
+```bash
+export BOE_REGISTRY=registry.internal.example.com/envoy-extensions
+export BOE_REGISTRY_INSECURE=true    # If pushing to an insecure registry
+```
+
+Once the environment variable is set, you cn invoke your extension `Makefile` targets to generate
+and push the extension artifacts:
+
+```bash
+make push_image   # Push the extension image
+make push_code    # Push the extension source code
+```
+
+> 💡 You can use tools like `skopeo`, `crane` or `docker` to synchronize the official images from the
+> official extension registry to your custom one.
+
+## Environment variables reference
+
+| Variable | Description | Default |
+|---|---|---|
+| `BOE_REGISTRY` | OCI registry URL for extensions | `ghcr.io/tetratelabs/built-on-envoy` |
+| `BOE_REGISTRY_USERNAME` | Registry username | - |
+| `BOE_REGISTRY_PASSWORD` | Registry password | - |
+| `BOE_REGISTRY_INSECURE` | Allow HTTP (non-TLS) registry connections | `false` |
+
+See the full list in the [Environment Variables](/docs/reference/environment-variables) reference.
