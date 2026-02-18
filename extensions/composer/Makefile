@@ -61,7 +61,7 @@ SOURCE := https://$(subst ghcr.io,github.com,$(HUB))
 # Option to build lite version of the loader.
 ifeq ($(strip $(COMPOSER_LITE)),true)
 	DESCRIPTION := Go plugin loader.
-	COMPOSER_BUILD_TAG := lite
+	COMPOSER_BUILD_TAG := "-tags lite"
 	IMAGE := $(HUB)/$(NAME)-lite:$(VERSION)$(IMAGE_NONCE)
 else
 	COMPOSER_BUILD_TAG := ""
@@ -108,7 +108,7 @@ create_builder:
 
 .PHONY: build
 build:
-	CGO_ENABLED=1 go build -buildmode=c-shared -tags $(COMPOSER_BUILD_TAG) -o lib$(NAME).so ./main
+	CGO_ENABLED=1 go build -buildmode=c-shared $(COMPOSER_BUILD_TAG) -o lib$(NAME).so ./main
 
 .PHONY: install
 install: build
