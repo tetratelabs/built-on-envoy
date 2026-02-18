@@ -17,7 +17,7 @@ sections:
 
   - title: Reference
     items:
-      - title: Environment variables
+      - title: Environment Variables
         href: /docs/reference/environment-variables
-      - title: Extension manifest
+      - title: Extension Manifest
         href: /docs/reference/manifest

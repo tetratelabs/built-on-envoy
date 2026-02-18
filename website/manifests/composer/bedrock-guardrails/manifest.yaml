@@ -1,0 +1,62 @@
+name: bedrock-guardrails
+version: 0.0.1
+categories:
+  - AI
+author: Tetrate
+description: Apply AWS Bedrock Guardrails to HTTP requests.
+longDescription: |
+  This extension implements an Envoy HTTP filter that applies [AWS Bedrock Guardrails](https://aws.amazon.com/bedrock)
+  to incoming HTTP requests. It will check the body of the request and, if they contain prompt messages, it will
+  match that prompt against the configured AWS Bedrock Guardrails, blocking the requests that fail to comply them.
+
+  The extension uses a [Bedrock API key](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html) to authenticate
+  to the Bedrock API. Please check the [Bedrock API documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys-generate.html)
+  for more details on how to obtain an API key.
+type: composer
+composerVersion: 0.2.1
+tags:
+  - go
+  - http
+  - filter
+  - ai
+  - bedrock
+  - guardrails
+license: Apache-2.0
+examples:
+  - title: Quickstart
+    description: |
+      In this example, we will run the Bedrock Guardrails extension with a simple configuration that applies a
+      single guardrail to check if the prompt contains any disallowed content.
+    code: |
+      boe run --extension bedrock-guardrails --config '{
+        "bedrock_endpoint": "bedrock.us-east-1.amazonaws.com",
+        "bedrock_api_key": "YOUR_BEDROCK_API_KEY",
+        "bedrock_guardrails": [
+          {
+            "identifier": "xxxxxxx",
+            "version": "1"
+          }
+        ]
+      }'
+  - title: Multiple guardrails
+    description: |
+      You can add as many guardrails as required to the extension configuration.
+    code: |
+      boe run --extension bedrock-guardrails --config '{
+        "bedrock_endpoint": "bedrock.us-east-1.amazonaws.com",
+        "bedrock_api_key": "YOUR_BEDROCK_API_KEY",
+        "bedrock_guardrails": [
+          {
+            "identifier": "xxxxxxx",
+            "version": "1"
+          },
+          {
+            "identifier": "yyyyyyy",
+            "version": "1"
+          },
+          {
+            "identifier": "zzzzzzz",
+            "version": "1"
+          }
+        ]
+      }'

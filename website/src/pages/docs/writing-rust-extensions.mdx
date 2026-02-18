@@ -22,7 +22,7 @@ Refer to the [Running Local Extensions](/docs/running-local-extensions) page for
 Create a new extension called `my-extension` in the `my-extension` directory with a single command:
 
 ```bash
-boe create my-extension --type rust --path my-extension
+boe create my-extension --type dynamic_module_rust --path my-extension
 ```
 
 This generates a ready-to-use extension with all required files. You can build and test it with:
@@ -163,7 +163,7 @@ The manifest describes your extension:
 ```yaml
 name: my-extension
 version: 0.1.0
-type: rust
+type: dynamic_module
 categories:
   - Security             # Or: Traffic, Observability, Examples, Misc
 author: Your Name

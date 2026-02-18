@@ -1,0 +1,11 @@
+---
+import { CLI_NAME } from '../constants';
+
+interface Props {
+  path?: string;
+}
+
+const { path = 'config.yaml' } = Astro.props;
+const fullPath = `~/.${CLI_NAME}/${path}`;
+---
+<code>{fullPath}</code>

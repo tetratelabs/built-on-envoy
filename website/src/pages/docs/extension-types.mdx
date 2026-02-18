@@ -14,76 +14,6 @@ is packaged and loaded by Envoy.
 
 <ToC maxDepth="3"/>
 
-## Rust Dynamic Module Extensions
-
-Rust extensions are compiled HTTP filters that run inside Envoy as native
-[Dynamic Modules](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/dynamic_modules).
-They use the [Rust SDK](https://github.com/envoyproxy/envoy/tree/main/source/extensions/dynamic_modules/sdk/rust)
-and are compiled to a C-compatible shared library that Envoy loads directly - no intermediate
-runtime or plugin loader is needed.
-
-**Manifest type:** `rust`
-
-```yaml
-name: my-rust-extension
-version: 0.1.0
-type: rust
-```
-
-### How it Works
-
-1. Your extension implements the `HttpFilterConfig` and `HttpFilter` traits from the Rust SDK.
-2. The crate is compiled with `cargo build --release` to produce a shared library (`.so` on Linux, `.dylib` on macOS).
-3. The `declare_init_functions!` macro wires up the init and filter-creation entry points that Envoy
-   expects from a dynamic module.
-4. At runtime, Envoy loads the shared library directly with no additional host module.
-
-### Getting Started with Rust Extensions
-
-See the [Writing Rust Extensions](/docs/writing-rust-extensions) guide for a complete walkthrough of the
-filter API, lifecycle callbacks, and build process.
-
-
-## Go Extensions
-
-Go extensions are compiled HTTP filters that run inside Envoy through the
-[Dynamic Modules](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/dynamic_modules) system.
-They offer full access to the Dynamic Modules Go SDK and support advanced operations such as metrics,
-body modification, metadata, and local replies.
-
-> 🚧 There are some limitations related to how the Go runtime loads dependencies that affect how different Go
-> extensions can be loaded in the same Envoy process. To overcome these, a
-> [special dynamic module](https://github.com/tetratelabs/built-on-envoy/tree/main/extensions/internal/goplugin)
-> is used to load the Go extensions at runtime.
-
-**Manifest type:** `go`
-
-```yaml
-name: my-extension
-type: go
-composerVersion: 0.2.2
-```
-
-The `composerVersion` field is required and must match the version of the Composer dynamic module (the special
-loader module) that will load the plugin.
-
-### How it works
-
-1. Your extension exports a `WellKnownHttpFilterConfigFactories()` function as its entry point.
-2. The extension is compiled with `go build -buildmode=plugin` to produce a `.so` file.
-3. At runtime, the Composer's plugin loader opens the `.so` file and validates that it was built
-   with the same Go version and matching dependency versions before registering its filters.
-
-You can see a full example in the
-[extensions/composer/example](https://github.com/tetratelabs/built-on-envoy/tree/main/extensions/composer/example)
-directory.
-
-### Getting Started with Go Extensions
-
-See the [Writing Go Extensions](/docs/writing-go-extensions) guide for a complete walkthrough of the
-filter API, lifecycle callbacks, and build process.
-
-
 ## Lua Extensions
 
 Lua extensions use Envoy's built-in [Lua HTTP filter](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/lua_filter)
@@ -135,3 +65,158 @@ Lua extensions are a good fit when you need:
 **Limitations:** Lua extensions have access only to the APIs exposed by Envoy's Lua filter. For
 advanced features like custom metrics, body buffering, or tight performance requirements, consider
 a Go extension instead.
+
+## Go Extensions
+
+Go extensions are compiled HTTP filters that run inside Envoy through the
+[Dynamic Modules](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/dynamic_modules) system.
+They offer full access to the Dynamic Modules Go SDK and support advanced operations such as metrics,
+body modification, metadata, and local replies.
+
+> There are some limitations in how the Go runtime is used inside Envoy. To overcome these, a
+> [special dynamic module](https://github.com/tetratelabs/built-on-envoy/tree/main/extensions/internal/goplugin)
+> is used to load the Go extensions at runtime.
+
+There are two packaging approaches for Go extensions, each with its own manifest type, advantages and limitations.
+
+### Standalone (`composer`)
+
+A standalone extension is compiled as a separate Go plugin (`.so` file) and loaded at runtime by the
+Composer (or `goplugin`) dynamic module.
+
+**Manifest type:** `composer`
+
+```yaml
+name: my-extension
+type: composer
+composerVersion: 0.2.1
+```
+
+The `composerVersion` field is required and must match the version of the Composer dynamic module
+that will load your plugin.
+
+**How it works:**
+
+1. Your extension exports a `WellKnownHttpFilterConfigFactories()` function as its entry point.
+2. The extension is compiled with `go build -buildmode=plugin` to produce a `.so` file.
+3. At runtime, the Composer's plugin loader opens the `.so` file and validates that it was built
+   with the same Go version and matching dependency versions before registering its filters.
+
+**Advantages:**
+
+- Extensions can be built and updated independently.
+- Supports dynamic plugin loading - new extensions can be added without rebuilding Composer
+  dynamic module.
+
+**Disadvantages:**
+
+- The extension **must** be compiled with the exact same Go runtime version as the Composer.
+- All shared dependencies must have matching versions and checksums. A mismatch will cause a
+  load-time error.
+
+**Complete example:**
+
+You can see a full example in the [example-go/standalone](https://github.com/tetratelabs/built-on-envoy/tree/main/extensions/example-go/standalone)
+directory.
+
+### Embedded (`dynamic_module`)
+
+An embedded extension is compiled directly into the Composer dynamic module. There is no separate `.so` file.
+
+**Manifest type:** `dynamic_module`
+
+```yaml
+name: my-extension-embedded
+type: dynamic_module
+```
+
+**How it works:**
+
+1. Your extension package registers itself with the SDK during Go's `init()` phase.
+2. The Composer's build includes a special `main` package that imports your extension and the Composer
+   [goplugin](https://github.com/tetratelabs/built-on-envoy/tree/main/extensions/internal/goplugin),
+   so your extension becomes part of the final binary.
+3. No runtime loading or version validation is needed.
+
+The following example shows a minimal `main.go` to generate the composer dynamic module with an example
+extension embedded in it:
+
+```go
+package main
+
+/*
+#cgo darwin LDFLAGS: -Wl,-undefined,dynamic_lookup
+#cgo linux LDFLAGS: -Wl,--unresolved-symbols=ignore-all
+*/
+import "C"
+
+import (
+        _ "github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/abi" // import the SDK
+        _ "github.com/tetratelabs/built-on-envoy/extensions/internal/goplugin"       // registrr the plugin loader
+        _ "github.com/tetratelabs/built-on-envoy/extensions/example-go/embedded"     // register the custom extension
+)
+
+func main() {} // main is required to build as a C shared library.
+```
+
+**Advantages:**
+
+- Go runtime compatibility is guaranteed because the extension and host are compiled together with
+  the same toolchain and dependencies.
+- Simpler deployment with a single binary and no version mismatch issues.
+
+**Disadvantages:**
+
+- Updating the extension requires rebuilding the entire Composer module.
+- All extensions must be known at compile time.
+
+**Complete example:**
+
+You can see a full example in the [example-go/embedded](https://github.com/tetratelabs/built-on-envoy/tree/main/extensions/example-go/embedded)
+directory.
+
+### Choosing Between `composer` and `dynamic_module`
+
+| Consideration | `composer` (Standalone) | `dynamic_module` (Embedded) |
+|---|---|---|
+| Version compatibility | Must be managed carefully | Guaranteed |
+| Update flexibility | Independent updates | Requires Composer rebuild |
+| Build complexity | Plugin only | Full Composer rebuild |
+| Deployment | Separate `.so` file + Composer | Single binary |
+
+For production environments where stability is the priority, the **embedded** (`dynamic_module`)
+approach is recommended. It eliminates an entire class of compatibility issues.
+
+The **standalone** (`composer`) approach is useful during development or when extensions need to be
+distributed and updated independently of the host.
+
+### Getting Started with Go Extensions
+
+See the
+[Writing Go Extensions](/docs/writing-go-extensions) guide for a complete walkthrough of the
+filter API, lifecycle callbacks, and build process.
+
+## Rust Dynamic Module Extensions
+
+Rust extensions are compiled HTTP filters that run inside Envoy as native
+[Dynamic Modules](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/dynamic_modules).
+They use the [Rust SDK](https://github.com/envoyproxy/envoy/tree/main/source/extensions/dynamic_modules/sdk/rust)
+and are compiled to a C-compatible shared library that Envoy loads directly - no intermediate
+runtime or plugin loader is needed.
+
+**Manifest type:** `dynamic_module`
+
+```yaml
+name: my-rust-extension
+version: 0.1.0
+type: dynamic_module
+```
+
+### How it Works
+
+1. Your extension implements the `HttpFilterConfig` and `HttpFilter` traits from the Rust SDK.
+2. The crate is compiled with `cargo build --release` to produce a shared library (`.so` on Linux, `.dylib` on macOS).
+3. The `declare_init_functions!` macro wires up the init and filter-creation entry points that Envoy
+   expects from a dynamic module.
+4. At runtime, Envoy loads the shared library directly with no additional host module.
+
