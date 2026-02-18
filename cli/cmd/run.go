@@ -42,7 +42,7 @@ type Run struct {
 	// be split into separate invalid fragments, causing protobuf unmarshal failures.
 	Configs  []string `name:"config" sep:"none" help:"Optional JSON config string for extensions. Applied in order to combined --extension and --local flags."`
 	Clusters []string `name:"cluster" sep:"none" help:"Optional additional Envoy cluster. Supports JSON or short format (host:tlsPort)."`
-	Docker   bool     `help:"Run Envoy as a Docker container instead of using func-e." default:"false"`
+	Docker   bool     `help:"Run Envoy as a Docker container instead of using func-e." default:"false" env:"BOE_RUN_DOCKER"`
 	OCI      OCIFlags `embed:""`
 
 	extensionPositions extensionPositions `kong:"-"` // Internal field: tracks the original position of extensions specified via both --extension and --local flags

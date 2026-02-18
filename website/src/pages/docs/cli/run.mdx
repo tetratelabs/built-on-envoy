@@ -14,6 +14,11 @@ You can enable multiple extensions using the `--extension` flag, and also load e
 local directories using `--local` for development and testing purposes. The command manages
 all runtime files, logs, and the Envoy admin interface automatically.
 
+> ⚠️ `boe run` will try to download Envoy for your operating system and platform, but Envoy does
+> not provide packages for all platforms. If there are no Envoy binaries for your platform, `boe`
+> can transparently run Envoy in Docker. Just use `boe run --docker` or set the `BOE_RUN_DOCKER=true`
+> environment variable.
+
 ## Examples
 
 Run the `example-lua` extension from the default registry with `debug` logs enabled for Lua:
@@ -70,7 +75,7 @@ boe run --help
 | `--local` | Path to a directory containing a local Extension to enable. | `[]string` | - | - | No |
 | `--config` | Optional JSON config string for extensions. Applied in order to combined --extension and --local flags. | `[]string` | - | - | No |
 | `--cluster` | Optional additional Envoy cluster. Supports JSON or short format (host:tlsPort). | `[]string` | - | - | No |
-| `--docker` | Run Envoy as a Docker container instead of using func-e. | `bool` | `false` | - | No |
+| `--docker` | Run Envoy as a Docker container instead of using func-e. | `bool` | `false` | `BOE_RUN_DOCKER` | No |
 | `--registry` | OCI registry URL for the extensions. | `string` | `ghcr.io/tetratelabs/built-on-envoy` | `BOE_REGISTRY` | No |
 | `--insecure` | Allow connecting to an insecure (HTTP) registry. | `bool` | `false` | `BOE_REGISTRY_INSECURE` | No |
 | `--username` | Username for the OCI registry. | `string` | - | `BOE_REGISTRY_USERNAME` | No |
