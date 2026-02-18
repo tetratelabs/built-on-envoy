@@ -8,6 +8,7 @@ module github.com/tetratelabs/built-on-envoy/extensions/composer
 go 1.25.7
 
 require (
+	github.com/cedar-policy/cedar-go v1.5.2
 	github.com/corazawaf/coraza/v3 v3.3.3
 	github.com/envoyproxy/envoy/source/extensions/dynamic_modules v0.0.0-20260129014508-e8c1dc7dcbcd
 	github.com/lestrrat-go/jwx/v3 v3.0.13
@@ -66,6 +67,7 @@ require (
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/crypto v0.47.0 // indirect
+	golang.org/x/exp v0.0.0-20220921023135-46d9e7742f1e // indirect
 	golang.org/x/net v0.49.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.40.0 // indirect

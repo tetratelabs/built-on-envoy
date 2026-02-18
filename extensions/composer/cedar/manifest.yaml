@@ -1,0 +1,273 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: cedar-auth
+parent: composer
+categories:
+  - Security
+author: Tetrate
+description: Inline Cedar policy evaluation for HTTP request authorization
+longDescription: |
+  This extension implements [Cedar](https://www.cedarpolicy.com/) policy evaluation
+  as an inline Envoy HTTP filter. It uses the [Cedar-Go](https://github.com/cedar-policy/cedar-go)
+  library to make authorization decisions on each request without a separate authorization server.
+
+  **Key Features:**
+
+  - **Inline Cedar evaluation**: Load and evaluate Cedar policy files directly in the Envoy
+    data path using the Cedar-Go library. No separate authorization server required.
+  - **Structured authorization model**: Maps HTTP requests to Cedar's Principal/Action/Resource
+    model with rich context for fine-grained `when` clause conditions.
+  - **Entity hierarchies**: Optionally load Cedar entity data to enable group membership and
+    hierarchical authorization checks (e.g., `principal in Group::"admins"`).
+  - **Dry-run mode**: Log authorization decisions without enforcing them, useful for testing
+    policies in production.
+  - **Fail-open mode**: Allow requests through when policy evaluation encounters an error,
+    instead of returning a 500 response.
+  - **mTLS and SPIFFE identity**: Access client certificate attributes including SPIFFE IDs
+    (URI SANs), DNS SANs, and certificate subject in policy context.
+  - **Configurable deny responses**: Customize the HTTP status code, body, and headers
+    returned when a request is denied.
+
+  **Authorization Model:**
+
+  HTTP requests are mapped to Cedar authorization concepts:
+
+  - **Principal**: Derived from a configurable request header (e.g., `User::"alice"` from
+    the `x-user-id` header). The entity type is set via `principal_type` and the ID is
+    extracted from the header specified by `principal_id_header`.
+  - **Action**: Derived from the HTTP method (e.g., `Action::"GET"`, `Action::"POST"`).
+    The entity type defaults to `Action` and can be customized via `action_type`.
+  - **Resource**: Derived from the request path without query string (e.g.,
+    `Resource::"/api/users"`). The entity type defaults to `Resource` and can be
+    customized via `resource_type`.
+  - **Context**: Rich request attributes available in Cedar `when` clauses.
+
+  **Context Record Structure:**
+
+  The `context` record passed to Cedar policies contains the following structure:
+
+  ```json
+  {
+    "request": {
+      "method": "GET",
+      "path": "/api/v1/resource?key=value",
+      "host": "example.com",
+      "scheme": "https",
+      "protocol": "HTTP/1.1",
+      "headers": {
+        "authorization": "Bearer ...",
+        "content-type": "application/json"
+      }
+    },
+    "source": {
+      "address": "10.0.0.1:5000",
+      "certificate": {
+        "uri_san": "spiffe://cluster.local/ns/default/sa/client",
+        "dns_san": "client.default.svc.cluster.local",
+        "subject": "CN=client,O=example",
+        "sha256_digest": "abc123..."
+      }
+    },
+    "destination": {
+      "address": "10.0.0.2:443"
+    },
+    "connection": {
+      "tls_version": "TLSv1.3"
+    },
+    "parsed_path": ["api", "v1", "resource"],
+    "parsed_query": {"key": ["value"]}
+  }
+  ```
+type: composer
+featured: true
+tags:
+  - go
+  - http
+  - filter
+  - cedar
+  - security
+  - authorization
+  - policy
+  - spiffe
+  - mtls
+license: Apache-2.0
+examples:
+  - title: Basic Path Authorization
+    description: |
+      Run the Cedar extension with a policy that allows GET requests
+      to any resource and denies everything else.
+    code: |
+      # Create a simple policy file
+      cat > /tmp/policy.cedar << 'EOF'
+      permit(
+        principal,
+        action == Action::"GET",
+        resource
+      );
+      EOF
+
+      # Run the extension
+      boe run --extension cedar-auth --config '{
+        "policy_file": "/tmp/policy.cedar",
+        "principal_type": "User",
+        "principal_id_header": "x-user-id"
+      }'
+
+      # Test allowed request
+      curl -H "x-user-id: alice" http://localhost:10000/public/resource
+      # => 200 OK (proxied to upstream)
+
+      # Test denied request (POST)
+      curl -X POST -H "x-user-id: alice" http://localhost:10000/api/resource
+      # => 403 Forbidden
+  - title: Conditional Authorization with When Clauses
+    description: |
+      Use `when` and `unless` clauses to add fine-grained conditions based on
+      request context. The context record contains the full request attributes
+      including method, path, headers, source, destination, and connection info.
+
+      This example allows read-only access to anyone, but restricts write
+      operations to requests that carry a valid admin token header and are
+      made over HTTPS.
+    code: |
+      cat > /tmp/policy.cedar << 'EOF'
+      // Anyone can read
+      permit(
+        principal,
+        action == Action::"GET",
+        resource
+      );
+
+      // Only allow writes over HTTPS with a valid admin token
+      permit(
+        principal,
+        action,
+        resource
+      ) when {
+        context.request.scheme == "https" &&
+        context.request.headers has "x-admin-token" &&
+        context.request.headers["x-admin-token"] == "my-secret"
+      };
+
+      // Never allow DELETE regardless of other rules
+      forbid(
+        principal,
+        action == Action::"DELETE",
+        resource
+      );
+      EOF
+
+      boe run --extension cedar-auth --config '{
+        "policy_file": "/tmp/policy.cedar",
+        "principal_type": "User",
+        "principal_id_header": "x-user-id"
+      }'
+
+      # Test read (allowed for all users)
+      curl -H "x-user-id: alice" http://localhost:10000/api/resource
+      # => 200 OK
+
+      # Test write with admin token over HTTPS (allowed)
+      curl -X POST -H "x-user-id: alice" -H "x-admin-token: my-secret" \
+        https://localhost:10000/api/resource
+      # => 200 OK
+
+      # Test write without admin token (denied)
+      curl -X POST -H "x-user-id: alice" http://localhost:10000/api/resource
+      # => 403 Forbidden
+
+      # Test DELETE (always denied by forbid rule)
+      curl -X DELETE -H "x-user-id: alice" -H "x-admin-token: my-secret" \
+        https://localhost:10000/api/resource
+      # => 403 Forbidden
+  - title: User-Based Authorization
+    description: |
+      Use a policy that restricts access based on the user identity
+      derived from the x-user-id header.
+    code: |
+      cat > /tmp/policy.cedar << 'EOF'
+      permit(
+        principal == User::"admin",
+        action,
+        resource
+      );
+      EOF
+
+      boe run --extension cedar-auth --config '{
+        "policy_file": "/tmp/policy.cedar",
+        "principal_type": "User",
+        "principal_id_header": "x-user-id"
+      }'
+  - title: Group-Based Authorization with Entities
+    description: |
+      Use Cedar entity hierarchies to authorize based on group membership.
+      Users that are members of the "admins" group are permitted access.
+    code: |
+      cat > /tmp/policy.cedar << 'EOF'
+      permit(
+        principal in Group::"admins",
+        action,
+        resource
+      );
+      EOF
+
+      cat > /tmp/entities.json << 'EOF'
+      [
+        {
+          "uid": {"type": "User", "id": "alice"},
+          "parents": [{"type": "Group", "id": "admins"}],
+          "attrs": {}
+        },
+        {
+          "uid": {"type": "Group", "id": "admins"},
+          "parents": [],
+          "attrs": {}
+        }
+      ]
+      EOF
+
+      boe run --extension cedar-auth --config '{
+        "policy_file": "/tmp/policy.cedar",
+        "entities_file": "/tmp/entities.json",
+        "principal_type": "User",
+        "principal_id_header": "x-user-id"
+      }'
+  - title: Custom Deny Response
+    description: |
+      Customize the HTTP response returned when a request is denied.
+    code: |
+      boe run --extension cedar-auth --config '{
+        "policy_file": "/tmp/policy.cedar",
+        "principal_type": "User",
+        "principal_id_header": "x-user-id",
+        "deny_status": 401,
+        "deny_body": "Authentication Required",
+        "deny_headers": {"www-authenticate": "Bearer"}
+      }'
+  - title: Dry-Run Mode
+    description: |
+      Enable dry-run mode to log authorization decisions without enforcing them.
+      Useful for testing new policies in production without blocking traffic.
+    code: |
+      boe run --extension cedar-auth --config '{
+        "policy_file": "/tmp/policy.cedar",
+        "principal_type": "User",
+        "principal_id_header": "x-user-id",
+        "dry_run": true
+      }'
+  - title: Fail-Open Mode
+    description: |
+      Enable fail-open mode to allow requests through when policy evaluation
+      encounters an error, instead of returning a 500 response. Useful for
+      non-critical authorization checks where availability is prioritized
+      over enforcement.
+    code: |
+      boe run --extension cedar-auth --config '{
+        "policy_file": "/tmp/policy.cedar",
+        "principal_type": "User",
+        "principal_id_header": "x-user-id",
+        "fail_open": true
+      }'

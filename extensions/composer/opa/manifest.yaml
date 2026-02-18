@@ -136,6 +136,14 @@ examples:
       boe run --extension opa --config '{
         "policy_file": "/tmp/policy.rego"
       }'
+
+      # Test with a valid JWT
+      curl -H "Authorization: Bearer <token>" http://localhost:10000/api/resource
+      # => 200 OK
+
+      # Test without a token
+      curl http://localhost:10000/api/resource
+      # => 401 Unauthorized
   - title: JWT Token Verification
     description: |
       Use a policy that decodes JWT tokens using OPA's built-in

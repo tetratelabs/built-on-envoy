@@ -7,6 +7,7 @@
 package composer
 
 import (
+	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/cedar/embedded"   // Cedar authorization plugin.
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/example/embedded" // Example built-in plugin.
 	// Go plugin to loader other composer plugins that be compiled into separate shared libraries.
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/goplugin"

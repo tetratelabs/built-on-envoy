@@ -9,7 +9,6 @@ categories:
   - Examples
   - Observability
 author: Tetrate
-featured: true
 description: Comprehensive example demonstrating Envoy Lua HTTP filter capabilities
 longDescription: |
   This extension serves as a comprehensive reference implementation showcasing
