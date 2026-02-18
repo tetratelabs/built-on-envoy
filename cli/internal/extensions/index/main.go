@@ -11,13 +11,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
+	"strings"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 )
 
 func main() {
 	fmt.Println("Generationg extension catalog index...")
-	index, err := json.MarshalIndent(extensions.ManifestsForCatalog(), "", "  ")
+
+	manifests := extensions.ManifestsForCatalog()
+	slices.SortFunc(manifests, func(a, b *extensions.Manifest) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+
+	index, err := json.MarshalIndent(manifests, "", "  ")
 	if err != nil {
 		panic(err)
 	}

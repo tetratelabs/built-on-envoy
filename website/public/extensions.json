@@ -1,36 +1,5 @@
 [
   {
-    "name": "coraza-waf",
-    "version": "0.2.1",
-    "parent": "composer",
-    "categories": [
-      "Security"
-    ],
-    "author": "Tetrate",
-    "featured": true,
-    "description": "Web Application Firewall (WAF) for HTTP traffic using Coraza",
-    "longDescription": "A Web Application Firewall (WAF) HTTP filter plugin that provides layer 7 security\nfor web applications using the [Coraza WAF engine](https://coraza.io/).\n\n## Features\n\nThis plugin provides comprehensive web application security:\n\n- **OWASP ModSecurity [Core Rule Set (CRS)](https://coreruleset.org/)**: Built-in protection against common web attacks\n- **Request inspection**: Analyzes HTTP requests for malicious patterns and anomalies\n- **Response inspection**: Examines HTTP responses to prevent data leakage\n- **Flexible rule engine**: Supports custom security rules and policies\n- **Multiple operation modes**: Detection-only or active blocking modes\n- **Detailed logging**: Comprehensive audit logging of security events\n\n## Packaging\n\nThis is the **embedded** version of the plugin, compiled directly into the Composer\ndynamic module binary. This approach guarantees Go runtime compatibility since the\nplugin and host are built together with the same toolchain and dependencies.\n\n## Security Rules\n\nThe WAF comes with support for OWASP ModSecurity Core Rule Set (CRS) and allows\ncustom rule configuration for specific security requirements.\n",
-    "type": "composer",
-    "tags": [
-      "go",
-      "http",
-      "security",
-      "waf",
-      "coraza",
-      "owasp",
-      "modsecurity"
-    ],
-    "license": "Apache-2.0",
-    "examples": [
-      {
-        "title": "SQL Injection Protection",
-        "description": "The following example demonstrates how to run the WAF plugin with recommended OWASP CRS rules and test SQL\ninjection protection by sending a malicious payload that should be blocked by the WAF.\n\nBy default WAF is configured in `DetectionOnly` mode, which means it will only log detected attacks without\nblocking them. To enable active blocking, this example sets `SecRuleEngine On` in the configuration. It also\nsets `SecResponseBodyAccess Off` to disable response body inspection as it's not needed for hte example.\n",
-        "code": "# Start WAF with recommended OWASP CRS rules and enforcement enabled\nboe run --extension coraza-waf --config '\n  {\n    \"directives\": [\n      \"Include @recommended.conf\",\n      \"SecRuleEngine On\",\n      \"SecResponseBodyAccess Off\",\n      \"Include @crs-setup.conf\",\n      \"Include @owasp_crs/*.conf\"\n    ]\n  }'\n\n# Try sending a SQL injection payload and see the request rejected\ncurl -v http://localhost:10000/post -X POST --data \"1%27%20ORDER%20BY%203--%2B\"\n\n\u003c HTTP/1.1 403 Forbidden\n\u003c content-length: 22\n\u003c content-type: text/plain\n\u003c date: Thu, 12 Feb 2026 10:28:16 GMT\n\u003c server: envoy\n\u003c\nRequest blocked by WAF\n"
-      }
-    ],
-    "composerVersion": "0.2.1"
-  },
-  {
     "name": "cedar-auth",
     "version": "0.2.1",
     "parent": "composer",
@@ -89,6 +58,189 @@
         "title": "Fail-Open Mode",
         "description": "Enable fail-open mode to allow requests through when policy evaluation\nencounters an error, instead of returning a 500 response. Useful for\nnon-critical authorization checks where availability is prioritized\nover enforcement.\n",
         "code": "boe run --extension cedar-auth --config '{\n  \"policy_file\": \"/tmp/policy.cedar\",\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\",\n  \"fail_open\": true\n}'\n"
+      }
+    ],
+    "composerVersion": "0.2.1"
+  },
+  {
+    "name": "coraza-waf",
+    "version": "0.2.1",
+    "parent": "composer",
+    "categories": [
+      "Security"
+    ],
+    "author": "Tetrate",
+    "featured": true,
+    "description": "Web Application Firewall (WAF) for HTTP traffic using Coraza",
+    "longDescription": "A Web Application Firewall (WAF) HTTP filter plugin that provides layer 7 security\nfor web applications using the [Coraza WAF engine](https://coraza.io/).\n\n## Features\n\nThis plugin provides comprehensive web application security:\n\n- **OWASP ModSecurity [Core Rule Set (CRS)](https://coreruleset.org/)**: Built-in protection against common web attacks\n- **Request inspection**: Analyzes HTTP requests for malicious patterns and anomalies\n- **Response inspection**: Examines HTTP responses to prevent data leakage\n- **Flexible rule engine**: Supports custom security rules and policies\n- **Multiple operation modes**: Detection-only or active blocking modes\n- **Detailed logging**: Comprehensive audit logging of security events\n\n## Packaging\n\nThis is the **embedded** version of the plugin, compiled directly into the Composer\ndynamic module binary. This approach guarantees Go runtime compatibility since the\nplugin and host are built together with the same toolchain and dependencies.\n\n## Security Rules\n\nThe WAF comes with support for OWASP ModSecurity Core Rule Set (CRS) and allows\ncustom rule configuration for specific security requirements.\n",
+    "type": "composer",
+    "tags": [
+      "go",
+      "http",
+      "security",
+      "waf",
+      "coraza",
+      "owasp",
+      "modsecurity"
+    ],
+    "license": "Apache-2.0",
+    "examples": [
+      {
+        "title": "SQL Injection Protection",
+        "description": "The following example demonstrates how to run the WAF plugin with recommended OWASP CRS rules and test SQL\ninjection protection by sending a malicious payload that should be blocked by the WAF.\n\nBy default WAF is configured in `DetectionOnly` mode, which means it will only log detected attacks without\nblocking them. To enable active blocking, this example sets `SecRuleEngine On` in the configuration. It also\nsets `SecResponseBodyAccess Off` to disable response body inspection as it's not needed for hte example.\n",
+        "code": "# Start WAF with recommended OWASP CRS rules and enforcement enabled\nboe run --extension coraza-waf --config '\n  {\n    \"directives\": [\n      \"Include @recommended.conf\",\n      \"SecRuleEngine On\",\n      \"SecResponseBodyAccess Off\",\n      \"Include @crs-setup.conf\",\n      \"Include @owasp_crs/*.conf\"\n    ]\n  }'\n\n# Try sending a SQL injection payload and see the request rejected\ncurl -v http://localhost:10000/post -X POST --data \"1%27%20ORDER%20BY%203--%2B\"\n\n\u003c HTTP/1.1 403 Forbidden\n\u003c content-length: 22\n\u003c content-type: text/plain\n\u003c date: Thu, 12 Feb 2026 10:28:16 GMT\n\u003c server: envoy\n\u003c\nRequest blocked by WAF\n"
+      }
+    ],
+    "composerVersion": "0.2.1"
+  },
+  {
+    "name": "example-go",
+    "version": "0.2.1",
+    "parent": "composer",
+    "categories": [
+      "Examples"
+    ],
+    "author": "Tetrate",
+    "description": "Example composer embedded go plugin for HTTP filters",
+    "longDescription": "An example HTTP filter plugin written in Go that demonstrates how to build extensions\nusing the Composer Dynamic Module system.\n\n## Features\n\nThis plugin showcases common HTTP filter operations:\n\n- **Header manipulation**: Read, add, and modify request/response headers\n- **Body modification**: Intercept and rewrite request/response bodies\n- **Metadata access**: Store and retrieve dynamic metadata and request attributes\n- **Metrics**: Work with Envoy counters, gauges, and histograms\n- **Local replies**: Send custom responses directly from the filter\n\n## Packaging\n\nThis is the **embedded** version of the plugin, compiled directly into the Composer\ndynamic module binary. This approach guarantees Go runtime compatibility since the\nplugin and host are built together with the same toolchain and dependencies.\n",
+    "type": "composer",
+    "tags": [
+      "go",
+      "http",
+      "filter"
+    ],
+    "license": "Apache-2.0",
+    "examples": [
+      {
+        "title": "Basic Example",
+        "description": "Load the example go plugin as an HTTP filter",
+        "code": "boe run --extension example\n"
+      }
+    ],
+    "composerVersion": "0.2.1"
+  },
+  {
+    "name": "example-lua",
+    "version": "1.0.0",
+    "categories": [
+      "Examples",
+      "Observability"
+    ],
+    "author": "Tetrate",
+    "description": "Comprehensive example demonstrating Envoy Lua HTTP filter capabilities",
+    "longDescription": "This extension serves as a comprehensive reference implementation showcasing\nmost of the available methods in Envoy's Lua HTTP filter API.\n\n## Example features in the extension\n\n* Request and response header manipulation (get, add, replace, remove, iterate)\n* Multiple logging levels (trace, debug, info, warn, err, critical)\n* Stream information access (protocol, route name, addresses, SNI)\n* Dynamic metadata for inter-filter communication\n* SSL/TLS connection inspection (certificates, cipher suites, TLS version)\n* Route and virtual host metadata access\n* Body handling (streaming with bodyChunks, buffered with body)\n* HTTP calls to external services\n* Direct response generation\n* Cryptographic operations (signature verification)\n* Utility functions (base64 encoding, timestamps)\n\nThis extension is intended as a learning resource and starting point for\ndeveloping custom Lua extensions. Most functionality is commented out by\ndefault to prevent unintended behavior - uncomment sections as needed.\n",
+    "type": "lua",
+    "tags": [
+      "example",
+      "reference",
+      "headers",
+      "logging",
+      "metadata",
+      "ssl",
+      "body"
+    ],
+    "license": "Apache-2.0",
+    "examples": [
+      {
+        "title": "Basic Usage",
+        "description": "Enable the example Lua extension to add request/response processing",
+        "code": "boe run --extension example-lua\n"
+      },
+      {
+        "title": "With Logging Enabled",
+        "description": "Run with debug logging to see all Lua filter output",
+        "code": "boe run --extension example-lua --log-level lua:debug\n"
+      }
+    ],
+    "lua": {
+      "path": "plugin.lua"
+    }
+  },
+  {
+    "name": "ip-restriction",
+    "version": "0.1.0",
+    "categories": [
+      "Security",
+      "Examples"
+    ],
+    "author": "Tetrate",
+    "featured": true,
+    "description": "IP-based access control using allowlists or denylists",
+    "longDescription": "This extension provides IP-based access control for your Envoy proxy using Rust and Envoy's\ndynamic module framework. It allows you to define allowlists or denylists of IP addresses,\nrestricting access based on the client's source IP.\n\n## Features\n\n* **IP Allowlisting**: Only permit requests from specific IP addresses\n* **IP Denylisting**: Block requests from specific IP addresses\n* **IPv4 and IPv6 Support**: Handles both IPv4 and IPv6 addresses\n\n## How It Works\n\nThe filter examines the source IP address of incoming requests and compares it against\nthe configured allow or deny list. Requests that don't match the policy receive a 403\nForbidden response.\n\n## Configuration\n\nYou must specify exactly one of:\n- `allow_addresses`: Array of IP addresses to allow (all others blocked)\n- `deny_addresses`: Array of IP addresses to deny (all others allowed)\n\n## Building\n\nThis is a Rust dynamic module that must be compiled to a shared library (`.so` on Linux,\n`.dylib` on macOS). The compiled module is loaded by Envoy at runtime.\n\n```bash\ncargo build --release -p ip-restriction\n```\n\nThe compiled library will be at `target/release/libip_restriction.{so,dylib}`\n\n## Note on Dynamic Modules\n\nThis extension requires Envoy to be built with dynamic module support. This feature\nis experimental and may not be available in all Envoy distributions.\n",
+    "type": "dynamic_module",
+    "tags": [
+      "security",
+      "ip-filtering",
+      "access-control",
+      "rust",
+      "dynamic-module",
+      "example"
+    ],
+    "license": "Apache-2.0",
+    "examples": [
+      {
+        "title": "Allow Specific IPs",
+        "description": "Only allow requests from localhost and a specific IP",
+        "code": "boe run --extension ip-restriction --config '\n  {\n    \"allow_addresses\": [\n      \"127.0.0.1\",\n      \"::1\",\n      \"192.168.1.100\"\n    ]\n  }'\n"
+      },
+      {
+        "title": "Deny Specific IPs",
+        "description": "Block requests from specific malicious IPs",
+        "code": "boe run --extension ip-restriction --config '\n  {\n    \"deny_addresses\": [\n      \"192.168.1.50\",\n      \"10.0.0.100\"\n    ]\n  }'\n"
+      },
+      {
+        "title": "IPv6 Support",
+        "description": "Works with both IPv4 and IPv6 addresses",
+        "code": "boe run --extension ip-restriction --config '\n  {\n    \"allow_addresses\": [\n      \"127.0.0.1\",\n      \"::1\",\n      \"2001:db8::1\"\n    ]\n  }'\n"
+      }
+    ]
+  },
+  {
+    "name": "jwe-decrypt",
+    "version": "0.2.1",
+    "parent": "composer",
+    "categories": [
+      "Security"
+    ],
+    "author": "Tetrate",
+    "featured": true,
+    "description": "Decrypt JWE tokens and recover the inner JWT for Envoy to process",
+    "longDescription": "This extension implements [JSON Web Encryption (JWE)](https://datatracker.ietf.org/doc/html/rfc7516)\ndecryption in a Go extension for Envoy. JWE is a standard defined in\n[RFC 7516](https://datatracker.ietf.org/doc/html/rfc7516) that provides encrypted content\nusing JSON-based data structures, built on top of the\n[JSON Web Algorithms (JWA)](https://datatracker.ietf.org/doc/html/rfc7518) and\n[JSON Web Key (JWK)](https://datatracker.ietf.org/doc/html/rfc7517) specifications.\n\n**JWT inside JWE** \u0026mdash; For clients that encrypt a [JWT (RFC 7519)](https://datatracker.ietf.org/doc/html/rfc7519)\ninto a JWE token before sending it to the server, this extension decrypts the JWE and recovers the original\nJWT so that Envoy's built-in\n[JWT Authentication filter](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/jwt_authn_filter)\ncan read it, extract the token claims and use them for authorization.\n",
+    "type": "composer",
+    "tags": [
+      "go",
+      "http",
+      "filter",
+      "jwe",
+      "security",
+      "encryption"
+    ],
+    "license": "Apache-2.0",
+    "examples": [
+      {
+        "title": "Quickstart",
+        "description": "In this example, we will generate a JWE token containing a JWT token as the payload, and then use the JWE decryption extension\nin Envoy to decrypt the JWE token and recover the original JWT token.\n\nIn order to decrypt JWE tokens, you will need to provide the private key that matches the public key used for encryption. You can\nuse online tools such as [Authgear's JWK generator](https://www.authgear.com/tools/jwk-generator) to generate the necessary keypair,\nthen use [Authgear's JWT \u0026 JWE Debugger](https://www.authgear.com/tools/jwt-jwe-debugger) to generate sample JWT tokens,\nand encrypt them into JWE tokens using the generated public key.\n\nYou can then run the JWE decryption extension in Envoy to decrypt the JWE token and recover the original JWT token.\n",
+        "code": "# Run the extension reading the token from the `Authorization` header\nboe run --extension jwe-decrypt --config '{\n  \"key_file\": \"/path/to/private-key.pem\",\n  \"input_header\": \"Authorization\",\n  \"prefix\": \"Bearer \",\n  \"output_header\": \"Authorization\"\n}'\n\n# Send a request with the JWE token and see that the upstream receives the decrypted JWT token in the `Authorization` header.\ncurl http://localhost:10000/headers -H 'Authorization: Bearer \u003cJWE_TOKEN\u003e'\n{\n  \"headers\": {\n    \"Accept\": \"*/*\",\n    \"Authorization\": \"Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOlsiQm9FIFVzZXJzIl0sImlhdCI6MTc3MTI1NTU2NCwicHJpdmF0ZUNsYWltS2V5IjoiSGVsbG8sIFdvcmxkISIsInN1YiI6IlNhbXBsZUpXVCJ9.Gx8GzN4cQZDbgz9RbTyARbQX5LJ1FAggyYH2LGoxR5pXGGpO4m1bHmqQABRJaP-oCFwfXsX1aiA9WoN6Fxy5JdDNtAZpu7uR5u_PD2Cw24u_quRB-s_LeWYEwwftoDfnzEQfJeKappWbq9VCvk9Axg5sE-EnLPekhfo0gYhnn4TX-fg_v50AuvBSvXCR6WiIQn79TBIKPUe1UEFZz5kzgQXGWUR3SgczYqRGo0oqAMl7YLiviUUt--Jr0ozYkSA3j7_3ZqLEdyUqRxTe54gRSIym2HRiaSA75Fd12JJWF26YqzsoJ1anw1X037nRpetmV1_ANbOwcmUXTgIqL5NILA\",\n    \"Host\": \"localhost\",\n    \"User-Agent\": \"curl/8.13.0\",\n    \"X-Amzn-Trace-Id\": \"Root=1-69933906-43c5ac60421eeeb57f50a55e\",\n    \"X-Envoy-Expected-Rq-Timeout-Ms\": \"15000\"\n  }\n}\n"
+      },
+      {
+        "title": "Decrypt and forward a Bearer token",
+        "description": "Process a request with the `Authorization: Bearer \u003cJWE compact token\u003e` header,\ndecrypt the JWE token, and emit the decrypted payload back into the `Authorization`\nheader with the `Bearer` prefix restored.\n",
+        "code": "boe run --extension jwe-decrypt --config '{\n  \"key_file\": \"/path/to/private-key.pem\",\n  \"input_header\": \"Authorization\",\n  \"prefix\": \"Bearer \",\n  \"output_header\": \"Authorization\"\n}'\n"
+      },
+      {
+        "title": "Using inline key",
+        "description": "To enable the JWE decryption extension to decrypt JWE tokens you will need to provide the private key\nthat will be used to decrypt the JWE tokens. You can provide the key inline with the config by base64 encoding\nthe PEM PKCS8 private key.\nYou will also need to specify the header that contains the JWE token, and the header or metadata key where\nthe decrypted payload should be stored.\n",
+        "code": "boe run --extension jwe-decrypt --config '{\n  \"inline_key\": \"LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQo...base64-encoded-key...\"\n  \"input_header\": \"X-JWE-Token\",\n  \"output_header\": \"X-Decrypted-JWE-Token\",\n}'\n"
+      },
+      {
+        "title": "Using key file",
+        "description": "You can provide the key file path in the config. The extension will read the file and use the key to decrypt\nthe JWE tokens. The key file should contain the PEM PKCS8 private key.\nYou will also need to specify the header that contains the JWE token, and the header or metadata key where\nthe decrypted payload should be stored.\n",
+        "code": "boe run --extension jwe-decrypt --config '{\n  \"key_file\": \"/path/to/private-key.pem\",\n  \"input_header\": \"X-JWE-Token\",\n  \"output_header\": \"X-Decrypted-JWE-Token\",\n}'\n"
+      },
+      {
+        "title": "Add decrypted payload to metadata",
+        "description": "Specify the output_metadata field in the config to add the decrypted payload to Envoy metadata instead of a\nheader. The value of output_metadata should be the key where the decrypted payload will be stored in the\nmetadata under the `jwe-decrypt` namespace.\n",
+        "code": "boe run --extension jwe-decrypt --config '{\n  \"inline_key\": \"LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQo...base64-encoded-key...\"\n  \"input_header\": \"X-JWE-Token\",\n  \"output_metadata\": \"jwe_decrypted_payload\",\n}'\n"
       }
     ],
     "composerVersion": "0.2.1"
@@ -193,158 +345,6 @@
         "title": "Custom Deny Response",
         "description": "Customize the response returned when a request fails validation.\n",
         "code": "boe run --extension openapi-validator --config '{\n  \"spec_file\": \"/path/to/openapi.yaml\",\n  \"deny_status\": 422,\n  \"deny_body\": \"Request does not conform to API specification\",\n  \"deny_headers\": {\"content-type\": \"text/plain\"}\n}'\n"
-      }
-    ],
-    "composerVersion": "0.2.1"
-  },
-  {
-    "name": "example-lua",
-    "version": "1.0.0",
-    "categories": [
-      "Examples",
-      "Observability"
-    ],
-    "author": "Tetrate",
-    "description": "Comprehensive example demonstrating Envoy Lua HTTP filter capabilities",
-    "longDescription": "This extension serves as a comprehensive reference implementation showcasing\nmost of the available methods in Envoy's Lua HTTP filter API.\n\n## Example features in the extension\n\n* Request and response header manipulation (get, add, replace, remove, iterate)\n* Multiple logging levels (trace, debug, info, warn, err, critical)\n* Stream information access (protocol, route name, addresses, SNI)\n* Dynamic metadata for inter-filter communication\n* SSL/TLS connection inspection (certificates, cipher suites, TLS version)\n* Route and virtual host metadata access\n* Body handling (streaming with bodyChunks, buffered with body)\n* HTTP calls to external services\n* Direct response generation\n* Cryptographic operations (signature verification)\n* Utility functions (base64 encoding, timestamps)\n\nThis extension is intended as a learning resource and starting point for\ndeveloping custom Lua extensions. Most functionality is commented out by\ndefault to prevent unintended behavior - uncomment sections as needed.\n",
-    "type": "lua",
-    "tags": [
-      "example",
-      "reference",
-      "headers",
-      "logging",
-      "metadata",
-      "ssl",
-      "body"
-    ],
-    "license": "Apache-2.0",
-    "examples": [
-      {
-        "title": "Basic Usage",
-        "description": "Enable the example Lua extension to add request/response processing",
-        "code": "boe run --extension example-lua\n"
-      },
-      {
-        "title": "With Logging Enabled",
-        "description": "Run with debug logging to see all Lua filter output",
-        "code": "boe run --extension example-lua --log-level lua:debug\n"
-      }
-    ],
-    "lua": {
-      "path": "plugin.lua"
-    }
-  },
-  {
-    "name": "ip-restriction",
-    "version": "0.1.0",
-    "categories": [
-      "Security",
-      "Examples"
-    ],
-    "author": "Tetrate",
-    "featured": true,
-    "description": "IP-based access control using allowlists or denylists",
-    "longDescription": "This extension provides IP-based access control for your Envoy proxy using Rust and Envoy's\ndynamic module framework. It allows you to define allowlists or denylists of IP addresses,\nrestricting access based on the client's source IP.\n\n## Features\n\n* **IP Allowlisting**: Only permit requests from specific IP addresses\n* **IP Denylisting**: Block requests from specific IP addresses\n* **IPv4 and IPv6 Support**: Handles both IPv4 and IPv6 addresses\n\n## How It Works\n\nThe filter examines the source IP address of incoming requests and compares it against\nthe configured allow or deny list. Requests that don't match the policy receive a 403\nForbidden response.\n\n## Configuration\n\nYou must specify exactly one of:\n- `allow_addresses`: Array of IP addresses to allow (all others blocked)\n- `deny_addresses`: Array of IP addresses to deny (all others allowed)\n\n## Building\n\nThis is a Rust dynamic module that must be compiled to a shared library (`.so` on Linux,\n`.dylib` on macOS). The compiled module is loaded by Envoy at runtime.\n\n```bash\ncargo build --release -p ip-restriction\n```\n\nThe compiled library will be at `target/release/libip_restriction.{so,dylib}`\n\n## Note on Dynamic Modules\n\nThis extension requires Envoy to be built with dynamic module support. This feature\nis experimental and may not be available in all Envoy distributions.\n",
-    "type": "dynamic_module",
-    "tags": [
-      "security",
-      "ip-filtering",
-      "access-control",
-      "rust",
-      "dynamic-module",
-      "example"
-    ],
-    "license": "Apache-2.0",
-    "examples": [
-      {
-        "title": "Allow Specific IPs",
-        "description": "Only allow requests from localhost and a specific IP",
-        "code": "boe run --extension ip-restriction --config '\n  {\n    \"allow_addresses\": [\n      \"127.0.0.1\",\n      \"::1\",\n      \"192.168.1.100\"\n    ]\n  }'\n"
-      },
-      {
-        "title": "Deny Specific IPs",
-        "description": "Block requests from specific malicious IPs",
-        "code": "boe run --extension ip-restriction --config '\n  {\n    \"deny_addresses\": [\n      \"192.168.1.50\",\n      \"10.0.0.100\"\n    ]\n  }'\n"
-      },
-      {
-        "title": "IPv6 Support",
-        "description": "Works with both IPv4 and IPv6 addresses",
-        "code": "boe run --extension ip-restriction --config '\n  {\n    \"allow_addresses\": [\n      \"127.0.0.1\",\n      \"::1\",\n      \"2001:db8::1\"\n    ]\n  }'\n"
-      }
-    ]
-  },
-  {
-    "name": "example-go",
-    "version": "0.2.1",
-    "parent": "composer",
-    "categories": [
-      "Examples"
-    ],
-    "author": "Tetrate",
-    "description": "Example composer embedded go plugin for HTTP filters",
-    "longDescription": "An example HTTP filter plugin written in Go that demonstrates how to build extensions\nusing the Composer Dynamic Module system.\n\n## Features\n\nThis plugin showcases common HTTP filter operations:\n\n- **Header manipulation**: Read, add, and modify request/response headers\n- **Body modification**: Intercept and rewrite request/response bodies\n- **Metadata access**: Store and retrieve dynamic metadata and request attributes\n- **Metrics**: Work with Envoy counters, gauges, and histograms\n- **Local replies**: Send custom responses directly from the filter\n\n## Packaging\n\nThis is the **embedded** version of the plugin, compiled directly into the Composer\ndynamic module binary. This approach guarantees Go runtime compatibility since the\nplugin and host are built together with the same toolchain and dependencies.\n",
-    "type": "composer",
-    "tags": [
-      "go",
-      "http",
-      "filter"
-    ],
-    "license": "Apache-2.0",
-    "examples": [
-      {
-        "title": "Basic Example",
-        "description": "Load the example go plugin as an HTTP filter",
-        "code": "boe run --extension example\n"
-      }
-    ],
-    "composerVersion": "0.2.1"
-  },
-  {
-    "name": "jwe-decrypt",
-    "version": "0.2.1",
-    "parent": "composer",
-    "categories": [
-      "Security"
-    ],
-    "author": "Tetrate",
-    "featured": true,
-    "description": "Decrypt JWE tokens and recover the inner JWT for Envoy to process",
-    "longDescription": "This extension implements [JSON Web Encryption (JWE)](https://datatracker.ietf.org/doc/html/rfc7516)\ndecryption in a Go extension for Envoy. JWE is a standard defined in\n[RFC 7516](https://datatracker.ietf.org/doc/html/rfc7516) that provides encrypted content\nusing JSON-based data structures, built on top of the\n[JSON Web Algorithms (JWA)](https://datatracker.ietf.org/doc/html/rfc7518) and\n[JSON Web Key (JWK)](https://datatracker.ietf.org/doc/html/rfc7517) specifications.\n\n**JWT inside JWE** \u0026mdash; For clients that encrypt a [JWT (RFC 7519)](https://datatracker.ietf.org/doc/html/rfc7519)\ninto a JWE token before sending it to the server, this extension decrypts the JWE and recovers the original\nJWT so that Envoy's built-in\n[JWT Authentication filter](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/jwt_authn_filter)\ncan read it, extract the token claims and use them for authorization.\n",
-    "type": "composer",
-    "tags": [
-      "go",
-      "http",
-      "filter",
-      "jwe",
-      "security",
-      "encryption"
-    ],
-    "license": "Apache-2.0",
-    "examples": [
-      {
-        "title": "Quickstart",
-        "description": "In this example, we will generate a JWE token containing a JWT token as the payload, and then use the JWE decryption extension\nin Envoy to decrypt the JWE token and recover the original JWT token.\n\nIn order to decrypt JWE tokens, you will need to provide the private key that matches the public key used for encryption. You can\nuse online tools such as [Authgear's JWK generator](https://www.authgear.com/tools/jwk-generator) to generate the necessary keypair,\nthen use [Authgear's JWT \u0026 JWE Debugger](https://www.authgear.com/tools/jwt-jwe-debugger) to generate sample JWT tokens,\nand encrypt them into JWE tokens using the generated public key.\n\nYou can then run the JWE decryption extension in Envoy to decrypt the JWE token and recover the original JWT token.\n",
-        "code": "# Run the extension reading the token from the `Authorization` header\nboe run --extension jwe-decrypt --config '{\n  \"key_file\": \"/path/to/private-key.pem\",\n  \"input_header\": \"Authorization\",\n  \"prefix\": \"Bearer \",\n  \"output_header\": \"Authorization\"\n}'\n\n# Send a request with the JWE token and see that the upstream receives the decrypted JWT token in the `Authorization` header.\ncurl http://localhost:10000/headers -H 'Authorization: Bearer \u003cJWE_TOKEN\u003e'\n{\n  \"headers\": {\n    \"Accept\": \"*/*\",\n    \"Authorization\": \"Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOlsiQm9FIFVzZXJzIl0sImlhdCI6MTc3MTI1NTU2NCwicHJpdmF0ZUNsYWltS2V5IjoiSGVsbG8sIFdvcmxkISIsInN1YiI6IlNhbXBsZUpXVCJ9.Gx8GzN4cQZDbgz9RbTyARbQX5LJ1FAggyYH2LGoxR5pXGGpO4m1bHmqQABRJaP-oCFwfXsX1aiA9WoN6Fxy5JdDNtAZpu7uR5u_PD2Cw24u_quRB-s_LeWYEwwftoDfnzEQfJeKappWbq9VCvk9Axg5sE-EnLPekhfo0gYhnn4TX-fg_v50AuvBSvXCR6WiIQn79TBIKPUe1UEFZz5kzgQXGWUR3SgczYqRGo0oqAMl7YLiviUUt--Jr0ozYkSA3j7_3ZqLEdyUqRxTe54gRSIym2HRiaSA75Fd12JJWF26YqzsoJ1anw1X037nRpetmV1_ANbOwcmUXTgIqL5NILA\",\n    \"Host\": \"localhost\",\n    \"User-Agent\": \"curl/8.13.0\",\n    \"X-Amzn-Trace-Id\": \"Root=1-69933906-43c5ac60421eeeb57f50a55e\",\n    \"X-Envoy-Expected-Rq-Timeout-Ms\": \"15000\"\n  }\n}\n"
-      },
-      {
-        "title": "Decrypt and forward a Bearer token",
-        "description": "Process a request with the `Authorization: Bearer \u003cJWE compact token\u003e` header,\ndecrypt the JWE token, and emit the decrypted payload back into the `Authorization`\nheader with the `Bearer` prefix restored.\n",
-        "code": "boe run --extension jwe-decrypt --config '{\n  \"key_file\": \"/path/to/private-key.pem\",\n  \"input_header\": \"Authorization\",\n  \"prefix\": \"Bearer \",\n  \"output_header\": \"Authorization\"\n}'\n"
-      },
-      {
-        "title": "Using inline key",
-        "description": "To enable the JWE decryption extension to decrypt JWE tokens you will need to provide the private key\nthat will be used to decrypt the JWE tokens. You can provide the key inline with the config by base64 encoding\nthe PEM PKCS8 private key.\nYou will also need to specify the header that contains the JWE token, and the header or metadata key where\nthe decrypted payload should be stored.\n",
-        "code": "boe run --extension jwe-decrypt --config '{\n  \"inline_key\": \"LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQo...base64-encoded-key...\"\n  \"input_header\": \"X-JWE-Token\",\n  \"output_header\": \"X-Decrypted-JWE-Token\",\n}'\n"
-      },
-      {
-        "title": "Using key file",
-        "description": "You can provide the key file path in the config. The extension will read the file and use the key to decrypt\nthe JWE tokens. The key file should contain the PEM PKCS8 private key.\nYou will also need to specify the header that contains the JWE token, and the header or metadata key where\nthe decrypted payload should be stored.\n",
-        "code": "boe run --extension jwe-decrypt --config '{\n  \"key_file\": \"/path/to/private-key.pem\",\n  \"input_header\": \"X-JWE-Token\",\n  \"output_header\": \"X-Decrypted-JWE-Token\",\n}'\n"
-      },
-      {
-        "title": "Add decrypted payload to metadata",
-        "description": "Specify the output_metadata field in the config to add the decrypted payload to Envoy metadata instead of a\nheader. The value of output_metadata should be the key where the decrypted payload will be stored in the\nmetadata under the `jwe-decrypt` namespace.\n",
-        "code": "boe run --extension jwe-decrypt --config '{\n  \"inline_key\": \"LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQo...base64-encoded-key...\"\n  \"input_header\": \"X-JWE-Token\",\n  \"output_metadata\": \"jwe_decrypted_payload\",\n}'\n"
       }
     ],
     "composerVersion": "0.2.1"
