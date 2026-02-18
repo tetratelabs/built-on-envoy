@@ -8,7 +8,6 @@ parent: composer
 categories:
   - Examples
 author: Tetrate
-featured: true
 description: Example composer embedded go plugin for HTTP filters
 longDescription: |
   An example HTTP filter plugin written in Go that demonstrates how to build extensions

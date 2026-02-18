@@ -11,7 +11,8 @@ import (
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/example/embedded" // Example built-in plugin.
 	// Go plugin to loader other composer plugins that be compiled into separate shared libraries.
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/goplugin"
-	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/jwe-decrypt/embedded" // JWE decryption plugin.
-	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/opa/embedded"         // OPA authorization plugin.
-	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/waf/embedded"         // WAF plugin.
+	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/jwe-decrypt/embedded"       // JWE decryption plugin.
+	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/opa/embedded"               // OPA authorization plugin.
+	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/openapi-validator/embedded" // OpenAPI validator plugin.
+	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/waf/embedded"               // WAF plugin.
 )

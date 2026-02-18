@@ -1,0 +1,138 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: openapi-validator
+parent: composer
+categories:
+  - Security
+author: Tetrate
+description: Validate HTTP requests against an OpenAPI specification
+longDescription: |
+  This extension validates incoming HTTP requests against an
+  [OpenAPI](https://www.openapis.org/) specification file. It matches
+  requests to operations and validate paths, methods, query parameters,
+  headers, and request bodies against the defined schemas.
+
+  **Key Features:**
+
+  - **Full request validation**: Validates the HTTP method, path, path parameters,
+    query parameters, request headers, and the request body against the OpenAPI spec.
+  - **OpenAPI 3.0 and 3.1 support**: Load specifications in YAML or JSON format.
+  - **Configurable body size limit**: Set a maximum request body size to buffer for
+    validation. Requests exceeding the limit are rejected with a 413 status.
+  - **Dry-run mode**: Log validation failures without enforcing them, useful for
+    testing new specs in production.
+  - **Configurable deny responses**: Customize the HTTP status code, body, and
+    headers returned when a request fails validation.
+
+  **Configuration Fields:**
+
+  | Field | Type | Required | Default | Description |
+  |-------|------|----------|---------|-------------|
+  | `spec_file` | string | yes | - | Path to the OpenAPI spec file (YAML or JSON) |
+  | `max_body_bytes` | integer | no | 0 (no limit) | Maximum body size to buffer; 0 disables the limit |
+  | `allow_unmatched_paths` | boolean | no | false | Allow requests to paths not in the spec |
+  | `dry_run` | boolean | no | false | Log failures without enforcing |
+  | `deny_status` | integer | no | 400 | HTTP status code on validation failure |
+  | `deny_body` | string | no | (error message) | Response body on failure |
+  | `deny_headers` | object | no | - | Additional response headers on failure |
+type: composer
+featured: true
+tags:
+  - go
+  - http
+  - filter
+  - openapi
+  - validation
+  - security
+  - api
+license: Apache-2.0
+examples:
+  - title: Minimal OpenAPI Spec
+    description: |
+      A minimal OpenAPI spec that validates requests to a `/post` endpoint.
+      Only POST requests with a JSON body containing a required `title` field
+      (string) are allowed.
+    code: |
+      # Create a minimal OpenAPI spec
+      cat > /tmp/openapi.yaml << 'EOF'
+      openapi: "3.0.0"
+      info:
+        title: Example API
+        version: "1.0"
+      paths:
+        /post:
+          post:
+            requestBody:
+              required: true
+              content:
+                application/json:
+                  schema:
+                    type: object
+                    required: [title]
+                    properties:
+                      title:
+                        type: string
+            responses:
+              "200":
+                description: Successful response
+      EOF
+
+      # Run the extension
+      boe run --extension openapi-validator --config '{
+        "spec_file": "/tmp/openapi.yaml"
+      }'
+
+      # Valid request
+      curl -X POST -H "Content-Type: application/json" \
+        -d '{"title": "hello"}' http://localhost:10000/post
+      # => 200 OK (proxied to upstream)
+
+      # Missing required field
+      curl -X POST -H "Content-Type: application/json" \
+        -d '{"other": "field"}' http://localhost:10000/post
+      # => 400 Bad Request
+
+      # Unknown path
+      curl http://localhost:10000/unknown
+      # => 400 Bad Request
+  - title: Body Validation with Size Limit
+    description: |
+      Validate request bodies against the schema defined in the OpenAPI spec.
+      Set a maximum body size to protect against oversized payloads.
+    code: |
+      boe run --extension openapi-validator --config '{
+        "spec_file": "/path/to/openapi.yaml",
+        "max_body_bytes": 1048576
+      }'
+
+      # Valid POST with conforming body
+      curl -X POST -H "Content-Type: application/json" \
+        -d '{"name": "alice"}' http://localhost:10000/api/users
+      # => 201 Created
+
+      # POST with body exceeding size limit
+      curl -X POST -H "Content-Type: application/json" \
+        -d @large-file.json http://localhost:10000/api/users
+      # => 413 Request body too large
+  - title: Dry-Run Mode
+    description: |
+      Enable dry-run mode to log validation failures without blocking traffic.
+      Useful for testing a new API spec before enforcing it.
+    code: |
+      boe run --extension openapi-validator --config '{
+        "spec_file": "/path/to/openapi.yaml",
+        "dry_run": true
+      }'
+  - title: Custom Deny Response
+    description: |
+      Customize the response returned when a request fails validation.
+    code: |
+      boe run --extension openapi-validator --config '{
+        "spec_file": "/path/to/openapi.yaml",
+        "deny_status": 422,
+        "deny_body": "Request does not conform to API specification",
+        "deny_headers": {"content-type": "text/plain"}
+      }'

@@ -59,56 +59,56 @@ type cedarHttpFilter struct { //nolint:revive
 	config *cedarParsedConfig
 }
 
-func (f *cedarHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) shared.HeadersStatus {
-	req, err := f.buildRequest(headers)
+func (c *cedarHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) shared.HeadersStatus {
+	req, err := c.buildRequest(headers)
 	if err != nil {
-		if f.config.FailOpen {
-			f.handle.Log(shared.LogLevelWarn, "cedar: request building error (fail_open enabled): %s", err.Error())
+		if c.config.FailOpen {
+			c.handle.Log(shared.LogLevelWarn, "cedar: request building error (fail_open enabled): %s", err.Error())
 			return shared.HeadersStatusContinue
 		}
-		f.handle.Log(shared.LogLevelWarn, "cedar: request building error: %s", err.Error())
-		f.handle.SendLocalResponse(403, nil, []byte("Forbidden"), "cedar_denied")
+		c.handle.Log(shared.LogLevelWarn, "cedar: request building error: %s", err.Error())
+		c.handle.SendLocalResponse(403, nil, []byte("Forbidden"), "cedar_denied")
 		return shared.HeadersStatusStop
 	}
 
-	f.handle.Log(shared.LogLevelDebug, "cedar: evaluating policy for %s %s",
+	c.handle.Log(shared.LogLevelDebug, "cedar: evaluating policy for %s %s",
 		headers.GetOne(":method"), headers.GetOne(":path"))
 
-	decision, diagnostic := cedarlib.Authorize(f.config.policySet, f.config.entities, req)
+	decision, diagnostic := cedarlib.Authorize(c.config.policySet, c.config.entities, req)
 
-	f.handle.Log(shared.LogLevelDebug, "cedar: decision=%s diagnostic=%+v", decision, diagnostic)
+	c.handle.Log(shared.LogLevelDebug, "cedar: decision=%s diagnostic=%+v", decision, diagnostic)
 
 	if len(diagnostic.Errors) > 0 {
-		if f.config.FailOpen {
-			f.handle.Log(shared.LogLevelError, "cedar: policy evaluation errors (fail_open enabled): %v", diagnostic.Errors)
+		if c.config.FailOpen {
+			c.handle.Log(shared.LogLevelError, "cedar: policy evaluation errors (fail_open enabled): %v", diagnostic.Errors)
 			return shared.HeadersStatusContinue
 		}
-		f.handle.Log(shared.LogLevelError, "cedar: policy evaluation errors: %v", diagnostic.Errors)
-		f.handle.SendLocalResponse(500, nil, []byte("Internal Server Error"), "cedar_eval_error")
+		c.handle.Log(shared.LogLevelError, "cedar: policy evaluation errors: %v", diagnostic.Errors)
+		c.handle.SendLocalResponse(500, nil, []byte("Internal Server Error"), "cedar_eval_error")
 		return shared.HeadersStatusStop
 	}
 
 	allowed := decision == cedarlib.Allow
-	if f.config.DryRun {
-		f.handle.Log(shared.LogLevelInfo, "cedar: dry-run decision: allowed=%v", allowed)
+	if c.config.DryRun {
+		c.handle.Log(shared.LogLevelInfo, "cedar: dry-run decision: allowed=%v", allowed)
 		return shared.HeadersStatusContinue
 	}
 
 	if !allowed {
-		status := f.config.DenyStatus
+		status := c.config.DenyStatus
 		if status == 0 {
 			status = 403
 		}
-		body := f.config.DenyBody
+		body := c.config.DenyBody
 		if body == "" {
 			body = "Forbidden"
 		}
 		var responseHeaders [][2]string
-		for k, v := range f.config.DenyHeaders {
+		for k, v := range c.config.DenyHeaders {
 			responseHeaders = append(responseHeaders, [2]string{k, v})
 		}
-		f.handle.Log(shared.LogLevelDebug, "cedar: denying request with status %d", status)
-		f.handle.SendLocalResponse(
+		c.handle.Log(shared.LogLevelDebug, "cedar: denying request with status %d", status)
+		c.handle.SendLocalResponse(
 			uint32(status), //nolint:gosec
 			responseHeaders,
 			[]byte(body),
@@ -121,22 +121,22 @@ func (f *cedarHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) sha
 }
 
 // buildRequest constructs the Cedar authorization request from HTTP headers and attributes.
-func (f *cedarHttpFilter) buildRequest(headers shared.HeaderMap) (cedarlib.Request, error) {
+func (c *cedarHttpFilter) buildRequest(headers shared.HeaderMap) (cedarlib.Request, error) {
 	principalID := ""
-	if f.config.PrincipalIDHeader != "" {
-		principalID = headers.GetOne(f.config.PrincipalIDHeader)
+	if c.config.PrincipalIDHeader != "" {
+		principalID = headers.GetOne(c.config.PrincipalIDHeader)
 	}
 	if principalID == "" {
-		return cedarlib.Request{}, fmt.Errorf("principal header %q is empty or missing", f.config.PrincipalIDHeader)
+		return cedarlib.Request{}, fmt.Errorf("principal header %q is empty or missing", c.config.PrincipalIDHeader)
 	}
 
 	principal := cedarlib.NewEntityUID(
-		cedarlib.EntityType(f.config.PrincipalType),
+		cedarlib.EntityType(c.config.PrincipalType),
 		cedarlib.String(principalID),
 	)
 
 	method := headers.GetOne(":method")
-	actionType := cmp.Or(f.config.ActionType, "Action")
+	actionType := cmp.Or(c.config.ActionType, "Action")
 	action := cedarlib.NewEntityUID(
 		cedarlib.EntityType(actionType),
 		cedarlib.String(method),
@@ -147,13 +147,13 @@ func (f *cedarHttpFilter) buildRequest(headers shared.HeaderMap) (cedarlib.Reque
 	if before, _, ok := strings.Cut(fullPath, "?"); ok {
 		resourcePath = before
 	}
-	resourceType := cmp.Or(f.config.ResourceType, "Resource")
+	resourceType := cmp.Or(c.config.ResourceType, "Resource")
 	resource := cedarlib.NewEntityUID(
 		cedarlib.EntityType(resourceType),
 		cedarlib.String(resourcePath),
 	)
 
-	context := f.buildContext(headers)
+	context := c.buildContext(headers)
 
 	return cedarlib.Request{
 		Principal: principal,
@@ -164,7 +164,7 @@ func (f *cedarHttpFilter) buildRequest(headers shared.HeaderMap) (cedarlib.Reque
 }
 
 // buildContext constructs the Cedar context record from request headers and Envoy attributes.
-func (f *cedarHttpFilter) buildContext(headers shared.HeaderMap) cedarlib.Record {
+func (c *cedarHttpFilter) buildContext(headers shared.HeaderMap) cedarlib.Record {
 	var (
 		method = headers.GetOne(":method")
 		path   = headers.GetOne(":path")
@@ -172,7 +172,7 @@ func (f *cedarHttpFilter) buildContext(headers shared.HeaderMap) cedarlib.Record
 		scheme = cmp.Or(headers.GetOne(":scheme"), "http")
 	)
 	parsedPath, parsedQuery := parsePath(path)
-	protocol, _ := f.handle.GetAttributeString(shared.AttributeIDRequestProtocol)
+	protocol, _ := c.handle.GetAttributeString(shared.AttributeIDRequestProtocol)
 	protocol = cmp.Or(protocol, "HTTP/1.1")
 
 	// Build headers record excluding pseudo-headers.
@@ -186,14 +186,14 @@ func (f *cedarHttpFilter) buildContext(headers shared.HeaderMap) cedarlib.Record
 	}
 
 	var (
-		sourceAddr, _ = f.handle.GetAttributeString(shared.AttributeIDSourceAddress)
-		destAddr, _   = f.handle.GetAttributeString(shared.AttributeIDDestinationAddress)
+		sourceAddr, _ = c.handle.GetAttributeString(shared.AttributeIDSourceAddress)
+		destAddr, _   = c.handle.GetAttributeString(shared.AttributeIDDestinationAddress)
 		// Extract connection/TLS attributes for mTLS-aware policies.
-		uriSanPeer, _   = f.handle.GetAttributeString(shared.AttributeIDConnectionUriSanPeerCertificate)
-		dnsSanPeer, _   = f.handle.GetAttributeString(shared.AttributeIDConnectionDnsSanPeerCertificate)
-		subjectPeer, _  = f.handle.GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate)
-		tlsVersion, _   = f.handle.GetAttributeString(shared.AttributeIDConnectionTlsVersion)
-		sha256Digest, _ = f.handle.GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest)
+		uriSanPeer, _   = c.handle.GetAttributeString(shared.AttributeIDConnectionUriSanPeerCertificate)
+		dnsSanPeer, _   = c.handle.GetAttributeString(shared.AttributeIDConnectionDnsSanPeerCertificate)
+		subjectPeer, _  = c.handle.GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate)
+		tlsVersion, _   = c.handle.GetAttributeString(shared.AttributeIDConnectionTlsVersion)
+		sha256Digest, _ = c.handle.GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest)
 	)
 
 	// Build parsed_path as a Cedar Set of Strings.
@@ -272,8 +272,8 @@ type cedarHttpFilterFactory struct { //nolint:revive
 	config *cedarParsedConfig
 }
 
-func (f *cedarHttpFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
-	return &cedarHttpFilter{handle: handle, config: f.config}
+func (c *cedarHttpFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
+	return &cedarHttpFilter{handle: handle, config: c.config}
 }
 
 // CedarHttpFilterConfigFactory is the configuration factory for the HTTP filter.
@@ -282,7 +282,7 @@ type CedarHttpFilterConfigFactory struct { //nolint:revive
 }
 
 // Create parses the JSON configuration and creates a factory for the HTTP filter.
-func (f *CedarHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
+func (c *CedarHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
 	if len(config) == 0 {
 		handle.Log(shared.LogLevelError, "cedar: empty config")
 		return nil, fmt.Errorf("empty config")
