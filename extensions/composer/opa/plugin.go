@@ -175,7 +175,7 @@ func (f *opaHttpFilter) buildInput(headers shared.HeaderMap) map[string]any {
 			},
 			"connection": map[string]any{
 				// TODO(nacx): Add mTLS boolean when supported by the ABI.
-				//"mtls":        mtls,
+				// "mtls":        mtls,
 				"tls_version": tlsVersion,
 			},
 		},

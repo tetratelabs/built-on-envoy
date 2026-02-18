@@ -6,6 +6,7 @@
 package opa
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/fake"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
+	"github.com/open-policy-agent/opa/v1/rego"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -829,12 +831,15 @@ allow := {"allowed": true, "headers": {"x-jwt-role": payload.role}} if {
 }
 `
 	// Valid JWT: {"sub":"user123","role":"admin","iss":"test-issuer","exp":9999999999}, signed with "test-secret-key".
+	// nolint:gosec
 	validToken := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyMTIzIiwicm9sZSI6ImFkbWluIiwiaXNzIjoidGVzdC1pc3N1ZXIiLCJleHAiOjk5OTk5OTk5OTl9.AgWMvlXsikFYopkQ8xnqsmshOU7BrydgwdGNQBE3rog"
 
 	// Expired JWT: {"sub":"user456","role":"viewer","iss":"test-issuer","exp":1000000000}, signed with "test-secret-key".
+	// nolint:gosec
 	expiredToken := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyNDU2Iiwicm9sZSI6InZpZXdlciIsImlzcyI6InRlc3QtaXNzdWVyIiwiZXhwIjoxMDAwMDAwMDAwfQ.CqWHLAH26GMiRdAtPaNbU2S0nCQg1k-aG0IfICVNuMU"
 
 	// Wrong-secret JWT: {"sub":"user789","role":"admin","iss":"test-issuer","exp":9999999999}, signed with "wrong-secret".
+	// nolint:gosec
 	wrongSecretToken := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyNzg5Iiwicm9sZSI6ImFkbWluIiwiaXNzIjoidGVzdC1pc3N1ZXIiLCJleHAiOjk5OTk5OTk5OTl9.jqjuxP5_6wpMg-HrVnLMoIIXLFgWyGTO9BWhGxZOa_M"
 
 	t.Run("valid JWT is allowed and role header is set", func(t *testing.T) {
@@ -921,6 +926,89 @@ allow := {"allowed": true, "headers": {"x-jwt-role": payload.role}} if {
 		status := filter.OnRequestHeaders(headers, true)
 		require.Equal(t, shared.HeadersStatusStop, status)
 	})
+}
+
+// Helper to create a filter with a policy that will error at evaluation time.
+// It uses rego.StrictBuiltinErrors so that division by zero produces an error
+// instead of being silently undefined.
+func createErrorFilter(t *testing.T, failOpen bool) (*opaHttpFilter, *mocks.MockHttpFilterHandle) {
+	t.Helper()
+
+	// This policy compiles successfully but will fail at evaluation time
+	// because it divides by zero with strict builtin errors enabled.
+	policy := `package envoy.authz
+result := 1 / 0
+`
+	policyFile := createTestPolicyFile(t, policy)
+
+	r := rego.New(
+		rego.Query("result = data.envoy.authz.result"),
+		rego.Module(policyFile, policy),
+		rego.StrictBuiltinErrors(true),
+	)
+
+	pq, err := r.PrepareForEval(context.Background())
+	require.NoError(t, err)
+
+	parsed := &opaParsedConfig{
+		opaConfig: opaConfig{
+			PolicyFile:   policyFile,
+			DecisionPath: "envoy.authz.result",
+			FailOpen:     failOpen,
+		},
+		preparedQuery: pq,
+	}
+
+	ctrl := gomock.NewController(t)
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return("HTTP/1.1", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return("127.0.0.1:5000", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDDestinationAddress).Return("127.0.0.1:80", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionUriSanPeerCertificate).Return("", false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionDnsSanPeerCertificate).Return("", false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate).Return("", false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return("", false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return("", false).AnyTimes()
+
+	filter := &opaHttpFilter{handle: mockHandle, config: parsed}
+	return filter, mockHandle
+}
+
+// Tests for fail_open behavior on evaluation errors.
+
+func TestOnRequestHeaders_FailOpen_AllowsOnError(t *testing.T) {
+	filter, _ := createErrorFilter(t, true)
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":    {"GET"},
+		":path":      {"/api/resource"},
+		":authority": {"example.com"},
+		":scheme":    {"http"},
+	})
+
+	// With fail_open=true, evaluation errors should allow the request.
+	status := filter.OnRequestHeaders(headers, true)
+	require.Equal(t, shared.HeadersStatusContinue, status)
+}
+
+func TestOnRequestHeaders_FailClosed_DeniesOnError(t *testing.T) {
+	filter, mockHandle := createErrorFilter(t, false)
+
+	mockHandle.EXPECT().SendLocalResponse(
+		uint32(500), gomock.Nil(), []byte("Internal Server Error"), "opa_eval_error",
+	)
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":    {"GET"},
+		":path":      {"/api/resource"},
+		":authority": {"example.com"},
+		":scheme":    {"http"},
+	})
+
+	// With fail_open=false (default), evaluation errors should deny with 500.
+	status := filter.OnRequestHeaders(headers, true)
+	require.Equal(t, shared.HeadersStatusStop, status)
 }
 
 // Test with an absolute path to a non-existent rego file to trigger read error in ConfigFactory.
