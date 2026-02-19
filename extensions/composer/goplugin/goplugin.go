@@ -7,6 +7,7 @@
 package goplugin
 
 import (
+	"context"
 	"debug/buildinfo"
 	"encoding/json"
 	"fmt"
@@ -19,6 +20,8 @@ import (
 
 	sdk "github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/goplugin/imagefetcher"
 )
 
 var (
@@ -161,14 +164,16 @@ func loadGoPlugin(moduleConfig []byte) (Config, []byte, error) {
 	return goPlugin, innerConfigJSON, nil
 }
 
-// TODO(wbpcode): when migrating this from extensibility to built-on-envoy, we removed
-// remote image fetching support temporarily to keep code tree clean. Re-add it later.
-func fetchGoPluginPath(pluginURL string, _ string) (string, error) {
-	if strings.HasPrefix(pluginURL, "file://") {
-		binaryPath := strings.TrimPrefix(pluginURL, "file://")
-		return binaryPath, nil
+func fetchGoPluginPath(pluginURL string, pluginName string) (string, error) {
+	switch {
+	case strings.HasPrefix(pluginURL, "file://"):
+		return strings.TrimPrefix(pluginURL, "file://"), nil
+	case strings.HasPrefix(pluginURL, "oci://"):
+		ref := strings.TrimPrefix(pluginURL, "oci://")
+		return imagefetcher.FetchPlugin(context.Background(), ref, pluginName, imagefetcher.OptionFromEnv())
+	default:
+		return "", fmt.Errorf("unsupported plugin URL scheme: %s", pluginURL)
 	}
-	return "", fmt.Errorf("unsupported plugin URL: %s", pluginURL)
 }
 
 func loadPluginImpl(name, url string, strictCheck bool) (shared.HttpFilterConfigFactory, error) {
