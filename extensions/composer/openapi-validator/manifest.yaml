@@ -15,7 +15,7 @@ longDescription: |
   requests to operations and validate paths, methods, query parameters,
   headers, and request bodies against the defined schemas.
 
-  **Key Features:**
+  ## Key Features
 
   - **Full request validation**: Validates the HTTP method, path, path parameters,
     query parameters, request headers, and the request body against the OpenAPI spec.
@@ -27,7 +27,7 @@ longDescription: |
   - **Configurable deny responses**: Customize the HTTP status code, body, and
     headers returned when a request fails validation.
 
-  **Configuration Fields:**
+  ## Configuration Fields
 
   | Field | Type | Required | Default | Description |
   |-------|------|----------|---------|-------------|

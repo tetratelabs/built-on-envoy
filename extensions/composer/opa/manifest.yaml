@@ -15,7 +15,7 @@ longDescription: |
   pattern by running the OPA Go library directly within the filter, making authorization
   decisions on each request without a separate OPA sidecar or server.
 
-  **Key Features:**
+  ## Key Features
 
   - **Inline Rego evaluation**: Load and evaluate Rego policy files directly in the Envoy
     data path using OPA's Go library. No separate OPA server required.
@@ -32,7 +32,7 @@ longDescription: |
     (URI SANs), DNS SANs, and certificate subject for identity-based authorization.
   - **Configurable decision path**: Query any rule path in the policy (default: `envoy.authz.allow`).
 
-  **Input Document Structure:**
+  ## Input Document Structure
 
   Requests are parsed and transformed into a structured `input` document that is passed to the OPA
   policy for evaluation. The following `input` document shows an example of the structure that is
@@ -75,17 +75,17 @@ longDescription: |
   }
   ```
 
-  **Metrics:**
+  ## Metrics
 
   The extension exposes the `opa_requests_total` counter metric with a `decision` tag that
   tracks authorization outcomes. The possible tag values are:
 
-  - `allowed`: The policy allowed the request.
-  - `denied`: The policy denied the request (or an error occurred with fail-open disabled).
-  - `failopen`: An error occurred during policy evaluation and the request was allowed because
-    fail-open mode is enabled.
-  - `dryrun_allow`: The policy denied the request but it was allowed because dry-run mode is
-    enabled.
+  | Decision | Description |
+  |--------|------|
+  | `allowed` | The policy allowed the request. |
+  | `denied` | The policy denied the request (or an error occurred with fail-open disabled). |
+  | `failopen` | An error occurred during policy evaluation and the request was allowed because fail-open mode is enabled. |
+  | `dryrun_allow` | The policy denied the request but it was allowed because dry-run mode is enabled. |
 type: composer
 featured: true
 tags:
