@@ -33,7 +33,7 @@ test:
 # It is intended to be used in CI environments to ensure that each image
 # built gets a unique tag.
 IMAGE_NONCE  ?=
-OCI_REGISTRY ?= ghcr.io/tetratelabsAAA
+OCI_REGISTRY ?= ghcr.io/tetratelabs
 
 registry_output :=
 ifeq ($(BOE_REGISTRY_INSECURE),true)

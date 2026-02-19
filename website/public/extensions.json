@@ -1,0 +1,352 @@
+[
+  {
+    "name": "cedar-auth",
+    "version": "0.2.1",
+    "parent": "composer",
+    "categories": [
+      "Security"
+    ],
+    "author": "Tetrate",
+    "featured": true,
+    "description": "Inline Cedar policy evaluation for HTTP request authorization",
+    "longDescription": "This extension implements [Cedar](https://www.cedarpolicy.com/) policy evaluation\nas an inline Envoy HTTP filter. It uses the [Cedar-Go](https://github.com/cedar-policy/cedar-go)\nlibrary to make authorization decisions on each request without a separate authorization server.\n\n**Key Features:**\n\n- **Inline Cedar evaluation**: Load and evaluate Cedar policy files directly in the Envoy\n  data path using the Cedar-Go library. No separate authorization server required.\n- **Structured authorization model**: Maps HTTP requests to Cedar's Principal/Action/Resource\n  model with rich context for fine-grained `when` clause conditions.\n- **Entity hierarchies**: Optionally load Cedar entity data to enable group membership and\n  hierarchical authorization checks (e.g., `principal in Group::\"admins\"`).\n- **Dry-run mode**: Log authorization decisions without enforcing them, useful for testing\n  policies in production.\n- **Fail-open mode**: Allow requests through when policy evaluation encounters an error,\n  instead of returning a 500 response.\n- **mTLS and SPIFFE identity**: Access client certificate attributes including SPIFFE IDs\n  (URI SANs), DNS SANs, and certificate subject in policy context.\n- **Configurable deny responses**: Customize the HTTP status code, body, and headers\n  returned when a request is denied.\n\n**Authorization Model:**\n\nHTTP requests are mapped to Cedar authorization concepts:\n\n- **Principal**: Derived from a configurable request header (e.g., `User::\"alice\"` from\n  the `x-user-id` header). The entity type is set via `principal_type` and the ID is\n  extracted from the header specified by `principal_id_header`.\n- **Action**: Derived from the HTTP method (e.g., `Action::\"GET\"`, `Action::\"POST\"`).\n  The entity type defaults to `Action` and can be customized via `action_type`.\n- **Resource**: Derived from the request path without query string (e.g.,\n  `Resource::\"/api/users\"`). The entity type defaults to `Resource` and can be\n  customized via `resource_type`.\n- **Context**: Rich request attributes available in Cedar `when` clauses.\n\n**Context Record Structure:**\n\nThe `context` record passed to Cedar policies contains the following structure:\n\n```json\n{\n  \"request\": {\n    \"method\": \"GET\",\n    \"path\": \"/api/v1/resource?key=value\",\n    \"host\": \"example.com\",\n    \"scheme\": \"https\",\n    \"protocol\": \"HTTP/1.1\",\n    \"headers\": {\n      \"authorization\": \"Bearer ...\",\n      \"content-type\": \"application/json\"\n    }\n  },\n  \"source\": {\n    \"address\": \"10.0.0.1:5000\",\n    \"certificate\": {\n      \"uri_san\": \"spiffe://cluster.local/ns/default/sa/client\",\n      \"dns_san\": \"client.default.svc.cluster.local\",\n      \"subject\": \"CN=client,O=example\",\n      \"sha256_digest\": \"abc123...\"\n    }\n  },\n  \"destination\": {\n    \"address\": \"10.0.0.2:443\"\n  },\n  \"connection\": {\n    \"tls_version\": \"TLSv1.3\"\n  },\n  \"parsed_path\": [\"api\", \"v1\", \"resource\"],\n  \"parsed_query\": {\"key\": [\"value\"]}\n}\n```\n",
+    "type": "composer",
+    "tags": [
+      "go",
+      "http",
+      "filter",
+      "cedar",
+      "security",
+      "authorization",
+      "policy",
+      "spiffe",
+      "mtls"
+    ],
+    "license": "Apache-2.0",
+    "examples": [
+      {
+        "title": "Basic Path Authorization",
+        "description": "Run the Cedar extension with a policy that allows GET requests\nto any resource and denies everything else.\n",
+        "code": "# Create a simple policy file\ncat \u003e /tmp/policy.cedar \u003c\u003c 'EOF'\npermit(\n  principal,\n  action == Action::\"GET\",\n  resource\n);\nEOF\n\n# Run the extension\nboe run --extension cedar-auth --config '{\n  \"policy_file\": \"/tmp/policy.cedar\",\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\"\n}'\n\n# Test allowed request\ncurl -H \"x-user-id: alice\" http://localhost:10000/public/resource\n# =\u003e 200 OK (proxied to upstream)\n\n# Test denied request (POST)\ncurl -X POST -H \"x-user-id: alice\" http://localhost:10000/api/resource\n# =\u003e 403 Forbidden\n"
+      },
+      {
+        "title": "Conditional Authorization with When Clauses",
+        "description": "Use `when` and `unless` clauses to add fine-grained conditions based on\nrequest context. The context record contains the full request attributes\nincluding method, path, headers, source, destination, and connection info.\n\nThis example allows read-only access to anyone, but restricts write\noperations to requests that carry a valid admin token header and are\nmade over HTTPS.\n",
+        "code": "cat \u003e /tmp/policy.cedar \u003c\u003c 'EOF'\n// Anyone can read\npermit(\n  principal,\n  action == Action::\"GET\",\n  resource\n);\n\n// Only allow writes over HTTPS with a valid admin token\npermit(\n  principal,\n  action,\n  resource\n) when {\n  context.request.scheme == \"https\" \u0026\u0026\n  context.request.headers has \"x-admin-token\" \u0026\u0026\n  context.request.headers[\"x-admin-token\"] == \"my-secret\"\n};\n\n// Never allow DELETE regardless of other rules\nforbid(\n  principal,\n  action == Action::\"DELETE\",\n  resource\n);\nEOF\n\nboe run --extension cedar-auth --config '{\n  \"policy_file\": \"/tmp/policy.cedar\",\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\"\n}'\n\n# Test read (allowed for all users)\ncurl -H \"x-user-id: alice\" http://localhost:10000/api/resource\n# =\u003e 200 OK\n\n# Test write with admin token over HTTPS (allowed)\ncurl -X POST -H \"x-user-id: alice\" -H \"x-admin-token: my-secret\" \\\n  https://localhost:10000/api/resource\n# =\u003e 200 OK\n\n# Test write without admin token (denied)\ncurl -X POST -H \"x-user-id: alice\" http://localhost:10000/api/resource\n# =\u003e 403 Forbidden\n\n# Test DELETE (always denied by forbid rule)\ncurl -X DELETE -H \"x-user-id: alice\" -H \"x-admin-token: my-secret\" \\\n  https://localhost:10000/api/resource\n# =\u003e 403 Forbidden\n"
+      },
+      {
+        "title": "User-Based Authorization",
+        "description": "Use a policy that restricts access based on the user identity\nderived from the x-user-id header.\n",
+        "code": "cat \u003e /tmp/policy.cedar \u003c\u003c 'EOF'\npermit(\n  principal == User::\"admin\",\n  action,\n  resource\n);\nEOF\n\nboe run --extension cedar-auth --config '{\n  \"policy_file\": \"/tmp/policy.cedar\",\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\"\n}'\n"
+      },
+      {
+        "title": "Group-Based Authorization with Entities",
+        "description": "Use Cedar entity hierarchies to authorize based on group membership.\nUsers that are members of the \"admins\" group are permitted access.\n",
+        "code": "cat \u003e /tmp/policy.cedar \u003c\u003c 'EOF'\npermit(\n  principal in Group::\"admins\",\n  action,\n  resource\n);\nEOF\n\ncat \u003e /tmp/entities.json \u003c\u003c 'EOF'\n[\n  {\n    \"uid\": {\"type\": \"User\", \"id\": \"alice\"},\n    \"parents\": [{\"type\": \"Group\", \"id\": \"admins\"}],\n    \"attrs\": {}\n  },\n  {\n    \"uid\": {\"type\": \"Group\", \"id\": \"admins\"},\n    \"parents\": [],\n    \"attrs\": {}\n  }\n]\nEOF\n\nboe run --extension cedar-auth --config '{\n  \"policy_file\": \"/tmp/policy.cedar\",\n  \"entities_file\": \"/tmp/entities.json\",\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\"\n}'\n"
+      },
+      {
+        "title": "Custom Deny Response",
+        "description": "Customize the HTTP response returned when a request is denied.\n",
+        "code": "boe run --extension cedar-auth --config '{\n  \"policy_file\": \"/tmp/policy.cedar\",\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\",\n  \"deny_status\": 401,\n  \"deny_body\": \"Authentication Required\",\n  \"deny_headers\": {\"www-authenticate\": \"Bearer\"}\n}'\n"
+      },
+      {
+        "title": "Dry-Run Mode",
+        "description": "Enable dry-run mode to log authorization decisions without enforcing them.\nUseful for testing new policies in production without blocking traffic.\n",
+        "code": "boe run --extension cedar-auth --config '{\n  \"policy_file\": \"/tmp/policy.cedar\",\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\",\n  \"dry_run\": true\n}'\n"
+      },
+      {
+        "title": "Fail-Open Mode",
+        "description": "Enable fail-open mode to allow requests through when policy evaluation\nencounters an error, instead of returning a 500 response. Useful for\nnon-critical authorization checks where availability is prioritized\nover enforcement.\n",
+        "code": "boe run --extension cedar-auth --config '{\n  \"policy_file\": \"/tmp/policy.cedar\",\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\",\n  \"fail_open\": true\n}'\n"
+      }
+    ],
+    "composerVersion": "0.2.1"
+  },
+  {
+    "name": "coraza-waf",
+    "version": "0.2.1",
+    "parent": "composer",
+    "categories": [
+      "Security"
+    ],
+    "author": "Tetrate",
+    "featured": true,
+    "description": "Web Application Firewall (WAF) for HTTP traffic using Coraza",
+    "longDescription": "A Web Application Firewall (WAF) HTTP filter plugin that provides layer 7 security\nfor web applications using the [Coraza WAF engine](https://coraza.io/).\n\n## Features\n\nThis plugin provides comprehensive web application security:\n\n- **OWASP ModSecurity [Core Rule Set (CRS)](https://coreruleset.org/)**: Built-in protection against common web attacks\n- **Request inspection**: Analyzes HTTP requests for malicious patterns and anomalies\n- **Response inspection**: Examines HTTP responses to prevent data leakage\n- **Flexible rule engine**: Supports custom security rules and policies\n- **Multiple operation modes**: Detection-only or active blocking modes\n- **Detailed logging**: Comprehensive audit logging of security events\n\n## Packaging\n\nThis is the **embedded** version of the plugin, compiled directly into the Composer\ndynamic module binary. This approach guarantees Go runtime compatibility since the\nplugin and host are built together with the same toolchain and dependencies.\n\n## Security Rules\n\nThe WAF comes with support for OWASP ModSecurity Core Rule Set (CRS) and allows\ncustom rule configuration for specific security requirements.\n",
+    "type": "composer",
+    "tags": [
+      "go",
+      "http",
+      "security",
+      "waf",
+      "coraza",
+      "owasp",
+      "modsecurity"
+    ],
+    "license": "Apache-2.0",
+    "examples": [
+      {
+        "title": "SQL Injection Protection",
+        "description": "The following example demonstrates how to run the WAF plugin with recommended OWASP CRS rules and test SQL\ninjection protection by sending a malicious payload that should be blocked by the WAF.\n\nBy default WAF is configured in `DetectionOnly` mode, which means it will only log detected attacks without\nblocking them. To enable active blocking, this example sets `SecRuleEngine On` in the configuration. It also\nsets `SecResponseBodyAccess Off` to disable response body inspection as it's not needed for hte example.\n",
+        "code": "# Start WAF with recommended OWASP CRS rules and enforcement enabled\nboe run --extension coraza-waf --config '\n  {\n    \"directives\": [\n      \"Include @recommended.conf\",\n      \"SecRuleEngine On\",\n      \"SecResponseBodyAccess Off\",\n      \"Include @crs-setup.conf\",\n      \"Include @owasp_crs/*.conf\"\n    ]\n  }'\n\n# Try sending a SQL injection payload and see the request rejected\ncurl -v http://localhost:10000/post -X POST --data \"1%27%20ORDER%20BY%203--%2B\"\n\n\u003c HTTP/1.1 403 Forbidden\n\u003c content-length: 22\n\u003c content-type: text/plain\n\u003c date: Thu, 12 Feb 2026 10:28:16 GMT\n\u003c server: envoy\n\u003c\nRequest blocked by WAF\n"
+      }
+    ],
+    "composerVersion": "0.2.1"
+  },
+  {
+    "name": "example-go",
+    "version": "0.2.1",
+    "parent": "composer",
+    "categories": [
+      "Examples"
+    ],
+    "author": "Tetrate",
+    "description": "Example composer embedded go plugin for HTTP filters",
+    "longDescription": "An example HTTP filter plugin written in Go that demonstrates how to build extensions\nusing the Composer Dynamic Module system.\n\n## Features\n\nThis plugin showcases common HTTP filter operations:\n\n- **Header manipulation**: Read, add, and modify request/response headers\n- **Body modification**: Intercept and rewrite request/response bodies\n- **Metadata access**: Store and retrieve dynamic metadata and request attributes\n- **Metrics**: Work with Envoy counters, gauges, and histograms\n- **Local replies**: Send custom responses directly from the filter\n\n## Packaging\n\nThis is the **embedded** version of the plugin, compiled directly into the Composer\ndynamic module binary. This approach guarantees Go runtime compatibility since the\nplugin and host are built together with the same toolchain and dependencies.\n",
+    "type": "composer",
+    "tags": [
+      "go",
+      "http",
+      "filter"
+    ],
+    "license": "Apache-2.0",
+    "examples": [
+      {
+        "title": "Basic Example",
+        "description": "Load the example go plugin as an HTTP filter",
+        "code": "boe run --extension example\n"
+      }
+    ],
+    "composerVersion": "0.2.1"
+  },
+  {
+    "name": "example-lua",
+    "version": "1.0.0",
+    "categories": [
+      "Examples",
+      "Observability"
+    ],
+    "author": "Tetrate",
+    "description": "Comprehensive example demonstrating Envoy Lua HTTP filter capabilities",
+    "longDescription": "This extension serves as a comprehensive reference implementation showcasing\nmost of the available methods in Envoy's Lua HTTP filter API.\n\n## Example features in the extension\n\n* Request and response header manipulation (get, add, replace, remove, iterate)\n* Multiple logging levels (trace, debug, info, warn, err, critical)\n* Stream information access (protocol, route name, addresses, SNI)\n* Dynamic metadata for inter-filter communication\n* SSL/TLS connection inspection (certificates, cipher suites, TLS version)\n* Route and virtual host metadata access\n* Body handling (streaming with bodyChunks, buffered with body)\n* HTTP calls to external services\n* Direct response generation\n* Cryptographic operations (signature verification)\n* Utility functions (base64 encoding, timestamps)\n\nThis extension is intended as a learning resource and starting point for\ndeveloping custom Lua extensions. Most functionality is commented out by\ndefault to prevent unintended behavior - uncomment sections as needed.\n",
+    "type": "lua",
+    "tags": [
+      "example",
+      "reference",
+      "headers",
+      "logging",
+      "metadata",
+      "ssl",
+      "body"
+    ],
+    "license": "Apache-2.0",
+    "examples": [
+      {
+        "title": "Basic Usage",
+        "description": "Enable the example Lua extension to add request/response processing",
+        "code": "boe run --extension example-lua\n"
+      },
+      {
+        "title": "With Logging Enabled",
+        "description": "Run with debug logging to see all Lua filter output",
+        "code": "boe run --extension example-lua --log-level lua:debug\n"
+      }
+    ],
+    "lua": {
+      "path": "plugin.lua"
+    }
+  },
+  {
+    "name": "ip-restriction",
+    "version": "0.1.0",
+    "categories": [
+      "Security",
+      "Examples"
+    ],
+    "author": "Tetrate",
+    "featured": true,
+    "description": "IP-based access control using allowlists or denylists",
+    "longDescription": "This extension provides IP-based access control for your Envoy proxy using Rust and Envoy's\ndynamic module framework. It allows you to define allowlists or denylists of IP addresses,\nrestricting access based on the client's source IP.\n\n## Features\n\n* **IP Allowlisting**: Only permit requests from specific IP addresses\n* **IP Denylisting**: Block requests from specific IP addresses\n* **IPv4 and IPv6 Support**: Handles both IPv4 and IPv6 addresses\n\n## How It Works\n\nThe filter examines the source IP address of incoming requests and compares it against\nthe configured allow or deny list. Requests that don't match the policy receive a 403\nForbidden response.\n\n## Configuration\n\nYou must specify exactly one of:\n- `allow_addresses`: Array of IP addresses to allow (all others blocked)\n- `deny_addresses`: Array of IP addresses to deny (all others allowed)\n\n## Building\n\nThis is a Rust dynamic module that must be compiled to a shared library (`.so` on Linux,\n`.dylib` on macOS). The compiled module is loaded by Envoy at runtime.\n\n```bash\ncargo build --release -p ip-restriction\n```\n\nThe compiled library will be at `target/release/libip_restriction.{so,dylib}`\n\n## Note on Dynamic Modules\n\nThis extension requires Envoy to be built with dynamic module support. This feature\nis experimental and may not be available in all Envoy distributions.\n",
+    "type": "dynamic_module",
+    "tags": [
+      "security",
+      "ip-filtering",
+      "access-control",
+      "rust",
+      "dynamic-module",
+      "example"
+    ],
+    "license": "Apache-2.0",
+    "examples": [
+      {
+        "title": "Allow Specific IPs",
+        "description": "Only allow requests from localhost and a specific IP",
+        "code": "boe run --extension ip-restriction --config '\n  {\n    \"allow_addresses\": [\n      \"127.0.0.1\",\n      \"::1\",\n      \"192.168.1.100\"\n    ]\n  }'\n"
+      },
+      {
+        "title": "Deny Specific IPs",
+        "description": "Block requests from specific malicious IPs",
+        "code": "boe run --extension ip-restriction --config '\n  {\n    \"deny_addresses\": [\n      \"192.168.1.50\",\n      \"10.0.0.100\"\n    ]\n  }'\n"
+      },
+      {
+        "title": "IPv6 Support",
+        "description": "Works with both IPv4 and IPv6 addresses",
+        "code": "boe run --extension ip-restriction --config '\n  {\n    \"allow_addresses\": [\n      \"127.0.0.1\",\n      \"::1\",\n      \"2001:db8::1\"\n    ]\n  }'\n"
+      }
+    ]
+  },
+  {
+    "name": "jwe-decrypt",
+    "version": "0.2.1",
+    "parent": "composer",
+    "categories": [
+      "Security"
+    ],
+    "author": "Tetrate",
+    "featured": true,
+    "description": "Decrypt JWE tokens and recover the inner JWT for Envoy to process",
+    "longDescription": "This extension implements [JSON Web Encryption (JWE)](https://datatracker.ietf.org/doc/html/rfc7516)\ndecryption in a Go extension for Envoy. JWE is a standard defined in\n[RFC 7516](https://datatracker.ietf.org/doc/html/rfc7516) that provides encrypted content\nusing JSON-based data structures, built on top of the\n[JSON Web Algorithms (JWA)](https://datatracker.ietf.org/doc/html/rfc7518) and\n[JSON Web Key (JWK)](https://datatracker.ietf.org/doc/html/rfc7517) specifications.\n\n**JWT inside JWE** \u0026mdash; For clients that encrypt a [JWT (RFC 7519)](https://datatracker.ietf.org/doc/html/rfc7519)\ninto a JWE token before sending it to the server, this extension decrypts the JWE and recovers the original\nJWT so that Envoy's built-in\n[JWT Authentication filter](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/jwt_authn_filter)\ncan read it, extract the token claims and use them for authorization.\n",
+    "type": "composer",
+    "tags": [
+      "go",
+      "http",
+      "filter",
+      "jwe",
+      "security",
+      "encryption"
+    ],
+    "license": "Apache-2.0",
+    "examples": [
+      {
+        "title": "Quickstart",
+        "description": "In this example, we will generate a JWE token containing a JWT token as the payload, and then use the JWE decryption extension\nin Envoy to decrypt the JWE token and recover the original JWT token.\n\nIn order to decrypt JWE tokens, you will need to provide the private key that matches the public key used for encryption. You can\nuse online tools such as [Authgear's JWK generator](https://www.authgear.com/tools/jwk-generator) to generate the necessary keypair,\nthen use [Authgear's JWT \u0026 JWE Debugger](https://www.authgear.com/tools/jwt-jwe-debugger) to generate sample JWT tokens,\nand encrypt them into JWE tokens using the generated public key.\n\nYou can then run the JWE decryption extension in Envoy to decrypt the JWE token and recover the original JWT token.\n",
+        "code": "# Run the extension reading the token from the `Authorization` header\nboe run --extension jwe-decrypt --config '{\n  \"key_file\": \"/path/to/private-key.pem\",\n  \"input_header\": \"Authorization\",\n  \"prefix\": \"Bearer \",\n  \"output_header\": \"Authorization\"\n}'\n\n# Send a request with the JWE token and see that the upstream receives the decrypted JWT token in the `Authorization` header.\ncurl http://localhost:10000/headers -H 'Authorization: Bearer \u003cJWE_TOKEN\u003e'\n{\n  \"headers\": {\n    \"Accept\": \"*/*\",\n    \"Authorization\": \"Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOlsiQm9FIFVzZXJzIl0sImlhdCI6MTc3MTI1NTU2NCwicHJpdmF0ZUNsYWltS2V5IjoiSGVsbG8sIFdvcmxkISIsInN1YiI6IlNhbXBsZUpXVCJ9.Gx8GzN4cQZDbgz9RbTyARbQX5LJ1FAggyYH2LGoxR5pXGGpO4m1bHmqQABRJaP-oCFwfXsX1aiA9WoN6Fxy5JdDNtAZpu7uR5u_PD2Cw24u_quRB-s_LeWYEwwftoDfnzEQfJeKappWbq9VCvk9Axg5sE-EnLPekhfo0gYhnn4TX-fg_v50AuvBSvXCR6WiIQn79TBIKPUe1UEFZz5kzgQXGWUR3SgczYqRGo0oqAMl7YLiviUUt--Jr0ozYkSA3j7_3ZqLEdyUqRxTe54gRSIym2HRiaSA75Fd12JJWF26YqzsoJ1anw1X037nRpetmV1_ANbOwcmUXTgIqL5NILA\",\n    \"Host\": \"localhost\",\n    \"User-Agent\": \"curl/8.13.0\",\n    \"X-Amzn-Trace-Id\": \"Root=1-69933906-43c5ac60421eeeb57f50a55e\",\n    \"X-Envoy-Expected-Rq-Timeout-Ms\": \"15000\"\n  }\n}\n"
+      },
+      {
+        "title": "Decrypt and forward a Bearer token",
+        "description": "Process a request with the `Authorization: Bearer \u003cJWE compact token\u003e` header,\ndecrypt the JWE token, and emit the decrypted payload back into the `Authorization`\nheader with the `Bearer` prefix restored.\n",
+        "code": "boe run --extension jwe-decrypt --config '{\n  \"key_file\": \"/path/to/private-key.pem\",\n  \"input_header\": \"Authorization\",\n  \"prefix\": \"Bearer \",\n  \"output_header\": \"Authorization\"\n}'\n"
+      },
+      {
+        "title": "Using inline key",
+        "description": "To enable the JWE decryption extension to decrypt JWE tokens you will need to provide the private key\nthat will be used to decrypt the JWE tokens. You can provide the key inline with the config by base64 encoding\nthe PEM PKCS8 private key.\nYou will also need to specify the header that contains the JWE token, and the header or metadata key where\nthe decrypted payload should be stored.\n",
+        "code": "boe run --extension jwe-decrypt --config '{\n  \"inline_key\": \"LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQo...base64-encoded-key...\"\n  \"input_header\": \"X-JWE-Token\",\n  \"output_header\": \"X-Decrypted-JWE-Token\",\n}'\n"
+      },
+      {
+        "title": "Using key file",
+        "description": "You can provide the key file path in the config. The extension will read the file and use the key to decrypt\nthe JWE tokens. The key file should contain the PEM PKCS8 private key.\nYou will also need to specify the header that contains the JWE token, and the header or metadata key where\nthe decrypted payload should be stored.\n",
+        "code": "boe run --extension jwe-decrypt --config '{\n  \"key_file\": \"/path/to/private-key.pem\",\n  \"input_header\": \"X-JWE-Token\",\n  \"output_header\": \"X-Decrypted-JWE-Token\",\n}'\n"
+      },
+      {
+        "title": "Add decrypted payload to metadata",
+        "description": "Specify the output_metadata field in the config to add the decrypted payload to Envoy metadata instead of a\nheader. The value of output_metadata should be the key where the decrypted payload will be stored in the\nmetadata under the `jwe-decrypt` namespace.\n",
+        "code": "boe run --extension jwe-decrypt --config '{\n  \"inline_key\": \"LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQo...base64-encoded-key...\"\n  \"input_header\": \"X-JWE-Token\",\n  \"output_metadata\": \"jwe_decrypted_payload\",\n}'\n"
+      }
+    ],
+    "composerVersion": "0.2.1"
+  },
+  {
+    "name": "opa",
+    "version": "0.2.1",
+    "parent": "composer",
+    "categories": [
+      "Security"
+    ],
+    "author": "Tetrate",
+    "featured": true,
+    "description": "Inline OPA policy evaluation for HTTP request authorization",
+    "longDescription": "This extension implements [Open Policy Agent (OPA)](https://www.openpolicyagent.org/)\npolicy evaluation as an inline Envoy HTTP filter. It replaces the traditional ext_authz\npattern by running the OPA Go library directly within the filter, making authorization\ndecisions on each request without a separate OPA sidecar or server.\n\n**Key Features:**\n\n- **Inline Rego evaluation**: Load and evaluate Rego policy files directly in the Envoy\n  data path using OPA's Go library. No separate OPA server required.\n- **ext_authz inspired input**: Constructs an OPA input document from request attributes\n  (method, path, headers, source/destination addresses) inspired by the\n  [OPA-Envoy plugin](https://github.com/open-policy-agent/opa-envoy-plugin).\n  Supports both boolean (allow/deny) and structured object responses with custom HTTP status\n  codes, headers, and response bodies.\n- **Dry-run mode**: Log authorization decisions without enforcing them, useful for testing\n  policies in production.\n- **Fail-open mode**: Allow requests through when policy evaluation encounters an error,\n  instead of returning a 500 response.\n- **mTLS and SPIFFE identity**: Access client certificate attributes including SPIFFE IDs\n  (URI SANs), DNS SANs, and certificate subject for identity-based authorization.\n- **Configurable decision path**: Query any rule path in the policy (default: `envoy.authz.allow`).\n\n**Input Document Structure:**\n\nRequests are parsed and transformed into a structured `input` document that is passed to the OPA\npolicy for evaluation. The following `input` document shows an example of the structure that is\npassed to the OPA policy on each request:\n\n```json\n{\n  \"attributes\": {\n    \"request\": {\n      \"http\": {\n        \"method\":   \"GET\",               // HTTP method\n        \"path\":     \"/api/v1/resource\",  // Full path including query string\n        \"host\":     \"example.com\",       // Host header (:authority)\n        \"scheme\":   \"https\",             // URL scheme (default: \"http\")\n        \"protocol\": \"HTTP/1.1\",          // Request protocol (default: \"HTTP/1.1\")\n        \"headers\": {                     // Request headers (excluding pseudo-headers)\n          \"authorization\": \"Bearer ...\",\n          \"content-type\": \"application/json\"\n        }\n      }\n    },\n    \"source\": {\n      \"address\": \"10.0.0.1:5000\",       // Client address (ip:port)\n      \"certificate\": {                   // Peer certificate (mTLS connections)\n        \"uri_san\":       \"spiffe://cluster.local/ns/default/sa/client\",\n        \"dns_san\":       \"client.default.svc.cluster.local\",\n        \"subject\":       \"CN=client,O=example\",\n        \"sha256_digest\": \"abc123...\"\n      }\n    },\n    \"destination\": {\n      \"address\": \"10.0.0.2:443\"         // Server address (ip:port)\n    },\n    \"connection\": {\n      \"tls_version\": \"TLSv1.3\"          // TLS version\n    }\n  },\n  \"parsed_path\":  [\"api\", \"v1\", \"resource\"],  // Path segments\n  \"parsed_query\": {\"key\": [\"value\"]}          // Parsed query parameters\n}\n```\n",
+    "type": "composer",
+    "tags": [
+      "go",
+      "http",
+      "filter",
+      "opa",
+      "security",
+      "authorization",
+      "policy",
+      "spiffe",
+      "mtls"
+    ],
+    "license": "Apache-2.0",
+    "examples": [
+      {
+        "title": "Basic Authorization",
+        "description": "Run the OPA extension with a simple Rego policy that allows or denies\nrequests based on the request path. Create a policy file and reference\nit in the configuration.\n",
+        "code": "# Create a simple policy file\ncat \u003e /tmp/policy.rego \u003c\u003c 'EOF'\npackage envoy.authz\n\ndefault allow := false\n\nallow if {\n  input.parsed_path[0] == \"public\"\n}\nEOF\n\n# Run the extension\nboe run --extension opa --config '{\n  \"policy_file\": \"/tmp/policy.rego\"\n}'\n\n# Test allowed request\ncurl http://localhost:10000/public/resource\n# =\u003e 200 OK (proxied to upstream)\n\n# Test denied request\ncurl http://localhost:10000/private/resource\n# =\u003e 403 Forbidden\n"
+      },
+      {
+        "title": "Custom Deny Response",
+        "description": "Use a policy that returns a structured object with custom HTTP status,\nheaders, and body when denying a request.\n",
+        "code": "cat \u003e /tmp/policy.rego \u003c\u003c 'EOF'\npackage envoy.authz\n\ndefault allow := {\"allowed\": false, \"http_status\": 401, \"body\": \"Unauthorized\"}\n\nallow := {\"allowed\": true} if {\n  token := input.attributes.request.http.headers.authorization\n  startswith(token, \"Bearer \")\n}\nEOF\n\nboe run --extension opa --config '{\n  \"policy_file\": \"/tmp/policy.rego\"\n}'\n\n# Test with a valid JWT\ncurl -H \"Authorization: Bearer \u003ctoken\u003e\" http://localhost:10000/api/resource\n# =\u003e 200 OK\n\n# Test without a token\ncurl http://localhost:10000/api/resource\n# =\u003e 401 Unauthorized\n"
+      },
+      {
+        "title": "JWT Token Verification",
+        "description": "Use a policy that decodes JWT tokens using OPA's built-in\n`io.jwt.decode` function. This example decodes a JWT token,\nchecks the subject claim, and forwards the user's role as a\nrequest header to the upstream service.\n",
+        "code": "cat \u003e /tmp/policy.rego \u003c\u003c 'EOF'\npackage envoy.authz\n\nimport rego.v1\n\ndefault allow := {\"allowed\": false, \"http_status\": 401, \"body\": \"Unauthorized\"}\n\nallow := {\"allowed\": true, \"headers\": {\"x-jwt-role\": payload.role}} if {\n  auth_header := input.attributes.request.http.headers.authorization\n  startswith(auth_header, \"Bearer \")\n  token := substring(auth_header, 7, -1)\n  [_, payload, _] := io.jwt.decode(token)\n  payload.sub == \"my-subject\"\n}\nEOF\n\nboe run --extension opa --config '{\n  \"policy_file\": \"/tmp/policy.rego\"\n}'\n\n# Test with a valid JWT\ncurl -H \"Authorization: Bearer \u003ctoken\u003e\" http://localhost:10000/api/resource\n# =\u003e 200 OK (upstream receives x-jwt-role header)\n\n# Test without a token\ncurl http://localhost:10000/api/resource\n# =\u003e 401 Unauthorized\n"
+      },
+      {
+        "title": "SPIFFE Identity Authorization",
+        "description": "Use a policy that authorizes requests based on the client's SPIFFE identity\nfrom an mTLS connection. The SPIFFE ID is available at\n`input.attributes.source.certificate.uri_san`.\n",
+        "code": "cat \u003e /tmp/policy.rego \u003c\u003c 'EOF'\npackage envoy.authz\n\ndefault allow := false\n\n# Allow requests from trusted workloads\nallow if {\n  spiffe_id := input.attributes.source.certificate.uri_san\n  startswith(spiffe_id, \"spiffe://cluster.local/ns/production/\")\n}\nEOF\n\nboe run --extension opa --config '{\n  \"policy_file\": \"/tmp/policy.rego\"\n}'\n"
+      },
+      {
+        "title": "Dry-Run Mode",
+        "description": "Enable dry-run mode to log authorization decisions without enforcing them.\nUseful for testing new policies in production without blocking traffic.\n",
+        "code": "boe run --extension opa --config '{\n  \"policy_file\": \"/tmp/policy.rego\",\n  \"dry_run\": true\n}'\n"
+      },
+      {
+        "title": "Fail-Open Mode",
+        "description": "Enable fail-open mode to allow requests through when policy evaluation\nencounters an error, instead of returning a 500 response. Useful for\nnon-critical authorization checks where availability is prioritized\nover enforcement.\n",
+        "code": "boe run --extension opa --config '{\n  \"policy_file\": \"/tmp/policy.rego\",\n  \"fail_open\": true\n}'\n"
+      }
+    ],
+    "composerVersion": "0.2.1"
+  },
+  {
+    "name": "openapi-validator",
+    "version": "0.2.1",
+    "parent": "composer",
+    "categories": [
+      "Security"
+    ],
+    "author": "Tetrate",
+    "featured": true,
+    "description": "Validate HTTP requests against an OpenAPI specification",
+    "longDescription": "This extension validates incoming HTTP requests against an\n[OpenAPI](https://www.openapis.org/) specification file. It matches\nrequests to operations and validate paths, methods, query parameters,\nheaders, and request bodies against the defined schemas.\n\n**Key Features:**\n\n- **Full request validation**: Validates the HTTP method, path, path parameters,\n  query parameters, request headers, and the request body against the OpenAPI spec.\n- **OpenAPI 3.0 and 3.1 support**: Load specifications in YAML or JSON format.\n- **Configurable body size limit**: Set a maximum request body size to buffer for\n  validation. Requests exceeding the limit are rejected with a 413 status.\n- **Dry-run mode**: Log validation failures without enforcing them, useful for\n  testing new specs in production.\n- **Configurable deny responses**: Customize the HTTP status code, body, and\n  headers returned when a request fails validation.\n\n**Configuration Fields:**\n\n| Field | Type | Required | Default | Description |\n|-------|------|----------|---------|-------------|\n| `spec_file` | string | yes | - | Path to the OpenAPI spec file (YAML or JSON) |\n| `max_body_bytes` | integer | no | 0 (no limit) | Maximum body size to buffer; 0 disables the limit |\n| `allow_unmatched_paths` | boolean | no | false | Allow requests to paths not in the spec |\n| `dry_run` | boolean | no | false | Log failures without enforcing |\n| `deny_status` | integer | no | 400 | HTTP status code on validation failure |\n| `deny_body` | string | no | (error message) | Response body on failure |\n| `deny_headers` | object | no | - | Additional response headers on failure |\n",
+    "type": "composer",
+    "tags": [
+      "go",
+      "http",
+      "filter",
+      "openapi",
+      "validation",
+      "security",
+      "api"
+    ],
+    "license": "Apache-2.0",
+    "examples": [
+      {
+        "title": "Minimal OpenAPI Spec",
+        "description": "A minimal OpenAPI spec that validates requests to a `/post` endpoint.\nOnly POST requests with a JSON body containing a required `title` field\n(string) are allowed.\n",
+        "code": "# Create a minimal OpenAPI spec\ncat \u003e /tmp/openapi.yaml \u003c\u003c 'EOF'\nopenapi: \"3.0.0\"\ninfo:\n  title: Example API\n  version: \"1.0\"\npaths:\n  /post:\n    post:\n      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              type: object\n              required: [title]\n              properties:\n                title:\n                  type: string\n      responses:\n        \"200\":\n          description: Successful response\nEOF\n\n# Run the extension\nboe run --extension openapi-validator --config '{\n  \"spec_file\": \"/tmp/openapi.yaml\"\n}'\n\n# Valid request\ncurl -X POST -H \"Content-Type: application/json\" \\\n  -d '{\"title\": \"hello\"}' http://localhost:10000/post\n# =\u003e 200 OK (proxied to upstream)\n\n# Missing required field\ncurl -X POST -H \"Content-Type: application/json\" \\\n  -d '{\"other\": \"field\"}' http://localhost:10000/post\n# =\u003e 400 Bad Request\n\n# Unknown path\ncurl http://localhost:10000/unknown\n# =\u003e 400 Bad Request\n"
+      },
+      {
+        "title": "Body Validation with Size Limit",
+        "description": "Validate request bodies against the schema defined in the OpenAPI spec.\nSet a maximum body size to protect against oversized payloads.\n",
+        "code": "boe run --extension openapi-validator --config '{\n  \"spec_file\": \"/path/to/openapi.yaml\",\n  \"max_body_bytes\": 1048576\n}'\n\n# Valid POST with conforming body\ncurl -X POST -H \"Content-Type: application/json\" \\\n  -d '{\"name\": \"alice\"}' http://localhost:10000/api/users\n# =\u003e 201 Created\n\n# POST with body exceeding size limit\ncurl -X POST -H \"Content-Type: application/json\" \\\n  -d @large-file.json http://localhost:10000/api/users\n# =\u003e 413 Request body too large\n"
+      },
+      {
+        "title": "Dry-Run Mode",
+        "description": "Enable dry-run mode to log validation failures without blocking traffic.\nUseful for testing a new API spec before enforcing it.\n",
+        "code": "boe run --extension openapi-validator --config '{\n  \"spec_file\": \"/path/to/openapi.yaml\",\n  \"dry_run\": true\n}'\n"
+      },
+      {
+        "title": "Custom Deny Response",
+        "description": "Customize the response returned when a request fails validation.\n",
+        "code": "boe run --extension openapi-validator --config '{\n  \"spec_file\": \"/path/to/openapi.yaml\",\n  \"deny_status\": 422,\n  \"deny_body\": \"Request does not conform to API specification\",\n  \"deny_headers\": {\"content-type\": \"text/plain\"}\n}'\n"
+      }
+    ],
+    "composerVersion": "0.2.1"
+  }
+]

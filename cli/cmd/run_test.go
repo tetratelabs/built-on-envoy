@@ -69,7 +69,7 @@ Flags:
       --cluster=CLUSTER            Optional additional Envoy cluster. Supports
                                    JSON or short format (host:tlsPort).
       --docker                     Run Envoy as a Docker container instead of
-                                   using func-e.
+                                   using func-e ($BOE_RUN_DOCKER).
       --registry="ghcr.io/tetratelabs/built-on-envoy"
                                    OCI registry URL for the extensions
                                    ($BOE_REGISTRY).

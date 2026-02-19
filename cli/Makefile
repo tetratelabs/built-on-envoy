@@ -109,7 +109,8 @@ gen-docs:  ## Generate documentation
 	@go run tools/gen-cli-docs/main.go -docs-dir=../website/src/pages/docs
 	@go run tools/gen-manifest-reference/main.go \
 		-schema=../extensions/manifest.schema.json \
-		-output=../website/src/pages/docs/reference/manifest.mdx
+		-output=../website/src/pages/docs/reference/manifest.mdx \
+		-extension-index=../website/public/extensions.json
 
 ##@ Docker
 

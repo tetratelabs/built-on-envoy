@@ -14,12 +14,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"text/template"
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+
+	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 )
 
 //go:embed templates/*.tmpl
@@ -124,17 +127,24 @@ type TemplateData struct {
 
 func main() {
 	var (
-		schemaPath string
-		outputPath string
+		schemaPath         string
+		outputPath         string
+		extensionIndexPath string
 	)
 
 	flag.StringVar(&schemaPath, "schema", "", "Path to the JSON schema file (required)")
 	flag.StringVar(&outputPath, "output", "", "Output path for the MDX file (required)")
+	flag.StringVar(&extensionIndexPath, "extension-index", "", "Output path for the extension index file (required)")
 	flag.Parse()
 
-	if schemaPath == "" || outputPath == "" {
-		fmt.Fprintln(os.Stderr, "Usage: gen-manifest-reference -schema <path> -output <path>")
+	if schemaPath == "" || outputPath == "" || extensionIndexPath == "" {
+		fmt.Fprintln(os.Stderr, "Usage: gen-manifest-reference -schema <path> -output <path> -extension-index <path>")
 		flag.PrintDefaults()
+		os.Exit(1)
+	}
+
+	if err := generateExtensionIndex(extensionIndexPath); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to generate extension index: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -207,6 +217,22 @@ func main() {
 	_ = f.Close()
 
 	fmt.Printf("Generated: %s\n", outputPath)
+}
+
+func generateExtensionIndex(path string) error {
+	manifests := extensions.ManifestsForCatalog()
+	slices.SortFunc(manifests, func(a, b *extensions.Manifest) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+	index, err := json.MarshalIndent(manifests, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, index, 0o600); err != nil {
+		return err
+	}
+	fmt.Printf("Generated: %s\n", path)
+	return nil
 }
 
 // convertProperty converts a schema property to a documentation property.

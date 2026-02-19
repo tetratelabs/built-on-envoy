@@ -6,6 +6,11 @@ You can enable multiple extensions using the `--extension` flag, and also load e
 local directories using `--local` for development and testing purposes. The command manages
 all runtime files, logs, and the Envoy admin interface automatically.
 
+> ⚠️ `boe run` will try to download Envoy for your operating system and platform, but Envoy does
+> not provide packages for all platforms. If there are no Envoy binaries for your platform, `boe`
+> can transparently run Envoy in Docker. Just use `boe run --docker` or set the `BOE_RUN_DOCKER=true`
+> environment variable.
+
 ## Examples
 
 Run the `example-lua` extension from the default registry with `debug` logs enabled for Lua:
