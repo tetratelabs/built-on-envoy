@@ -9,7 +9,7 @@ services:
     user: root
     volumes:
       - shared:/opt/keycloak/data/import:rw
-    entrypoint: curl -v https://github.com/tetratelabs/built-on-envoy/raw/main/extensions/composer/saml/demo/keycloak/realm-export.json -o /opt/keycloak/data/import/realm-export.json
+    entrypoint: curl -v --fail-with-body https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/saml/demo/keycloak/realm-export.json -o /opt/keycloak/data/import/realm-export.json
 
   keycloak:
     depends_on:
@@ -24,7 +24,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - shared:/opt/keycloak/data/import/realm-export.json:ro
+      - shared:/opt/keycloak/data/import:ro
 
 volumes:
   shared:
