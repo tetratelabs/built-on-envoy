@@ -48,6 +48,7 @@ default allow := false
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().DefineCounter("opa_requests_total", "decision").Return(shared.MetricID(1), shared.MetricsSuccess)
 
 	filterFactory, err := factory.Create(mockHandle, configJSON)
 	require.NoError(t, err)
@@ -150,6 +151,7 @@ default allow := false
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().DefineCounter("opa_requests_total", "decision").Return(shared.MetricID(1), shared.MetricsSuccess)
 
 	filterFactory, err := factory.Create(mockHandle, configJSON)
 	require.NoError(t, err)
@@ -176,6 +178,7 @@ default verdict := false
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().DefineCounter("opa_requests_total", "decision").Return(shared.MetricID(1), shared.MetricsSuccess)
 
 	filterFactory, err := factory.Create(mockHandle, configJSON)
 	require.NoError(t, err)
@@ -202,6 +205,7 @@ func createTestFilter(t *testing.T, policy string, cfg opaConfig) (*opaHttpFilte
 	ctrl := gomock.NewController(t)
 	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	mockConfigHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockConfigHandle.EXPECT().DefineCounter("opa_requests_total", "decision").Return(shared.MetricID(1), shared.MetricsSuccess).AnyTimes()
 
 	filterFactory, err := factory.Create(mockConfigHandle, configJSON)
 	require.NoError(t, err)
@@ -216,6 +220,7 @@ func createTestFilter(t *testing.T, policy string, cfg opaConfig) (*opaHttpFilte
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate).Return("", false).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return("", false).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return("", false).AnyTimes()
+	mockHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), gomock.Any()).Return(shared.MetricsSuccess).AnyTimes()
 
 	filter := filterFactory.Create(mockHandle)
 	opaFilter, ok := filter.(*opaHttpFilter)
@@ -357,6 +362,115 @@ default allow := false
 	require.Equal(t, shared.HeadersStatusContinue, status)
 }
 
+// Tests for metrics
+
+// createTestFilterWithMetricExpectation creates a filter that expects a specific metric decision tag.
+func createTestFilterWithMetricExpectation(t *testing.T, policy string, cfg opaConfig, expectedDecision string) (*opaHttpFilter, *mocks.MockHttpFilterHandle) {
+	t.Helper()
+
+	if cfg.PolicyFile == "" {
+		cfg.PolicyFile = createTestPolicyFile(t, policy)
+	}
+
+	configJSON, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	factory := &OPAHttpFilterConfigFactory{}
+
+	ctrl := gomock.NewController(t)
+	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockConfigHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockConfigHandle.EXPECT().DefineCounter("opa_requests_total", "decision").Return(shared.MetricID(1), shared.MetricsSuccess)
+
+	filterFactory, err := factory.Create(mockConfigHandle, configJSON)
+	require.NoError(t, err)
+
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return("HTTP/1.1", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return("127.0.0.1:5000", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDDestinationAddress).Return("127.0.0.1:80", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionUriSanPeerCertificate).Return("", false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionDnsSanPeerCertificate).Return("", false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate).Return("", false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return("", false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return("", false).AnyTimes()
+	mockHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), expectedDecision).Return(shared.MetricsSuccess)
+
+	filter := filterFactory.Create(mockHandle)
+	opaFilter, ok := filter.(*opaHttpFilter)
+	require.True(t, ok)
+
+	return opaFilter, mockHandle
+}
+
+func TestOnRequestHeaders_Metrics_Allowed(t *testing.T) {
+	policy := `package envoy.authz
+default allow := true
+`
+	filter, _ := createTestFilterWithMetricExpectation(t, policy, opaConfig{}, decisionAllowed)
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":    {"GET"},
+		":path":      {"/api/resource"},
+		":authority": {"example.com"},
+		":scheme":    {"http"},
+	})
+
+	status := filter.OnRequestHeaders(headers, true)
+	require.Equal(t, shared.HeadersStatusContinue, status)
+}
+
+func TestOnRequestHeaders_Metrics_Denied(t *testing.T) {
+	policy := `package envoy.authz
+default allow := false
+`
+	filter, mockHandle := createTestFilterWithMetricExpectation(t, policy, opaConfig{}, decisionDenied)
+	mockHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "opa_denied")
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":    {"GET"},
+		":path":      {"/api/resource"},
+		":authority": {"example.com"},
+		":scheme":    {"http"},
+	})
+
+	status := filter.OnRequestHeaders(headers, true)
+	require.Equal(t, shared.HeadersStatusStop, status)
+}
+
+func TestOnRequestHeaders_Metrics_FailOpen(t *testing.T) {
+	filter, mockHandle := createErrorFilter(t, true)
+	mockHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), decisionFailOpen).Return(shared.MetricsSuccess)
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":    {"GET"},
+		":path":      {"/api/resource"},
+		":authority": {"example.com"},
+		":scheme":    {"http"},
+	})
+
+	status := filter.OnRequestHeaders(headers, true)
+	require.Equal(t, shared.HeadersStatusContinue, status)
+}
+
+func TestOnRequestHeaders_Metrics_DryRunAllow(t *testing.T) {
+	policy := `package envoy.authz
+default allow := false
+`
+	filter, _ := createTestFilterWithMetricExpectation(t, policy, opaConfig{DryRun: true}, decisionDryAllow)
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":    {"GET"},
+		":path":      {"/api/resource"},
+		":authority": {"example.com"},
+		":scheme":    {"http"},
+	})
+
+	status := filter.OnRequestHeaders(headers, true)
+	require.Equal(t, shared.HeadersStatusContinue, status)
+}
+
 // Tests for parsePath
 
 func TestParsePath_Simple(t *testing.T) {
@@ -400,6 +514,7 @@ allow := true
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().DefineCounter("opa_requests_total", "decision").Return(shared.MetricID(1), shared.MetricsSuccess)
 
 	filterFactory, err := factory.Create(mockHandle, configJSON)
 	require.NoError(t, err)
@@ -407,6 +522,7 @@ allow := true
 	mockFilterHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	mockFilterHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockFilterHandle.EXPECT().GetAttributeString(gomock.Any()).Return("", false).AnyTimes()
+	mockFilterHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), "allowed").Return(shared.MetricsSuccess)
 
 	filter := filterFactory.Create(mockFilterHandle).(*opaHttpFilter)
 
@@ -433,6 +549,7 @@ allow := false
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().DefineCounter("opa_requests_total", "decision").Return(shared.MetricID(1), shared.MetricsSuccess)
 
 	filterFactory, err := factory.Create(mockHandle, configJSON)
 	require.NoError(t, err)
@@ -441,6 +558,7 @@ allow := false
 	mockFilterHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockFilterHandle.EXPECT().GetAttributeString(gomock.Any()).Return("", false).AnyTimes()
 	mockFilterHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "opa_denied")
+	mockFilterHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), "denied").Return(shared.MetricsSuccess)
 
 	filter := filterFactory.Create(mockFilterHandle).(*opaHttpFilter)
 
@@ -545,6 +663,7 @@ default allow := true
 
 	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	mockConfigHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockConfigHandle.EXPECT().DefineCounter("opa_requests_total", "decision").Return(shared.MetricID(1), shared.MetricsSuccess)
 
 	filterFactory, err := factory.Create(mockConfigHandle, configJSON)
 	require.NoError(t, err)
@@ -610,6 +729,7 @@ allow if {
 
 	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	mockConfigHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockConfigHandle.EXPECT().DefineCounter("opa_requests_total", "decision").Return(shared.MetricID(1), shared.MetricsSuccess)
 
 	filterFactory, err := factory.Create(mockConfigHandle, configJSON)
 	require.NoError(t, err)
@@ -625,6 +745,7 @@ allow if {
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate).Return("", false).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return("TLSv1.3", true).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return("", false).AnyTimes()
+	mockHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), "allowed").Return(shared.MetricsSuccess)
 
 	filter := filterFactory.Create(mockHandle).(*opaHttpFilter)
 
@@ -657,6 +778,7 @@ allow if {
 
 	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	mockConfigHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockConfigHandle.EXPECT().DefineCounter("opa_requests_total", "decision").Return(shared.MetricID(1), shared.MetricsSuccess)
 
 	filterFactory, err := factory.Create(mockConfigHandle, configJSON)
 	require.NoError(t, err)
@@ -673,6 +795,7 @@ allow if {
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return("TLSv1.3", true).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return("", false).AnyTimes()
 	mockHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "opa_denied")
+	mockHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), "denied").Return(shared.MetricsSuccess)
 
 	filter := filterFactory.Create(mockHandle).(*opaHttpFilter)
 
@@ -718,6 +841,7 @@ default allow := false
 	defer ctrl.Finish()
 	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	mockConfigHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockConfigHandle.EXPECT().DefineCounter("opa_requests_total", "decision").Return(shared.MetricID(1), shared.MetricsSuccess)
 
 	filterFactory, err := factory.Create(mockConfigHandle, configJSON)
 	require.NoError(t, err)
@@ -957,6 +1081,10 @@ result := 1 / 0
 			FailOpen:     failOpen,
 		},
 		preparedQuery: pq,
+		metrics: opaMetrics{
+			requestsTotal: shared.MetricID(1),
+			enabled:       true,
+		},
 	}
 
 	ctrl := gomock.NewController(t)
@@ -978,7 +1106,8 @@ result := 1 / 0
 // Tests for fail_open behavior on evaluation errors.
 
 func TestOnRequestHeaders_FailOpen_AllowsOnError(t *testing.T) {
-	filter, _ := createErrorFilter(t, true)
+	filter, mockHandle := createErrorFilter(t, true)
+	mockHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), "failopen").Return(shared.MetricsSuccess)
 
 	headers := fake.NewFakeHeaderMap(map[string][]string{
 		":method":    {"GET"},
@@ -998,6 +1127,7 @@ func TestOnRequestHeaders_FailClosed_DeniesOnError(t *testing.T) {
 	mockHandle.EXPECT().SendLocalResponse(
 		uint32(500), gomock.Nil(), []byte("Internal Server Error"), "opa_eval_error",
 	)
+	mockHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), "denied").Return(shared.MetricsSuccess)
 
 	headers := fake.NewFakeHeaderMap(map[string][]string{
 		":method":    {"GET"},

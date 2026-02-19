@@ -35,10 +35,32 @@ type opaConfig struct {
 	DryRun bool `json:"dry_run"`
 }
 
+// Metric tag values for authorization decisions.
+const (
+	decisionAllowed  = "allowed"
+	decisionDenied   = "denied"
+	decisionFailOpen = "failopen"
+	decisionDryAllow = "dryrun_allow"
+)
+
+// opaMetrics holds the metric IDs for the OPA filter.
+type opaMetrics struct {
+	requestsTotal shared.MetricID
+	enabled       bool
+}
+
+// IncRequestsTotal increments the requests counter with the given decision tag value.
+func (m opaMetrics) IncRequestsTotal(handle shared.HttpFilterHandle, decision string) {
+	if m.enabled {
+		handle.IncrementCounterValue(m.requestsTotal, 1, decision)
+	}
+}
+
 // opaParsedConfig holds the parsed configuration and compiled OPA query.
 type opaParsedConfig struct {
 	opaConfig
 	preparedQuery rego.PreparedEvalQuery
+	metrics       opaMetrics
 }
 
 // opaHttpFilter is the per-request HTTP filter instance.
@@ -67,19 +89,22 @@ func (o *opaHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) share
 	if err != nil {
 		if o.config.FailOpen {
 			o.handle.Log(shared.LogLevelError, "opa: policy evaluation error (fail_open enabled): %s", err.Error())
+			o.config.metrics.IncRequestsTotal(o.handle, decisionFailOpen)
 			return shared.HeadersStatusContinue
 		}
 		o.handle.Log(shared.LogLevelError, "opa: policy evaluation error: %s", err.Error())
 		o.handle.SendLocalResponse(500, nil, []byte("Internal Server Error"), "opa_eval_error")
+		o.config.metrics.IncRequestsTotal(o.handle, decisionDenied)
 		return shared.HeadersStatusStop
 	}
 
 	allowed, resp := interpretResult(rs)
 	o.handle.Log(shared.LogLevelDebug, "opa: decision: allowed=%v", allowed)
 
-	if o.config.DryRun {
+	if !allowed && o.config.DryRun {
 		o.handle.Log(shared.LogLevelInfo, "opa: dry-run decision: allowed=%v", allowed)
-		return shared.HeadersStatusContinue
+		o.config.metrics.IncRequestsTotal(o.handle, decisionDryAllow)
+		allowed = true
 	}
 
 	if !allowed {
@@ -102,6 +127,7 @@ func (o *opaHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) share
 			[]byte(body),
 			"opa_denied",
 		)
+		o.config.metrics.IncRequestsTotal(o.handle, decisionDenied)
 		return shared.HeadersStatusStop
 	}
 
@@ -109,6 +135,10 @@ func (o *opaHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) share
 	for k, v := range resp.headers {
 		o.handle.Log(shared.LogLevelDebug, "opa: adding header %s=%s", k, v)
 		o.handle.RequestHeaders().Set(k, v)
+	}
+
+	if !o.config.DryRun {
+		o.config.metrics.IncRequestsTotal(o.handle, decisionAllowed)
 	}
 
 	return shared.HeadersStatusContinue
@@ -316,9 +346,17 @@ func (o *OPAHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle
 
 	handle.Log(shared.LogLevelDebug, "opa: policy compiled successfully")
 
+	var metrics opaMetrics
+	metricID, metricStatus := handle.DefineCounter("opa_requests_total", "decision")
+	if metricStatus == shared.MetricsSuccess {
+		metrics.requestsTotal = metricID
+		metrics.enabled = true
+	}
+
 	parsed := &opaParsedConfig{
 		opaConfig:     cfg,
 		preparedQuery: pq,
+		metrics:       metrics,
 	}
 
 	return &opaHttpFilterFactory{config: parsed}, nil

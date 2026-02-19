@@ -63,6 +63,7 @@ func createTestFilter(t *testing.T, policy string, cfg *cedarConfig) (*cedarHttp
 	ctrl := gomock.NewController(t)
 	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	mockConfigHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockConfigHandle.EXPECT().DefineCounter("cedar_requests_total", "decision").Return(shared.MetricID(1), shared.MetricsSuccess).AnyTimes()
 
 	filterFactory, err := factory.Create(mockConfigHandle, configJSON)
 	require.NoError(t, err)
@@ -77,6 +78,7 @@ func createTestFilter(t *testing.T, policy string, cfg *cedarConfig) (*cedarHttp
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate).Return("", false).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return("", false).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return("", false).AnyTimes()
+	mockHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), gomock.Any()).Return(shared.MetricsSuccess).AnyTimes()
 
 	filter := filterFactory.Create(mockHandle)
 	cedarFilter, ok := filter.(*cedarHttpFilter)
@@ -104,6 +106,7 @@ func TestConfigFactory_Create_ValidConfig(t *testing.T) {
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().DefineCounter("cedar_requests_total", "decision").Return(shared.MetricID(1), shared.MetricsSuccess)
 
 	filterFactory, err := factory.Create(mockHandle, configJSON)
 	require.NoError(t, err)
@@ -293,6 +296,7 @@ func TestConfigFactory_Create_ValidConfigWithEntities(t *testing.T) {
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().DefineCounter("cedar_requests_total", "decision").Return(shared.MetricID(1), shared.MetricsSuccess)
 
 	filterFactory, err := factory.Create(mockHandle, configJSON)
 	require.NoError(t, err)
@@ -368,6 +372,7 @@ func TestConfigFactory_Create_DefaultEntityTypes(t *testing.T) {
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().DefineCounter("cedar_requests_total", "decision").Return(shared.MetricID(1), shared.MetricsSuccess)
 
 	filterFactory, err := factory.Create(mockHandle, configJSON)
 	require.NoError(t, err)
@@ -399,6 +404,7 @@ func TestConfigFactory_Create_CustomEntityTypes(t *testing.T) {
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().DefineCounter("cedar_requests_total", "decision").Return(shared.MetricID(1), shared.MetricsSuccess)
 
 	filterFactory, err := factory.Create(mockHandle, configJSON)
 	require.NoError(t, err)
@@ -430,6 +436,7 @@ forbid(principal, action == Action::"DELETE", resource);
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().DefineCounter("cedar_requests_total", "decision").Return(shared.MetricID(1), shared.MetricsSuccess)
 
 	filterFactory, err := factory.Create(mockHandle, configJSON)
 	require.NoError(t, err)
@@ -603,6 +610,120 @@ func TestOnRequestHeaders_MissingPrincipalHeader_FailOpen(t *testing.T) {
 	})
 
 	// With fail_open=true, missing principal header should allow the request.
+	status := filter.OnRequestHeaders(headers, true)
+	require.Equal(t, shared.HeadersStatusContinue, status)
+}
+
+// Tests for metrics
+
+// createTestFilterWithMetricExpectation creates a filter that expects a specific metric decision tag.
+func createTestFilterWithMetricExpectation(t *testing.T, policy string, cfg *cedarConfig, expectedDecision string) (*cedarHttpFilter, *mocks.MockHttpFilterHandle) {
+	t.Helper()
+
+	if cfg.PolicyFile == "" {
+		cfg.PolicyFile = createTestPolicyFile(t, policy)
+	}
+
+	if cfg.PrincipalType == "" {
+		cfg.PrincipalType = "User"
+	}
+	if cfg.PrincipalIDHeader == "" {
+		cfg.PrincipalIDHeader = "x-user-id"
+	}
+
+	configJSON, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	factory := &CedarHttpFilterConfigFactory{}
+
+	ctrl := gomock.NewController(t)
+	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockConfigHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockConfigHandle.EXPECT().DefineCounter("cedar_requests_total", "decision").Return(shared.MetricID(1), shared.MetricsSuccess)
+
+	filterFactory, err := factory.Create(mockConfigHandle, configJSON)
+	require.NoError(t, err)
+
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return("HTTP/1.1", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return("127.0.0.1:5000", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDDestinationAddress).Return("127.0.0.1:80", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionUriSanPeerCertificate).Return("", false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionDnsSanPeerCertificate).Return("", false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate).Return("", false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return("", false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return("", false).AnyTimes()
+	mockHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), expectedDecision).Return(shared.MetricsSuccess)
+
+	filter := filterFactory.Create(mockHandle)
+	cedarFilter, ok := filter.(*cedarHttpFilter)
+	require.True(t, ok)
+
+	return cedarFilter, mockHandle
+}
+
+func TestOnRequestHeaders_Metrics_Allowed(t *testing.T) {
+	policy := `permit(principal, action, resource);`
+	filter, _ := createTestFilterWithMetricExpectation(t, policy, &cedarConfig{}, decisionAllowed)
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":    {"GET"},
+		":path":      {"/api/resource"},
+		":authority": {"example.com"},
+		":scheme":    {"http"},
+		"x-user-id":  {"alice"},
+	})
+
+	status := filter.OnRequestHeaders(headers, true)
+	require.Equal(t, shared.HeadersStatusContinue, status)
+}
+
+func TestOnRequestHeaders_Metrics_Denied(t *testing.T) {
+	policy := `forbid(principal, action, resource);`
+	filter, mockHandle := createTestFilterWithMetricExpectation(t, policy, &cedarConfig{}, decisionDenied)
+	mockHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "cedar_denied")
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":    {"GET"},
+		":path":      {"/api/resource"},
+		":authority": {"example.com"},
+		":scheme":    {"http"},
+		"x-user-id":  {"alice"},
+	})
+
+	status := filter.OnRequestHeaders(headers, true)
+	require.Equal(t, shared.HeadersStatusStop, status)
+}
+
+func TestOnRequestHeaders_Metrics_FailOpen(t *testing.T) {
+	policy := `permit(principal, action, resource);`
+	filter, _ := createTestFilterWithMetricExpectation(t, policy, &cedarConfig{FailOpen: true}, decisionFailOpen)
+
+	// No x-user-id header triggers an error, which should be allowed via fail_open.
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":    {"GET"},
+		":path":      {"/api/resource"},
+		":authority": {"example.com"},
+		":scheme":    {"http"},
+	})
+
+	status := filter.OnRequestHeaders(headers, true)
+	require.Equal(t, shared.HeadersStatusContinue, status)
+}
+
+func TestOnRequestHeaders_Metrics_DryRunAllow(t *testing.T) {
+	policy := `forbid(principal, action, resource);`
+	filter, _ := createTestFilterWithMetricExpectation(t, policy, &cedarConfig{DryRun: true}, decisionDryAllow)
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":    {"GET"},
+		":path":      {"/api/resource"},
+		":authority": {"example.com"},
+		":scheme":    {"http"},
+		"x-user-id":  {"alice"},
+	})
+
 	status := filter.OnRequestHeaders(headers, true)
 	require.Equal(t, shared.HeadersStatusContinue, status)
 }
@@ -1117,6 +1238,7 @@ func TestBuildContext_MTLSAttributes(t *testing.T) {
 
 	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	mockConfigHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockConfigHandle.EXPECT().DefineCounter("cedar_requests_total", "decision").Return(shared.MetricID(1), shared.MetricsSuccess)
 
 	filterFactory, err := factory.Create(mockConfigHandle, configJSON)
 	require.NoError(t, err)
@@ -1166,6 +1288,7 @@ func TestOnRequestHeaders_PolicyUsesSPIFFE(t *testing.T) {
 
 	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	mockConfigHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockConfigHandle.EXPECT().DefineCounter("cedar_requests_total", "decision").Return(shared.MetricID(1), shared.MetricsSuccess)
 
 	filterFactory, err := factory.Create(mockConfigHandle, configJSON)
 	require.NoError(t, err)
@@ -1181,6 +1304,7 @@ func TestOnRequestHeaders_PolicyUsesSPIFFE(t *testing.T) {
 		mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate).Return("", false).AnyTimes()
 		mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return("TLSv1.3", true).AnyTimes()
 		mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return("", false).AnyTimes()
+		mockHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), "allowed").Return(shared.MetricsSuccess)
 
 		filter := filterFactory.Create(mockHandle).(*cedarHttpFilter)
 
@@ -1208,6 +1332,7 @@ func TestOnRequestHeaders_PolicyUsesSPIFFE(t *testing.T) {
 		mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return("TLSv1.3", true).AnyTimes()
 		mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return("", false).AnyTimes()
 		mockHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "cedar_denied")
+		mockHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), "denied").Return(shared.MetricsSuccess)
 
 		filter := filterFactory.Create(mockHandle).(*cedarHttpFilter)
 
@@ -1336,6 +1461,7 @@ func TestFilterFactory_Create(t *testing.T) {
 	defer ctrl.Finish()
 	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	mockConfigHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockConfigHandle.EXPECT().DefineCounter("cedar_requests_total", "decision").Return(shared.MetricID(1), shared.MetricsSuccess)
 
 	filterFactory, err := factory.Create(mockConfigHandle, configJSON)
 	require.NoError(t, err)
