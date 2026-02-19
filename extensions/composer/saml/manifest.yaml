@@ -52,6 +52,17 @@ longDescription: |
   The `_file` variants read the value from disk at config parse time, which is
   convenient for large PEM blocks and XML documents. You cannot specify both the
   inline value and the `_file` variant for the same field.
+
+  ## Metrics
+
+  The extension emits the following Envoy counters:
+
+  | Metric | Type | Tags | Description |
+  |--------|------|------|-------------|
+  | `saml_authn_requests_total` | Counter | — | Incremented on each IdP redirect |
+  | `saml_assertions_validated_total` | Counter | `result` (`success` / `failure`) | Incremented after SAML response validation |
+  | `saml_sessions_created_total` | Counter | — | Incremented on successful ACS processing |
+  | `saml_sessions_validated_total` | Counter | `result` (`valid` / `expired` / `invalid`) | Incremented on session cookie validation |
 type: composer
 tags:
   - saml

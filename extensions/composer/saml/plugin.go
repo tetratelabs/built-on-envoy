@@ -90,7 +90,7 @@ func (f *HTTPFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, c
 		metrics:     metrics,
 	}
 
-	handle.Log(shared.LogLevelTrace, "saml: config: %s", cfg.String())
+	handle.Log(shared.LogLevelDebug, "saml: config: %s", cfg.String())
 
 	return &samlFilterFactory{cfg: filterCfg}, nil
 }

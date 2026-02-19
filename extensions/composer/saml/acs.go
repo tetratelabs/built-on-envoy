@@ -70,7 +70,7 @@ func handleACSPost(l logger, cfg *Config, idpMeta *IDPMetadata, body []byte, req
 		// Unsafe RelayState is silently replaced with the default redirect path.
 	}
 
-	l.Log(shared.LogLevelTrace, "SAML ACS POST processed successfully. Session data: %s, Redirect URL: %s", sessionData, redirectURL)
+	l.Log(shared.LogLevelDebug, "saml: ACS POST processed successfully. Session data: %s, Redirect URL: %s", sessionData, redirectURL)
 
 	return sessionData, redirectURL, nil
 }

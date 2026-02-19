@@ -30,4 +30,4 @@ header:
     - LICENSE
     - "**/coraza/rules/**"
     - "**/.claude/**"
-    - "**/demo/**"
+    - "**/*.json"

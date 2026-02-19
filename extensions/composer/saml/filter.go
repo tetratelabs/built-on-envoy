@@ -9,7 +9,6 @@ import (
 	"errors"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 )
@@ -65,7 +64,8 @@ func (f *samlHTTPFilter) OnRequestHeaders(headers shared.HeaderMap, endStream bo
 	// 2. Serve SP metadata.
 	if path == cfg.MetadataPath {
 		f.serveMetadata()
-		return shared.HeadersStatusContinue
+		// seveMetadata sends a success or failure local response.
+		return shared.HeadersStatusStop
 	}
 
 	// 3. ACS endpoint — buffer the POST body.
@@ -77,7 +77,7 @@ func (f *samlHTTPFilter) OnRequestHeaders(headers shared.HeaderMap, endStream bo
 			// Empty POST body — this shouldn't happen for a valid SAML response.
 			f.handle.Log(shared.LogLevelError, "saml: [%s] ACS POST with empty body", f.requestID)
 			f.handle.SendLocalResponse(400, nil, []byte("Bad Request: empty ACS POST body"), "saml")
-			return shared.HeadersStatusContinue
+			return shared.HeadersStatusStop
 		}
 		// Buffer the body; processing happens in OnRequestBody.
 		return shared.HeadersStatusStop
@@ -94,12 +94,6 @@ func (f *samlHTTPFilter) OnRequestHeaders(headers shared.HeaderMap, endStream bo
 				f.setUpstreamHeaders(headers, session)
 				f.handle.Log(shared.LogLevelDebug, "saml: [%s] valid session for %s", f.requestID, session.NameID)
 				f.incrementSessionsValidated("valid")
-				// Warn if session is near expiry (< 10% of duration remaining).
-				remaining := time.Until(session.ExpiresAt)
-				threshold := cfg.SessionDuration / 10
-				if remaining > 0 && remaining < threshold {
-					f.handle.Log(shared.LogLevelWarn, "saml: [%s] session for %s expires in %s", f.requestID, session.NameID, remaining)
-				}
 				return shared.HeadersStatusContinue
 			}
 			f.handle.Log(shared.LogLevelDebug, "saml: [%s] invalid session cookie: %s", f.requestID, err.Error())
@@ -119,7 +113,7 @@ func (f *samlHTTPFilter) OnRequestHeaders(headers shared.HeaderMap, endStream bo
 	if err != nil {
 		f.handle.Log(shared.LogLevelError, "saml: [%s] failed to generate AuthnRequest: %s", f.requestID, err.Error())
 		f.handle.SendLocalResponse(500, nil, []byte("Internal Server Error"), "saml")
-		return shared.HeadersStatusContinue
+		return shared.HeadersStatusStop
 	}
 
 	f.handle.Log(shared.LogLevelInfo, "saml: [%s] redirecting to IdP for authentication", f.requestID)
@@ -130,7 +124,7 @@ func (f *samlHTTPFilter) OnRequestHeaders(headers shared.HeaderMap, endStream bo
 	}, nil, "saml-redirect")
 	f.incrementAuthnRequests()
 
-	return shared.HeadersStatusContinue
+	return shared.HeadersStatusStop
 }
 
 // OnRequestBody processes the buffered request body, specifically for the ACS endpoint.
@@ -169,7 +163,7 @@ func (f *samlHTTPFilter) OnRequestBody(_ shared.BodyBuffer, endStream bool) shar
 		f.handle.SendLocalResponse(401, [][2]string{
 			{"content-type", "text/plain"},
 		}, []byte("Unauthorized: "+publicMsg), "saml-acs-error")
-		return shared.BodyStatusContinue
+		return shared.BodyStatusStopNoBuffer
 	}
 	f.incrementAssertionsValidated("success")
 
@@ -178,7 +172,7 @@ func (f *samlHTTPFilter) OnRequestBody(_ shared.BodyBuffer, endStream bool) shar
 	if err != nil {
 		f.handle.Log(shared.LogLevelError, "saml: [%s] failed to create session token: %s", f.requestID, err.Error())
 		f.handle.SendLocalResponse(500, nil, []byte("Internal Server Error"), "saml")
-		return shared.BodyStatusContinue
+		return shared.BodyStatusStopNoBuffer
 	}
 	f.incrementSessionsCreated()
 
@@ -191,7 +185,7 @@ func (f *samlHTTPFilter) OnRequestBody(_ shared.BodyBuffer, endStream bool) shar
 		{"cache-control", "no-cache, no-store"},
 	}, nil, "saml-acs-redirect")
 
-	return shared.BodyStatusContinue
+	return shared.BodyStatusStopNoBuffer
 }
 
 // setUpstreamHeaders sets the authenticated user's identity headers on the request

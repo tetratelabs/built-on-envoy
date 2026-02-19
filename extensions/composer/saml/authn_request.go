@@ -93,8 +93,8 @@ func generateAuthnRequest(l logger, cfg *Config, idpMeta *IDPMetadata, requestSc
 		q.Set("Signature", base64.StdEncoding.EncodeToString(sig))
 	}
 
-	l.Log(shared.LogLevelTrace,
-		"SAML AuthnRequest. SAMLRequest: %s, SAMLRequest(deflate&base64): %s, RelayState: %s, SigAlg: %s, Signature: %s",
+	l.Log(shared.LogLevelDebug,
+		"saml: authn request. SAMLRequest: %s, SAMLRequest(deflate&base64): %s, RelayState: %s, SigAlg: %s, Signature: %s",
 		xmlBytes, q.Get("SAMLRequest"), q.Get("RelayState"), q.Get("SigAlg"), q.Get("Signature"))
 
 	redirectURL.RawQuery = q.Encode()

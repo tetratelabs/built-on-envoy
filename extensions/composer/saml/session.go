@@ -110,7 +110,7 @@ func buildSessionCookie(l logger, cfg *Config, token string) string {
 	maxAge := int(cfg.SessionDuration.Seconds())
 	cookie += fmt.Sprintf("; Max-Age=%d", maxAge)
 
-	l.Log(shared.LogLevelTrace, "SAML Session Cookie: %s", cookie)
+	l.Log(shared.LogLevelDebug, "saml: session cookie: %s", cookie)
 
 	return cookie
 }

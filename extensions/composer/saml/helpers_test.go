@@ -140,6 +140,16 @@ func testFilterConfig(spKP, idpKP *testKeyPair) *samlFilterConfig {
 	return &samlFilterConfig{
 		config:      testConfig(spKP, idpKP),
 		idpMetadata: testIDPMetadata(idpKP),
+		metrics: &samlMetrics{
+			authnRequests:          shared.MetricID(1),
+			hasAuthnRequests:       true,
+			assertionsValidated:    shared.MetricID(2),
+			hasAssertionsValidated: true,
+			sessionsCreated:        shared.MetricID(3),
+			hasSessionsCreated:     true,
+			sessionsValidated:      shared.MetricID(4),
+			hasSessionsValidated:   true,
+		},
 	}
 }
 

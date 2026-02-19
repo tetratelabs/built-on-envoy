@@ -67,7 +67,7 @@ func TestOnRequestHeaders_MetadataPath(t *testing.T) {
 
 	headers := fake.NewFakeHeaderMap(map[string][]string{})
 	status := f.OnRequestHeaders(headers, true)
-	require.Equal(t, shared.HeadersStatusContinue, status)
+	require.Equal(t, shared.HeadersStatusStop, status)
 }
 
 func TestOnRequestHeaders_ACSPost_BuffersBody(t *testing.T) {
@@ -95,7 +95,7 @@ func TestOnRequestHeaders_ACSPost_EmptyBody(t *testing.T) {
 	headers := fake.NewFakeHeaderMap(map[string][]string{})
 	// endStream=true means empty POST body.
 	status := f.OnRequestHeaders(headers, true)
-	require.Equal(t, shared.HeadersStatusContinue, status)
+	require.Equal(t, shared.HeadersStatusStop, status)
 }
 
 func TestOnRequestHeaders_ValidSession(t *testing.T) {
@@ -115,6 +115,7 @@ func TestOnRequestHeaders_ValidSession(t *testing.T) {
 
 	expectGetAttribute(handle, "/protected", "GET", "https", "sp.example.com")
 	handle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	handle.EXPECT().IncrementCounterValue(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	headers := fake.NewFakeHeaderMap(map[string][]string{
 		"cookie": {cfg.CookieName + "=" + token},
@@ -145,6 +146,7 @@ func TestOnRequestHeaders_ExpiredSession_Redirects(t *testing.T) {
 
 	expectGetAttribute(handle, "/protected", "GET", "https", "sp.example.com")
 	handle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	handle.EXPECT().IncrementCounterValue(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	handle.EXPECT().SendLocalResponse(uint32(302), gomock.Any(), gomock.Any(), gomock.Eq("saml-redirect"))
 
 	headers := fake.NewFakeHeaderMap(map[string][]string{
@@ -152,7 +154,7 @@ func TestOnRequestHeaders_ExpiredSession_Redirects(t *testing.T) {
 	})
 
 	status := f.OnRequestHeaders(headers, true)
-	require.Equal(t, shared.HeadersStatusContinue, status)
+	require.Equal(t, shared.HeadersStatusStop, status)
 }
 
 func TestOnRequestHeaders_NoCookie_Redirects(t *testing.T) {
@@ -161,11 +163,12 @@ func TestOnRequestHeaders_NoCookie_Redirects(t *testing.T) {
 
 	expectGetAttribute(handle, "/protected", "GET", "https", "sp.example.com")
 	handle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	handle.EXPECT().IncrementCounterValue(gomock.Any(), gomock.Any()).AnyTimes()
 	handle.EXPECT().SendLocalResponse(uint32(302), gomock.Any(), gomock.Any(), gomock.Eq("saml-redirect"))
 
 	headers := fake.NewFakeHeaderMap(map[string][]string{})
 	status := f.OnRequestHeaders(headers, true)
-	require.Equal(t, shared.HeadersStatusContinue, status)
+	require.Equal(t, shared.HeadersStatusStop, status)
 }
 
 func TestOnRequestHeaders_InvalidCookie_Redirects(t *testing.T) {
@@ -176,6 +179,7 @@ func TestOnRequestHeaders_InvalidCookie_Redirects(t *testing.T) {
 
 	expectGetAttribute(handle, "/protected", "GET", "https", "sp.example.com")
 	handle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	handle.EXPECT().IncrementCounterValue(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	handle.EXPECT().SendLocalResponse(uint32(302), gomock.Any(), gomock.Any(), gomock.Eq("saml-redirect"))
 
 	headers := fake.NewFakeHeaderMap(map[string][]string{
@@ -183,7 +187,7 @@ func TestOnRequestHeaders_InvalidCookie_Redirects(t *testing.T) {
 	})
 
 	status := f.OnRequestHeaders(headers, true)
-	require.Equal(t, shared.HeadersStatusContinue, status)
+	require.Equal(t, shared.HeadersStatusStop, status)
 }
 
 func TestOnRequestBody_NonACSRequest(t *testing.T) {
@@ -214,6 +218,7 @@ func TestOnRequestBody_ACS_InvalidSAMLResponse(t *testing.T) {
 	f.isACSRequest = true
 
 	handle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	handle.EXPECT().IncrementCounterValue(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	handle.EXPECT().SendLocalResponse(
 		uint32(401),
 		gomock.Any(),
@@ -227,7 +232,7 @@ func TestOnRequestBody_ACS_InvalidSAMLResponse(t *testing.T) {
 
 	body := fake.NewFakeBodyBuffer(nil)
 	status := f.OnRequestBody(body, true)
-	require.Equal(t, shared.BodyStatusContinue, status)
+	require.Equal(t, shared.BodyStatusStopNoBuffer, status)
 }
 
 func TestOnRequestHeaders_RedirectContainsIdPSSO(t *testing.T) {
@@ -236,6 +241,7 @@ func TestOnRequestHeaders_RedirectContainsIdPSSO(t *testing.T) {
 
 	expectGetAttribute(handle, "/dashboard", "GET", "https", "sp.example.com")
 	handle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	handle.EXPECT().IncrementCounterValue(gomock.Any(), gomock.Any()).AnyTimes()
 
 	var capturedHeaders [][2]string
 	handle.EXPECT().SendLocalResponse(uint32(302), gomock.Any(), gomock.Any(), gomock.Eq("saml-redirect")).
@@ -276,6 +282,7 @@ func TestOnRequestHeaders_ValidSession_MultipleAttributes(t *testing.T) {
 
 	expectGetAttribute(handle, "/api/data", "GET", "https", "sp.example.com")
 	handle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	handle.EXPECT().IncrementCounterValue(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	headers := fake.NewFakeHeaderMap(map[string][]string{
 		"cookie": {cfg.CookieName + "=" + token},
@@ -350,4 +357,101 @@ func TestConfigFactory_Create_InvalidIdPMetadata(t *testing.T) {
 	factory := &HTTPFilterConfigFactory{}
 	_, err := factory.Create(configHandle, []byte(configJSON))
 	require.Error(t, err)
+}
+
+func TestMetrics_AuthnRequests_IncrementedOnRedirect(t *testing.T) {
+	f, handle, ctrl := newTestFilter(t)
+	defer ctrl.Finish()
+
+	expectGetAttribute(handle, "/protected", "GET", "https", "sp.example.com")
+	handle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	handle.EXPECT().SendLocalResponse(uint32(302), gomock.Any(), gomock.Any(), gomock.Eq("saml-redirect"))
+
+	// Expect authnRequests counter (metric ID 1) to be incremented.
+	handle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{})
+	status := f.OnRequestHeaders(headers, true)
+	require.Equal(t, shared.HeadersStatusStop, status)
+}
+
+func TestMetrics_AssertionsValidated_Failure(t *testing.T) {
+	f, handle, ctrl := newTestFilter(t)
+	defer ctrl.Finish()
+
+	f.isACSRequest = true
+
+	handle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	handle.EXPECT().SendLocalResponse(uint32(401), gomock.Any(), gomock.Any(), gomock.Eq("saml-acs-error"))
+
+	// Provide a body with no SAMLResponse field.
+	bufferedBody := fake.NewFakeBodyBuffer([]byte("RelayState=https://sp.example.com/page"))
+	handle.EXPECT().BufferedRequestBody().Return(bufferedBody)
+
+	// Expect assertionsValidated counter (metric ID 2) to be incremented with "failure" tag.
+	handle.EXPECT().IncrementCounterValue(shared.MetricID(2), uint64(1), "failure").Return(shared.MetricsSuccess)
+
+	body := fake.NewFakeBodyBuffer(nil)
+	status := f.OnRequestBody(body, true)
+	require.Equal(t, shared.BodyStatusStopNoBuffer, status)
+}
+
+func TestMetrics_SessionsValidated_Valid(t *testing.T) {
+	f, handle, ctrl := newTestFilter(t)
+	defer ctrl.Finish()
+
+	cfg := f.cfg.config
+
+	// Create a valid session token.
+	session := &SessionData{
+		NameID:     "user@example.com",
+		Attributes: map[string][]string{"email": {"user@example.com"}},
+		ExpiresAt:  time.Now().Add(1 * time.Hour),
+	}
+	token, err := createSessionToken(cfg.CookieSigningKey, session)
+	require.NoError(t, err)
+
+	expectGetAttribute(handle, "/protected", "GET", "https", "sp.example.com")
+	handle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	// Expect sessionsValidated counter (metric ID 4) to be incremented with "valid" tag.
+	handle.EXPECT().IncrementCounterValue(shared.MetricID(4), uint64(1), "valid").Return(shared.MetricsSuccess)
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		"cookie": {cfg.CookieName + "=" + token},
+	})
+
+	status := f.OnRequestHeaders(headers, true)
+	require.Equal(t, shared.HeadersStatusContinue, status)
+}
+
+func TestMetrics_SessionsValidated_Expired(t *testing.T) {
+	f, handle, ctrl := newTestFilter(t)
+	defer ctrl.Finish()
+
+	cfg := f.cfg.config
+
+	// Create an expired session token.
+	session := &SessionData{
+		NameID:    "user@example.com",
+		ExpiresAt: time.Now().Add(-1 * time.Hour),
+	}
+	token, err := createSessionToken(cfg.CookieSigningKey, session)
+	require.NoError(t, err)
+
+	expectGetAttribute(handle, "/protected", "GET", "https", "sp.example.com")
+	handle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	handle.EXPECT().SendLocalResponse(uint32(302), gomock.Any(), gomock.Any(), gomock.Eq("saml-redirect"))
+
+	// Expect sessionsValidated counter (metric ID 4) to be incremented with "expired" tag.
+	handle.EXPECT().IncrementCounterValue(shared.MetricID(4), uint64(1), "expired").Return(shared.MetricsSuccess)
+	// Expect authnRequests counter (metric ID 1) to be incremented for the redirect.
+	handle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		"cookie": {cfg.CookieName + "=" + token},
+	})
+
+	status := f.OnRequestHeaders(headers, true)
+	require.Equal(t, shared.HeadersStatusStop, status)
 }
