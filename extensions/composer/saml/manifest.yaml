@@ -79,8 +79,9 @@ examples:
       Minimal setup — only the IdP metadata is needed. An ephemeral SP certificate
       and key are auto-generated.
     code: |
-      # Start keycloack in a different terminal
-      docker compose -f https://github.com/tetratelabs/built-on-envoy/raw/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yml up --wait
+      # Start keycloack
+      curl -o docker-compose.yaml https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yaml
+      docker compose -f docker-compose.yaml up --wait
 
       # Download the IdP metadata
       curl http://localhost:8080/realms/saml-demo/protocol/saml/descriptor -o idp-metadata.xml
@@ -97,14 +98,15 @@ examples:
       open http://localhost:10000
 
       # Cleanup keycloak
-      docker compose -f https://github.com/tetratelabs/built-on-envoy/raw/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yml down -v
+      docker compose -f docker-compose.yaml down -v
   - title: Explicit SP Certificate
     description: |
       Provide your own SP certificate and key for production deployments where the
       IdP requires a pre-registered SP certificate.
     code: |
-      # Start keycloack in a different terminal
-      docker compose -f https://github.com/tetratelabs/built-on-envoy/raw/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yml up --wait
+      # Start keycloack
+      curl -o docker-compose.yaml https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yaml
+      docker compose -f docker-compose.yaml up --wait
 
       # Download the IdP metadata
       curl http://localhost:8080/realms/saml-demo/protocol/saml/descriptor -o idp-metadata.xml
@@ -123,14 +125,15 @@ examples:
       open http://localhost:10000
 
       # Cleanup keycloak
-      docker compose -f https://github.com/tetratelabs/built-on-envoy/raw/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yml down -v
+      docker compose -f docker-compose.yaml down -v
   - title: Custom Session Settings
     description: |
       Configure session cookie name, duration, domain, security, and a fixed
       HMAC signing key (64 hex chars = 32 bytes) for cookie persistence across restarts.
     code: |
-      # Start keycloack in a different terminal
-      docker compose -f https://github.com/tetratelabs/built-on-envoy/raw/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yml up --wait
+      # Start keycloack
+      curl -o docker-compose.yaml https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yaml
+      docker compose -f docker-compose.yaml up --wait
 
       # Download the IdP metadata
       curl http://localhost:8080/realms/saml-demo/protocol/saml/descriptor -o idp-metadata.xml
@@ -155,14 +158,15 @@ examples:
       open http://localhost:10000
 
       # Cleanup keycloak
-      docker compose -f https://github.com/tetratelabs/built-on-envoy/raw/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yml down -v
+      docker compose -f docker-compose.yaml down -v
   - title: Attribute Mapping and Bypass Paths
     description: |
       Map SAML attributes to upstream headers and bypass health check paths
       from authentication.
     code: |
-      # Start keycloack in a different terminal
-      docker compose -f https://github.com/tetratelabs/built-on-envoy/raw/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yml up --wait
+      # Start keycloack
+      curl -o docker-compose.yaml https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yaml
+      docker compose -f docker-compose.yaml up --wait
 
       # Download the IdP metadata
       curl http://localhost:8080/realms/saml-demo/protocol/saml/descriptor -o idp-metadata.xml
@@ -187,4 +191,4 @@ examples:
       open http://localhost:10000/status/409
 
       # Cleanup keycloak
-      docker compose -f https://github.com/tetratelabs/built-on-envoy/raw/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yml down -v
+      docker compose -f docker-compose.yaml down -v
