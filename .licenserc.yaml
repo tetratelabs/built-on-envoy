@@ -29,3 +29,5 @@ header:
     - .editorconfig
     - LICENSE
     - "**/coraza/rules/**"
+    - "**/.claude/**"
+    - "**/*.json"

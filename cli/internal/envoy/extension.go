@@ -151,6 +151,9 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 		DynamicModuleConfig: &dymv3.DynamicModuleConfig{
 			Name:         manifest.Name,
 			LoadGlobally: false,
+			// TODO(nacx): configure a meaningful metrics namespace when
+			// the changes in https://github.com/envoyproxy/envoy/pull/43266 are available.
+			// Currently defaults to `dynamicmodulescustom`.
 		},
 		FilterName:   manifest.Name,
 		FilterConfig: anyConfig,
@@ -228,6 +231,9 @@ func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manif
 		DynamicModuleConfig: &dymv3.DynamicModuleConfig{
 			Name:         "composer",
 			LoadGlobally: true,
+			// TODO(nacx): configure a metrics namespace like "composer" or similar when
+			// the changes in https://github.com/envoyproxy/envoy/pull/43266 are available.
+			// Currently defaults to `dynamicmodulescustom`.
 		},
 		FilterName:   "goplugin",
 		FilterConfig: anyConfig,

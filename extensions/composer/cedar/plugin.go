@@ -45,11 +45,33 @@ type cedarConfig struct {
 	DryRun bool `json:"dry_run"`
 }
 
+// Metric tag values for authorization decisions.
+const (
+	decisionAllowed  = "allowed"
+	decisionDenied   = "denied"
+	decisionFailOpen = "failopen"
+	decisionDryAllow = "dryrun_allow"
+)
+
+// cedarMetrics holds the metric IDs for the Cedar filter.
+type cedarMetrics struct {
+	requestsTotal shared.MetricID
+	enabled       bool
+}
+
+// IncRequestsTotal increments the requests counter with the given decision tag value.
+func (m cedarMetrics) IncRequestsTotal(handle shared.HttpFilterHandle, decision string) {
+	if m.enabled {
+		handle.IncrementCounterValue(m.requestsTotal, 1, decision)
+	}
+}
+
 // cedarParsedConfig holds the parsed configuration and compiled Cedar policy set.
 type cedarParsedConfig struct {
 	cedarConfig
 	policySet *cedarlib.PolicySet
 	entities  cedarlib.EntityMap
+	metrics   cedarMetrics
 }
 
 // cedarHttpFilter is the per-request HTTP filter instance.
@@ -64,10 +86,12 @@ func (c *cedarHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) sha
 	if err != nil {
 		if c.config.FailOpen {
 			c.handle.Log(shared.LogLevelWarn, "cedar: request building error (fail_open enabled): %s", err.Error())
+			c.config.metrics.IncRequestsTotal(c.handle, decisionFailOpen)
 			return shared.HeadersStatusContinue
 		}
 		c.handle.Log(shared.LogLevelWarn, "cedar: request building error: %s", err.Error())
 		c.handle.SendLocalResponse(403, nil, []byte("Forbidden"), "cedar_denied")
+		c.config.metrics.IncRequestsTotal(c.handle, decisionDenied)
 		return shared.HeadersStatusStop
 	}
 
@@ -81,17 +105,21 @@ func (c *cedarHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) sha
 	if len(diagnostic.Errors) > 0 {
 		if c.config.FailOpen {
 			c.handle.Log(shared.LogLevelError, "cedar: policy evaluation errors (fail_open enabled): %v", diagnostic.Errors)
+			c.config.metrics.IncRequestsTotal(c.handle, decisionFailOpen)
 			return shared.HeadersStatusContinue
 		}
 		c.handle.Log(shared.LogLevelError, "cedar: policy evaluation errors: %v", diagnostic.Errors)
 		c.handle.SendLocalResponse(500, nil, []byte("Internal Server Error"), "cedar_eval_error")
+		c.config.metrics.IncRequestsTotal(c.handle, decisionDenied)
 		return shared.HeadersStatusStop
 	}
 
 	allowed := decision == cedarlib.Allow
-	if c.config.DryRun {
+
+	if !allowed && c.config.DryRun {
 		c.handle.Log(shared.LogLevelInfo, "cedar: dry-run decision: allowed=%v", allowed)
-		return shared.HeadersStatusContinue
+		c.config.metrics.IncRequestsTotal(c.handle, decisionDryAllow)
+		allowed = true
 	}
 
 	if !allowed {
@@ -114,7 +142,12 @@ func (c *cedarHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) sha
 			[]byte(body),
 			"cedar_denied",
 		)
+		c.config.metrics.IncRequestsTotal(c.handle, decisionDenied)
 		return shared.HeadersStatusStop
+	}
+
+	if !c.config.DryRun {
+		c.config.metrics.IncRequestsTotal(c.handle, decisionAllowed)
 	}
 
 	return shared.HeadersStatusContinue
@@ -341,10 +374,18 @@ func (c *CedarHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHand
 		handle.Log(shared.LogLevelDebug, "cedar: entities loaded successfully")
 	}
 
+	var metrics cedarMetrics
+	metricID, metricStatus := handle.DefineCounter("cedar_requests_total", "decision")
+	if metricStatus == shared.MetricsSuccess {
+		metrics.requestsTotal = metricID
+		metrics.enabled = true
+	}
+
 	parsed := &cedarParsedConfig{
 		cedarConfig: cfg,
 		policySet:   policySet,
 		entities:    entities,
+		metrics:     metrics,
 	}
 
 	return &cedarHttpFilterFactory{config: parsed}, nil

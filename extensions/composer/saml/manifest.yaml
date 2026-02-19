@@ -1,0 +1,190 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: saml
+parent: composer
+categories:
+  - Security
+author: Tetrate
+featured: true
+description: SAML 2.0 Service Provider authentication for Envoy HTTP traffic
+longDescription: |
+  A SAML 2.0 Service Provider (SP) HTTP filter that adds browser-based single sign-on
+  authentication to any service behind Envoy Proxy.
+
+  ## Features
+
+  * **SP-Initiated SSO**: Redirects unauthenticated users to your Identity Provider
+  * **Assertion Validation**: Full SAML Response signature verification and condition checks
+  * **Session Management**: HMAC-signed cookies with configurable expiration
+  * **Attribute Forwarding**: Maps SAML attributes to upstream request headers
+  * **SP Metadata Endpoint**: Auto-generated metadata XML for easy IdP registration
+  * **Signed AuthnRequests**: Optional RSA-SHA256 signing of outbound authentication requests
+  * **Auto-Generated SP Certificates**: Ephemeral keypair generated when no certificate is provided
+
+  ## How It Works
+
+  The filter intercepts incoming HTTP requests and checks for a valid session cookie.
+  If no session exists, the browser is redirected to the configured IdP with a SAML
+  AuthnRequest. After authentication, the IdP POSTs a SAMLResponse to the Assertion
+  Consumer Service (ACS) endpoint. The filter validates the assertion, creates a signed
+  session cookie, and redirects the user to their original URL. Subsequent requests
+  include the session cookie and pass through with identity headers set.
+
+  ## Configuration
+
+  Required fields:
+  - `entity_id`: The SP entity ID (usually, audience URI)
+  - `acs_path`: Path for the Assertion Consumer Service endpoint
+  - `idp_metadata_xml`: Inline IdP metadata XML (or `idp_metadata_xml_file` with a file path)
+
+  Optional fields:
+  - `sp_cert_pem` / `sp_key_pem`: PEM-encoded SP certificate and private key. If both are
+    omitted, an ephemeral self-signed keypair is auto-generated — convenient for development
+    or when the IdP does not require a pre-registered SP certificate. If provided, both must
+    be set together (or use `sp_cert_pem_file` / `sp_key_pem_file` to read from disk).
+  - Session settings: `session.duration`, `session.cookie_name`, `session.cookie_secure`,
+    `session.cookie_domain`, `session.cookie_signing_key`
+  - `bypass_paths`, `attribute_headers`, `sign_authn_requests`, `default_redirect_path`
+
+  The `_file` variants read the value from disk at config parse time, which is
+  convenient for large PEM blocks and XML documents. You cannot specify both the
+  inline value and the `_file` variant for the same field.
+
+  ## Metrics
+
+  The extension emits the following Envoy counters:
+
+  | Metric | Type | Tags | Description |
+  |--------|------|------|-------------|
+  | `saml_authn_requests_total` | Counter | — | Incremented on each IdP redirect |
+  | `saml_assertions_validated_total` | Counter | `result` (`success` / `failure`) | Incremented after SAML response validation |
+  | `saml_sessions_created_total` | Counter | — | Incremented on successful ACS processing |
+  | `saml_sessions_validated_total` | Counter | `result` (`valid` / `expired` / `invalid`) | Incremented on session cookie validation |
+type: composer
+tags:
+  - saml
+  - sso
+  - authentication
+  - security
+  - go
+  - http
+  - filter
+license: Apache-2.0
+examples:
+  - title: Basic SAML SSO
+    description: |
+      Minimal setup — only the IdP metadata is needed. An ephemeral SP certificate
+      and key are auto-generated.
+    code: |
+      # Start keycloack in a different terminal
+      docker compose -f https://github.com/tetratelabs/built-on-envoy/raw/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yml up --wait
+
+      # Download the IdP metadata
+      curl http://localhost:8080/realms/saml-demo/protocol/saml/descriptor -o idp-metadata.xml
+
+      # Run the plugin
+      boe run --extension saml --config '
+        {
+          "entity_id": "http://localhost:10000",
+          "acs_path": "/saml/acs",
+          "idp_metadata_xml_file": "idp-metadata.xml"
+        }'
+
+      # Test the plugin in the browser and login as testuser/testpass
+      open http://localhost:10000
+
+      # Cleanup keycloak
+      docker compose -f https://github.com/tetratelabs/built-on-envoy/raw/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yml down -v
+  - title: Explicit SP Certificate
+    description: |
+      Provide your own SP certificate and key for production deployments where the
+      IdP requires a pre-registered SP certificate.
+    code: |
+      # Start keycloack in a different terminal
+      docker compose -f https://github.com/tetratelabs/built-on-envoy/raw/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yml up --wait
+
+      # Download the IdP metadata
+      curl http://localhost:8080/realms/saml-demo/protocol/saml/descriptor -o idp-metadata.xml
+
+      # Run the plugin
+      boe run --extension saml --config '
+        {
+          "entity_id": "http://localhost:10000",
+          "acs_path": "/saml/acs",
+          "idp_metadata_xml_file": "idp-metadata.xml",
+          "sp_cert_pem_file": "sp-cert.pem",
+          "sp_key_pem_file": "sp-key.pem"
+        }'
+
+      # Test the plugin in the browser and login as testuser/testpass
+      open http://localhost:10000
+
+      # Cleanup keycloak
+      docker compose -f https://github.com/tetratelabs/built-on-envoy/raw/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yml down -v
+  - title: Custom Session Settings
+    description: |
+      Configure session cookie name, duration, domain, security, and a fixed
+      HMAC signing key (64 hex chars = 32 bytes) for cookie persistence across restarts.
+    code: |
+      # Start keycloack in a different terminal
+      docker compose -f https://github.com/tetratelabs/built-on-envoy/raw/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yml up --wait
+
+      # Download the IdP metadata
+      curl http://localhost:8080/realms/saml-demo/protocol/saml/descriptor -o idp-metadata.xml
+
+      # Run the plugin
+      boe run --extension saml --config '
+        {
+          "entity_id": "http://localhost:10000",
+          "acs_path": "/saml/acs",
+          "idp_metadata_xml_file": "idp-metadata.xml",
+          "session": {
+            "cookie_name": "my_session",
+            "duration": "5m",
+            "cookie_domain": ".example.com",
+            "cookie_secure": true,
+            "cookie_signing_key": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+          }
+        }'
+
+      # Test the plugin in the browser and login as testuser/testpass
+      # Check the cookie with browser dev tools to see how the settings applied
+      open http://localhost:10000
+
+      # Cleanup keycloak
+      docker compose -f https://github.com/tetratelabs/built-on-envoy/raw/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yml down -v
+  - title: Attribute Mapping and Bypass Paths
+    description: |
+      Map SAML attributes to upstream headers and bypass health check paths
+      from authentication.
+    code: |
+      # Start keycloack in a different terminal
+      docker compose -f https://github.com/tetratelabs/built-on-envoy/raw/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yml up --wait
+
+      # Download the IdP metadata
+      curl http://localhost:8080/realms/saml-demo/protocol/saml/descriptor -o idp-metadata.xml
+
+      # Run the plugin
+      boe run --extension saml --config '
+        {
+          "entity_id": "http://localhost:10000",
+          "acs_path": "/saml/acs",
+          "idp_metadata_xml_file": "idp-metadata.xml",
+          "attribute_headers": {
+            "email": "x-saml-email",
+            "Role": "x-saml-role"
+          },
+          "bypass_paths": ["/health", "/ready", "/status/409"],
+        }'
+
+      # Test the plugin in the browser and login as testuser/testpass and check how the headers are set
+      open http://localhost:10000/headers
+
+      # Clear the session cookies and then open again the browser and check how authentication is bypassed
+      open http://localhost:10000/status/409
+
+      # Cleanup keycloak
+      docker compose -f https://github.com/tetratelabs/built-on-envoy/raw/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yml down -v
