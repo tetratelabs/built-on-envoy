@@ -51,7 +51,6 @@ const (
 	decisionDenied   = "denied"
 	decisionFailOpen = "failopen"
 	decisionDryAllow = "dryrun_allow"
-	decisionDryDeny  = "dryrun_deny"
 )
 
 // cedarMetrics holds the metric IDs for the Cedar filter.

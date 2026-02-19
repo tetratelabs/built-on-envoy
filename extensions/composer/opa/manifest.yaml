@@ -74,6 +74,18 @@ longDescription: |
     "parsed_query": {"key": ["value"]}          // Parsed query parameters
   }
   ```
+
+  **Metrics:**
+
+  The extension exposes the `opa_requests_total` counter metric with a `decision` tag that
+  tracks authorization outcomes. The possible tag values are:
+
+  - `allowed`: The policy allowed the request.
+  - `denied`: The policy denied the request (or an error occurred with fail-open disabled).
+  - `failopen`: An error occurred during policy evaluation and the request was allowed because
+    fail-open mode is enabled.
+  - `dryrun_allow`: The policy denied the request but it was allowed because dry-run mode is
+    enabled.
 type: composer
 featured: true
 tags:
