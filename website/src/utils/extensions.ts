@@ -40,10 +40,3 @@ export function loadExtensions(): Extension[] {
 		.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/**
- * Get a specific extension by name
- */
-export function getExtensionByName(name: string): Extension | null {
-	const extensions = loadExtensions();
-	return extensions.find(ext => ext.name === name) || null;
-}

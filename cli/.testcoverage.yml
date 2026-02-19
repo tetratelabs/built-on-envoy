@@ -16,8 +16,6 @@ exclude:
     # Covered in integration tests.
     - main.go
     - internal/envoy/runner.go
-    # This is only for code generation at build time
-    - internal/codegen/main.go
     # These are test-only libraries.
     - internal/testing/
     
