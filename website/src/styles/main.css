@@ -142,13 +142,15 @@ header nav a:focus {
 	border-radius: 4px;
 }
 
-.github-icon {
+.github-icon,
+.slack-icon {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
 }
 
-.github-icon svg {
+.github-icon svg,
+.slack-icon svg {
 	width: 24px;
 	height: 24px;
 }
@@ -509,15 +511,15 @@ header nav a:focus {
 	background: #6d28d9;
 }
 
-.extension-badge--lua {
+.extension-badge--composer {
 	background: #c026d3;
 }
 
-.extension-badge--wasm {
+.extension-badge--lua {
 	background: #a855f7;
 }
 
-.extension-badge--composer {
+.extension-badge--wasm {
 	background: #cc69db;
 }
 
@@ -917,7 +919,8 @@ footer {
 		border-bottom: none;
 	}
 
-	header nav .github-icon {
+	header nav .github-icon,
+	header nav .slack-icon {
 		padding: 12px 24px;
 		justify-content: flex-start;
 	}
