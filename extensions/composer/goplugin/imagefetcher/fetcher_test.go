@@ -342,6 +342,205 @@ func TestFetchPlugin(t *testing.T) {
 	}
 }
 
+func TestOptionFromEnv(t *testing.T) {
+	tests := []struct {
+		name     string
+		envs     map[string]string
+		wantOpt  Option
+		wantData []byte // expected PullSecret content (nil means no secret)
+	}{
+		{
+			name: "defaults",
+			wantOpt: Option{
+				CacheDir: filepath.Join(os.TempDir(), "goplugin-cache"),
+			},
+		},
+		{
+			name: "custom cache dir",
+			envs: map[string]string{"GOPLUGIN_CACHE_DIR": "/custom/cache"},
+			wantOpt: Option{
+				CacheDir: "/custom/cache",
+			},
+		},
+		{
+			name: "insecure true",
+			envs: map[string]string{"GOPLUGIN_INSECURE": "true"},
+			wantOpt: Option{
+				CacheDir: filepath.Join(os.TempDir(), "goplugin-cache"),
+				Insecure: true,
+			},
+		},
+		{
+			name: "insecure false value",
+			envs: map[string]string{"GOPLUGIN_INSECURE": "false"},
+			wantOpt: Option{
+				CacheDir: filepath.Join(os.TempDir(), "goplugin-cache"),
+				Insecure: false,
+			},
+		},
+		{
+			name: "pull secret from file",
+			envs: map[string]string{"GOPLUGIN_PULL_SECRET": "PLACEHOLDER"},
+			wantOpt: Option{
+				CacheDir: filepath.Join(os.TempDir(), "goplugin-cache"),
+			},
+			wantData: []byte(`{"auths":{}}`),
+		},
+		{
+			name: "pull secret missing file",
+			envs: map[string]string{"GOPLUGIN_PULL_SECRET": "/nonexistent/path"},
+			wantOpt: Option{
+				CacheDir: filepath.Join(os.TempDir(), "goplugin-cache"),
+			},
+		},
+		{
+			name: "all options",
+			envs: map[string]string{
+				"GOPLUGIN_CACHE_DIR":   "/my/cache",
+				"GOPLUGIN_INSECURE":    "true",
+				"GOPLUGIN_PULL_SECRET": "PLACEHOLDER",
+			},
+			wantOpt: Option{
+				CacheDir: "/my/cache",
+				Insecure: true,
+			},
+			wantData: []byte(`{"auths":{}}`),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Clear all relevant env vars first.
+			for _, key := range []string{"GOPLUGIN_CACHE_DIR", "GOPLUGIN_PULL_SECRET", "GOPLUGIN_INSECURE"} {
+				t.Setenv(key, "")
+				os.Unsetenv(key) //nolint:errcheck // best-effort cleanup
+			}
+
+			// If a test case needs a real pull secret file, create one.
+			for k, v := range tt.envs {
+				if k == "GOPLUGIN_PULL_SECRET" && v == "PLACEHOLDER" && tt.wantData != nil {
+					f := filepath.Join(t.TempDir(), "dockerconfig.json")
+					if err := os.WriteFile(f, tt.wantData, 0o600); err != nil {
+						t.Fatal(err)
+					}
+					v = f
+				}
+				t.Setenv(k, v)
+			}
+
+			got := OptionFromEnv()
+
+			if got.CacheDir != tt.wantOpt.CacheDir {
+				t.Errorf("CacheDir = %q, want %q", got.CacheDir, tt.wantOpt.CacheDir)
+			}
+			if got.Insecure != tt.wantOpt.Insecure {
+				t.Errorf("Insecure = %v, want %v", got.Insecure, tt.wantOpt.Insecure)
+			}
+			if tt.wantData != nil {
+				if !bytes.Equal(got.PullSecret, tt.wantData) {
+					t.Errorf("PullSecret = %q, want %q", got.PullSecret, tt.wantData)
+				}
+			} else if got.PullSecret != nil {
+				t.Errorf("PullSecret = %q, want nil", got.PullSecret)
+			}
+		})
+	}
+}
+
+func TestFetchPlugin_DockerFormat(t *testing.T) {
+	// Set up a fake registry.
+	s := httptest.NewServer(registry.New())
+	defer s.Close()
+	u, err := url.Parse(s.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Build a Docker-format image with a single layer.
+	expectedContent := "docker plugin binary"
+	layer, err := newMockLayer(types.DockerLayer, map[string][]byte{
+		"plugin.so": []byte(expectedContent),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	img, err := mutate.Append(empty.Image, mutate.Addendum{Layer: layer})
+	if err != nil {
+		t.Fatal(err)
+	}
+	img = mutate.MediaType(img, types.DockerManifestSchema2)
+
+	// Push the image to the registry.
+	ref := fmt.Sprintf("%s/test/dockerplugin:latest", u.Host)
+	if err = crane.Push(img, ref); err != nil {
+		t.Fatal(err)
+	}
+
+	tmpDir := t.TempDir()
+	opt := Option{CacheDir: tmpDir}
+
+	filePath, err := FetchPlugin(context.Background(), ref, "dockerplugin", opt)
+	if err != nil {
+		t.Fatalf("FetchPlugin() error = %v", err)
+	}
+	if filePath == "" {
+		t.Fatal("FetchPlugin() returned empty path")
+	}
+
+	b, err := os.ReadFile(filePath) //nolint:gosec // Test code reads from temp dir.
+	if err != nil {
+		t.Fatalf("failed reading plugin file: %v", err)
+	}
+	if string(b) != expectedContent {
+		t.Fatalf("content mismatch: got %q want %q", string(b), expectedContent)
+	}
+}
+
+func TestExtractPluginBinary_MultipleSOFiles(t *testing.T) {
+	// Create an archive with two .so files. The first .so encountered in the
+	// tar stream should be the one extracted.
+	buf := bytes.NewBuffer(nil)
+	gz := gzip.NewWriter(buf)
+	tw := tar.NewWriter(gz)
+
+	first := "first-plugin-content"
+	second := "second-plugin-content"
+
+	// Write foo.so first, then bar.so.
+	for _, entry := range []struct {
+		name    string
+		content string
+	}{
+		{"foo.so", first},
+		{"bar.so", second},
+	} {
+		if err := tw.WriteHeader(&tar.Header{
+			Name: entry.name,
+			Size: int64(len(entry.content)),
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := io.WriteString(tw, entry.content); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = tw.Close()
+	_ = gz.Close()
+
+	dest := filepath.Join(t.TempDir(), "plugin.so")
+	if err := extractPluginBinary(buf, dest); err != nil {
+		t.Fatalf("extractPluginBinary failed: %v", err)
+	}
+	b, err := os.ReadFile(dest) //nolint:gosec // Test code reads from temp dir.
+	if err != nil {
+		t.Fatalf("failed to read written plugin: %v", err)
+	}
+	// foo.so appears first in the tar stream, so it should be extracted.
+	if string(b) != first {
+		t.Fatalf("got %q, want %q (first .so in tar stream)", string(b), first)
+	}
+}
+
 // newMockLayer creates a mock OCI layer with the given media type and file contents.
 func newMockLayer(mediaType types.MediaType, contents map[string][]byte) (v1.Layer, error) {
 	var b bytes.Buffer
