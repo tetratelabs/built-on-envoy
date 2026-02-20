@@ -168,14 +168,16 @@ func TestGenConfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
 			cmd := &GenConfig{
-				Minimal:          tt.minimal,
-				AdminPort:        9901,
-				ListenPort:       10000,
-				Local:            tt.local,
-				Clusters:         tt.clusters,
-				ClustersInsecure: tt.clustersInsecure,
-				ClustersJSON:     tt.clustersJSON,
-				output:           &buf,
+				Minimal:    tt.minimal,
+				AdminPort:  9901,
+				ListenPort: 10000,
+				Local:      tt.local,
+				Clusters: ClusterFlags{
+					Secure:   tt.clusters,
+					Insecure: tt.clustersInsecure,
+					JSONSpec: tt.clustersJSON,
+				},
+				output: &buf,
 			}
 
 			var args []string
@@ -224,5 +226,5 @@ func TestGenConfigMultipleArgsWithCommas(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{config1, config2}, cli.GenConfig.Configs)
-	require.Equal(t, []string{clusterJSON1, clusterJSON2}, cli.GenConfig.ClustersJSON)
+	require.Equal(t, []string{clusterJSON1, clusterJSON2}, cli.GenConfig.Clusters.JSONSpec)
 }
