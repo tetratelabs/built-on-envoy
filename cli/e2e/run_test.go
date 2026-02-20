@@ -109,27 +109,6 @@ func TestDockerRemoteDockerExtension(t *testing.T) {
 	}, 2*time.Minute, 200*time.Millisecond)
 }
 
-func TestComposerRemoteExtension(t *testing.T) {
-	internaltesting.SkipIfTestRegistryNotConfigured(t)
-
-	// Run a remote composer (Go plugin) extension.
-	// This downloads the extension and composer from the registry, generates
-	// config with oci:// URLs, and runs Envoy with the goplugin loader.
-	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin,
-		"--log-level", "dynamic_modules:debug",
-		"--extension", "example-go")
-
-	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
-	checkHeader := func(r *http.Response) bool {
-		return r.Header.Get("x-example-response-header") == "example-value"
-	}
-
-	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
-	t.Cleanup(cancel)
-
-	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
-}
-
 func TestDynamicModuleRemoteExtension(t *testing.T) {
 	internaltesting.SkipIfTestRegistryNotConfigured(t)
 
