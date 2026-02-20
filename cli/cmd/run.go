@@ -381,4 +381,3 @@ func validateComposerCompat(manifests []*extensions.Manifest) error {
 
 	return nil
 }
-
