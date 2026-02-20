@@ -5,6 +5,7 @@
 package oauth2te
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -54,6 +55,9 @@ type tokenExchangeConfig struct {
 
 	// HTTP callout timeout in milliseconds. Optional. Defaults to 5000.
 	TimeoutMs uint64 `json:"timeout_ms"`
+
+	// calloutHeaders is the precomputed set of headers for the request to the STS.
+	calloutHeaders [][2]string
 }
 
 // parseConfig parses and validates the JSON configuration.
@@ -106,6 +110,16 @@ func parseConfig(data []byte) (*tokenExchangeConfig, error) {
 	}
 	if cfg.TimeoutMs == 0 {
 		cfg.TimeoutMs = defaultTimeoutMs
+	}
+
+	// Precompute fixed values derived from the config
+	creds := base64.StdEncoding.EncodeToString([]byte(cfg.ClientID + ":" + cfg.ClientSecret))
+	cfg.calloutHeaders = [][2]string{
+		{":method", "POST"},
+		{":path", cfg.TokenExchangeEndpoint},
+		{"host", cfg.TokenExchangeHost},
+		{"content-type", "application/x-www-form-urlencoded"},
+		{"authorization", "Basic " + creds},
 	}
 
 	return cfg, nil

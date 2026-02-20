@@ -6,6 +6,7 @@ package oauth2te
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"testing"
@@ -16,6 +17,17 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
+
+// mustParseConfig marshals cfg to JSON and runs it through parseConfig so that
+// precomputed fields (e.g. calloutHeaders) are populated.
+func mustParseConfig(t *testing.T, cfg tokenExchangeConfig) *tokenExchangeConfig {
+	t.Helper()
+	b, err := json.Marshal(cfg)
+	require.NoError(t, err)
+	parsed, err := parseConfig(b)
+	require.NoError(t, err)
+	return parsed
+}
 
 // testMetrics returns an oauth2teMetrics with all metrics enabled for testing.
 func testMetrics() *oauth2teMetrics {
@@ -64,15 +76,13 @@ func TestOnRequestHeaders(t *testing.T) {
 		defer ctrl.Finish()
 		mockHandle := newMockFilterHandle(ctrl)
 
-		cfg := &tokenExchangeConfig{
+		cfg := mustParseConfig(t, tokenExchangeConfig{
 			Cluster:               "sts_cluster",
 			TokenExchangeEndpoint: "/oauth2/token",
 			TokenExchangeHost:     "sts.example.com",
 			ClientID:              "my-client",
 			ClientSecret:          "my-secret",
-			SubjectTokenType:      defaultSubjectTokenType,
-			TimeoutMs:             5000,
-		}
+		})
 
 		var capturedCluster string
 		var capturedHeaders [][2]string
@@ -124,21 +134,19 @@ func TestOnRequestHeaders(t *testing.T) {
 		defer ctrl.Finish()
 		mockHandle := newMockFilterHandle(ctrl)
 
-		cfg := &tokenExchangeConfig{
+		cfg := mustParseConfig(t, tokenExchangeConfig{
 			Cluster:               "sts_cluster",
 			TokenExchangeEndpoint: "/oauth2/token",
 			TokenExchangeHost:     "sts.example.com",
 			ClientID:              "my-client",
 			ClientSecret:          "my-secret",
-			SubjectTokenType:      defaultSubjectTokenType,
 			Audience:              "https://api.example.com",
 			Resource:              "https://api.example.com/v1",
 			Scope:                 "read write",
 			RequestedTokenType:    "urn:ietf:params:oauth:token-type:access_token",
 			ActorToken:            "actor-tok",
 			ActorTokenType:        "urn:ietf:params:oauth:token-type:access_token",
-			TimeoutMs:             5000,
-		}
+		})
 
 		var capturedBody []byte
 		mockHandle.EXPECT().HttpCallout(
@@ -173,15 +181,13 @@ func TestOnRequestHeaders(t *testing.T) {
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return(shared.HttpCalloutInitClusterNotFound, uint64(0))
 
-		cfg := &tokenExchangeConfig{
+		cfg := mustParseConfig(t, tokenExchangeConfig{
 			Cluster:               "bad_cluster",
 			TokenExchangeEndpoint: "/t",
 			TokenExchangeHost:     "h",
 			ClientID:              "c",
 			ClientSecret:          "s",
-			SubjectTokenType:      defaultSubjectTokenType,
-			TimeoutMs:             5000,
-		}
+		})
 
 		f := &tokenExchangeFilter{handle: mockHandle, config: cfg}
 		status := f.OnRequestHeaders(fake.NewFakeHeaderMap(map[string][]string{

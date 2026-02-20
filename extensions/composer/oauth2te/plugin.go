@@ -6,7 +6,6 @@ package oauth2te
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -80,6 +79,15 @@ func WellKnownHttpFilterConfigFactories() map[string]shared.HttpFilterConfigFact
 	}
 }
 
+// joinBody returns the body as a single byte slice, avoiding to call bytes.Join
+// when there is only one chunk which always returns a copy.
+func joinBody(body [][]byte) []byte {
+	if len(body) == 1 {
+		return body[0]
+	}
+	return bytes.Join(body, nil)
+}
+
 // headerValue returns the first value for a key in a [][2]string header list.
 func headerValue(headers [][2]string, key string) string {
 	for _, h := range headers {
@@ -125,10 +133,10 @@ func (f *tokenExchangeFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool)
 	if authHeader == "" {
 		return sendLocalRespError(f.handle, shared.LogLevelWarn, http.StatusUnauthorized, "missing Authorization header")
 	}
-	if !strings.HasPrefix(authHeader, "Bearer ") {
+	subjectToken, ok := strings.CutPrefix(authHeader, "Bearer ")
+	if !ok {
 		return sendLocalRespError(f.handle, shared.LogLevelWarn, http.StatusUnauthorized, "invalid Authorization header")
 	}
-	subjectToken := strings.TrimPrefix(authHeader, "Bearer ")
 	if subjectToken == "" {
 		return sendLocalRespError(f.handle, shared.LogLevelWarn, http.StatusUnauthorized, "empty bearer token")
 	}
@@ -156,20 +164,9 @@ func (f *tokenExchangeFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool)
 		body.Set("actor_token_type", f.config.ActorTokenType)
 	}
 
-	// auth header from client credentials.
-	creds := base64.StdEncoding.EncodeToString([]byte(f.config.ClientID + ":" + f.config.ClientSecret))
-
-	calloutHeaders := [][2]string{
-		{":method", "POST"},
-		{":path", f.config.TokenExchangeEndpoint},
-		{"host", f.config.TokenExchangeHost},
-		{"content-type", "application/x-www-form-urlencoded"},
-		{"authorization", "Basic " + creds},
-	}
-
 	result, _ := f.handle.HttpCallout(
 		f.config.Cluster,
-		calloutHeaders,
+		f.config.calloutHeaders,
 		[]byte(body.Encode()),
 		f.config.TimeoutMs,
 		&tokenExchangeCallback{handle: f.handle, metrics: f.metrics},
@@ -212,7 +209,7 @@ func (c *tokenExchangeCallback) OnHttpCalloutDone(_ uint64, result shared.HttpCa
 			Error       string `json:"error"`
 			Description string `json:"error_description"`
 		}
-		if err := json.Unmarshal(bytes.Join(body, nil), &stsErr); err == nil && stsErr.Error != "" {
+		if err := json.Unmarshal(joinBody(body), &stsErr); err == nil && stsErr.Error != "" {
 			c.handle.Log(shared.LogLevelError, "oauth2te: STS returned %s: error=%s description=%s",
 				statusCode, stsErr.Error, stsErr.Description)
 		} else {
@@ -230,7 +227,7 @@ func (c *tokenExchangeCallback) OnHttpCalloutDone(_ uint64, result shared.HttpCa
 	}
 
 	// Parse the JSON token response.
-	fullBody := bytes.Join(body, nil)
+	fullBody := joinBody(body)
 
 	var tokenResp struct {
 		AccessToken     string `json:"access_token"`

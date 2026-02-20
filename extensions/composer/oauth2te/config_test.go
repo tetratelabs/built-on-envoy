@@ -56,6 +56,7 @@ func TestConfigFactory(t *testing.T) {
 		require.Equal(t, "sts_cluster", tff.config.Cluster)
 		require.Equal(t, defaultSubjectTokenType, tff.config.SubjectTokenType)
 		require.Equal(t, defaultTimeoutMs, tff.config.TimeoutMs)
+		require.Len(t, tff.config.calloutHeaders, 5)
 	})
 
 	t.Run("empty config", func(t *testing.T) {
