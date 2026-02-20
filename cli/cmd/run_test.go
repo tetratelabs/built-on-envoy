@@ -816,9 +816,9 @@ func TestSetupGoPluginEnv(t *testing.T) {
 
 	// Clean up env vars set during tests
 	t.Cleanup(func() {
-		os.Unsetenv("GOPLUGIN_CACHE_DIR")
-		os.Unsetenv("GOPLUGIN_INSECURE")
-		os.Unsetenv("GOPLUGIN_PULL_SECRET")
+		t.Setenv("GOPLUGIN_CACHE_DIR", "")
+		t.Setenv("GOPLUGIN_INSECURE", "")
+		t.Setenv("GOPLUGIN_PULL_SECRET", "")
 	})
 }
 
