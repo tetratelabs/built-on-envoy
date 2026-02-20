@@ -14,7 +14,7 @@ longDescription: |
   as an inline Envoy HTTP filter. It uses the [Cedar-Go](https://github.com/cedar-policy/cedar-go)
   library to make authorization decisions on each request without a separate authorization server.
 
-  **Key Features:**
+  ## Key Features
 
   - **Inline Cedar evaluation**: Load and evaluate Cedar policy files directly in the Envoy
     data path using the Cedar-Go library. No separate authorization server required.
@@ -31,7 +31,7 @@ longDescription: |
   - **Configurable deny responses**: Customize the HTTP status code, body, and headers
     returned when a request is denied.
 
-  **Authorization Model:**
+  ## Authorization Model
 
   HTTP requests are mapped to Cedar authorization concepts:
 
@@ -45,7 +45,7 @@ longDescription: |
     customized via `resource_type`.
   - **Context**: Rich request attributes available in Cedar `when` clauses.
 
-  **Context Record Structure:**
+  ## Context Record Structure
 
   The `context` record passed to Cedar policies contains the following structure:
 
@@ -82,17 +82,17 @@ longDescription: |
   }
   ```
 
-  **Metrics:**
+  ## Metrics
 
   The extension exposes the `cedar_requests_total` counter metric with a `decision` tag that
   tracks authorization outcomes. The possible tag values are:
 
-  - `allowed`: The policy allowed the request.
-  - `denied`: The policy denied the request (or an error occurred with fail-open disabled).
-  - `failopen`: An error occurred during policy evaluation and the request was allowed because
-    fail-open mode is enabled.
-  - `dryrun_allow`: The policy denied the request but it was allowed because dry-run mode is
-    enabled.
+  | Decision | Description |
+  |--------|------|
+  | `allowed` | The policy allowed the request. |
+  | `denied` | The policy denied the request (or an error occurred with fail-open disabled). |
+  | `failopen` | An error occurred during policy evaluation and the request was allowed because fail-open mode is enabled. |
+  | `dryrun_allow` | The policy denied the request but it was allowed because dry-run mode is enabled. |
 type: composer
 featured: true
 tags:
