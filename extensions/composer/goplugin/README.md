@@ -58,9 +58,9 @@ The loader supports the following URL schemes for plugin locations:
 - `file://` — Load from a local file path (e.g. `file:///path/to/plugin.so`)
 - `oci://` — Fetch from an OCI registry at runtime (e.g. `oci://ghcr.io/tetratelabs/built-on-envoy/extension-my-plugin:v1.0.0`)
 
-When using `boe gen-config` or `boe run`, remote extensions automatically use `oci://` URLs so the
-generated configuration is portable across machines. Local extensions use `file://` URLs pointing to
-the locally cached plugin binary.
+`boe gen-config` generates `oci://` URLs for remote composer (Go plugin) extensions, allowing
+Envoy to fetch the plugin binary directly from the OCI registry at runtime. `boe run` uses
+`file://` URLs pointing to locally cached binaries.
 
 The following environment variables configure OCI plugin fetching at runtime:
 
