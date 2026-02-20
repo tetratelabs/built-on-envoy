@@ -51,7 +51,7 @@ The cluster name is the short format string itself (e.g. `my-service.example.com
 For full control over the cluster configuration, raw JSON is also supported:
 
     ```shell
-    boe gen-config --local ~/src/my-extension --cluster '{"name":"my-service","type":"STRICT_DNS","load_assignment":{"cluster_name":"my-service","endpoints":[{"lb_endpoints":[{"endpoint":{"address":{"socket_address":{"address":"my-service.example.com","port_value":443}}}}]}]}}'
+    boe gen-config --local ~/src/my-extension --cluster-json '{"name":"my-service","type":"STRICT_DNS","load_assignment":{"cluster_name":"my-service","endpoints":[{"lb_endpoints":[{"endpoint":{"address":{"socket_address":{"address":"my-service.example.com","port_value":443}}}}]}]}}'
     ```
 
 Generate configuration from a specific version hosted in a custom OCI registry:

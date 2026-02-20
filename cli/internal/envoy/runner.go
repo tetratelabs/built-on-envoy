@@ -54,20 +54,26 @@ type RunnerFuncE struct {
 	Extensions []*extensions.Manifest
 	// Configs specifies optional JSON config strings for each extension (by index).
 	Configs []string
-	// Clusters specifies additional Envoy cluster JSON strings to include in the configuration.
+	// Clusters specifies additional Envoy cluster (with TLS) from short names to include in the configuration.
 	Clusters []string
+	// ClustersInsecure specifies additional Envoy cluster (without TLS) from short names to include in the configuration.
+	ClustersInsecure []string
+	// ClustersJSON specifies additional Envoy cluster JSON strings to include in the configuration.
+	ClustersJSON []string
 }
 
 // Run starts Envoy using func-e as a library.
 func (r *RunnerFuncE) Run(ctx context.Context) error {
 	params := &ConfigGenerationParams{
-		Logger:       r.Logger,
-		AdminPort:    r.AdminPort,
-		ListenerPort: r.ListenPort,
-		Dirs:         r.Dirs,
-		Extensions:   r.Extensions,
-		Configs:      r.Configs,
-		Clusters:     r.Clusters,
+		Logger:           r.Logger,
+		AdminPort:        r.AdminPort,
+		ListenerPort:     r.ListenPort,
+		Dirs:             r.Dirs,
+		Extensions:       r.Extensions,
+		Configs:          r.Configs,
+		Clusters:         r.Clusters,
+		ClustersInsecure: r.ClustersInsecure,
+		ClustersJSON:     r.ClustersJSON,
 	}
 	config, err := RenderConfig(params, FullConfigRenderer)
 	if err != nil {
