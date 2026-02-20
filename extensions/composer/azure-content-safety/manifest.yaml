@@ -28,13 +28,14 @@ longDescription: |
   - **Block and Monitor modes**: Choose between rejecting harmful traffic with a 403 response
     or logging detections while allowing traffic through.
   - **Configurable thresholds**: Fine-tune severity thresholds per content category.
-  - **Fail-open design**: If the Azure API is unreachable, traffic is allowed through to prevent
-    the safety service from becoming a single point of failure.
+  - **Configurable error handling**: Choose between fail-open (allow traffic through on API errors)
+    or fail-closed (return 500) behavior with the `fail_open` option.
 
-  ## Request Format
+  ## Supported API Formats
 
-  Request and response bodies are expected in OpenAI chat completions format
-  (`{"messages": [{"role": "user", "content": "..."}]}`). Non-chat traffic is passed through
+  The extension automatically detects the API format from the request/response body:
+  OpenAI Chat Completions (`v1/chat/completions`), OpenAI Responses API (`v1/responses`),
+  and Anthropic Messages API (`v1/messages`). Non-chat traffic is passed through
   without inspection.
 type: composer
 tags:
@@ -87,4 +88,14 @@ examples:
         "api_key": "your-api-key-here",
         "hate_threshold": 4,
         "violence_threshold": 4
+      }'
+  - title: Fail-open mode
+    description: |
+      Allow traffic through when the Azure Content Safety API is unreachable
+      or returns errors, instead of returning a 500 error.
+    code: |
+      boe run --extension azure-content-safety --config '{
+        "endpoint": "https://my-resource.cognitiveservices.azure.com",
+        "api_key": "your-api-key-here",
+        "fail_open": true
       }'

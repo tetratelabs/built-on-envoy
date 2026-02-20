@@ -43,6 +43,21 @@ type contentPart struct {
 	Text string `json:"text"`
 }
 
+// chatCompletionsParser implements Parser for the OpenAI Chat Completions format.
+type chatCompletionsParser struct{}
+
+func (p *chatCompletionsParser) ParseRequest(body []byte) (string, []string, error) {
+	return ParseChatRequest(body)
+}
+
+func (p *chatCompletionsParser) ParseResponse(body []byte) (string, error) {
+	return ParseChatResponse(body)
+}
+
+func (p *chatCompletionsParser) ParseRequestForTaskAdherence(body []byte) (*taskAdherenceRequest, error) {
+	return parseChatRequestForTaskAdherence(body)
+}
+
 // chatCompletionRequestFull is an extended version of chatCompletionRequest
 // that also captures tools and tool_calls for Task Adherence analysis.
 type chatCompletionRequestFull struct {
@@ -178,26 +193,6 @@ func parseChatRequestForTaskAdherence(body []byte) (*taskAdherenceRequest, error
 	}
 
 	return result, nil
-}
-
-// titleCase converts a lowercase role name to Title Case.
-func titleCase(role string) string {
-	if role == "" {
-		return ""
-	}
-	return strings.ToUpper(role[:1]) + role[1:]
-}
-
-// roleToSource maps OpenAI roles to Azure Task Adherence source values.
-func roleToSource(role string) string {
-	switch role {
-	case "user", "system":
-		return "Prompt"
-	case "assistant", "tool":
-		return "Completion"
-	default:
-		return "Prompt"
-	}
 }
 
 // extractContent handles both string and array content formats.

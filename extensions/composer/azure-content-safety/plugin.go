@@ -103,10 +103,17 @@ func (f *contentSafetyFilter) OnRequestBody(
 		return shared.BodyStatusContinue
 	}
 
-	userPrompt, documents, err := ParseChatRequest(bodyBytes)
+	reqFormat := detectRequestFormat(bodyBytes)
+	if reqFormat == formatUnknown {
+		f.handle.Log(shared.LogLevelInfo, "azure-content-safety: unrecognized request format, passing through")
+		return shared.BodyStatusContinue
+	}
+	p := parserForFormat(reqFormat)
+
+	userPrompt, documents, err := p.ParseRequest(bodyBytes)
 	if err != nil {
 		f.handle.Log(shared.LogLevelInfo,
-			"azure-content-safety: failed to parse request as OpenAI chat format: %s", err.Error())
+			"azure-content-safety: failed to parse %s request: %s", reqFormat, err.Error())
 		return shared.BodyStatusContinue
 	}
 
@@ -136,10 +143,10 @@ func (f *contentSafetyFilter) OnRequestBody(
 
 	// Task Adherence check (opt-in).
 	if f.config.EnableTaskAdherence {
-		taReq, err := parseChatRequestForTaskAdherence(bodyBytes)
+		taReq, err := p.ParseRequestForTaskAdherence(bodyBytes)
 		if err != nil {
 			f.handle.Log(shared.LogLevelInfo,
-				"azure-content-safety: failed to parse request for task adherence: %s", err.Error())
+				"azure-content-safety: failed to parse %s request for task adherence: %s", reqFormat, err.Error())
 			return shared.BodyStatusContinue
 		}
 
@@ -191,10 +198,16 @@ func (f *contentSafetyFilter) OnResponseBody(
 		return shared.BodyStatusContinue
 	}
 
-	content, err := ParseChatResponse(bodyBytes)
+	respFormat := detectResponseFormat(bodyBytes)
+	if respFormat == formatUnknown {
+		f.handle.Log(shared.LogLevelInfo, "azure-content-safety: unrecognized response format, passing through")
+		return shared.BodyStatusContinue
+	}
+
+	content, err := parserForFormat(respFormat).ParseResponse(bodyBytes)
 	if err != nil {
 		f.handle.Log(shared.LogLevelInfo,
-			"azure-content-safety: failed to parse response as OpenAI chat format: %s", err.Error())
+			"azure-content-safety: failed to parse %s response: %s", respFormat, err.Error())
 		return shared.BodyStatusContinue
 	}
 
