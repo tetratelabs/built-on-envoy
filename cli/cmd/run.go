@@ -8,6 +8,7 @@ package cmd
 import (
 	"context"
 	_ "embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -146,6 +147,14 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 	if err = validateComposerCompat(extensions); err != nil {
 		return err
 	}
+
+	// Set up GOPLUGIN_* environment variables so the composer's goplugin loader
+	// can fetch plugins from OCI registries at runtime when oci:// URLs are used.
+	cleanup, err := setupGoPluginEnv(r.OCI, dirs)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
 
 	runner := &envoy.RunnerFuncE{
 		Logger:            logger,
@@ -371,4 +380,74 @@ func validateComposerCompat(manifests []*extensions.Manifest) error {
 	}
 
 	return nil
+}
+
+// setupGoPluginEnv configures environment variables needed by the composer's
+// goplugin OCI image fetcher at runtime. When registry credentials are provided,
+// it writes them to a temporary Docker config JSON file and sets GOPLUGIN_PULL_SECRET.
+// It also sets GOPLUGIN_INSECURE and GOPLUGIN_CACHE_DIR as needed.
+// The returned cleanup function removes the temporary credentials file.
+func setupGoPluginEnv(oci OCIFlags, dirs *xdg.Directories) (func(), error) {
+	noop := func() {}
+
+	if oci.Insecure {
+		if err := os.Setenv("GOPLUGIN_INSECURE", "true"); err != nil {
+			return noop, fmt.Errorf("failed to set GOPLUGIN_INSECURE: %w", err)
+		}
+	}
+
+	cacheDir := filepath.Join(dirs.DataHome, "goplugin-cache")
+	if err := os.Setenv("GOPLUGIN_CACHE_DIR", cacheDir); err != nil {
+		return noop, fmt.Errorf("failed to set GOPLUGIN_CACHE_DIR: %w", err)
+	}
+
+	if oci.Username == "" && oci.Password == "" {
+		return noop, nil
+	}
+
+	// Extract registry host for the Docker config auth key.
+	registryHost := oci.Registry
+	if idx := strings.Index(registryHost, "/"); idx != -1 {
+		registryHost = registryHost[:idx]
+	}
+
+	type dockerAuth struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	dockerConfig := struct {
+		Auths map[string]dockerAuth `json:"auths"`
+	}{
+		Auths: map[string]dockerAuth{
+			registryHost: {Username: oci.Username, Password: oci.Password},
+		},
+	}
+
+	data, err := json.Marshal(dockerConfig)
+	if err != nil {
+		return noop, fmt.Errorf("failed to marshal pull secret: %w", err)
+	}
+
+	tmpFile, err := os.CreateTemp("", "boe-pull-secret-*.json")
+	if err != nil {
+		return noop, fmt.Errorf("failed to create pull secret file: %w", err)
+	}
+
+	cleanup := func() { _ = os.Remove(tmpFile.Name()) }
+
+	if _, err := tmpFile.Write(data); err != nil {
+		cleanup()
+		return noop, fmt.Errorf("failed to write pull secret: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		cleanup()
+		return noop, fmt.Errorf("failed to close pull secret file: %w", err)
+	}
+
+	if err := os.Setenv("GOPLUGIN_PULL_SECRET", tmpFile.Name()); err != nil {
+		cleanup()
+		return noop, fmt.Errorf("failed to set GOPLUGIN_PULL_SECRET: %w", err)
+	}
+
+	return cleanup, nil
 }
