@@ -6,6 +6,7 @@ package oauth2te
 
 import (
 	"encoding/json"
+	"net/url"
 	"testing"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
@@ -169,6 +170,21 @@ func TestConfigFactory(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, ff)
 		})
+	})
+
+	t.Run("stsPostBodyPrefix", func(t *testing.T) {
+		cfg, err := parseConfig(marshalJSON(t, baseConfig()))
+		require.NoError(t, err)
+
+		// Append a subject token, this is what will happend at request time
+		token := "tok&enExample"
+		body := cfg.stsPostBodyPrefix + url.QueryEscape(token)
+
+		form, err := url.ParseQuery(body)
+		require.NoError(t, err)
+		require.Equal(t, grantTypeTokenExchange, form.Get("grant_type"))
+		require.Equal(t, defaultSubjectTokenType, form.Get("subject_token_type"))
+		require.Equal(t, token, form.Get("subject_token"))
 	})
 
 	t.Run("all optional fields", func(t *testing.T) {

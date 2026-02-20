@@ -16,7 +16,6 @@ import (
 )
 
 const (
-	grantTypeTokenExchange = "urn:ietf:params:oauth:grant-type:token-exchange"
 	httpStatusOKStr        = "200"
 	tokenTypeNotApplicable = "N_A"
 
@@ -55,6 +54,7 @@ func (f *OAuth2TokenExchangeHttpFilterConfigFactory) Create(handle shared.HttpFi
 		handle.Log(shared.LogLevelError, err.Error())
 		return nil, err
 	}
+	handle.Log(shared.LogLevelDebug, "oauth2te: parsed config: %v", cfg)
 
 	// Define metrics.
 	metrics := &oauth2teMetrics{}
@@ -141,33 +141,11 @@ func (f *tokenExchangeFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool)
 		return sendLocalRespError(f.handle, shared.LogLevelWarn, http.StatusUnauthorized, "empty bearer token")
 	}
 
-	// Build the form-encoded POST body per RFC 8693.
-	body := url.Values{}
-	body.Set("grant_type", grantTypeTokenExchange)
-	body.Set("subject_token", subjectToken)
-	body.Set("subject_token_type", f.config.SubjectTokenType)
-	// Eventually add optional fields.
-	if f.config.RequestedTokenType != "" {
-		body.Set("requested_token_type", f.config.RequestedTokenType)
-	}
-	if f.config.Audience != "" {
-		body.Set("audience", f.config.Audience)
-	}
-	if f.config.Resource != "" {
-		body.Set("resource", f.config.Resource)
-	}
-	if f.config.Scope != "" {
-		body.Set("scope", f.config.Scope)
-	}
-	if f.config.ActorToken != "" {
-		body.Set("actor_token", f.config.ActorToken)
-		body.Set("actor_token_type", f.config.ActorTokenType)
-	}
-
+	// The static form fields are precomputed at config time; only the subject token is dynamic.
 	result, _ := f.handle.HttpCallout(
 		f.config.Cluster,
 		f.config.calloutHeaders,
-		[]byte(body.Encode()),
+		[]byte(f.config.stsPostBodyPrefix+url.QueryEscape(subjectToken)),
 		f.config.TimeoutMs,
 		&tokenExchangeCallback{handle: f.handle, metrics: f.metrics},
 	)

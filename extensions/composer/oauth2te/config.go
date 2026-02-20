@@ -14,11 +14,12 @@ import (
 
 const (
 	defaultSubjectTokenType        = "urn:ietf:params:oauth:token-type:access_token"
+	grantTypeTokenExchange         = "urn:ietf:params:oauth:grant-type:token-exchange"
 	defaultTimeoutMs        uint64 = 5000
 )
 
 // tokenExchangeConfig holds the configuration for the OAuth2 Token Exchange
-// filter per RFC 8693 (https://datatracker.ietf.org/doc/html/rfc8693).
+// filter following the RFC 8693 (https://datatracker.ietf.org/doc/html/rfc8693).
 type tokenExchangeConfig struct {
 	// Envoy cluster name that routes to the token exchange endpoint.
 	Cluster string `json:"cluster"`
@@ -58,6 +59,9 @@ type tokenExchangeConfig struct {
 
 	// calloutHeaders is the precomputed set of headers for the request to the STS.
 	calloutHeaders [][2]string
+	// stsPostBodyPrefix is the URL-encoded precomputed body with all static fields,
+	// ending with "&subject_token=" so the per-request token value can be appended.
+	stsPostBodyPrefix string
 }
 
 // parseConfig parses and validates the JSON configuration.
@@ -122,5 +126,28 @@ func parseConfig(data []byte) (*tokenExchangeConfig, error) {
 		{"authorization", "Basic " + creds},
 	}
 
+	// Precompute request body of the token exchange: every field except subject_token is static
+	// except for the subject_token which will be appendned at every request
+	static := url.Values{}
+	static.Set("grant_type", grantTypeTokenExchange)
+	static.Set("subject_token_type", cfg.SubjectTokenType)
+	if cfg.RequestedTokenType != "" {
+		static.Set("requested_token_type", cfg.RequestedTokenType)
+	}
+	if cfg.Audience != "" {
+		static.Set("audience", cfg.Audience)
+	}
+	if cfg.Resource != "" {
+		static.Set("resource", cfg.Resource)
+	}
+	if cfg.Scope != "" {
+		static.Set("scope", cfg.Scope)
+	}
+	if cfg.ActorToken != "" {
+		static.Set("actor_token", cfg.ActorToken)
+		static.Set("actor_token_type", cfg.ActorTokenType)
+	}
+	// at request time we will append the URL-encoded subject token value.
+	cfg.stsPostBodyPrefix = static.Encode() + "&subject_token="
 	return cfg, nil
 }
