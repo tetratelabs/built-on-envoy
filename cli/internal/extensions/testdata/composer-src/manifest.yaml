@@ -3,19 +3,19 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-name: composer
+name: go_bundle
 version: 1.0.0
 categories:
   - Misc
 author: Tetrate
-description: test composer src
-longDescription: test composer src
-type: composer
+description: test go_bundle src
+longDescription: test go_bundle src
+type: go_bundle
 tags:
   - test
 license: Apache-2.0
 examples:
-  - title: Test composer src
-    description: Test the composer src extension
+  - title: Test go_bundle src
+    description: Test the go_bundle src extension
     code: |
-      boe run --extension composer
+      boe run --extension go_bundle

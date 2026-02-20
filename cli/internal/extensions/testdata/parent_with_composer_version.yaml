@@ -3,16 +3,16 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-name: parent-with-composer-version
-parent: composer
-composerVersion: 1.0.0
+name: parent-with-go_bundle-version
+parent: go_bundle
+goBundleVersion: 1.0.0
 categories:
   - Security
 author: Test Author
 description: A child extension with both parent and version
 longDescription: |
   This is a child extension that also specifies its own version.
-type: composer
+type: go_bundle
 tags:
   - test
 license: Apache-2.0

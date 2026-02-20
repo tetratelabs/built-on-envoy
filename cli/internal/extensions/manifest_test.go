@@ -36,17 +36,17 @@ func TestAllManifestsAreLoaded(t *testing.T) {
 	require.Len(t, Manifests, count)
 }
 
-func TestValidateComposerManifest(t *testing.T) {
+func TestValidateGoBundleManifest(t *testing.T) {
 	tests := []struct {
 		name    string
 		want    string
 		wantErr bool
 	}{
-		{"composer_empty_version.yaml", "", true},
-		{"composer_invalid_version.yaml", "", true},
-		{"composer_missing_version.yaml", "", true},
-		{"composer_missing_composer_version.yaml", "", true},
-		{"composer_valid.yaml", "1.2.3", false},
+		{"gobundle_empty_version.yaml", "", true},
+		{"gobundle_invalid_version.yaml", "", true},
+		{"gobundle_missing_version.yaml", "", true},
+		{"gobundle_missing_gobundle_version.yaml", "", true},
+		{"gobundle_valid.yaml", "1.2.3", false},
 	}
 
 	for _, tt := range tests {
@@ -57,7 +57,7 @@ func TestValidateComposerManifest(t *testing.T) {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
-				require.Equal(t, tt.want, localManifest.ComposerVersion)
+				require.Equal(t, tt.want, localManifest.GoBundleVersion)
 			}
 		})
 	}
@@ -263,7 +263,7 @@ func TestValidateParentManifest(t *testing.T) {
 		{"parent_invalid_type.yaml", true},
 		{"parent_missing.yaml", true},
 		{"parent_with_version.yaml", true},
-		{"parent_with_composer_version.yaml", true},
+		{"parent_with_gobundle_version.yaml", true},
 	}
 
 	for _, tt := range tests {
@@ -278,7 +278,7 @@ func TestValidateParentManifest(t *testing.T) {
 func TestResolveVersionsMissingParent(t *testing.T) {
 	m := &Manifest{
 		Name:   "child",
-		Type:   TypeComposer,
+		Type:   TypeGoBundle,
 		Parent: "nonexistent-parent",
 	}
 	err := resolveVersions(m, map[string]*Manifest{})

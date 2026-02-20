@@ -23,7 +23,7 @@ DESCRIPTION      := $(shell grep "^description:" manifest.yaml | sed 's/[^:]*:[[
 TIMESTAMP        := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 COMMIT_SHA       := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
 AUTHOR           := $(shell grep "^author:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-COMPOSER_VERSION := $(shell grep "^composerVersion:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+GOBUNDLE_VERSION := $(shell grep "^goBundleVersion:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
 LICENSE          := Apache-2.0
 
 HUB    := $(or $(BOE_REGISTRY),$(OCI_REGISTRY)/built-on-envoy)
@@ -47,8 +47,8 @@ BASE_OCI_ANNOTATIONS := \
 	--annotation "org.opencontainers.image.created=$(TIMESTAMP)" \
 	--annotation "org.opencontainers.image.revision=$(COMMIT_SHA)" \
 	--annotation "org.opencontainers.image.authors=$(AUTHOR)" \
-	--annotation "io.tetratelabs.built-on-envoy.extension.type=composer" \
-	--annotation "io.tetratelabs.built-on-envoy.extension.composer_version=$(COMPOSER_VERSION)"
+	--annotation "io.tetratelabs.built-on-envoy.extension.type=go_bundle" \
+	--annotation "io.tetratelabs.built-on-envoy.extension.gobundle_version=$(GOBUNDLE_VERSION)"
 
 # Artifact type annotations
 BINARY_ARTIFACT := --annotation "io.tetratelabs.built-on-envoy.extension.artifact=binary"

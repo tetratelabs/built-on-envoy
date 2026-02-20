@@ -10,7 +10,7 @@ author: Test Author
 description: Extension without parent or version should fail
 longDescription: |
   This extension has neither parent nor version.
-type: composer
+type: go_bundle
 tags:
   - test
 license: Apache-2.0

@@ -204,25 +204,25 @@ func TestDynamicModuleFilterGenerator(t *testing.T) {
 	checkProtos(t, wantWithConfig.HTTPFilters, got.HTTPFilters)
 }
 
-func TestComposerFilterGenerator(t *testing.T) {
+func TestGoBundleFilterGenerator(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 	dirs := &xdg.Directories{DataHome: t.TempDir()}
 	manifest := &extensions.Manifest{
-		Name:            "test-composer",
-		Type:            extensions.TypeComposer,
+		Name:            "test-go_bundle",
+		Type:            extensions.TypeGoBundle,
 		Version:         "v0.0.1",
-		ComposerVersion: "v1.0.0",
+		GoBundleVersion: "v1.0.0",
 		Remote:          true,
 	}
 
-	// Case 1: Composer binary missing
+	// Case 1: Go Bundle binary missing
 	_, err := GenerateFilterConfig(logger, manifest, dirs, "")
-	require.ErrorContains(t, err, "composer binary not found")
+	require.ErrorContains(t, err, "go_bundle binary not found")
 
-	// Create Composer binary
-	composerPath := extensions.LocalCacheComposerDir(dirs, manifest.ComposerVersion)
-	require.NoError(t, os.MkdirAll(composerPath, 0o750))
-	require.NoError(t, os.WriteFile(filepath.Join(composerPath, "libcomposer.so"), []byte("fake binary"), 0o600))
+	// Create Go Bundle binary
+	gobundlePath := extensions.LocalCacheGoBundleDir(dirs, manifest.GoBundleVersion)
+	require.NoError(t, os.MkdirAll(gobundlePath, 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(gobundlePath, "libgobundle.so"), []byte("fake binary"), 0o600))
 
 	// Case 2: Plugin binary missing
 	_, err = GenerateFilterConfig(logger, manifest, dirs, "")
@@ -245,7 +245,7 @@ func TestComposerFilterGenerator(t *testing.T) {
 					TypedConfig: func() *anypb.Any {
 						dymConfig := &dymhttpv3.DynamicModuleFilter{
 							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-								Name:         "composer",
+								Name:         "go_bundle",
 								LoadGlobally: true,
 							},
 							FilterName: "goplugin",
@@ -293,7 +293,7 @@ func TestComposerFilterGenerator(t *testing.T) {
 
 						dymConfig := &dymhttpv3.DynamicModuleFilter{
 							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-								Name:         "composer",
+								Name:         "go_bundle",
 								LoadGlobally: true,
 							},
 							FilterName: "goplugin",

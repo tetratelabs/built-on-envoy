@@ -36,20 +36,6 @@ Functional categories of the extension.
 
 
 
-## composerVersion
-
-Version of Built On Envoy Composer. Required if type is `composer` unless the `parent` field is set.
-
-| | |
-|---|---|
-| **Type** | `string` |
-| **Required** | No |
-| **Pattern** | `^\d+\.\d+\.\d+$` |
-| **Forbidden when** | `parent` is set |
-| **Required when** | `type` is `composer` and `parent` is not set |
-
-
-
 ## description
 
 Short single-line description of the extension.
@@ -129,6 +115,20 @@ Whether to feature this extension in UI/listings.
 |---|---|
 | **Type** | `boolean` |
 | **Required** | No |
+
+
+
+## goBundleVersion
+
+Version of Built On Envoy Go Bundle. Required if type is `go_bundle` unless the `parent` field is set.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+| **Pattern** | `^\d+\.\d+\.\d+$` |
+| **Forbidden when** | `parent` is set |
+| **Required when** | `type` is `go_bundle` and `parent` is not set |
 
 
 
@@ -232,7 +232,7 @@ Unique identifier for the extension.
 
 ## parent
 
-Parent extension set whose version will be used. When set, the `version` and `composerVersion` fields can't be set.
+Parent extension set whose version will be used. When set, the `version` and `goBundleVersion` fields can't be set.
 
 | | |
 |---|---|
@@ -266,7 +266,7 @@ Type of the extension.
 |---|---|
 | **Type** | `string` |
 | **Required** | Yes |
-| **Allowed values** | `lua`, `wasm`, `dynamic_module`, `composer` |
+| **Allowed values** | `lua`, `wasm`, `dynamic_module`, `go_bundle` |
 
 
 

@@ -40,7 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       rust-extensions: ${{ steps.discover.outputs.rust-extensions }}
-      has-composer: ${{ steps.discover.outputs.has-composer }}
+      has-go-bundle: ${{ steps.discover.outputs.has-go-bundle }}
     steps:
       - uses: actions/checkout@v4
       - name: Discover extensions
@@ -89,14 +89,14 @@ jobs:
           # Filter Rust extensions
           rust_extensions=$(echo "$extensions" | jq -c '[.[] | select(.language == "rust")]')
           
-          # Check if composer extension exists
-          has_composer=$(echo "$extensions" | jq '[.[] | select(.name == "composer")] | length > 0')
+          # Check if go-bundle extension exists
+          has_go_bundle=$(echo "$extensions" | jq '[.[] | select(.name == "gobundle")] | length > 0')
           
           echo "rust-extensions=$rust_extensions" >> $GITHUB_OUTPUT
-          echo "has-composer=$has_composer" >> $GITHUB_OUTPUT
+          echo "has-go-bundle=$has_go_bundle" >> $GITHUB_OUTPUT
           
           echo "Rust extensions: $rust_extensions"
-          echo "Has composer: $has_composer"
+          echo "Has go bundle: $has_go_bundle"
 
   rust-checks:
     needs: discover
@@ -107,7 +107,7 @@ jobs:
 
   go-checks:
     needs: discover
-    if: ${{ needs.discover.outputs.has-composer == 'true' }}
+    if: ${{ needs.discover.outputs.has-go-bundle == 'true' }}
     uses: ./.github/workflows/extensions-go.yaml
 
   # Aggregate all the required jobs and make it easier to customize CI required jobs

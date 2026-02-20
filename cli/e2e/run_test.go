@@ -198,7 +198,7 @@ func TestLocalGoExtension(t *testing.T) {
 	require.Equal(t, 0, status.ExitCode())
 
 	// Add a dummy dependency to the extension to test that the extension can be built and run successfully
-	// even the dependencies of the extension are not a subset of the composer's dependencies.
+	// even the dependencies of the extension are not a subset of the go_bundle's dependencies.
 	addDummyDependencyToExtension(t, dataDir+"/go-e2e")
 
 	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin,
@@ -228,7 +228,7 @@ func TestLocalGoExtension(t *testing.T) {
 func addDummyDependencyToExtension(t *testing.T, path string) {
 	// Create another module in the extension project as a dummy dependency for the extension.
 	// This is to test that the extension can be built and run successfully even the dependencies
-	// of the extension are not subset of the composer's dependencies.
+	// of the extension are not subset of the go_bundle's dependencies.
 
 	goModContent := `module inner
 go 1.25.7

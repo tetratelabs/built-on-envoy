@@ -32,7 +32,7 @@ func TestCreateWithDockerSupport(t *testing.T) {
 	require.Equal(t, 0, status.ExitCode())
 
 	extensionDir := filepath.Join(tmpDir, "test-docker")
-	version := extensions.LibComposerVersion
+	version := extensions.LibGoBundleVersion
 
 	t.Run("makefile_build_target", func(t *testing.T) {
 		// #nosec G204

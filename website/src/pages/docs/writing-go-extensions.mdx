@@ -112,8 +112,8 @@ The manifest describes your extension:
 ```yaml
 name: my-extension
 version: 0.0.1
-type: composer
-composerVersion: 0.2.1
+type: go_bundle
+goBundleVersion: 0.2.1
 categories:
   - Security             # Or: Traffic, Observability, Examples, Misc
 author: Your Name
@@ -133,7 +133,7 @@ examples:
       boe run --extension my-extension
 ```
 
-**Important:** The `composerVersion` field must match the version of the Composer dynamic module that will load your plugin.
+**Important:** The `goBundleVersion` field must match the version of the Go Bundle dynamic module that will load your plugin.
 See the [version compatibility](#version-compatibility) section for more details.
 
 ## Filter Lifecycle
@@ -385,12 +385,12 @@ curl -H "x-custom: value" http://localhost:10000/status/200
 Go plugins have strict version requirements. See the [Extension types](/docs/extension-types) page for further details
 about version compatibility and how the internals work.
 
-The `composerVersion` in your manifest indicates which Composer version your plugin is compatible with.
-When the Composer loads your plugin, it validates these requirements.
+The `goBundleVersion` in your manifest indicates which Go Bundle version your plugin is compatible with.
+When the Go Bundle loads your plugin, it validates these requirements.
 
 ## Complete Example
 
-For a complete example, refer to the [example-go](https://github.com/tetratelabs/built-on-envoy/tree/main/extensions/composer/example/) extension in GitHub.
+For a complete example, refer to the [example-go](https://github.com/tetratelabs/built-on-envoy/tree/main/extensions/go-bundle/example/) extension in GitHub.
 
 ## Next Steps
 

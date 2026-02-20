@@ -22,7 +22,7 @@ func TestLocalCacheManifest(t *testing.T) {
 		LocalCacheManifest(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeDynamicModule}))
 
 	require.Equal(t, "/home/user/.local/share/extensions/goplugin/test/1.0.1/manifest.yaml",
-		LocalCacheManifest(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeComposer}))
+		LocalCacheManifest(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeGoBundle}))
 }
 
 func TestLocalCacheExtensionDirs(t *testing.T) {
@@ -42,12 +42,12 @@ func TestLocalCacheExtensionDirs(t *testing.T) {
 	require.Equal(t, "/home/user/.local/share/extensions/dym/ip-restriction/1.0.0/libip-restriction.so",
 		LocalCacheExtension(dirs, &Manifest{Name: "ip-restriction", Version: "1.0.0", Type: TypeDynamicModule}))
 
-	// Test composer type
+	// Test go_bundle type
 	require.Equal(t, "/home/user/.local/share/extensions/goplugin/test/1.0.1",
-		LocalCacheExtensionDir(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeComposer}))
+		LocalCacheExtensionDir(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeGoBundle}))
 
 	require.Equal(t, "/home/user/.local/share/extensions/goplugin/test/1.0.1/plugin.so",
-		LocalCacheExtension(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeComposer}))
+		LocalCacheExtension(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeGoBundle}))
 
 	// Test other types (default)
 	require.Equal(t, "/home/user/.local/share/extensions/test/1.0.1",
@@ -57,27 +57,27 @@ func TestLocalCacheExtensionDirs(t *testing.T) {
 		LocalCacheExtension(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeLua}))
 }
 
-func TestLocalCacheComposerDirs(t *testing.T) {
+func TestLocalCacheGoBundleDirs(t *testing.T) {
 	dirs := &xdg.Directories{DataHome: "/home/user/.local/share"}
 
-	require.Equal(t, "/home/user/.local/share/extensions/dym/composer/2.0.0",
-		LocalCacheComposerDir(dirs, "2.0.0"))
-	require.Equal(t, "/home/user/.local/share/extensions/dym/composer/2.0.0/libcomposer.so",
-		LocalCacheComposerLib(dirs, "2.0.0"))
+	require.Equal(t, "/home/user/.local/share/extensions/dym/go_bundle/2.0.0",
+		LocalCacheGoBundleDir(dirs, "2.0.0"))
+	require.Equal(t, "/home/user/.local/share/extensions/dym/go_bundle/2.0.0/libgobundle.so",
+		LocalCacheGoBundleLib(dirs, "2.0.0"))
 }
 
 // validManifestYAML returns a valid manifest YAML string for the given extension name and type.
 func validManifestYAML(name string) string {
 	return `name: ` + name + `
 version: 1.0.0
-composerVersion: 1.0.0
+goBundleVersion: 1.0.0
 categories:
   - Network
 author: Test
 description: Test extension
 longDescription: |
   Test long description
-type: composer
+type: go_bundle
 tags:
   - test
 license: Apache-2.0
@@ -88,13 +88,13 @@ examples:
       boe run --extension ` + name
 }
 
-func TestLocalCacheComposerExtensionSourceDir(t *testing.T) {
+func TestLocalCacheGoBundleExtensionSourceDir(t *testing.T) {
 	t.Run("finds matching extension in source directory", func(t *testing.T) {
 		dirs := &xdg.Directories{DataHome: t.TempDir()}
-		manifest := &Manifest{Name: "my-set", Version: "1.0.0", Type: TypeComposer}
+		manifest := &Manifest{Name: "my-set", Version: "1.0.0", Type: TypeGoBundle}
 
 		// Create the source artifact directory structure with two extensions
-		base := LocalCacheComposerSourceArtifactDir(dirs, manifest)
+		base := LocalCacheGoBundleSourceArtifactDir(dirs, manifest)
 
 		ext1Dir := filepath.Join(base, "ext1")
 		ext2Dir := filepath.Join(base, "ext2")
@@ -107,38 +107,38 @@ func TestLocalCacheComposerExtensionSourceDir(t *testing.T) {
 			[]byte(validManifestYAML("beta")), 0o600))
 
 		// Should find the correct extension directory
-		require.Equal(t, ext1Dir, LocalCacheComposerExtensionSourceDir(dirs, manifest, "alpha"))
-		require.Equal(t, ext2Dir, LocalCacheComposerExtensionSourceDir(dirs, manifest, "beta"))
+		require.Equal(t, ext1Dir, LocalCacheGoBundleExtensionSourceDir(dirs, manifest, "alpha"))
+		require.Equal(t, ext2Dir, LocalCacheGoBundleExtensionSourceDir(dirs, manifest, "beta"))
 	})
 
 	t.Run("returns empty string when extension not found", func(t *testing.T) {
 		dirs := &xdg.Directories{DataHome: t.TempDir()}
-		manifest := &Manifest{Name: "my-set", Version: "1.0.0", Type: TypeComposer}
+		manifest := &Manifest{Name: "my-set", Version: "1.0.0", Type: TypeGoBundle}
 
 		// Create one extension
-		base := LocalCacheComposerSourceArtifactDir(dirs, manifest)
+		base := LocalCacheGoBundleSourceArtifactDir(dirs, manifest)
 		extDir := filepath.Join(base, "ext1")
 		require.NoError(t, os.MkdirAll(extDir, 0o750))
 		require.NoError(t, os.WriteFile(filepath.Join(extDir, "manifest.yaml"),
 			[]byte(validManifestYAML("alpha")), 0o600))
 
 		// Search for a non-existent extension
-		require.Empty(t, LocalCacheComposerExtensionSourceDir(dirs, manifest, "nonexistent"))
+		require.Empty(t, LocalCacheGoBundleExtensionSourceDir(dirs, manifest, "nonexistent"))
 	})
 
 	t.Run("returns empty string when base directory does not exist", func(t *testing.T) {
 		dirs := &xdg.Directories{DataHome: t.TempDir()}
-		manifest := &Manifest{Name: "missing", Version: "1.0.0", Type: TypeComposer}
+		manifest := &Manifest{Name: "missing", Version: "1.0.0", Type: TypeGoBundle}
 
 		// Don't create any directories base path doesn't exist
-		require.Empty(t, LocalCacheComposerExtensionSourceDir(dirs, manifest, "anything"))
+		require.Empty(t, LocalCacheGoBundleExtensionSourceDir(dirs, manifest, "anything"))
 	})
 
 	t.Run("returns empty string when manifest is invalid", func(t *testing.T) {
 		dirs := &xdg.Directories{DataHome: t.TempDir()}
-		manifest := &Manifest{Name: "my-set", Version: "1.0.0", Type: TypeComposer}
+		manifest := &Manifest{Name: "my-set", Version: "1.0.0", Type: TypeGoBundle}
 
-		base := LocalCacheComposerSourceArtifactDir(dirs, manifest)
+		base := LocalCacheGoBundleSourceArtifactDir(dirs, manifest)
 
 		// Create a directory with an invalid manifest
 		badDir := filepath.Join(base, "bad")
@@ -147,14 +147,14 @@ func TestLocalCacheComposerExtensionSourceDir(t *testing.T) {
 			[]byte("not: valid: yaml: ["), 0o600))
 
 		// Walk stops on error, so no result is returned
-		require.Empty(t, LocalCacheComposerExtensionSourceDir(dirs, manifest, "anything"))
+		require.Empty(t, LocalCacheGoBundleExtensionSourceDir(dirs, manifest, "anything"))
 	})
 
 	t.Run("handles nested directory structures", func(t *testing.T) {
 		dirs := &xdg.Directories{DataHome: t.TempDir()}
-		manifest := &Manifest{Name: "my-set", Version: "2.0.0", Type: TypeComposer}
+		manifest := &Manifest{Name: "my-set", Version: "2.0.0", Type: TypeGoBundle}
 
-		base := LocalCacheComposerSourceArtifactDir(dirs, manifest)
+		base := LocalCacheGoBundleSourceArtifactDir(dirs, manifest)
 
 		// Create a nested directory with a manifest
 		nestedDir := filepath.Join(base, "category", "nested-ext")
@@ -162,6 +162,6 @@ func TestLocalCacheComposerExtensionSourceDir(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(nestedDir, "manifest.yaml"),
 			[]byte(validManifestYAML("nested")), 0o600))
 
-		require.Equal(t, nestedDir, LocalCacheComposerExtensionSourceDir(dirs, manifest, "nested"))
+		require.Equal(t, nestedDir, LocalCacheGoBundleExtensionSourceDir(dirs, manifest, "nested"))
 	})
 }

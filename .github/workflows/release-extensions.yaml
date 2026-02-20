@@ -148,22 +148,22 @@ jobs:
           echo "Releasing Lua extension: ${{ matrix.extension.name }} (version: ${{ matrix.extension.version }})"
           make -C extensions push_lua
 
-      - name: Release Composer
-        if: matrix.extension.name == 'composer'
+      - name: Release Go Bundle
+        if: matrix.extension.name == 'gobundle'
         run: |
-          echo "Releasing Composer extension (version: ${{ matrix.extension.version }})"
-          make -C extensions/composer push_image
+          echo "Releasing Go Bundle extension (version: ${{ matrix.extension.version }})"
+          make -C extensions/go-bundle push_image
       
-      - name: Release Lite Composer
-        if: matrix.extension.name == 'composer'
+      - name: Release Lite Go Bundle
+        if: matrix.extension.name == 'gobundle'
         env:
-          COMPOSER_LITE: true
-        run: make -C extensions/composer push_image
+          GOBUNDLE_LITE: true
+        run: make -C extensions/go-bundle push_image
 
-      - name: Push Composer source code
-        if: matrix.extension.name == 'composer'
-        run: make -C extensions/composer push_code
+      - name: Push Go Bundle source code
+        if: matrix.extension.name == 'gobundle'
+        run: make -C extensions/go-bundle push_code
 
-      - name: Push Composer plugins
-        if: matrix.extension.name == 'composer'
-        run: make -C extensions/composer push_plugins
+      - name: Push Go Bundle plugins
+        if: matrix.extension.name == 'gobundle'
+        run: make -C extensions/go-bundle push_plugins

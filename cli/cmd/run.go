@@ -141,9 +141,9 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 		}
 	}
 
-	// Make sure all composer extensions use the same version of composer
-	logger.Debug("validating composer version compatibility for extensions")
-	if err = validateComposerCompat(extensions); err != nil {
+	// Make sure all go_bundle extensions use the same version of go_bundle
+	logger.Debug("validating go_bundle version compatibility for extensions")
+	if err = validateGoBundleCompat(extensions); err != nil {
 		return err
 	}
 
@@ -177,36 +177,36 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 
 		switch artifact.ArtifactType {
 		case extensions.ArtifactBinary:
-			if artifact.Manifest.Type == extensions.TypeComposer {
-				// Ensure the composer is downloaded before running any extensions that may depend on it.
-				if err = extensions.CheckOrDownloadLibComposer(ctx, downloader, artifact.Manifest.ComposerVersion); err != nil {
-					return nil, fmt.Errorf("failed to download libcomposer %s for extension %s: %w",
-						artifact.Manifest.ComposerVersion, name, err)
+			if artifact.Manifest.Type == extensions.TypeGoBundle {
+				// Ensure the go_bundle is downloaded before running any extensions that may depend on it.
+				if err = extensions.CheckOrDownloadLibGoBundle(ctx, downloader, artifact.Manifest.GoBundleVersion); err != nil {
+					return nil, fmt.Errorf("failed to download libgobundle %s for extension %s: %w",
+						artifact.Manifest.GoBundleVersion, name, err)
 				}
 			}
 			downloaded = append(downloaded, artifact.Manifest)
 
 		case extensions.ArtifactSource:
-			if artifact.Manifest.Type == extensions.TypeComposer {
+			if artifact.Manifest.Type == extensions.TypeGoBundle {
 				var manifest *extensions.Manifest
-				extensionSrc := extensions.LocalCacheComposerExtensionSourceDir(downloader.Dirs, artifact.Manifest, name)
+				extensionSrc := extensions.LocalCacheGoBundleExtensionSourceDir(downloader.Dirs, artifact.Manifest, name)
 				if extensionSrc == "" {
-					return nil, fmt.Errorf("invalid source artifact for composer extension %s: missing expected source directory: %s", name, artifact.Path)
+					return nil, fmt.Errorf("invalid source artifact for go_bundle extension %s: missing expected source directory: %s", name, artifact.Path)
 				}
 				downloader.Logger.Info("loading downloaded extension manifest", "path", extensionSrc)
 
 				manifest, err = extensions.LoadLocalManifest(filepath.Join(extensionSrc, "manifest.yaml"))
 				if err != nil {
-					return nil, fmt.Errorf("failed to load manifest for composer extension %s from source artifact %q: %w",
+					return nil, fmt.Errorf("failed to load manifest for go_bundle extension %s from source artifact %q: %w",
 						name, extensionSrc, err)
 				}
 				manifest.Remote = true // Mark the manifest as remote since it is from a downloaded artifact
 
 				if build {
 					fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)
-					downloader.Logger.Info("building downloaded composer extension", "name", manifest.Name, "version", manifest.Version)
-					if err = extensions.BuildLibComposer(downloader.Logger, downloader.Dirs, artifact.Path, manifest.ComposerVersion, false); err != nil {
-						return nil, fmt.Errorf("failed to build libcomposer %s for extension %s: %w",
+					downloader.Logger.Info("building downloaded go_bundle extension", "name", manifest.Name, "version", manifest.Version)
+					if err = extensions.BuildLibGoBundle(downloader.Logger, downloader.Dirs, artifact.Path, manifest.GoBundleVersion, false); err != nil {
+						return nil, fmt.Errorf("failed to build libgobundle %s for extension %s: %w",
 							artifact.Manifest.Version, name, err)
 					}
 					if err = extensions.BuildExtensionFromPath(downloader.Logger, downloader.Dirs, manifest, extensionSrc); err != nil {
@@ -296,13 +296,13 @@ func loadLocalManifests(ctx context.Context, logger *slog.Logger, downloader *ex
 
 		if build {
 			switch manifest.Type {
-			case extensions.TypeComposer:
+			case extensions.TypeGoBundle:
 				fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, manifest.Name, internal.ANSIReset)
-				downloader.Logger.Info("building local composer extension", "name", manifest.Name, "version", manifest.Version)
+				downloader.Logger.Info("building local go_bundle extension", "name", manifest.Name, "version", manifest.Version)
 				if err := extensions.BuildExtensionFromPath(downloader.Logger, downloader.Dirs, manifest, path); err != nil {
 					return nil, err
 				}
-				if err := extensions.CheckOrDownloadLibComposer(ctx, downloader, manifest.ComposerVersion); err != nil {
+				if err := extensions.CheckOrDownloadLibGoBundle(ctx, downloader, manifest.GoBundleVersion); err != nil {
 					return nil, err
 				}
 			case extensions.TypeDynamicModule:
@@ -346,12 +346,12 @@ func validateEnvoyCompat(envoyVersion string, extensions []*extensions.Manifest)
 	return errors.Join(errs...)
 }
 
-// validateComposerCompat validates that all extensions use the same composer version.
-func validateComposerCompat(manifests []*extensions.Manifest) error {
+// validateGoBundleCompat validates that all extensions use the same go_bundle version.
+func validateGoBundleCompat(manifests []*extensions.Manifest) error {
 	versions := make(map[string][]string)
 	for _, ext := range manifests {
-		if ext.Type == extensions.TypeComposer {
-			versions[ext.ComposerVersion] = append(versions[ext.ComposerVersion], ext.Name)
+		if ext.Type == extensions.TypeGoBundle {
+			versions[ext.GoBundleVersion] = append(versions[ext.GoBundleVersion], ext.Name)
 		}
 	}
 
@@ -364,8 +364,8 @@ func validateComposerCompat(manifests []*extensions.Manifest) error {
 			fmt.Fprintf(&b, "  - version %s used by extensions: %s\n",
 				version, strings.Join(versions[version], ", "))
 		}
-		return fmt.Errorf("incompatible composer versions found:\n%s"+
-			"all composer extensions must use the same composer version", b.String())
+		return fmt.Errorf("incompatible go_bundle versions found:\n%s"+
+			"all go_bundle extensions must use the same go_bundle version", b.String())
 	}
 
 	return nil

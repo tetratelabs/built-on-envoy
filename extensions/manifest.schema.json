@@ -82,12 +82,12 @@
         "lua",
         "wasm",
         "dynamic_module",
-        "composer"
+        "go_bundle"
       ]
     },
-    "composerVersion": {
+    "goBundleVersion": {
       "type": "string",
-      "description": "Version of Built On Envoy Composer. Required if type is `composer` unless the `parent` field is set.",
+      "description": "Version of Built On Envoy Go Bundle. Required if type is `go_bundle` unless the `parent` field is set.",
       "pattern": "^\\d+\\.\\d+\\.\\d+$"
     },
     "tags": {
@@ -160,7 +160,7 @@
     },
     "parent": {
       "type": "string",
-      "description": "Parent extension set whose version will be used. When set, the `version` and `composerVersion` fields can't be set.",
+      "description": "Parent extension set whose version will be used. When set, the `version` and `goBundleVersion` fields can't be set.",
       "minLength": 1,
       "pattern": "^[a-z][a-z0-9-_.]*$"
     },
@@ -191,9 +191,9 @@
       },
       "then": {
         "properties": {
-          "type": { "const": "composer" },
+          "type": { "const": "go_bundle" },
           "version": false,
-          "composerVersion": false
+          "goBundleVersion": false
         }
       }
     },
@@ -212,7 +212,7 @@
         "allOf": [
           {
             "properties": {
-              "type": { "const": "composer" }
+              "type": { "const": "go_bundle" }
             }
           },
           {
@@ -223,7 +223,7 @@
         ]
       },
       "then": {
-        "required": ["composerVersion"]
+        "required": ["goBundleVersion"]
       }
     }
   ]

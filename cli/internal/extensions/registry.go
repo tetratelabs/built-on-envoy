@@ -21,9 +21,9 @@ const (
 
 	// OCIAnnotationExtensionType is the OCI annotation key for the extension type.
 	OCIAnnotationExtensionType = "io.tetratelabs.built-on-envoy.extension.type"
-	// OCIAnnotationComposerVersion is the OCI annotation key for the composer version that
+	// OCIAnnotationGoBundleVersion is the OCI annotation key for the go_bundle version that
 	// the extension depends on, if any.
-	OCIAnnotationComposerVersion = "io.tetratelabs.built-on-envoy.extension.composer_version"
+	OCIAnnotationGoBundleVersion = "io.tetratelabs.built-on-envoy.extension.gobundle_version"
 	// OCIAnnotationArtifact is the OCI annotation key for the extension artifact.
 	OCIAnnotationArtifact = "io.tetratelabs.built-on-envoy.extension.artifact"
 
@@ -52,8 +52,8 @@ func NameFromRepository(repository string) string {
 
 // SourceRepositoryName constructs the source repository name for an extension based on the manifest.
 func SourceRepositoryName(registry string, manifest *Manifest) string {
-	if manifest.Type == TypeComposer {
-		return registry + "/composer-src"
+	if manifest.Type == TypeGoBundle {
+		return registry + "/go_bundle-src"
 	}
 	return registry + "/extension-src-" + manifest.Name
 }
@@ -65,7 +65,7 @@ func OCIAnnotationsForManifest(manifest *Manifest) map[string]string {
 		ocispec.AnnotationTitle:       manifest.Name,
 		ocispec.AnnotationDescription: manifest.Description,
 		ocispec.AnnotationVersion:     manifest.Version,
-		OCIAnnotationComposerVersion:  manifest.ComposerVersion,
+		OCIAnnotationGoBundleVersion:  manifest.GoBundleVersion,
 		ocispec.AnnotationAuthors:     manifest.Author,
 		ocispec.AnnotationLicenses:    manifest.License,
 		OCIAnnotationExtensionType:    string(manifest.Type),
@@ -78,7 +78,7 @@ func ManifestFromOCI(manifest *ocispec.Manifest) *Manifest {
 		Name:            manifest.Annotations[ocispec.AnnotationTitle],
 		Description:     manifest.Annotations[ocispec.AnnotationDescription],
 		Version:         manifest.Annotations[ocispec.AnnotationVersion],
-		ComposerVersion: manifest.Annotations[OCIAnnotationComposerVersion],
+		GoBundleVersion: manifest.Annotations[OCIAnnotationGoBundleVersion],
 		Author:          manifest.Annotations[ocispec.AnnotationAuthors],
 		License:         manifest.Annotations[ocispec.AnnotationLicenses],
 		Type:            Type(manifest.Annotations[OCIAnnotationExtensionType]),

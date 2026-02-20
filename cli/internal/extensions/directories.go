@@ -20,12 +20,12 @@ func LocalCacheManifest(dirs *xdg.Directories, manifest *Manifest) string {
 
 // LocalCacheExtensionDir returns the local cache directory for the given extension manifest.
 // Different extension types are organized in different directory structures:
-// - composer: extensions/goplugin/<name>/<version>
+// - go_bundle: extensions/goplugin/<name>/<version>
 // - dynamic_module: extensions/dym/<name>/<version>
 // - others: extensions/<name>/<version>
 func LocalCacheExtensionDir(dirs *xdg.Directories, manifest *Manifest) string {
 	switch manifest.Type {
-	case TypeComposer:
+	case TypeGoBundle:
 		return filepath.Join(dirs.DataHome, "extensions", "goplugin", manifest.Name, manifest.Version)
 	case TypeDynamicModule:
 		return filepath.Join(dirs.DataHome, "extensions", "dym", manifest.Name, manifest.Version)
@@ -36,7 +36,7 @@ func LocalCacheExtensionDir(dirs *xdg.Directories, manifest *Manifest) string {
 
 // LocalCacheExtension returns the local cache path for the extension library based on the manifest.
 // Returns the appropriate library file name for each extension type:
-// - composer: plugin.so (Go plugin)
+// - go_bundle: plugin.so (Go plugin)
 // - dynamic_module: lib<name>.so (uses original name from manifest)
 // - others: plugin.so (default)
 func LocalCacheExtension(dirs *xdg.Directories, manifest *Manifest) string {
@@ -47,22 +47,22 @@ func LocalCacheExtension(dirs *xdg.Directories, manifest *Manifest) string {
 		// Use the original manifest name for the library
 		return filepath.Join(dir, fmt.Sprintf("lib%s.so", manifest.Name))
 	default:
-		// Default for composer and other types
+		// Default for go_bundle and other types
 		return filepath.Join(dir, "plugin.so")
 	}
 }
 
-// LocalCacheComposerSourceArtifactDir returns the local cache directory for the composer
+// LocalCacheGoBundleSourceArtifactDir returns the local cache directory for the go_bundle
 // source artifact based on the manifest.
-func LocalCacheComposerSourceArtifactDir(dirs *xdg.Directories, manifest *Manifest) string {
+func LocalCacheGoBundleSourceArtifactDir(dirs *xdg.Directories, manifest *Manifest) string {
 	return filepath.Join(dirs.DataHome, "extensions", "src", manifest.Name, manifest.Version)
 }
 
-// LocalCacheComposerExtensionSourceDir returns the local cache directory for the composer extension source code
-// based on the extension name. It looks for the manifest.yaml file in the composer source artifact directory
+// LocalCacheGoBundleExtensionSourceDir returns the local cache directory for the go_bundle extension source code
+// based on the extension name. It looks for the manifest.yaml file in the go_bundle source artifact directory
 // to find the matching extension name and returns its path.
-func LocalCacheComposerExtensionSourceDir(dirs *xdg.Directories, manifest *Manifest, name string) string {
-	base := LocalCacheComposerSourceArtifactDir(dirs, manifest)
+func LocalCacheGoBundleExtensionSourceDir(dirs *xdg.Directories, manifest *Manifest, name string) string {
+	base := LocalCacheGoBundleSourceArtifactDir(dirs, manifest)
 	var extensionPath string
 
 	_ = filepath.WalkDir(base, func(path string, d fs.DirEntry, err error) error {
@@ -86,12 +86,12 @@ func LocalCacheComposerExtensionSourceDir(dirs *xdg.Directories, manifest *Manif
 	return extensionPath
 }
 
-// LocalCacheComposerDir returns the local cache directory for the composer.
-func LocalCacheComposerDir(dirs *xdg.Directories, version string) string {
-	return filepath.Join(dirs.DataHome, "extensions", "dym", "composer", version)
+// LocalCacheGoBundleDir returns the local cache directory for the go_bundle.
+func LocalCacheGoBundleDir(dirs *xdg.Directories, version string) string {
+	return filepath.Join(dirs.DataHome, "extensions", "dym", "go_bundle", version)
 }
 
-// LocalCacheComposerLib returns the local cache path for the composer lib.
-func LocalCacheComposerLib(dirs *xdg.Directories, version string) string {
-	return filepath.Join(LocalCacheComposerDir(dirs, version), "libcomposer.so")
+// LocalCacheGoBundleLib returns the local cache path for the go_bundle lib.
+func LocalCacheGoBundleLib(dirs *xdg.Directories, version string) string {
+	return filepath.Join(LocalCacheGoBundleDir(dirs, version), "libgobundle.so")
 }

@@ -7,7 +7,7 @@ import (
 )
 
 // WellKnownHttpFilterConfigFactories is the plugin entry point when running it as an
-// independently loaded composer plugin.
+// independently loaded go_bundle plugin.
 func WellKnownHttpFilterConfigFactories() map[string]shared.HttpFilterConfigFactory { //nolint:revive
 	return impl.WellKnownHttpFilterConfigFactories()
 }

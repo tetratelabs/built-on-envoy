@@ -44,9 +44,9 @@ type (
 		MinEnvoyVersion string    `yaml:"minEnvoyVersion,omitempty" json:"minEnvoyVersion,omitempty"`
 		MaxEnvoyVersion string    `yaml:"maxEnvoyVersion,omitempty" json:"maxEnvoyVersion,omitempty"`
 
-		// ComposerVersion specifies the compatible Composer dynamic module version
-		// for Composer go plugins.
-		ComposerVersion string `yaml:"composerVersion,omitempty" json:"composerVersion,omitempty"`
+		// GoBundleVersion specifies the compatible Go Bundle dynamic module version
+		// for Go Bundle go plugins.
+		GoBundleVersion string `yaml:"goBundleVersion,omitempty" json:"goBundleVersion,omitempty"`
 		Lua             *Lua   `yaml:"lua,omitempty" json:"lua,omitempty"`
 
 		// Path to the manifest file in the local filesystem.
@@ -107,8 +107,8 @@ const (
 	TypeWasm Type = "wasm"
 	// TypeDynamicModule represents a Dynamic Module extension.
 	TypeDynamicModule Type = "dynamic_module"
-	// TypeComposer represents a Composer extension.
-	TypeComposer Type = "composer"
+	// TypeGoBundle represents a Go Bundle extension.
+	TypeGoBundle Type = "go_bundle"
 
 	schemaURL = "manifest.schema.json"
 )
@@ -183,7 +183,7 @@ func loadManifests(fsys fs.FS, validate bool) (map[string]*Manifest, error) {
 		return nil, err
 	}
 
-	// For composer manifests that have a parent, resolve the version and composer versions
+	// For go_bundle manifests that have a parent, resolve the version and go_bundle versions
 	for _, m := range result {
 		if err := resolveVersions(m, result); err != nil {
 			return nil, err
@@ -220,9 +220,9 @@ func loadManifest(fsys fs.FS, path string, validate bool) (*Manifest, error) {
 	return &m, nil
 }
 
-// resolveVersions resolves the version and composer version for a manifest if it has a parent.
+// resolveVersions resolves the version and go_bundle version for a manifest if it has a parent.
 func resolveVersions(m *Manifest, all map[string]*Manifest) error {
-	if m.Type == TypeComposer && m.Parent != "" {
+	if m.Type == TypeGoBundle && m.Parent != "" {
 		parent, ok := all[m.Parent]
 		if !ok {
 			return fmt.Errorf("%w: %s", ErrParentManifestNotFound, m.Parent)
@@ -230,8 +230,8 @@ func resolveVersions(m *Manifest, all map[string]*Manifest) error {
 		if m.Version == "" {
 			m.Version = parent.Version
 		}
-		if m.ComposerVersion == "" {
-			m.ComposerVersion = parent.Version
+		if m.GoBundleVersion == "" {
+			m.GoBundleVersion = parent.Version
 		}
 	}
 	return nil

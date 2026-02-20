@@ -4,7 +4,7 @@
 # the root of the repo.
 
 name: parent-with-version
-parent: composer
+parent: go_bundle
 version: 1.0.0
 categories:
   - Security
@@ -12,7 +12,7 @@ author: Test Author
 description: A child extension with both parent and version
 longDescription: |
   This is a child extension that also specifies its own version.
-type: composer
+type: go_bundle
 tags:
   - test
 license: Apache-2.0

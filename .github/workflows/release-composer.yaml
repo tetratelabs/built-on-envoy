@@ -3,7 +3,7 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-name: Release Composer and Plugins Manually
+name: Release Go Bundle and Plugins Manually
 
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ env:
   OCI_REGISTRY: ghcr.io/tetratelabs
 
 jobs:
-  release-composer:
+  release-go-bundle:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -34,23 +34,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and Push Composer
+      - name: Build and Push Go Bundle
         env:
           IMAGE_NONCE: ${{ inputs.nonce }}
-        run: make -C extensions/composer push_image
+        run: make -C extensions/go-bundle push_image
       
-      - name: Build and Push Lite Composer
+      - name: Build and Push Lite Go Bundle
         env:
-          COMPOSER_LITE: true
+          GOBUNDLE_LITE: true
           IMAGE_NONCE: ${{ inputs.nonce }}
-        run: make -C extensions/composer push_image
+        run: make -C extensions/go-bundle push_image
 
       - name: Push source code
         env:
           IMAGE_NONCE: ${{ inputs.nonce }}
-        run: make -C extensions/composer push_code
+        run: make -C extensions/go-bundle push_code
 
       - name: Push all plugins
         env:
           IMAGE_NONCE: ${{ inputs.nonce }}
-        run: make -C extensions/composer push_plugins
+        run: make -C extensions/go-bundle push_plugins

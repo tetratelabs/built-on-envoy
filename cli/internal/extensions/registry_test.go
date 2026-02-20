@@ -64,10 +64,10 @@ func TestSourceRepositoryName(t *testing.T) {
 		"ghcr.io/tetratelabs/built-on-envoy/extension-src-test-extension",
 		SourceRepositoryName(DefaultOCIRegistry, manifest))
 
-	composerManifest := &Manifest{Name: "my-set", Type: TypeComposer}
+	gobundleManifest := &Manifest{Name: "my-set", Type: TypeGoBundle}
 	require.Equal(t,
-		"ghcr.io/tetratelabs/built-on-envoy/composer-src",
-		SourceRepositoryName(DefaultOCIRegistry, composerManifest))
+		"ghcr.io/tetratelabs/built-on-envoy/go_bundle-src",
+		SourceRepositoryName(DefaultOCIRegistry, gobundleManifest))
 }
 
 func TestOCIAnnotationsForManifest(t *testing.T) {

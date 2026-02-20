@@ -4,14 +4,14 @@
 # the root of the repo.
 
 name: parent-valid
-parent: composer
+parent: go_bundle
 categories:
   - Security
 author: Test Author
 description: A child extension that inherits parent version
 longDescription: |
   This is a child extension.
-type: composer
+type: go_bundle
 tags:
   - test
 license: Apache-2.0

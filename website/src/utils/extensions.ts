@@ -18,7 +18,7 @@ export interface Extension {
 	tags: string[];
 	license: string;
 	featured?: boolean;
-	composerVersion?: string;
+	goBundleVersion?: string;
 	examples?: Example[];
 	/** Relative path from the extensions directory to the extension folder */
 	path: string;
@@ -35,7 +35,7 @@ export function loadExtensions(): Extension[] {
 	return extensions
 		.map(ext => ({
 			...ext,
-			path: ext.type === 'composer' ? `composer/${ext.name}` : `${ext.name}`,
+			path: ext.type === 'go_bundle' ? `go-bundle/${ext.name}` : `${ext.name}`,
 		}))
 		.sort((a, b) => a.name.localeCompare(b.name));
 }

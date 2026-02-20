@@ -25,7 +25,7 @@ var templateFS embed.FS
 
 // Create is a command to create a new extension template.
 type Create struct {
-	Type string `help:"Type of the extension." default:"composer" enum:"composer,dynamic_module_rust"`
+	Type string `help:"Type of the extension." default:"go_bundle" enum:"go_bundle,dynamic_module_rust"`
 	Name string `arg:"" help:"Name of the extension."`
 	Path string `help:"Output directory for the extension. Defaults to the extension name." type:"path"`
 }
@@ -41,8 +41,8 @@ func (c *Create) Run(dirs *xdg.Directories, logger *slog.Logger) error {
 	logger.Debug("handling create command", "cmd", c)
 
 	switch c.Type {
-	case "composer":
-		return createComposerHTTPFilter(logger, dirs, c.Path, c.Name)
+	case "go_bundle":
+		return createGoBundleHTTPFilter(logger, dirs, c.Path, c.Name)
 	case "dynamic_module_rust":
 		return createRustExtension(logger, c.Path, c.Name)
 	default:
@@ -50,12 +50,12 @@ func (c *Create) Run(dirs *xdg.Directories, logger *slog.Logger) error {
 	}
 }
 
-func createComposerHTTPFilter(logger *slog.Logger, dirs *xdg.Directories, path, name string) error {
+func createGoBundleHTTPFilter(logger *slog.Logger, dirs *xdg.Directories, path, name string) error {
 	repoPath := filepath.Join(path, name)
 
 	data := map[string]string{
 		"Name":               name,
-		"LibComposerVersion": extensions.LibComposerVersion,
+		"LibGoBundleVersion": extensions.LibGoBundleVersion,
 		"DataHome":           dirs.DataHome,
 	}
 
@@ -72,7 +72,7 @@ func createComposerHTTPFilter(logger *slog.Logger, dirs *xdg.Directories, path, 
 		"standalone/main.go": "templates/create/main.go.tmpl",
 	}
 
-	logger.Info("creating composer extension", "name", name, "path", repoPath, "files", slices.Collect(maps.Keys(files)))
+	logger.Info("creating go_bundle extension", "name", name, "path", repoPath, "files", slices.Collect(maps.Keys(files)))
 
 	createFilesErr := createFilesFromTemplate(files, data, repoPath)
 	if createFilesErr != nil {

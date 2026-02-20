@@ -3,18 +3,18 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-name: test-composer
-parent: composer
+name: test-go_bundle
+parent: go_bundle
 categories:
   - Mist
 author: Tetrate
-description: ltest composer
-longDescription: test composer
+description: ltest go_bundle
+longDescription: test go_bundle
 tags:
   - test
 license: Apache-2.0
 examples:
-  - title: Test composer
-    description: Test composer
+  - title: Test go_bundle
+    description: Test go_bundle
     code: |
-      boe run --extension test-composer
+      boe run --extension test-go_bundle

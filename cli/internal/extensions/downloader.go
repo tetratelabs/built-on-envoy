@@ -45,21 +45,21 @@ type DownloadedExtension struct {
 	Manifest       *Manifest // The extension manifest with all metadata.
 	Path           string    // The local path where the extension artifact is downloaded.
 	ArtifactType   string    // The artifact type of the extension (binary or source).
-	ComposerBundle bool      // Whether the downloaded extension is a composer bundle (which may contain multiple extensions).
+	GoBundleBundle bool      // Whether the downloaded extension is a go_bundle bundle (which may contain multiple extensions).
 }
 
-// DownloadComposer downloads the composer from the specified repository and version into the downloadDir.
-func (d *Downloader) DownloadComposer(ctx context.Context, version string) (DownloadedExtension, error) {
-	d.Logger.Info("downloading composer", "repository", d.Registry, "version", version)
-	return d.download(ctx, d.Registry+"/composer-lite", version, func(manifest *ocispec.Manifest) string {
+// DownloadGoBundle downloads the go_bundle from the specified repository and version into the downloadDir.
+func (d *Downloader) DownloadGoBundle(ctx context.Context, version string) (DownloadedExtension, error) {
+	d.Logger.Info("downloading go_bundle", "repository", d.Registry, "version", version)
+	return d.download(ctx, d.Registry+"/gobundle-lite", version, func(manifest *ocispec.Manifest) string {
 		extensionManifest := ManifestFromOCI(manifest)
-		if isComposerSourceArtifact(manifest) {
-			return LocalCacheComposerSourceArtifactDir(d.Dirs, extensionManifest)
+		if isGoBundleSourceArtifact(manifest) {
+			return LocalCacheGoBundleSourceArtifactDir(d.Dirs, extensionManifest)
 		}
-		// use the composer version resolved from the manifest, as the input parameter one could be
+		// use the go_bundle version resolved from the manifest, as the input parameter one could be
 		// "latest" which needs to be resolved to a concrete version.
-		composerVersion := manifest.Annotations[OCIAnnotationComposerVersion]
-		return LocalCacheComposerDir(d.Dirs, composerVersion)
+		goBundleVersion := manifest.Annotations[OCIAnnotationGoBundleVersion]
+		return LocalCacheGoBundleDir(d.Dirs, goBundleVersion)
 	})
 }
 
@@ -70,8 +70,8 @@ func (d *Downloader) DownloadExtension(ctx context.Context, name, version string
 
 	artifact, err := d.download(ctx, repository, version, func(manifest *ocispec.Manifest) string {
 		extensionManifest := ManifestFromOCI(manifest)
-		if isComposerSourceArtifact(manifest) {
-			return LocalCacheComposerSourceArtifactDir(d.Dirs, extensionManifest)
+		if isGoBundleSourceArtifact(manifest) {
+			return LocalCacheGoBundleSourceArtifactDir(d.Dirs, extensionManifest)
 		}
 		return LocalCacheExtensionDir(d.Dirs, extensionManifest)
 	})
@@ -81,8 +81,8 @@ func (d *Downloader) DownloadExtension(ctx context.Context, name, version string
 
 	// If the Download dir contains the manifest (lua extensinos or downloaded source), load it to get
 	// the full manifest with all extension data.
-	// Composer extensions are different as the manifest is the uber-manifest and we dont' want to read that.
-	if !artifact.ComposerBundle {
+	// Go Bundle extensions are different as the manifest is the uber-manifest and we dont' want to read that.
+	if !artifact.GoBundleBundle {
 		manifestPath := LocalCacheManifest(d.Dirs, artifact.Manifest)
 		if _, err = os.Stat(manifestPath); err == nil {
 			d.Logger.Info("loading manifest from downloaded extension", "path", manifestPath)
@@ -144,8 +144,8 @@ func (d *Downloader) download(
 
 		extensionManifest := ManifestFromOCI(manifest)
 		sourceRepo := SourceRepositoryName(d.Registry, extensionManifest)
-		if extensionManifest.Type == TypeComposer {
-			version = extensionManifest.ComposerVersion
+		if extensionManifest.Type == TypeGoBundle {
+			version = extensionManifest.GoBundleVersion
 		}
 
 		// Create a downloader for the source artifact without the platforms so it does not
@@ -176,13 +176,13 @@ func (d *Downloader) download(
 		Manifest:       ManifestFromOCI(manifest),
 		Path:           downloadDir,
 		ArtifactType:   manifest.Annotations[OCIAnnotationArtifact],
-		ComposerBundle: isComposerSourceArtifact(manifest),
+		GoBundleBundle: isGoBundleSourceArtifact(manifest),
 	}, nil
 }
 
-// isComposerSourceArtifact checks if the downloaded artifact is a composer source artifact.
-func isComposerSourceArtifact(manifest *ocispec.Manifest) bool {
-	return Type(manifest.Annotations[OCIAnnotationExtensionType]) == TypeComposer &&
+// isGoBundleSourceArtifact checks if the downloaded artifact is a go_bundle source artifact.
+func isGoBundleSourceArtifact(manifest *ocispec.Manifest) bool {
+	return Type(manifest.Annotations[OCIAnnotationExtensionType]) == TypeGoBundle &&
 		manifest.Annotations[OCIAnnotationArtifact] == ArtifactSource
 }
 

@@ -79,38 +79,38 @@ body modification, metadata, and local replies.
 
 There are two packaging approaches for Go extensions, each with its own manifest type, advantages and limitations.
 
-### Standalone (`composer`)
+### Standalone (`go_bundle`)
 
 A standalone extension is compiled as a separate Go plugin (`.so` file) and loaded at runtime by the
-Composer (or `goplugin`) dynamic module.
+Go Bundle dynamic module.
 
-**Manifest type:** `composer`
+**Manifest type:** `go_bundle`
 
 ```yaml
 name: my-extension
-type: composer
-composerVersion: 0.2.1
+type: go_bundle
+goBundleVersion: 0.2.1
 ```
 
-The `composerVersion` field is required and must match the version of the Composer dynamic module
+The `goBundleVersion` field is required and must match the version of the Go Bundle dynamic module
 that will load your plugin.
 
 **How it works:**
 
 1. Your extension exports a `WellKnownHttpFilterConfigFactories()` function as its entry point.
 2. The extension is compiled with `go build -buildmode=plugin` to produce a `.so` file.
-3. At runtime, the Composer's plugin loader opens the `.so` file and validates that it was built
+3. At runtime, the Go Bundle's plugin loader opens the `.so` file and validates that it was built
    with the same Go version and matching dependency versions before registering its filters.
 
 **Advantages:**
 
 - Extensions can be built and updated independently.
-- Supports dynamic plugin loading - new extensions can be added without rebuilding Composer
+- Supports dynamic plugin loading - new extensions can be added without rebuilding Go Bundle
   dynamic module.
 
 **Disadvantages:**
 
-- The extension **must** be compiled with the exact same Go runtime version as the Composer.
+- The extension **must** be compiled with the exact same Go runtime version as the Go Bundle.
 - All shared dependencies must have matching versions and checksums. A mismatch will cause a
   load-time error.
 
@@ -121,7 +121,7 @@ directory.
 
 ### Embedded (`dynamic_module`)
 
-An embedded extension is compiled directly into the Composer dynamic module. There is no separate `.so` file.
+An embedded extension is compiled directly into the Go Bundle dynamic module. There is no separate `.so` file.
 
 **Manifest type:** `dynamic_module`
 
@@ -133,12 +133,12 @@ type: dynamic_module
 **How it works:**
 
 1. Your extension package registers itself with the SDK during Go's `init()` phase.
-2. The Composer's build includes a special `main` package that imports your extension and the Composer
+2. The Go Bundle's build includes a special `main` package that imports your extension and the Go Bundle
    [goplugin](https://github.com/tetratelabs/built-on-envoy/tree/main/extensions/internal/goplugin),
    so your extension becomes part of the final binary.
 3. No runtime loading or version validation is needed.
 
-The following example shows a minimal `main.go` to generate the composer dynamic module with an example
+The following example shows a minimal `main.go` to generate the Go Bundle dynamic module with an example
 extension embedded in it:
 
 ```go
@@ -167,7 +167,7 @@ func main() {} // main is required to build as a C shared library.
 
 **Disadvantages:**
 
-- Updating the extension requires rebuilding the entire Composer module.
+- Updating the extension requires rebuilding the entire Go Bundle module.
 - All extensions must be known at compile time.
 
 **Complete example:**
@@ -175,19 +175,19 @@ func main() {} // main is required to build as a C shared library.
 You can see a full example in the [example-go/embedded](https://github.com/tetratelabs/built-on-envoy/tree/main/extensions/example-go/embedded)
 directory.
 
-### Choosing Between `composer` and `dynamic_module`
+### Choosing Between `go_bundle` and `dynamic_module`
 
-| Consideration | `composer` (Standalone) | `dynamic_module` (Embedded) |
+| Consideration | `go_bundle` (Standalone) | `dynamic_module` (Embedded) |
 |---|---|---|
 | Version compatibility | Must be managed carefully | Guaranteed |
-| Update flexibility | Independent updates | Requires Composer rebuild |
-| Build complexity | Plugin only | Full Composer rebuild |
-| Deployment | Separate `.so` file + Composer | Single binary |
+| Update flexibility | Independent updates | Requires Go Bundle rebuild |
+| Build complexity | Plugin only | Full Go Bundle rebuild |
+| Deployment | Separate `.so` file + Go Bundle | Single binary |
 
 For production environments where stability is the priority, the **embedded** (`dynamic_module`)
 approach is recommended. It eliminates an entire class of compatibility issues.
 
-The **standalone** (`composer`) approach is useful during development or when extensions need to be
+The **standalone** (`go_bundle`) approach is useful during development or when extensions need to be
 distributed and updated independently of the host.
 
 ### Getting Started with Go Extensions

@@ -6,4 +6,4 @@
 FROM scratch
 
 COPY ./manifest.yaml /manifest.yaml
-COPY ./libcomposer.so.txt /libcomposer.so
+COPY ./libgobundle.so.txt /libgobundle.so

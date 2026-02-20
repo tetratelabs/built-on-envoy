@@ -1,13 +1,13 @@
 The create command generates a new extension template with the specified name and type.
 This is useful for getting started with developing a new extension for Built On Envoy.
 
-By default, it creates a `composer` type extension, which is an HTTP filter extension.
+By default, it creates a `go_bundle` type extension, which is an HTTP filter extension.
 The generated template includes boilerplate code, a manifest file, and build configuration
 to help you build and install the extension.
 
 ## Examples
 
-Create a new composer HTTP filter extension:
+Create a new go_bundle HTTP filter extension:
 
     ```shell
     boe create my-extension
@@ -22,7 +22,7 @@ Create an extension in a specific directory:
 Create an extension with explicit type:
 
     ```shell
-    boe create my-extension --type composer
+    boe create my-extension --type go_bundle
     ```
 
 Create a Rust dynamic module extension:
@@ -33,7 +33,7 @@ Create a Rust dynamic module extension:
 
 ## Extension Types
 
-    - **composer**: An HTTP filter extension using the Envoy dynamic modules SDK for Go.
+    - **go_bundle**: An HTTP filter extension using the Envoy dynamic modules SDK for Go.
       Generates Go source files, Makefile, and Dockerfile for building and deploying.
     
     - **dynamic_module_rust**: An HTTP filter extension using the Envoy dynamic modules SDK for Rust.

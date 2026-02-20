@@ -39,8 +39,8 @@ type (
 	WasmFilterGenerator struct{ Logger *slog.Logger }
 	// DynamicModuleFilterGenerator generates filter configuration for Dynamic Module extensions.
 	DynamicModuleFilterGenerator struct{ Logger *slog.Logger }
-	// ComposerFilterGenerator generates filter configuration for Composer extensions.
-	ComposerFilterGenerator struct{ Logger *slog.Logger }
+	// GoBundleFilterGenerator generates filter configuration for Go Bundle extensions.
+	GoBundleFilterGenerator struct{ Logger *slog.Logger }
 
 	// ExtensionResources holds the resources created by an extension.
 	ExtensionResources struct {
@@ -70,8 +70,8 @@ func GenerateFilterConfig(logger *slog.Logger, manifest *extensions.Manifest, di
 		generator = WasmFilterGenerator{Logger: logger}
 	case extensions.TypeDynamicModule:
 		generator = DynamicModuleFilterGenerator{Logger: logger}
-	case extensions.TypeComposer:
-		generator = ComposerFilterGenerator{Logger: logger}
+	case extensions.TypeGoBundle:
+		generator = GoBundleFilterGenerator{Logger: logger}
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedExtensionType, manifest.Type)
 	}
@@ -175,14 +175,14 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 	}, nil
 }
 
-// GenerateFilterConfig generates the filter configuration for Composer extensions.
-func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, dirs *xdg.Directories, config string) (*ExtensionResources, error) {
-	c.Logger.Info("generating composer filter config for extension", "name", manifest.Name, "config", config)
+// GenerateFilterConfig generates the filter configuration for Go Bundle extensions.
+func (c GoBundleFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, dirs *xdg.Directories, config string) (*ExtensionResources, error) {
+	c.Logger.Info("generating go_bundle filter config for extension", "name", manifest.Name, "config", config)
 
-	cachedComposerPath := extensions.LocalCacheComposerLib(dirs, manifest.ComposerVersion)
-	if _, err := os.Stat(cachedComposerPath); os.IsNotExist(err) {
-		// TODO(wbpcode): Download the composer binary from the URL specified in the manifest.
-		return nil, fmt.Errorf("composer binary not found at %s", cachedComposerPath)
+	cachedGoBundlePath := extensions.LocalCacheGoBundleLib(dirs, manifest.GoBundleVersion)
+	if _, err := os.Stat(cachedGoBundlePath); os.IsNotExist(err) {
+		// TODO(wbpcode): Download the go_bundle binary from the URL specified in the manifest.
+		return nil, fmt.Errorf("go_bundle binary not found at %s", cachedGoBundlePath)
 	}
 
 	cachedPluginPath := extensions.LocalCacheExtension(dirs, manifest)
@@ -191,7 +191,7 @@ func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manif
 		return nil, fmt.Errorf("go plugin binary not found at %s", cachedPluginPath)
 	}
 
-	// Covert the config to struct first. For go plugin/composer extensions, we ensure the
+	// Covert the config to struct first. For go plugin/go_bundle extensions, we ensure the
 	// config is always a valid JSON string (could be converted to google.protobuf.Struct).
 	var configValue *structpb.Value
 	if config != "" {
@@ -205,7 +205,7 @@ func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manif
 		configValue = structpb.NewNullValue()
 	}
 
-	// Create New proto struct for Composer go plugin filter.
+	// Create New proto struct for Go Bundle go plugin filter.
 	configStruct := &structpb.Struct{
 		Fields: map[string]*structpb.Value{
 			"name":   structpb.NewStringValue(manifest.Name),
@@ -229,18 +229,18 @@ func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manif
 
 	protoConfig := &dymhttpv3.DynamicModuleFilter{
 		DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-			Name:         "composer",
+			Name:         "go_bundle",
 			LoadGlobally: true,
-			// TODO(nacx): configure a metrics namespace like "composer" or similar when
+			// TODO(nacx): configure a metrics namespace like "go_bundle" or similar when
 			// the changes in https://github.com/envoyproxy/envoy/pull/43266 are available.
 			// Currently defaults to `dynamicmodulescustom`.
 		},
 		FilterName:   "goplugin",
 		FilterConfig: anyConfig,
 	}
-	composerAny, err := anypb.New(protoConfig)
+	gobundleAny, err := anypb.New(protoConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal Composer filter to Any: %w", err)
+		return nil, fmt.Errorf("failed to marshal Go Bundle filter to Any: %w", err)
 	}
 
 	return &ExtensionResources{
@@ -248,7 +248,7 @@ func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manif
 			{
 				Name: manifest.Name,
 				ConfigType: &hcmv3.HttpFilter_TypedConfig{
-					TypedConfig: composerAny,
+					TypedConfig: gobundleAny,
 				},
 			},
 		},

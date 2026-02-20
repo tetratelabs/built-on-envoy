@@ -47,7 +47,7 @@ Arguments:
 Flags:
   -h, --help               Show context-sensitive help.
 
-      --type="composer"    Type of the extension.
+      --type="go_bundle"    Type of the extension.
       --path=STRING        Output directory for the extension. Defaults to the
                            extension name.
 `, internaltesting.WrapHelp(createHelp))
@@ -64,7 +64,7 @@ func TestCreate_Run(t *testing.T) {
 	name := "my-extension"
 
 	c := &Create{
-		Type: "composer",
+		Type: "go_bundle",
 		Name: name,
 		Path: tmpDir,
 	}

@@ -372,14 +372,14 @@ func TestLoadLocalManifests(t *testing.T) {
 		require.ErrorIs(t, err, errFailedToLoadLocalManifest)
 	})
 
-	t.Run("invalid composer path", func(t *testing.T) {
-		// Create a temporary directory and create an template composer plugin with
-		// createComposerHTTPFilter.
+	t.Run("invalid go_bundle path", func(t *testing.T) {
+		// Create a temporary directory and create an template go_bundle plugin with
+		// createGoBundleHTTPFilter.
 		tempDir := t.TempDir()
-		err := createComposerHTTPFilter(logger, downloader.Dirs, tempDir, "test_custom")
+		err := createGoBundleHTTPFilter(logger, downloader.Dirs, tempDir, "test_custom")
 		require.NoError(t, err)
 
-		// Remove go.mod and go.sum to simulate invalid composer extension.
+		// Remove go.mod and go.sum to simulate invalid go_bundle extension.
 		err = os.Remove(tempDir + "/test_custom/go.mod")
 		require.NoError(t, err)
 		err = os.Remove(tempDir + "/test_custom/go.sum")
@@ -390,11 +390,11 @@ func TestLoadLocalManifests(t *testing.T) {
 		require.Contains(t, err.Error(), "failed to run 'go mod tidy'")
 	})
 
-	t.Run("valid composer path", func(t *testing.T) {
-		// Create a temporary directory and create an template composer plugin with
-		// createComposerHTTPFilter.
+	t.Run("valid go_bundle path", func(t *testing.T) {
+		// Create a temporary directory and create an template go_bundle plugin with
+		// createGoBundleHTTPFilter.
 		tempDir := t.TempDir()
-		err := createComposerHTTPFilter(logger, downloader.Dirs, tempDir, "test_valid")
+		err := createGoBundleHTTPFilter(logger, downloader.Dirs, tempDir, "test_valid")
 		require.NoError(t, err)
 
 		manifests, err := loadLocalManifests(t.Context(), logger, downloader, []string{tempDir + "/test_valid"}, false)
@@ -592,30 +592,30 @@ func TestDownloadExtensions(t *testing.T) {
 		require.Equal(t, extensions.TypeDynamicModule, manifests[0].Type)
 	})
 
-	t.Run("binary composer extension", func(t *testing.T) {
+	t.Run("binary go_bundle extension", func(t *testing.T) {
 		dataHome := t.TempDir()
-		composerVersion := "0.1.0"
+		goBundleVersion := "0.1.0"
 
-		// Pre-create the libcomposer.so so CheckOrDownloadLibComposer succeeds without network.
-		composerDir := extensions.LocalCacheComposerDir(&xdg.Directories{DataHome: dataHome}, composerVersion)
-		require.NoError(t, os.MkdirAll(composerDir, 0o750))
-		require.NoError(t, os.WriteFile(filepath.Join(composerDir, "libcomposer.so"), []byte("fake"), 0o600))
+		// Pre-create the libgobundle.so so CheckOrDownloadLibGoBundle succeeds without network.
+		gobundleDir := extensions.LocalCacheGoBundleDir(&xdg.Directories{DataHome: dataHome}, goBundleVersion)
+		require.NoError(t, os.MkdirAll(gobundleDir, 0o750))
+		require.NoError(t, os.WriteFile(filepath.Join(gobundleDir, "libgobundle.so"), []byte("fake"), 0o600))
 
 		mock := &mockOCIClient{
 			annotations: map[string]string{
-				ocispec.AnnotationTitle:                 "my-composer-ext",
-				extensions.OCIAnnotationExtensionType:   string(extensions.TypeComposer),
+				ocispec.AnnotationTitle:                 "my-go_bundle-ext",
+				extensions.OCIAnnotationExtensionType:   string(extensions.TypeGoBundle),
 				extensions.OCIAnnotationArtifact:        extensions.ArtifactBinary,
-				extensions.OCIAnnotationComposerVersion: composerVersion,
+				extensions.OCIAnnotationGoBundleVersion: goBundleVersion,
 			},
 		}
 		d := newTestDownloader(t, dataHome, mock)
 
-		manifests, err := downloadExtensions(t.Context(), d, []string{"my-composer-ext:1.0.0"}, false)
+		manifests, err := downloadExtensions(t.Context(), d, []string{"my-go_bundle-ext:1.0.0"}, false)
 		require.NoError(t, err)
 		require.Len(t, manifests, 1)
-		require.Equal(t, "my-composer-ext", manifests[0].Name)
-		require.Equal(t, extensions.TypeComposer, manifests[0].Type)
+		require.Equal(t, "my-go_bundle-ext", manifests[0].Name)
+		require.Equal(t, extensions.TypeGoBundle, manifests[0].Type)
 	})
 
 	t.Run("multiple extensions", func(t *testing.T) {
@@ -679,18 +679,18 @@ func TestDownloadExtensions(t *testing.T) {
 		require.Contains(t, err.Error(), "unknown artifact type")
 	})
 
-	t.Run("source composer extension with missing source dir", func(t *testing.T) {
+	t.Run("source go_bundle extension with missing source dir", func(t *testing.T) {
 		mock := &mockOCIClient{
 			annotations: map[string]string{
-				ocispec.AnnotationTitle:                 "my-composer-src",
-				extensions.OCIAnnotationExtensionType:   string(extensions.TypeComposer),
+				ocispec.AnnotationTitle:                 "my-go_bundle-src",
+				extensions.OCIAnnotationExtensionType:   string(extensions.TypeGoBundle),
 				extensions.OCIAnnotationArtifact:        extensions.ArtifactSource,
-				extensions.OCIAnnotationComposerVersion: "0.1.0",
+				extensions.OCIAnnotationGoBundleVersion: "0.1.0",
 			},
 		}
 		d := newTestDownloader(t, t.TempDir(), mock)
 
-		_, err := downloadExtensions(t.Context(), d, []string{"my-composer-src:1.0.0"}, false)
+		_, err := downloadExtensions(t.Context(), d, []string{"my-go_bundle-src:1.0.0"}, false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "missing expected source directory")
 	})
@@ -710,7 +710,7 @@ func TestDownloadExtensions(t *testing.T) {
 		require.Contains(t, err.Error(), "no Cargo.toml found")
 	})
 
-	t.Run("source non-composer non-dynamic-module extension", func(t *testing.T) {
+	t.Run("source non-go_bundle non-dynamic-module extension", func(t *testing.T) {
 		mock := &mockOCIClient{
 			annotations: map[string]string{
 				ocispec.AnnotationTitle:               "my-lua-src",
@@ -751,50 +751,50 @@ func TestDownloadExtensions(t *testing.T) {
 	})
 }
 
-func TestValidateComposerCompat(t *testing.T) {
+func TestValidateGoBundleCompat(t *testing.T) {
 	tests := []struct {
 		name       string
 		extensions []*extensions.Manifest
 		wantErr    string
 	}{
 		{
-			name: "no composer extensions",
+			name: "no go_bundle extensions",
 			extensions: []*extensions.Manifest{
 				{Name: "ext-1", Version: "1.0.0", Type: extensions.TypeDynamicModule},
 				{Name: "ext-2", Version: "2.0.0", Type: extensions.TypeLua},
 			},
 		},
 		{
-			name: "single composer extension",
+			name: "single go_bundle extension",
 			extensions: []*extensions.Manifest{
-				{Name: "ext-1", Version: "1.0.0", Type: extensions.TypeComposer, ComposerVersion: "1.2.3"},
+				{Name: "ext-1", Version: "1.0.0", Type: extensions.TypeGoBundle, GoBundleVersion: "1.2.3"},
 				{Name: "ext-2", Version: "2.0.0", Type: extensions.TypeDynamicModule},
 			},
 		},
 		{
-			name: "multiple composer extensions with same version",
+			name: "multiple go_bundle extensions with same version",
 			extensions: []*extensions.Manifest{
-				{Name: "ext-1", Version: "1.0.0", Type: extensions.TypeComposer, ComposerVersion: "1.2.3"},
-				{Name: "ext-2", Version: "2.0.0", Type: extensions.TypeComposer, ComposerVersion: "1.2.3"},
+				{Name: "ext-1", Version: "1.0.0", Type: extensions.TypeGoBundle, GoBundleVersion: "1.2.3"},
+				{Name: "ext-2", Version: "2.0.0", Type: extensions.TypeGoBundle, GoBundleVersion: "1.2.3"},
 			},
 		},
 		{
-			name: "multiple composer extensions with different versions",
+			name: "multiple go_bundle extensions with different versions",
 			extensions: []*extensions.Manifest{
-				{Name: "ext-1", Version: "1.0.0", Type: extensions.TypeComposer, ComposerVersion: "1.2.3"},
-				{Name: "ext-2", Version: "2.0.0", Type: extensions.TypeComposer, ComposerVersion: "2.0.0"},
-				{Name: "ext-3", Version: "2.0.0", Type: extensions.TypeComposer, ComposerVersion: "2.0.0"},
+				{Name: "ext-1", Version: "1.0.0", Type: extensions.TypeGoBundle, GoBundleVersion: "1.2.3"},
+				{Name: "ext-2", Version: "2.0.0", Type: extensions.TypeGoBundle, GoBundleVersion: "2.0.0"},
+				{Name: "ext-3", Version: "2.0.0", Type: extensions.TypeGoBundle, GoBundleVersion: "2.0.0"},
 			},
-			wantErr: `incompatible composer versions found:
+			wantErr: `incompatible go_bundle versions found:
   - version 1.2.3 used by extensions: ext-1
   - version 2.0.0 used by extensions: ext-2, ext-3
-all composer extensions must use the same composer version`,
+all go_bundle extensions must use the same go_bundle version`,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateComposerCompat(tt.extensions)
+			err := validateGoBundleCompat(tt.extensions)
 			if tt.wantErr == "" {
 				require.NoError(t, err)
 			} else {

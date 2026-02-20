@@ -143,7 +143,7 @@ Press Ctrl+C to stop
 }
 
 // setupDynamicModuleSearchPath creates a temporary directory and populates it with hard links
-// to all dynamic module libraries (both composer and Rust dynamic modules).
+// to all dynamic module libraries (both go_bundle and Rust dynamic modules).
 // Returns the path to the temporary directory and a cleanup function.
 func setupDynamicModuleSearchPath(params *ConfigGenerationParams) (string, func(), error) {
 	// Create a temporary directory for dynamic module libraries
@@ -160,13 +160,13 @@ func setupDynamicModuleSearchPath(params *ConfigGenerationParams) (string, func(
 	}
 
 	// Collect all dynamic module libraries that need to be linked
-	var composerVersion string
+	var goBundleVersion string
 	for _, ext := range params.Extensions {
 		switch ext.Type {
-		case extensions.TypeComposer:
+		case extensions.TypeGoBundle:
 			// At this point all extensions are guaranteed to use the same version of
-			// composer.
-			composerVersion = ext.ComposerVersion
+			// go_bundle.
+			goBundleVersion = ext.GoBundleVersion
 
 		case extensions.TypeDynamicModule:
 			// Get the path to the Rust dynamic module library
@@ -185,17 +185,17 @@ func setupDynamicModuleSearchPath(params *ConfigGenerationParams) (string, func(
 		}
 	}
 
-	// If there are composer extensions, link libcomposer.so as well
-	if composerVersion != "" {
-		composerPath := extensions.LocalCacheComposerLib(params.Dirs, composerVersion)
-		if _, err := os.Stat(composerPath); err == nil {
-			linkPath := filepath.Join(tempDir, filepath.Base(composerPath))
+	// If there are go_bundle extensions, link libgobundle.so as well
+	if goBundleVersion != "" {
+		gobundlePath := extensions.LocalCacheGoBundleLib(params.Dirs, goBundleVersion)
+		if _, err := os.Stat(gobundlePath); err == nil {
+			linkPath := filepath.Join(tempDir, filepath.Base(gobundlePath))
 
-			params.Logger.Debug("linking libcomposer for composer extensions", "path", composerPath, "linkPath", linkPath)
+			params.Logger.Debug("linking libgobundle for go_bundle extensions", "path", gobundlePath, "linkPath", linkPath)
 
-			if err := os.Symlink(composerPath, linkPath); err != nil {
+			if err := os.Symlink(gobundlePath, linkPath); err != nil {
 				cleanup()
-				return "", nil, fmt.Errorf("failed to create hard link for libcomposer: %w", err)
+				return "", nil, fmt.Errorf("failed to create hard link for libgobundle: %w", err)
 			}
 		}
 	}

@@ -106,19 +106,19 @@ func TestDownloadExtensionWithManifest(t *testing.T) {
 	require.Equal(t, "test.lua", artifact.Manifest.Lua.Path)
 }
 
-func TestCheckOrDownloadComposer(t *testing.T) {
+func TestCheckOrDownloadGoBundle(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 
-	// Create the image simulating to be composer
-	composerRepo := fmt.Sprintf("%s/composer-lite", registryAddr)
+	// Create the image simulating to be go_bundle
+	gobundleRepo := fmt.Sprintf("%s/gobundle-lite", registryAddr)
 	// #nosec G204
 	cmd := exec.CommandContext(t.Context(), "docker", "buildx", "build",
 		"--builder", builder,
 		"--platform", "linux/amd64",
-		"-t", composerRepo+":1.2.3",
+		"-t", gobundleRepo+":1.2.3",
 		"--push",
-		"--annotation", "index,manifest:org.opencontainers.image.title=composer-lite",
-		"--annotation", "index,manifest:io.tetratelabs.built-on-envoy.extension.composer_version=1.2.3",
+		"--annotation", "index,manifest:org.opencontainers.image.title=gobundle-lite",
+		"--annotation", "index,manifest:io.tetratelabs.built-on-envoy.extension.gobundle_version=1.2.3",
 		"--annotation", "index,manifest:io.tetratelabs.built-on-envoy.extension.artifact=binary",
 		"testdata/extension-with-manifest",
 	)
@@ -135,9 +135,9 @@ func TestCheckOrDownloadComposer(t *testing.T) {
 		Arch:     "amd64",
 	}
 
-	assert.ErrorContains(t, CheckOrDownloadLibComposer(t.Context(), downloader, "unexisting"), "not found") //nolint: testifylint
-	assert.NoError(t, CheckOrDownloadLibComposer(t.Context(), downloader, "1.2.3"))                         //nolint: testifylint
-	assert.FileExists(t, LocalCacheComposerLib(downloader.Dirs, "1.2.3"))                                   //nolint: testifylint
+	assert.ErrorContains(t, CheckOrDownloadLibGoBundle(t.Context(), downloader, "unexisting"), "not found") //nolint: testifylint
+	assert.NoError(t, CheckOrDownloadLibGoBundle(t.Context(), downloader, "1.2.3"))                         //nolint: testifylint
+	assert.FileExists(t, LocalCacheGoBundleLib(downloader.Dirs, "1.2.3"))                                   //nolint: testifylint
 }
 
 func TestFallbackToSourceDynamicModule(t *testing.T) {
@@ -202,23 +202,23 @@ func TestFallbackToSourceDynamicModule(t *testing.T) {
 	require.NoFileExists(t, artifact.Path+"/libplugin.so")
 }
 
-func TestFallbackToSourceComposer(t *testing.T) {
+func TestFallbackToSourceGoBundle(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 
 	// Push a platform-specific image
-	testRepo := fmt.Sprintf("%s/extension-test-composer", registryAddr)
+	testRepo := fmt.Sprintf("%s/extension-test-go_bundle", registryAddr)
 	// #nosec G204
 	cmd := exec.CommandContext(t.Context(), "docker", "buildx", "build",
 		"--builder", builder,
 		"--platform", "linux/amd64",
 		"-t", testRepo+":latest",
 		"--push",
-		"--annotation", "index,manifest:org.opencontainers.image.title=test-composer",
+		"--annotation", "index,manifest:org.opencontainers.image.title=test-go_bundle",
 		"--annotation", "index,manifest:org.opencontainers.image.version=1.0.0",
-		"--annotation", "index,manifest:io.tetratelabs.built-on-envoy.extension.composer_version=1.0.0",
-		"--annotation", "index,manifest:io.tetratelabs.built-on-envoy.extension.type=composer",
+		"--annotation", "index,manifest:io.tetratelabs.built-on-envoy.extension.gobundle_version=1.0.0",
+		"--annotation", "index,manifest:io.tetratelabs.built-on-envoy.extension.type=go_bundle",
 		"--annotation", "index,manifest:io.tetratelabs.built-on-envoy.extension.artifact=binary",
-		"testdata/composer-binary",
+		"testdata/go_bundle-binary",
 	)
 	output, err := cmd.CombinedOutput()
 	t.Logf("docker buildx output: %s", string(output))
@@ -235,32 +235,32 @@ func TestFallbackToSourceComposer(t *testing.T) {
 
 	// If the source artifact is not there, the download will fail because no artifact is there
 	// for the given platform
-	_, err = downloader.DownloadExtension(t.Context(), "test-composer", "latest")
+	_, err = downloader.DownloadExtension(t.Context(), "test-go_bundle", "latest")
 	require.Error(t, err)
 
 	// Push the source image
-	testSrcRepo := fmt.Sprintf("%s/composer-src", registryAddr)
+	testSrcRepo := fmt.Sprintf("%s/go_bundle-src", registryAddr)
 	// #nosec G204
 	cmd = exec.CommandContext(t.Context(), "docker", "buildx", "build",
 		"--builder", builder,
 		"-t", testSrcRepo+":1.0.0",
 		"--push",
 		"--provenance=false",
-		"--annotation", "org.opencontainers.image.title=composer",
+		"--annotation", "org.opencontainers.image.title=go_bundle",
 		"--annotation", "org.opencontainers.image.version=1.0.0",
-		"--annotation", "io.tetratelabs.built-on-envoy.extension.type=composer",
+		"--annotation", "io.tetratelabs.built-on-envoy.extension.type=go_bundle",
 		"--annotation", "io.tetratelabs.built-on-envoy.extension.artifact=source",
-		"testdata/composer-src",
+		"testdata/go_bundle-src",
 	)
 	output, err = cmd.CombinedOutput()
 	t.Logf("docker buildx output: %s", string(output))
 	require.NoError(t, err)
 
 	// Now the download would succeed and fallback to the source artifact
-	artifact, err := downloader.DownloadExtension(t.Context(), "test-composer", "latest")
+	artifact, err := downloader.DownloadExtension(t.Context(), "test-go_bundle", "latest")
 	require.NoError(t, err)
 	require.True(t, artifact.Manifest.Remote)
 	require.Equal(t, ArtifactSource, artifact.ArtifactType)
-	require.FileExists(t, artifact.Path+"/libcomposer.go")
-	require.NoFileExists(t, artifact.Path+"/libcomposer.so")
+	require.FileExists(t, artifact.Path+"/libgobundle.go")
+	require.NoFileExists(t, artifact.Path+"/libgobundle.so")
 }
