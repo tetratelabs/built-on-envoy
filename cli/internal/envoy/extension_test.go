@@ -323,6 +323,60 @@ func TestComposerFilterGenerator(t *testing.T) {
 	}
 
 	checkProtos(t, wantWithConfig.HTTPFilters, got.HTTPFilters)
+
+	// Case 5: Remote extension with SourceRegistry generates oci:// URL
+	ociManifest := &extensions.Manifest{
+		Name:            "test-composer",
+		Type:            extensions.TypeComposer,
+		Version:         "v0.0.1",
+		ComposerVersion: "v1.0.0",
+		Remote:          true,
+		SourceRegistry:  "ghcr.io/tetratelabs/built-on-envoy",
+		SourceTag:       "v0.0.1",
+	}
+
+	// Composer binary is already created from earlier in the test
+	got, err = GenerateFilterConfig(logger, ociManifest, dirs, "")
+	require.NoError(t, err)
+
+	wantOCI := &ExtensionResources{
+		HTTPFilters: []*hcmv3.HttpFilter{
+			{
+				Name: ociManifest.Name,
+				ConfigType: &hcmv3.HttpFilter_TypedConfig{
+					TypedConfig: func() *anypb.Any {
+						dymConfig := &dymhttpv3.DynamicModuleFilter{
+							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
+								Name:         "composer",
+								LoadGlobally: true,
+							},
+							FilterName: "goplugin",
+							FilterConfig: func() *anypb.Any {
+								configStruct := &structpb.Struct{
+									Fields: map[string]*structpb.Value{
+										"name":         structpb.NewStringValue(ociManifest.Name),
+										"url":          structpb.NewStringValue("oci://ghcr.io/tetratelabs/built-on-envoy/extension-test-composer:v0.0.1"),
+										"config":       structpb.NewNullValue(),
+										"strict_check": structpb.NewBoolValue(false),
+									},
+								}
+								marshaledJSON, marshalErr := protojson.Marshal(configStruct)
+								require.NoError(t, marshalErr)
+								cfg, anypbErr := anypb.New(wrapperspb.String(string(marshaledJSON)))
+								require.NoError(t, anypbErr)
+								return cfg
+							}(),
+						}
+						cfg, anypbErr := anypb.New(dymConfig)
+						require.NoError(t, anypbErr)
+						return cfg
+					}(),
+				},
+			},
+		},
+	}
+
+	checkProtos(t, wantOCI.HTTPFilters, got.HTTPFilters)
 }
 
 // checkProtosList checks if two lists of proto messages are equal and if not, prints their YAML representation

@@ -162,8 +162,9 @@ func TestDownloadExtension(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			d := &Downloader{
-				Logger: internaltesting.NewTLogger(t),
-				Dirs:   dirs,
+				Logger:   internaltesting.NewTLogger(t),
+				Registry: "ghcr.io/test",
+				Dirs:     dirs,
 				newClient: func(_ *slog.Logger, _, _, _ string, _ bool) (oci.RepositoryClient, error) {
 					if tt.clientErr != nil {
 						return nil, tt.clientErr
@@ -178,6 +179,8 @@ func TestDownloadExtension(t *testing.T) {
 				require.Equal(t, tt.wantName, artifact.Manifest.Name)
 				require.Equal(t, tt.wantVersion, artifact.Manifest.Version)
 				require.True(t, artifact.Manifest.Remote)
+				require.Equal(t, "ghcr.io/test", artifact.Manifest.SourceRegistry)
+				require.Equal(t, tt.wantVersion, artifact.Manifest.SourceTag)
 			}
 		})
 	}

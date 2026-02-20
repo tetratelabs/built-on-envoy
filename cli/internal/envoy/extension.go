@@ -185,10 +185,16 @@ func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manif
 		return nil, fmt.Errorf("composer binary not found at %s", cachedComposerPath)
 	}
 
-	cachedPluginPath := extensions.LocalCacheExtension(dirs, manifest)
-	if _, err := os.Stat(cachedPluginPath); os.IsNotExist(err) {
-		// TODO(wbpcode): Download the plugin binary from the URL specified in the manifest.
-		return nil, fmt.Errorf("go plugin binary not found at %s", cachedPluginPath)
+	var pluginURL string
+	if manifest.Remote && manifest.SourceRegistry != "" {
+		// For remote extensions, use oci:// URL so config is portable.
+		pluginURL = "oci://" + extensions.RepositoryName(manifest.SourceRegistry, manifest.Name) + ":" + manifest.SourceTag
+	} else {
+		cachedPluginPath := extensions.LocalCacheExtension(dirs, manifest)
+		if _, err := os.Stat(cachedPluginPath); os.IsNotExist(err) {
+			return nil, fmt.Errorf("go plugin binary not found at %s", cachedPluginPath)
+		}
+		pluginURL = "file://" + cachedPluginPath
 	}
 
 	// Covert the config to struct first. For go plugin/composer extensions, we ensure the
@@ -209,7 +215,7 @@ func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manif
 	configStruct := &structpb.Struct{
 		Fields: map[string]*structpb.Value{
 			"name":   structpb.NewStringValue(manifest.Name),
-			"url":    structpb.NewStringValue("file://" + cachedPluginPath),
+			"url":    structpb.NewStringValue(pluginURL),
 			"config": configValue,
 			// TODO(wbpcode): this could be false always in local testing/development.
 			// Should we support to configure this or give different default value for

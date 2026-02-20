@@ -54,6 +54,12 @@ type (
 		// Remote indicates whether this manifest is from a remote extension.
 		// This is set by the extension Downloader when fetching remote manifests.
 		Remote bool `yaml:"-" json:"-"`
+		// SourceRegistry is the OCI registry the extension was fetched from.
+		// Set by the Downloader for remote extensions.
+		SourceRegistry string `yaml:"-" json:"-"`
+		// SourceTag is the resolved version tag the extension was fetched with.
+		// Set by the Downloader for remote extensions.
+		SourceTag string `yaml:"-" json:"-"`
 	}
 
 	// Example represents an example usage of an extension.

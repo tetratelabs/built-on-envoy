@@ -201,6 +201,8 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 						name, extensionSrc, err)
 				}
 				manifest.Remote = true // Mark the manifest as remote since it is from a downloaded artifact
+				manifest.SourceRegistry = downloader.Registry
+				manifest.SourceTag = manifest.Version
 
 				if build {
 					fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)

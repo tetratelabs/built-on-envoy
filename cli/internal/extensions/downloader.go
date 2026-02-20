@@ -98,6 +98,8 @@ func (d *Downloader) DownloadExtension(ctx context.Context, name, version string
 	// Mark the manifest as remote so that config generation knows the extension is
 	// a remote one and can take it into account.
 	artifact.Manifest.Remote = true
+	artifact.Manifest.SourceRegistry = d.Registry
+	artifact.Manifest.SourceTag = artifact.Manifest.Version
 
 	return artifact, nil
 }
