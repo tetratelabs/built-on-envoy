@@ -43,3 +43,14 @@ combined list of `--extension` and `--local` flags. Use an empty string `''` to 
     ```shell
     boe run --extension ext1 --extension ext2 --config '{"key":"value"}' --config ''
     ```
+
+If the extension needs to reach external services, you can provide additional Envoy clusters using the `--cluster`, `--cluster-insecure`, and `--cluster-json` flags. For example:
+
+    ```shell
+    # Configure cluster for a given URL
+    boe run --extension ext1 --cluster example.com:443
+    # Configure cluster for a given URL that is not TLS
+    boe run --extension ext1 --cluster-insecure example.com:80
+    # Configure a full cluster
+    boe run --extension ext1 --cluster-json '{"name":"my-cluster","type":"STRICT_DNS","load_assignment":{"cluster_name":"my-cluster","endpoints":[{"lb_endpoints":[{"endpoint":{"address":{"socket_address":"address":"example.com","port_value":8081}}}}]}]}}'
+    ```

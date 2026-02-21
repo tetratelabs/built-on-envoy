@@ -55,8 +55,15 @@ Flags:
       --config=CONFIG              Optional JSON config string for extensions.
                                    Applied in order to combined --extension and
                                    --local flags.
-      --cluster=CLUSTER            Optional additional Envoy cluster. Supports
-                                   JSON or short format (host:tlsPort).
+      --cluster=CLUSTER,...        Optional additional Envoy cluster provided in
+                                   the host:tlsPort pattern.
+      --cluster-insecure=CLUSTER-INSECURE,...
+                                   Optional additional Envoy cluster (with TLS
+                                   transport disabled) provided in the host:port
+                                   pattern.
+      --cluster-json=CLUSTER-JSON
+                                   Optional additional Envoy cluster providing
+                                   the complete cluster config in JSON format.
       --registry="ghcr.io/tetratelabs/built-on-envoy"
                                    OCI registry URL for the extensions
                                    ($BOE_REGISTRY).
@@ -74,13 +81,16 @@ Flags:
 func TestGenConfig(t *testing.T) {
 	clusterJSON := `{"name":"my-cluster","type":"STRICT_DNS","load_assignment":{"cluster_name":"my-cluster","endpoints":[{"lb_endpoints":[{"endpoint":{"address":{"socket_address":{"address":"example.com","port_value":443}}}}]}]}}`
 	clusterShort := `example.com:443`
+	clusterInsecureShort := `example.com:80`
 
 	tests := []struct {
-		name     string
-		minimal  bool
-		local    []string
-		clusters []string
-		wantFile string
+		name             string
+		minimal          bool
+		local            []string
+		clusters         []string
+		clustersInsecure []string
+		clustersJSON     []string
+		wantFile         string
 	}{
 		{
 			name:     "only filters",
@@ -95,18 +105,18 @@ func TestGenConfig(t *testing.T) {
 			wantFile: "testdata/output_full_config.yaml",
 		},
 		{
-			name:     "full config with JSON cluster",
-			minimal:  false,
-			local:    []string{"testdata/input_lua_inline"},
-			clusters: []string{clusterJSON},
-			wantFile: "testdata/output_full_config_with_cluster.yaml",
+			name:         "full config with JSON cluster",
+			minimal:      false,
+			local:        []string{"testdata/input_lua_inline"},
+			clustersJSON: []string{clusterJSON},
+			wantFile:     "testdata/output_full_config_with_cluster.yaml",
 		},
 		{
-			name:     "only filters with JSON cluster",
-			minimal:  true,
-			local:    []string{"testdata/input_lua_inline"},
-			clusters: []string{clusterJSON},
-			wantFile: "testdata/output_only_filters_with_cluster.yaml",
+			name:         "only filters with JSON cluster",
+			minimal:      true,
+			local:        []string{"testdata/input_lua_inline"},
+			clustersJSON: []string{clusterJSON},
+			wantFile:     "testdata/output_only_filters_with_cluster.yaml",
 		},
 		{
 			name:     "full config with shorthand cluster",
@@ -122,6 +132,36 @@ func TestGenConfig(t *testing.T) {
 			clusters: []string{clusterShort},
 			wantFile: "testdata/output_only_filters_with_shorthand_cluster.yaml",
 		},
+		{
+			name:             "full config with shorthand insecure cluster",
+			minimal:          false,
+			local:            []string{"testdata/input_lua_inline"},
+			clustersInsecure: []string{clusterInsecureShort},
+			wantFile:         "testdata/output_full_config_with_shorthand_insecure_cluster.yaml",
+		},
+		{
+			name:             "only filters with shorthand insecure cluster",
+			minimal:          true,
+			local:            []string{"testdata/input_lua_inline"},
+			clustersInsecure: []string{clusterInsecureShort},
+			wantFile:         "testdata/output_only_filters_with_shorthand_insecure_cluster.yaml",
+		},
+		{
+			name:             "full config with shorthand cluster and insecure cluster",
+			minimal:          false,
+			local:            []string{"testdata/input_lua_inline"},
+			clusters:         []string{clusterShort},
+			clustersInsecure: []string{clusterInsecureShort},
+			wantFile:         "testdata/output_full_config_with_shorthand_cluster_and_insecure_cluster.yaml",
+		},
+		{
+			name:             "only filters with shorthand cluster and insecure cluster",
+			minimal:          true,
+			local:            []string{"testdata/input_lua_inline"},
+			clusters:         []string{clusterShort},
+			clustersInsecure: []string{clusterInsecureShort},
+			wantFile:         "testdata/output_only_filters_with_shorthand_cluster_and_insecure_cluster.yaml",
+		},
 	}
 
 	for _, tt := range tests {
@@ -132,8 +172,12 @@ func TestGenConfig(t *testing.T) {
 				AdminPort:  9901,
 				ListenPort: 10000,
 				Local:      tt.local,
-				Clusters:   tt.clusters,
-				output:     &buf,
+				Clusters: ClusterFlags{
+					Secure:   tt.clusters,
+					Insecure: tt.clustersInsecure,
+					JSONSpec: tt.clustersJSON,
+				},
+				output: &buf,
 			}
 
 			var args []string
@@ -159,8 +203,8 @@ func TestGenConfig(t *testing.T) {
 func TestGenConfigMultipleArgsWithCommas(t *testing.T) {
 	config1 := `{"header":"value1","header2":"value2"}`
 	config2 := `{"another_config":"value3","yet_another_config":"value4"}`
-	cluster1 := `{"name":"cluster1","type":"STRICT_DNS","load_assignment":{"cluster_name":"cluster1"}}`
-	cluster2 := `{"name":"cluster2","type":"STRICT_DNS","load_assignment":{"cluster_name":"cluster2"}}`
+	clusterJSON1 := `{"name":"cluster1","type":"STRICT_DNS","load_assignment":{"cluster_name":"cluster1"}}`
+	clusterJSON2 := `{"name":"cluster2","type":"STRICT_DNS","load_assignment":{"cluster_name":"cluster2"}}`
 
 	var cli struct {
 		GenConfig GenConfig `cmd:"" help:"Generate Envoy configuration with specified extensions"`
@@ -178,9 +222,9 @@ func TestGenConfigMultipleArgsWithCommas(t *testing.T) {
 	_, err = parser.Parse([]string{
 		"gen-config",
 		"--config", config1, "--config", config2,
-		"--cluster", cluster1, "--cluster", cluster2,
+		"--cluster-json", clusterJSON1, "--cluster-json", clusterJSON2,
 	})
 	require.NoError(t, err)
 	require.Equal(t, []string{config1, config2}, cli.GenConfig.Configs)
-	require.Equal(t, []string{cluster1, cluster2}, cli.GenConfig.Clusters)
+	require.Equal(t, []string{clusterJSON1, clusterJSON2}, cli.GenConfig.Clusters.JSONSpec)
 }
