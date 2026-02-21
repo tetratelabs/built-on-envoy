@@ -257,7 +257,6 @@ func ManifestsIndex() []*ManifestIndexEntry {
 				Manifest:   m,
 				SourcePath: filepath.Dir(strings.TrimPrefix(m.Path, "manifests/")),
 			})
-
 		}
 	}
 	slices.SortFunc(manifests, func(a, b *ManifestIndexEntry) int {
