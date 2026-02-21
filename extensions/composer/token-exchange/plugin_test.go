@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The full text of the Apache license is available in the LICENSE file at
 // the root of the repo.
+
 package oauth2te
 
 import (
@@ -20,7 +21,7 @@ import (
 
 // mustParseConfig marshals cfg to JSON and runs it through parseConfig so that
 // precomputed fields (e.g. calloutHeaders) are populated.
-func mustParseConfig(t *testing.T, cfg tokenExchangeConfig) *tokenExchangeConfig {
+func mustParseConfig(t *testing.T, cfg *tokenExchangeConfig) *tokenExchangeConfig {
 	t.Helper()
 	b, err := json.Marshal(cfg)
 	require.NoError(t, err)
@@ -29,9 +30,9 @@ func mustParseConfig(t *testing.T, cfg tokenExchangeConfig) *tokenExchangeConfig
 	return parsed
 }
 
-// testMetrics returns an oauth2teMetrics with all metrics enabled for testing.
-func testMetrics() *oauth2teMetrics {
-	return &oauth2teMetrics{
+// testMetrics returns an tokenExchangeMetrics with all metrics enabled for testing.
+func testMetrics() *tokenExchangeMetrics {
+	return &tokenExchangeMetrics{
 		exchanges:          shared.MetricID(1),
 		hasExchanges:       true,
 		exchangeResults:    shared.MetricID(2),
@@ -76,12 +77,11 @@ func TestOnRequestHeaders(t *testing.T) {
 		defer ctrl.Finish()
 		mockHandle := newMockFilterHandle(ctrl)
 
-		cfg := mustParseConfig(t, tokenExchangeConfig{
-			Cluster:               "sts_cluster",
-			TokenExchangeEndpoint: "/oauth2/token",
-			TokenExchangeHost:     "sts.example.com",
-			ClientID:              "my-client",
-			ClientSecret:          "my-secret",
+		cfg := mustParseConfig(t, &tokenExchangeConfig{
+			Cluster:          "sts_cluster",
+			TokenExchangeURL: "sts.example.com/oauth2/token",
+			ClientID:         "my-client",
+			ClientSecret:     "my-secret",
 		})
 
 		var capturedCluster string
@@ -91,7 +91,7 @@ func TestOnRequestHeaders(t *testing.T) {
 
 		mockHandle.EXPECT().HttpCallout(
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
-		).Do(func(cluster string, headers [][2]string, body []byte, timeout uint64, cb shared.HttpCalloutCallback) {
+		).Do(func(cluster string, headers [][2]string, body []byte, timeout uint64, _ shared.HttpCalloutCallback) {
 			capturedCluster = cluster
 			capturedHeaders = headers
 			capturedBody = body
@@ -134,18 +134,17 @@ func TestOnRequestHeaders(t *testing.T) {
 		defer ctrl.Finish()
 		mockHandle := newMockFilterHandle(ctrl)
 
-		cfg := mustParseConfig(t, tokenExchangeConfig{
-			Cluster:               "sts_cluster",
-			TokenExchangeEndpoint: "/oauth2/token",
-			TokenExchangeHost:     "sts.example.com",
-			ClientID:              "my-client",
-			ClientSecret:          "my-secret",
-			Audience:              "https://api.example.com",
-			Resource:              "https://api.example.com/v1",
-			Scope:                 "read write",
-			RequestedTokenType:    "urn:ietf:params:oauth:token-type:access_token",
-			ActorToken:            "actor-tok",
-			ActorTokenType:        "urn:ietf:params:oauth:token-type:access_token",
+		cfg := mustParseConfig(t, &tokenExchangeConfig{
+			Cluster:            "sts_cluster",
+			TokenExchangeURL:   "sts.example.com/oauth2/token",
+			ClientID:           "my-client",
+			ClientSecret:       "my-secret",
+			Audience:           "https://api.example.com",
+			Resource:           "https://api.example.com/v1",
+			Scope:              "read write",
+			RequestedTokenType: "urn:ietf:params:oauth:token-type:access_token",
+			ActorToken:         "actor-tok",
+			ActorTokenType:     "urn:ietf:params:oauth:token-type:access_token",
 		})
 
 		var capturedBody []byte
@@ -181,12 +180,11 @@ func TestOnRequestHeaders(t *testing.T) {
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return(shared.HttpCalloutInitClusterNotFound, uint64(0))
 
-		cfg := mustParseConfig(t, tokenExchangeConfig{
-			Cluster:               "bad_cluster",
-			TokenExchangeEndpoint: "/t",
-			TokenExchangeHost:     "h",
-			ClientID:              "c",
-			ClientSecret:          "s",
+		cfg := mustParseConfig(t, &tokenExchangeConfig{
+			Cluster:          "bad_cluster",
+			TokenExchangeURL: "h/t",
+			ClientID:         "c",
+			ClientSecret:     "s",
 		})
 
 		f := &tokenExchangeFilter{handle: mockHandle, config: cfg}
@@ -198,7 +196,6 @@ func TestOnRequestHeaders(t *testing.T) {
 }
 
 func TestSTSCallback(t *testing.T) {
-
 	t.Run("successful exchange", func(t *testing.T) {
 		tests := []struct {
 			name string
@@ -244,7 +241,7 @@ func TestSTSCallback(t *testing.T) {
 			result         shared.HttpCalloutResult
 			headers        [][2]string
 			body           [][]byte
-			expectedStatus int
+			expectedStatus uint32
 		}{
 			{
 				name:           "callout failure",
@@ -322,7 +319,7 @@ func TestSTSCallback(t *testing.T) {
 				ctrl := gomock.NewController(t)
 				defer ctrl.Finish()
 				mockHandle := newMockFilterHandle(ctrl)
-				mockHandle.EXPECT().SendLocalResponse(uint32(tt.expectedStatus), gomock.Any(), gomock.Any(), gomock.Any())
+				mockHandle.EXPECT().SendLocalResponse(tt.expectedStatus, gomock.Any(), gomock.Any(), gomock.Any())
 
 				cb := &tokenExchangeCallback{handle: mockHandle}
 				cb.OnHttpCalloutDone(0, tt.result, tt.headers, tt.body)

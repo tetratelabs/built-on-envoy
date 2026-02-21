@@ -2,19 +2,21 @@
 // SPDX-License-Identifier: Apache-2.0
 // The full text of the Apache license is available in the LICENSE file at
 // the root of the repo.
+
 package oauth2te
 
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 )
 
 const (
-	defaultSubjectTokenType        = "urn:ietf:params:oauth:token-type:access_token"
-	grantTypeTokenExchange         = "urn:ietf:params:oauth:grant-type:token-exchange"
+	defaultSubjectTokenType        = "urn:ietf:params:oauth:token-type:access_token"   // #nosec G101 -- not a credential.
+	grantTypeTokenExchange         = "urn:ietf:params:oauth:grant-type:token-exchange" // #nosec G101 -- not a credential.
 	defaultTimeoutMs        uint64 = 5000
 )
 
@@ -23,10 +25,9 @@ const (
 type tokenExchangeConfig struct {
 	// Envoy cluster name that routes to the token exchange endpoint.
 	Cluster string `json:"cluster"`
-	// Path of the token exchange endpoint, e.g. "/oauth2/token".
-	TokenExchangeEndpoint string `json:"token_exchange_endpoint"`
-	// Host of the token exchange endpoint.
-	TokenExchangeHost string `json:"token_exchange_host"`
+	// URL of the token exchange endpoint, e.g. "sts.example.com/oauth2/token".
+	// The URL scheme can be included but will be ignored in favor of the cluster's transport socket configuration.
+	TokenExchangeURL string `json:"token_exchange_url"`
 	// Client identifier used for HTTP Basic authentication with the authorization server.
 	ClientID string `json:"client_id"`
 	// Client secret used for HTTP Basic authentication with the authorization server.
@@ -57,6 +58,10 @@ type tokenExchangeConfig struct {
 	// HTTP callout timeout in milliseconds. Optional. Defaults to 5000.
 	TimeoutMs uint64 `json:"timeout_ms"`
 
+	// tokenExchangeHost is extracted from TokenExchangeURL at config time.
+	tokenExchangeHost string
+	// tokenExchangePath is extracted from TokenExchangeURL at config time.
+	tokenExchangePath string
 	// calloutHeaders is the precomputed set of headers for the request to the STS.
 	calloutHeaders [][2]string
 	// stsPostBodyPrefix is the URL-encoded precomputed body with all static fields,
@@ -64,48 +69,72 @@ type tokenExchangeConfig struct {
 	stsPostBodyPrefix string
 }
 
+// stsPostBody returns the full URL-encoded form body for the token exchange request,
+// appending the given subject token to the precomputed stsPostBodyPrefix.
+func (c *tokenExchangeConfig) stsPostBody(subjectToken string) []byte {
+	return []byte(c.stsPostBodyPrefix + url.QueryEscape(subjectToken))
+}
+
+// parseTokenExchangeURL extracts the host and path from the token exchange URL.
+// It accepts both scheme-less ("host/path") and absolute ("http://host/path").
+// The scheme is ignored in favor of the cluster's transport socket configuration.
+func parseTokenExchangeURL(inputURL string) (host, path string, err error) {
+	if inputURL == "" {
+		return "", "", fmt.Errorf("missing required field: token_exchange_url")
+	}
+	// Prepend a scheme if missing, so url.Parse treats it as an absolute URL
+	parsedURL := inputURL
+	if !strings.Contains(inputURL, "://") {
+		parsedURL = "scheme://" + parsedURL
+	}
+	u, parseErr := url.Parse(parsedURL)
+	if parseErr != nil || u.Host == "" || u.Path == "" {
+		return "", "", fmt.Errorf("token_exchange_url must contain a host and path, got %q", inputURL)
+	}
+	return u.Host, u.RequestURI(), nil
+}
+
 // parseConfig parses and validates the JSON configuration.
 func parseConfig(data []byte) (*tokenExchangeConfig, error) {
 	if len(data) == 0 {
-		return nil, fmt.Errorf("oauth2: configuration is required")
+		return nil, fmt.Errorf("token-exchange: configuration is required")
 	}
 
 	cfg := &tokenExchangeConfig{}
 	if err := json.Unmarshal(data, cfg); err != nil {
-		return nil, fmt.Errorf("oauth2: failed to parse config: %w", err)
+		return nil, fmt.Errorf("token-exchange: failed to parse config: %w", err)
 	}
 
-	// Validate required fields.
-	var missing []string
+	var (
+		errs []error
+		err  error
+	)
 	if cfg.Cluster == "" {
-		missing = append(missing, "cluster")
+		errs = append(errs, fmt.Errorf("missing required field: cluster"))
 	}
-	if cfg.TokenExchangeEndpoint == "" {
-		missing = append(missing, "token_exchange_endpoint")
-	}
-	if cfg.TokenExchangeHost == "" {
-		missing = append(missing, "token_exchange_host")
+	cfg.tokenExchangeHost, cfg.tokenExchangePath, err = parseTokenExchangeURL(cfg.TokenExchangeURL)
+	if err != nil {
+		errs = append(errs, err)
 	}
 	if cfg.ClientID == "" {
-		missing = append(missing, "client_id")
+		errs = append(errs, fmt.Errorf("missing required field: client_id"))
 	}
 	if cfg.ClientSecret == "" {
-		missing = append(missing, "client_secret")
+		errs = append(errs, fmt.Errorf("missing required field: client_secret"))
 	}
-	if len(missing) > 0 {
-		return nil, fmt.Errorf("oauth2: missing required config fields: %s", strings.Join(missing, ", "))
-	}
-
 	if cfg.Resource != "" {
 		// As per RFC: the value of the resource parameter MUST be an absolute URI, [..] that MAY include
 		// a query component and MUST NOT include a fragment component.
 		u, err := url.Parse(cfg.Resource)
 		if err != nil || !u.IsAbs() || u.Fragment != "" {
-			return nil, fmt.Errorf("oauth2: resource must be an absolute URI without fragment, got %q", cfg.Resource)
+			errs = append(errs, fmt.Errorf("resource must be an absolute URI without fragment, got %q", cfg.Resource))
 		}
 	}
 	if cfg.ActorToken != "" && cfg.ActorTokenType == "" {
-		return nil, fmt.Errorf("oauth2: actor_token_type is required when actor_token is present")
+		errs = append(errs, fmt.Errorf("actor_token_type is required when actor_token is present"))
+	}
+	if len(errs) > 0 {
+		return nil, fmt.Errorf("token-exchange: %w", errors.Join(errs...))
 	}
 
 	// Apply defaults.
@@ -120,14 +149,14 @@ func parseConfig(data []byte) (*tokenExchangeConfig, error) {
 	creds := base64.StdEncoding.EncodeToString([]byte(cfg.ClientID + ":" + cfg.ClientSecret))
 	cfg.calloutHeaders = [][2]string{
 		{":method", "POST"},
-		{":path", cfg.TokenExchangeEndpoint},
-		{"host", cfg.TokenExchangeHost},
+		{":path", cfg.tokenExchangePath},
+		{"host", cfg.tokenExchangeHost},
 		{"content-type", "application/x-www-form-urlencoded"},
 		{"authorization", "Basic " + creds},
 	}
 
-	// Precompute request body of the token exchange: every field except subject_token is static
-	// except for the subject_token which will be appendned at every request
+	// Precompute request body of the token exchange: every field is static
+	// except for the subject_token, which will be appended at every request
 	static := url.Values{}
 	static.Set("grant_type", grantTypeTokenExchange)
 	static.Set("subject_token_type", cfg.SubjectTokenType)

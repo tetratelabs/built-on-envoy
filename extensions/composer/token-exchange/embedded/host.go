@@ -7,12 +7,12 @@
 package host
 
 import (
-	oauth2te "github.com/tetratelabs/built-on-envoy/extensions/composer/oauth2te"
-
 	sdk "github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go"
+
+	te "github.com/tetratelabs/built-on-envoy/extensions/composer/token-exchange"
 )
 
 // Register this plugin to the host registry if this is built into the host binary.
 func init() {
-	sdk.RegisterHttpFilterConfigFactories(oauth2te.WellKnownHttpFilterConfigFactories())
+	sdk.RegisterHttpFilterConfigFactories(te.WellKnownHttpFilterConfigFactories())
 }

@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // The full text of the Apache license is available in the LICENSE file at
 // the root of the repo.
+
+// Package oauth2te implements an OAuth2 Token Exchange (RFC 8693) filter for Envoy.
 package oauth2te
 
 import (
@@ -9,7 +11,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
@@ -24,8 +25,8 @@ const (
 	metricResError    = "error"
 )
 
-// oauth2teMetrics holds metric IDs defined at config time, used at request time.
-type oauth2teMetrics struct {
+// tokenExchangeMetrics holds metric IDs defined at config time, used at request time.
+type tokenExchangeMetrics struct {
 	exchanges          shared.MetricID
 	hasExchanges       bool
 	exchangeResults    shared.MetricID
@@ -35,47 +36,47 @@ type oauth2teMetrics struct {
 // tokenExchangeFilterFactory creates filter instances with the parsed config.
 type tokenExchangeFilterFactory struct {
 	config  *tokenExchangeConfig
-	metrics *oauth2teMetrics
+	metrics *tokenExchangeMetrics
 }
 
 func (f *tokenExchangeFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
 	return &tokenExchangeFilter{handle: handle, config: f.config, metrics: f.metrics}
 }
 
-// OAuth2TokenExchangeHttpFilterConfigFactory is the configuration factory for the OAuth2 Token Exchange filter.
-type OAuth2TokenExchangeHttpFilterConfigFactory struct {
+// tokenExchangeHttpFilterConfigFactory is the configuration factory for the OAuth2 Token Exchange filter.
+type tokenExchangeHttpFilterConfigFactory struct { //nolint:revive
 	shared.EmptyHttpFilterConfigFactory
 }
 
 // Create parses the configuration and returns a new filter factory.
-func (f *OAuth2TokenExchangeHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
+func (f *tokenExchangeHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
 	cfg, err := parseConfig(config)
 	if err != nil {
 		handle.Log(shared.LogLevelError, err.Error())
 		return nil, err
 	}
-	handle.Log(shared.LogLevelDebug, "oauth2te: parsed config: %v", cfg)
+	handle.Log(shared.LogLevelDebug, "token-exchange: parsed config: %v", cfg)
 
 	// Define metrics.
-	metrics := &oauth2teMetrics{}
-	if id, status := handle.DefineCounter("oauth2te_token_exchanges_total"); status == shared.MetricsSuccess {
+	metrics := &tokenExchangeMetrics{}
+	if id, status := handle.DefineCounter("token_exchange_requests_total"); status == shared.MetricsSuccess {
 		metrics.exchanges = id
 		metrics.hasExchanges = true
 	}
-	if id, status := handle.DefineCounter("oauth2te_token_exchange_results_total", "result"); status == shared.MetricsSuccess {
+	if id, status := handle.DefineCounter("token_exchange_results_total", "result"); status == shared.MetricsSuccess {
 		metrics.exchangeResults = id
 		metrics.hasExchangeResults = true
 	}
 
-	handle.Log(shared.LogLevelInfo, "oauth2te: loaded token exchange config for cluster=%s endpoint=%s",
-		cfg.Cluster, cfg.TokenExchangeEndpoint)
+	handle.Log(shared.LogLevelInfo, "token-exchange: loaded token exchange config for cluster=%s url=%s",
+		cfg.Cluster, cfg.TokenExchangeURL)
 	return &tokenExchangeFilterFactory{cfg, metrics}, nil
 }
 
 // WellKnownHttpFilterConfigFactories is used to load the plugin.
-func WellKnownHttpFilterConfigFactories() map[string]shared.HttpFilterConfigFactory {
+func WellKnownHttpFilterConfigFactories() map[string]shared.HttpFilterConfigFactory { //nolint:revive
 	return map[string]shared.HttpFilterConfigFactory{
-		"oauth2te": &OAuth2TokenExchangeHttpFilterConfigFactory{},
+		"token-exchange": &tokenExchangeHttpFilterConfigFactory{},
 	}
 }
 
@@ -98,10 +99,15 @@ func headerValue(headers [][2]string, key string) string {
 	return ""
 }
 
-// sendLocalRespError logs the message, sends a local response, and returns HeadersStatusStop.
-func sendLocalRespError(handle shared.HttpFilterHandle, level shared.LogLevel, status int, msg string) shared.HeadersStatus {
-	handle.Log(level, "oauth2te: %s", msg)
-	handle.SendLocalResponse(uint32(status), [][2]string{{"content-type", "text/plain"}}, []byte(msg), "")
+// sendLocalRespError logs the message (with optional raw body), sends
+// a local response with the message, and returns HeadersStatusStop.
+func sendLocalRespError(handle shared.HttpFilterHandle, level shared.LogLevel, status uint32, msg string, rawBody []byte) shared.HeadersStatus {
+	if len(rawBody) > 0 {
+		handle.Log(level, "token-exchange: %s, raw_body=%s", msg, rawBody)
+	} else {
+		handle.Log(level, "token-exchange: %s", msg)
+	}
+	handle.SendLocalResponse(status, [][2]string{{"content-type", "text/plain"}}, []byte(msg), "")
 	return shared.HeadersStatusStop
 }
 
@@ -110,7 +116,7 @@ type tokenExchangeFilter struct {
 	shared.EmptyHttpFilter
 	handle  shared.HttpFilterHandle
 	config  *tokenExchangeConfig
-	metrics *oauth2teMetrics
+	metrics *tokenExchangeMetrics
 }
 
 // incrementExchanges increments the token exchanges counter.
@@ -131,82 +137,79 @@ func (f *tokenExchangeFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool)
 	// Extract the bearer token from the Authorization header.
 	authHeader := headers.GetOne("authorization")
 	if authHeader == "" {
-		return sendLocalRespError(f.handle, shared.LogLevelWarn, http.StatusUnauthorized, "missing Authorization header")
+		return sendLocalRespError(f.handle, shared.LogLevelWarn, http.StatusUnauthorized, "missing Authorization header", nil)
 	}
 	subjectToken, ok := strings.CutPrefix(authHeader, "Bearer ")
 	if !ok {
-		return sendLocalRespError(f.handle, shared.LogLevelWarn, http.StatusUnauthorized, "invalid Authorization header")
+		return sendLocalRespError(f.handle, shared.LogLevelWarn, http.StatusUnauthorized, "invalid Authorization header", nil)
 	}
 	if subjectToken == "" {
-		return sendLocalRespError(f.handle, shared.LogLevelWarn, http.StatusUnauthorized, "empty bearer token")
+		return sendLocalRespError(f.handle, shared.LogLevelWarn, http.StatusUnauthorized, "empty bearer token", nil)
 	}
 
 	// The static form fields are precomputed at config time; only the subject token is dynamic.
 	result, _ := f.handle.HttpCallout(
 		f.config.Cluster,
 		f.config.calloutHeaders,
-		[]byte(f.config.stsPostBodyPrefix+url.QueryEscape(subjectToken)),
+		f.config.stsPostBody(subjectToken),
 		f.config.TimeoutMs,
 		&tokenExchangeCallback{handle: f.handle, metrics: f.metrics},
 	)
 	if result != shared.HttpCalloutInitSuccess {
-		return sendLocalRespError(f.handle, shared.LogLevelError, http.StatusBadGateway, "token exchange unavailable")
+		return sendLocalRespError(f.handle, shared.LogLevelError, http.StatusBadGateway, "token exchange unavailable", nil)
 	}
 
 	f.incrementExchanges()
-	f.handle.Log(shared.LogLevelInfo, "oauth2te: token exchange callout initiated")
+	f.handle.Log(shared.LogLevelInfo, "token-exchange: token exchange callout initiated")
 	return shared.HeadersStatusStopAllAndBuffer
 }
 
 // tokenExchangeCallback handles the STS endpoint response.
 type tokenExchangeCallback struct {
 	handle  shared.HttpFilterHandle
-	metrics *oauth2teMetrics
+	metrics *tokenExchangeMetrics
 }
 
 // OnHttpCalloutDone is called when the STS response is received. It processes the response and either continues
 // the request with the new token replacing the original one or sends a local error response.
-func (c *tokenExchangeCallback) OnHttpCalloutDone(_ uint64, result shared.HttpCalloutResult, headers [][2]string, body [][]byte) {
+func (c *tokenExchangeCallback) OnHttpCalloutDone(_ uint64, result shared.HttpCalloutResult, headers [][2]string, body [][]byte) { //nolint:revive
+	fullBody := joinBody(body)
+
 	if result != shared.HttpCalloutSuccess {
 		c.incrementExchangeResult(metricResError)
-		sendLocalRespError(c.handle, shared.LogLevelError, http.StatusBadGateway, "token exchange failed")
+		sendLocalRespError(c.handle, shared.LogLevelError, http.StatusBadGateway, fmt.Sprintf("callout failed, result=%v", result), fullBody)
 		return
 	}
 
 	// Check the HTTP status from the STS response.
 	statusCode := headerValue(headers, ":status")
 	if len(statusCode) == 0 {
-		c.handle.Log(shared.LogLevelError, "oauth2te: STS response missing :status header")
 		c.incrementExchangeResult(metricResError)
-		sendLocalRespError(c.handle, shared.LogLevelError, http.StatusBadGateway, "token exchange failed: invalid response")
+		sendLocalRespError(c.handle, shared.LogLevelError, http.StatusBadGateway, "token exchange failed: invalid response", fullBody)
 		return
 	}
+
 	// For 4xx errors, we can attempt to parse error response for better logging.
 	if statusCode[0] == '4' {
 		var stsErr struct {
 			Error       string `json:"error"`
 			Description string `json:"error_description"`
 		}
-		if err := json.Unmarshal(joinBody(body), &stsErr); err == nil && stsErr.Error != "" {
-			c.handle.Log(shared.LogLevelError, "oauth2te: STS returned %s: error=%s description=%s",
+		if err := json.Unmarshal(fullBody, &stsErr); err == nil && stsErr.Error != "" {
+			c.handle.Log(shared.LogLevelError, "token-exchange: STS returned %s: error=%s description=%s",
 				statusCode, stsErr.Error, stsErr.Description)
-		} else {
-			c.handle.Log(shared.LogLevelError, "oauth2te: STS endpoint returned status %s", statusCode)
 		}
 		c.incrementExchangeResult(metricResRejected)
-		sendLocalRespError(c.handle, shared.LogLevelError, http.StatusUnauthorized, "token exchange rejected")
+		sendLocalRespError(c.handle, shared.LogLevelError, http.StatusUnauthorized, fmt.Sprintf("token exchange rejected: STS returned %s", statusCode), fullBody)
 		return
 	}
 	if statusCode != httpStatusOKStr {
-		c.handle.Log(shared.LogLevelError, "oauth2te: STS endpoint returned status %s", statusCode)
 		c.incrementExchangeResult(metricResError)
-		sendLocalRespError(c.handle, shared.LogLevelError, http.StatusBadGateway, "token exchange error")
+		sendLocalRespError(c.handle, shared.LogLevelError, http.StatusBadGateway, fmt.Sprintf("token exchange error: STS returned %s", statusCode), fullBody)
 		return
 	}
 
 	// Parse the JSON token response.
-	fullBody := joinBody(body)
-
 	var tokenResp struct {
 		AccessToken     string `json:"access_token"`
 		TokenType       string `json:"token_type"`
@@ -215,27 +218,27 @@ func (c *tokenExchangeCallback) OnHttpCalloutDone(_ uint64, result shared.HttpCa
 
 	if err := json.Unmarshal(fullBody, &tokenResp); err != nil {
 		c.incrementExchangeResult(metricResError)
-		sendLocalRespError(c.handle, shared.LogLevelError, http.StatusBadGateway, "invalid token exchange response: "+err.Error())
+		sendLocalRespError(c.handle, shared.LogLevelError, http.StatusBadGateway, "invalid token exchange response: "+err.Error(), fullBody)
 		return
 	}
 	if tokenResp.AccessToken == "" {
 		c.incrementExchangeResult(metricResError)
-		sendLocalRespError(c.handle, shared.LogLevelError, http.StatusBadGateway, "invalid token exchange response: missing required access_token")
+		sendLocalRespError(c.handle, shared.LogLevelError, http.StatusBadGateway, "invalid token exchange response: missing required access_token", fullBody)
 		return
 	}
 	if tokenResp.TokenType == "" {
 		c.incrementExchangeResult(metricResError)
-		sendLocalRespError(c.handle, shared.LogLevelError, http.StatusBadGateway, "invalid token exchange response: missing required token_type")
+		sendLocalRespError(c.handle, shared.LogLevelError, http.StatusBadGateway, "invalid token exchange response: missing required token_type", fullBody)
 		return
 	}
 	if tokenResp.IssuedTokenType == "" {
 		c.incrementExchangeResult(metricResError)
-		sendLocalRespError(c.handle, shared.LogLevelError, http.StatusBadGateway, "invalid token exchange response: missing required issued_token_type")
+		sendLocalRespError(c.handle, shared.LogLevelError, http.StatusBadGateway, "invalid token exchange response: missing required issued_token_type", fullBody)
 		return
 	}
 	if strings.EqualFold(tokenResp.TokenType, tokenTypeNotApplicable) {
 		c.incrementExchangeResult(metricResError)
-		sendLocalRespError(c.handle, shared.LogLevelError, http.StatusBadGateway, "invalid token exchange response: returned token_type N_A")
+		sendLocalRespError(c.handle, shared.LogLevelError, http.StatusBadGateway, "invalid token exchange response: returned token_type N_A", fullBody)
 		return
 	}
 
@@ -243,6 +246,6 @@ func (c *tokenExchangeCallback) OnHttpCalloutDone(_ uint64, result shared.HttpCa
 	reqHeaders := c.handle.RequestHeaders()
 	reqHeaders.Set("authorization", fmt.Sprintf("%s %s", tokenResp.TokenType, tokenResp.AccessToken))
 	c.incrementExchangeResult(metricResSuccess)
-	c.handle.Log(shared.LogLevelInfo, "oauth2te: token exchange succeeded, token_type=%s issued_token_type=%s", tokenResp.TokenType, tokenResp.IssuedTokenType)
+	c.handle.Log(shared.LogLevelInfo, "token-exchange: token exchange succeeded, token_type=%s issued_token_type=%s", tokenResp.TokenType, tokenResp.IssuedTokenType)
 	c.handle.ContinueRequest()
 }

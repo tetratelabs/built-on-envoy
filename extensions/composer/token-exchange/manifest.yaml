@@ -3,7 +3,7 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-name: oauth2te
+name: token-exchange
 parent: composer
 categories:
   - Security
@@ -11,9 +11,10 @@ author: Tetrate
 featured: true
 description: OAuth2 token exchange for Envoy HTTP traffic
 longDescription: |
-  An OAuth 2.0 Token Exchange (RFC 8693) HTTP filter for Envoy Proxy. It intercepts
-  incoming requests and exchanges the bearer token for a new one connecting to an external
-  Security Token Service (STS) before forwarding the request upstream.
+  An OAuth 2.0 Token Exchange ([RFC 8693](https://datatracker.ietf.org/doc/html/rfc8693))
+  HTTP filter for Envoy Proxy. It intercepts incoming requests and exchanges the bearer
+  token for a new one connecting to an external Security Token Service (STS) before
+  forwarding the request upstream.
 
   ## Features
 
@@ -24,18 +25,17 @@ longDescription: |
 
   ## How It Works
 
-  The filter intercepts incoming HTTP requests, extracts the Bearer token from the
-  incoming Authorization header and sends a HTTP callout to the configured STS endpoint.
+  The filter intercepts incoming HTTP requests, extracts the `Bearer` token from the
+  incoming `Authorization` header, and sends an HTTP callout to the configured STS endpoint.
   The gateway authenticates via HTTP Basic auth using the configured client credentials and
-  exchanges the incoming token for a new one. On success, the original Authorization header is
+  exchanges the incoming token for a new one. On success, the original `Authorization` header is
   replaced with the exchanged token before the request continues upstream.
 
   ## Configuration
 
   Required fields:
   - `cluster`: Envoy cluster name that routes to the STS endpoint
-  - `token_exchange_endpoint`: Path of the token exchange endpoint (e.g. "/oauth2/token")
-  - `token_exchange_host`: Host of the STS endpoint
+  - `token_exchange_url`: URL of the token exchange endpoint (e.g. "sts.example.com/oauth2/token").
   - `client_id`: Client identifier for HTTP Basic authentication with the STS
   - `client_secret`: Client secret for HTTP Basic authentication with the STS
 
@@ -54,8 +54,8 @@ longDescription: |
 
   | Metric | Type | Tags | Description |
   |--------|------|------|-------------|
-  | `oauth2te_token_exchanges_total` | Counter | — | Incremented on each token exchange callout initiated |
-  | `oauth2te_token_exchange_results_total` | Counter | `result` (`success` / `rejected` / `error`) | Incremented after the STS response is processed |
+  | `token_exchange_requests_total` | Counter | — | Incremented on each token exchange callout initiated |
+  | `token_exchange_results_total` | Counter | `result` (`success` / `rejected` / `error`) | Incremented after the STS response is processed |
 type: composer
 tags:
   - oauth2

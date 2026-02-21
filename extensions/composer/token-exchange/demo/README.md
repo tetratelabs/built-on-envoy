@@ -36,7 +36,7 @@ User ──Bearer token──▶ Envoy (gateway) ──exchanged token──▶ 
 ## 1. Start Keycloak
 
 ```bash
-cd extensions/composer/oauth2te/demo
+cd extensions/composer/token-exchange/demo
 docker compose up
 ```
 
@@ -46,15 +46,15 @@ In another terminal, configure Keycloak. It requires explicit authorization befo
 The setup script configures it via the Keycloak APIs:
 
 ```bash
-cd extensions/composer/oauth2te/demo
+cd extensions/composer/token-exchange/demo
 ./setup.sh
 ```
-## 3. Run Envoy with the oauth2 extension
+## 3. Run Envoy with the token-exchange extension
 
 The extension is configured with `gateway` credentials (the intermediary) and `audience=httpbin` (the target service). For every request, it tells the STS that the the gateway has to exchange this user's token for one targeting httpbin:
 
 ```bash
-boe run --local extensions/composer/oauth2te --config '{"cluster":"sts_server","token_exchange_endpoint":"/realms/demo/protocol/openid-connect/token","token_exchange_host":"localhost:8080","client_id":"gateway","client_secret":"gateway-secret","audience":"httpbin"}' \
+boe run --local extensions/composer/token-exchange --config '{"cluster":"sts_server","token_exchange_url":"localhost:8080/realms/demo/protocol/openid-connect/token","client_id":"gateway","client_secret":"gateway-secret","audience":"httpbin"}' \
   --cluster '{"name":"sts_server","type":"STRICT_DNS","dns_lookup_family":"V4_ONLY","load_assignment":{"cluster_name":"sts_server","endpoints":[{"lb_endpoints":[{"endpoint":{"address":{"socket_address":{"address":"127.0.0.1","port_value":8080}}}}]}]}}'
 ```
 

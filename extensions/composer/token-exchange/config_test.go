@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The full text of the Apache license is available in the LICENSE file at
 // the root of the repo.
+
 package oauth2te
 
 import (
@@ -18,11 +19,10 @@ import (
 // baseConfig returns a valid config with all required fields populated.
 func baseConfig() tokenExchangeConfig {
 	return tokenExchangeConfig{
-		Cluster:               "sts_cluster",
-		TokenExchangeEndpoint: "/oauth2/token",
-		TokenExchangeHost:     "sts.example.com",
-		ClientID:              "my-client",
-		ClientSecret:          "my-secret",
+		Cluster:          "sts_cluster",
+		TokenExchangeURL: "sts.example.com/oauth2/token",
+		ClientID:         "my-client",
+		ClientSecret:     "my-secret",
 	}
 }
 
@@ -46,7 +46,7 @@ func TestConfigFactory(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		factory := &OAuth2TokenExchangeHttpFilterConfigFactory{}
+		factory := &tokenExchangeHttpFilterConfigFactory{}
 		ff, err := factory.Create(newMockConfigHandle(ctrl), marshalJSON(t, baseConfig()))
 
 		require.NoError(t, err)
@@ -64,7 +64,7 @@ func TestConfigFactory(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		factory := &OAuth2TokenExchangeHttpFilterConfigFactory{}
+		factory := &tokenExchangeHttpFilterConfigFactory{}
 		ff, err := factory.Create(newMockConfigHandle(ctrl), []byte{})
 
 		require.Error(t, err)
@@ -76,7 +76,7 @@ func TestConfigFactory(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		factory := &OAuth2TokenExchangeHttpFilterConfigFactory{}
+		factory := &tokenExchangeHttpFilterConfigFactory{}
 		ff, err := factory.Create(newMockConfigHandle(ctrl), []byte("{bad"))
 
 		require.Error(t, err)
@@ -89,18 +89,17 @@ func TestConfigFactory(t *testing.T) {
 			missing string
 			cfg     tokenExchangeConfig
 		}{
-			{"cluster", tokenExchangeConfig{TokenExchangeEndpoint: "/t", TokenExchangeHost: "h", ClientID: "c", ClientSecret: "s"}},
-			{"token_exchange_endpoint", tokenExchangeConfig{Cluster: "c", TokenExchangeHost: "h", ClientID: "c", ClientSecret: "s"}},
-			{"token_exchange_host", tokenExchangeConfig{Cluster: "c", TokenExchangeEndpoint: "/t", ClientID: "c", ClientSecret: "s"}},
-			{"client_id", tokenExchangeConfig{Cluster: "c", TokenExchangeEndpoint: "/t", TokenExchangeHost: "h", ClientSecret: "s"}},
-			{"client_secret", tokenExchangeConfig{Cluster: "c", TokenExchangeEndpoint: "/t", TokenExchangeHost: "h", ClientID: "c"}},
+			{"cluster", tokenExchangeConfig{TokenExchangeURL: "h/t", ClientID: "c", ClientSecret: "s"}},
+			{"token_exchange_url", tokenExchangeConfig{Cluster: "c", ClientID: "c", ClientSecret: "s"}},
+			{"client_id", tokenExchangeConfig{Cluster: "c", TokenExchangeURL: "h/t", ClientSecret: "s"}},
+			{"client_secret", tokenExchangeConfig{Cluster: "c", TokenExchangeURL: "h/t", ClientID: "c"}},
 		}
 		for _, tt := range tests {
 			t.Run(tt.missing, func(t *testing.T) {
 				ctrl := gomock.NewController(t)
 				defer ctrl.Finish()
 
-				factory := &OAuth2TokenExchangeHttpFilterConfigFactory{}
+				factory := &tokenExchangeHttpFilterConfigFactory{}
 				ff, err := factory.Create(newMockConfigHandle(ctrl), marshalJSON(t, tt.cfg))
 				require.Error(t, err)
 				require.Nil(t, ff)
@@ -128,7 +127,7 @@ func TestConfigFactory(t *testing.T) {
 				cfg := baseConfig()
 				cfg.Resource = tt.resource
 
-				factory := &OAuth2TokenExchangeHttpFilterConfigFactory{}
+				factory := &tokenExchangeHttpFilterConfigFactory{}
 				ff, err := factory.Create(newMockConfigHandle(ctrl), marshalJSON(t, cfg))
 				if tt.wantErr {
 					require.Error(t, err)
@@ -150,7 +149,7 @@ func TestConfigFactory(t *testing.T) {
 			cfg := baseConfig()
 			cfg.ActorToken = "tok"
 
-			factory := &OAuth2TokenExchangeHttpFilterConfigFactory{}
+			factory := &tokenExchangeHttpFilterConfigFactory{}
 			ff, err := factory.Create(newMockConfigHandle(ctrl), marshalJSON(t, cfg))
 			require.Error(t, err)
 			require.Nil(t, ff)
@@ -165,7 +164,7 @@ func TestConfigFactory(t *testing.T) {
 			cfg.ActorToken = "tok"
 			cfg.ActorTokenType = "urn:ietf:params:oauth:token-type:access_token"
 
-			factory := &OAuth2TokenExchangeHttpFilterConfigFactory{}
+			factory := &tokenExchangeHttpFilterConfigFactory{}
 			ff, err := factory.Create(newMockConfigHandle(ctrl), marshalJSON(t, cfg))
 			require.NoError(t, err)
 			require.NotNil(t, ff)
@@ -176,7 +175,7 @@ func TestConfigFactory(t *testing.T) {
 		cfg, err := parseConfig(marshalJSON(t, baseConfig()))
 		require.NoError(t, err)
 
-		// Append a subject token, this is what will happend at request time
+		// Append a subject token, this is what will happened at request time
 		token := "tok&enExample"
 		body := cfg.stsPostBodyPrefix + url.QueryEscape(token)
 
@@ -201,7 +200,7 @@ func TestConfigFactory(t *testing.T) {
 		cfg.ActorTokenType = "urn:ietf:params:oauth:token-type:access_token"
 		cfg.TimeoutMs = 3000
 
-		factory := &OAuth2TokenExchangeHttpFilterConfigFactory{}
+		factory := &tokenExchangeHttpFilterConfigFactory{}
 		ff, err := factory.Create(newMockConfigHandle(ctrl), marshalJSON(t, cfg))
 
 		require.NoError(t, err)
@@ -216,4 +215,36 @@ func TestConfigFactory(t *testing.T) {
 		require.Equal(t, "urn:ietf:params:oauth:token-type:access_token", tff.config.ActorTokenType)
 		require.Equal(t, uint64(3000), tff.config.TimeoutMs)
 	})
+}
+
+func TestParseTokenExchangeURL(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		wantHost string
+		wantPath string
+		wantErr  bool
+	}{
+		{"host only", "sts.example.com", "", "", true},
+		{"path only", "/oauth2/token", "", "", true},
+		{"empty", "", "", "", true},
+		{"no scheme", "sts.example.com/oauth2/token", "sts.example.com", "/oauth2/token", false},
+		{"http", "http://sts.example.com/oauth2/token", "sts.example.com", "/oauth2/token", false},
+		{"https", "https://sts.example.com/oauth2/token", "sts.example.com", "/oauth2/token", false},
+		{"port", "sts.example.com:8443/oauth2/token", "sts.example.com:8443", "/oauth2/token", false},
+		{"port and scheme", "https://sts.example.com:8443/oauth2/token", "sts.example.com:8443", "/oauth2/token", false},
+		{"with query", "sts.example.com/oauth2/token?foo=bar", "sts.example.com", "/oauth2/token?foo=bar", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			host, path, err := parseTokenExchangeURL(tt.input)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.wantHost, host)
+			require.Equal(t, tt.wantPath, path)
+		})
+	}
 }
