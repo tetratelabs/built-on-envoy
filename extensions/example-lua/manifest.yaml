@@ -7,7 +7,6 @@ name: example-lua
 version: 1.0.0
 categories:
   - Examples
-  - Observability
 author: Tetrate
 description: Comprehensive example demonstrating Envoy Lua HTTP filter capabilities
 longDescription: |

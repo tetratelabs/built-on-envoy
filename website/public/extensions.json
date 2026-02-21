@@ -126,8 +126,7 @@
     "name": "example-lua",
     "version": "1.0.0",
     "categories": [
-      "Examples",
-      "Observability"
+      "Examples"
     ],
     "author": "Tetrate",
     "description": "Comprehensive example demonstrating Envoy Lua HTTP filter capabilities",
@@ -164,8 +163,7 @@
     "name": "ip-restriction",
     "version": "0.1.0",
     "categories": [
-      "Security",
-      "Examples"
+      "Security"
     ],
     "author": "Tetrate",
     "featured": true,

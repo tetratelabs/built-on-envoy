@@ -7,7 +7,6 @@ name: ip-restriction
 version: 0.1.0
 categories:
   - Security
-  - Examples
 author: Tetrate
 featured: true
 description: IP-based access control using allowlists or denylists
