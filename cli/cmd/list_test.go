@@ -76,7 +76,7 @@ func TestListCommand(t *testing.T) {
 
 		names[m.Name] = struct{}{}
 	}
-	require.Len(t, names, len(extensions.ManifestsForCatalog()))
+	require.Len(t, names, len(extensions.ManifestsIndex()))
 }
 
 func fieldsN(s string, n int) []string {

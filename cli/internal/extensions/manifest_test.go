@@ -96,7 +96,7 @@ end
 }
 
 func TestManifestsForCatalog(t *testing.T) {
-	manifests := ManifestsForCatalog()
+	manifests := ManifestsIndex()
 	require.Less(t, len(manifests), len(Manifests))
 	for _, m := range manifests {
 		require.Falsef(t, m.ExtensionSet, "manifest %s should not be included in catalog", m.Name)

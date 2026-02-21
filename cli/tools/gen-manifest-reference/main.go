@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 	"text/template"
@@ -220,10 +219,7 @@ func main() {
 }
 
 func generateExtensionIndex(path string) error {
-	manifests := extensions.ManifestsForCatalog()
-	slices.SortFunc(manifests, func(a, b *extensions.Manifest) int {
-		return strings.Compare(a.Name, b.Name)
-	})
+	manifests := extensions.ManifestsIndex()
 	index, err := json.MarshalIndent(manifests, "", "  ")
 	if err != nil {
 		return err

@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 
+import { GITHUB_REPO, EXTENSIONS_PATH } from '../constants';
+
 export interface Example {
 	title: string;
 	description: string;
@@ -20,8 +22,8 @@ export interface Extension {
 	featured?: boolean;
 	composerVersion?: string;
 	examples?: Example[];
-	/** Relative path from the extensions directory to the extension folder */
-	path: string;
+	sourcePath: string;
+	sourceUrl: string;
 }
 
 /**
@@ -30,12 +32,12 @@ export interface Extension {
 export function loadExtensions(): Extension[] {
 	const jsonPath = path.join(process.cwd(), 'public', 'extensions.json');
 	const content = fs.readFileSync(jsonPath, 'utf-8');
-	const extensions = JSON.parse(content) as Omit<Extension, 'path'>[];
+	const extensions = JSON.parse(content) as Omit<Extension, 'sourceUrl'>[];
 
 	return extensions
 		.map(ext => ({
 			...ext,
-			path: ext.type === 'composer' ? `composer/${ext.name}` : `${ext.name}`,
+			sourceUrl: `${GITHUB_REPO}/tree/main/${EXTENSIONS_PATH}/${ext.sourcePath}`,
 		}))
 		.sort((a, b) => a.name.localeCompare(b.name));
 }

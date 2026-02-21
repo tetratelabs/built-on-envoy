@@ -11,7 +11,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"slices"
 	"strings"
 	"text/tabwriter"
 
@@ -38,19 +37,11 @@ func (l *List) Run(logger *slog.Logger) error {
 		out = os.Stdout
 	}
 
-	manifests := extensions.ManifestsForCatalog()
-	slices.SortFunc(manifests, func(a, b *extensions.Manifest) int {
-		return strings.Compare(a.Name, b.Name)
-	})
-
 	// Create a tabwriter for nicely formatted table output
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-
-	// Print header
 	_, _ = fmt.Fprintln(w, "NAME\tVERSION\tTYPE\tDESCRIPTION")
 
-	// Print each extension
-	for _, m := range manifests {
+	for _, m := range extensions.ManifestsIndex() {
 		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
 			m.Name,
 			m.Version,

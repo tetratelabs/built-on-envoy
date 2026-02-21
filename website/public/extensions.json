@@ -60,7 +60,8 @@
         "code": "boe run --extension cedar-auth --config '{\n  \"policy_file\": \"/tmp/policy.cedar\",\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\",\n  \"fail_open\": true\n}'\n"
       }
     ],
-    "composerVersion": "0.2.1"
+    "composerVersion": "0.2.1",
+    "sourcePath": "composer/cedar"
   },
   {
     "name": "coraza-waf",
@@ -91,7 +92,8 @@
         "code": "# Start WAF with recommended OWASP CRS rules and enforcement enabled\nboe run --extension coraza-waf --config '\n  {\n    \"directives\": [\n      \"Include @recommended.conf\",\n      \"SecRuleEngine On\",\n      \"SecResponseBodyAccess Off\",\n      \"Include @crs-setup.conf\",\n      \"Include @owasp_crs/*.conf\"\n    ]\n  }'\n\n# Try sending a SQL injection payload and see the request rejected\ncurl -v http://localhost:10000/post -X POST --data \"1%27%20ORDER%20BY%203--%2B\"\n\n\u003c HTTP/1.1 403 Forbidden\n\u003c content-length: 22\n\u003c content-type: text/plain\n\u003c date: Thu, 12 Feb 2026 10:28:16 GMT\n\u003c server: envoy\n\u003c\nRequest blocked by WAF\n"
       }
     ],
-    "composerVersion": "0.2.1"
+    "composerVersion": "0.2.1",
+    "sourcePath": "composer/waf"
   },
   {
     "name": "example-go",
@@ -117,7 +119,8 @@
         "code": "boe run --extension example\n"
       }
     ],
-    "composerVersion": "0.2.1"
+    "composerVersion": "0.2.1",
+    "sourcePath": "composer/example"
   },
   {
     "name": "example-lua",
@@ -154,7 +157,8 @@
     ],
     "lua": {
       "path": "plugin.lua"
-    }
+    },
+    "sourcePath": "example-lua"
   },
   {
     "name": "ip-restriction",
@@ -193,7 +197,8 @@
         "description": "Works with both IPv4 and IPv6 addresses",
         "code": "boe run --extension ip-restriction --config '\n  {\n    \"allow_addresses\": [\n      \"127.0.0.1\",\n      \"::1\",\n      \"2001:db8::1\"\n    ]\n  }'\n"
       }
-    ]
+    ],
+    "sourcePath": "ip-restriction"
   },
   {
     "name": "jwe-decrypt",
@@ -243,7 +248,8 @@
         "code": "boe run --extension jwe-decrypt --config '{\n  \"inline_key\": \"LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQo...base64-encoded-key...\"\n  \"input_header\": \"X-JWE-Token\",\n  \"output_metadata\": \"jwe_decrypted_payload\",\n}'\n"
       }
     ],
-    "composerVersion": "0.2.1"
+    "composerVersion": "0.2.1",
+    "sourcePath": "composer/jwe-decrypt"
   },
   {
     "name": "opa",
@@ -301,7 +307,8 @@
         "code": "boe run --extension opa --config '{\n  \"policy_file\": \"/tmp/policy.rego\",\n  \"fail_open\": true\n}'\n"
       }
     ],
-    "composerVersion": "0.2.1"
+    "composerVersion": "0.2.1",
+    "sourcePath": "composer/opa"
   },
   {
     "name": "openapi-validator",
@@ -347,7 +354,8 @@
         "code": "boe run --extension openapi-validator --config '{\n  \"spec_file\": \"/path/to/openapi.yaml\",\n  \"deny_status\": 422,\n  \"deny_body\": \"Request does not conform to API specification\",\n  \"deny_headers\": {\"content-type\": \"text/plain\"}\n}'\n"
       }
     ],
-    "composerVersion": "0.2.1"
+    "composerVersion": "0.2.1",
+    "sourcePath": "composer/openapi-validator"
   },
   {
     "name": "saml",
@@ -393,6 +401,7 @@
         "code": "# Start keycloack\ncurl -o docker-compose.yaml https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yaml\ndocker compose -f docker-compose.yaml up --wait\n\n# Download the IdP metadata\ncurl http://localhost:8080/realms/saml-demo/protocol/saml/descriptor -o idp-metadata.xml\n\n# Run the plugin\nboe run --extension saml --config '\n  {\n    \"entity_id\": \"http://localhost:10000\",\n    \"acs_path\": \"/saml/acs\",\n    \"idp_metadata_xml_file\": \"idp-metadata.xml\",\n    \"attribute_headers\": {\n      \"email\": \"x-saml-email\",\n      \"Role\": \"x-saml-role\"\n    },\n    \"bypass_paths\": [\"/health\", \"/ready\", \"/status/409\"],\n  }'\n\n# Test the plugin in the browser and login as testuser/testpass and check how the headers are set\nopen http://localhost:10000/headers\n\n# Clear the session cookies and then open again the browser and check how authentication is bypassed\nopen http://localhost:10000/status/409\n\n# Cleanup keycloak\ndocker compose -f docker-compose.yaml down -v\n"
       }
     ],
-    "composerVersion": "0.2.1"
+    "composerVersion": "0.2.1",
+    "sourcePath": "composer/saml"
   }
 ]

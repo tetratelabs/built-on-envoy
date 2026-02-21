@@ -16,6 +16,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"golang.org/x/mod/semver"
@@ -70,6 +72,13 @@ type (
 	Lua struct {
 		Inline string `yaml:"inline,omitempty" json:"inline,omitempty"`
 		Path   string `yaml:"path,omitempty" json:"path,omitempty"`
+	}
+
+	// ManifestIndexEntry represents manifest entry in the manifext index JSON that is used
+	// as the source of truth of manifests and served in the public site.
+	ManifestIndexEntry struct {
+		*Manifest  `yaml:",inline" json:",inline"`
+		SourcePath string `yaml:"sourcePath" json:"sourcePath"`
 	}
 )
 
@@ -176,6 +185,7 @@ func loadManifests(fsys fs.FS, validate bool) (map[string]*Manifest, error) {
 		if _, ok := result[m.Name]; ok {
 			return fmt.Errorf("%w: %s", ErrDuplicateManifestName, m.Name)
 		}
+		m.Path = path
 		result[m.Name] = m
 		return nil
 	})
@@ -237,15 +247,22 @@ func resolveVersions(m *Manifest, all map[string]*Manifest) error {
 	return nil
 }
 
-// ManifestsForCatalog returns a list of manifests that should be included in the catalog.
+// ManifestsIndex returns a list of manifests that should be included in the catalog.
 // This filters out manifests that are only used as parents for version inheritance.
-func ManifestsForCatalog() []*Manifest {
-	manifests := make([]*Manifest, 0, len(Manifests))
+func ManifestsIndex() []*ManifestIndexEntry {
+	manifests := make([]*ManifestIndexEntry, 0, len(Manifests))
 	for _, m := range Manifests {
 		if !m.ExtensionSet {
-			manifests = append(manifests, m)
+			manifests = append(manifests, &ManifestIndexEntry{
+				Manifest:   m,
+				SourcePath: filepath.Dir(strings.TrimPrefix(m.Path, "manifests/")),
+			})
+
 		}
 	}
+	slices.SortFunc(manifests, func(a, b *ManifestIndexEntry) int {
+		return strings.Compare(a.Name, b.Name)
+	})
 	return manifests
 }
 
