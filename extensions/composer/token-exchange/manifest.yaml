@@ -65,4 +65,35 @@ tags:
   - http
   - filter
 license: Apache-2.0
-examples: []
+examples:
+  - title: Token Exchange with Keycloak
+    description: |
+      Exchange a user's token for one scoped to a target audience using Keycloak
+      as the STS. It uses the impersonation semantics, the exchanged token still
+      identifies the original user but targets the httpbin audience.
+    code: |
+      # Start Keycloak
+      curl -o docker-compose.yaml https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/token-exchange/demo/docker-compose.yaml
+      curl -o keycloak-realm.json https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/token-exchange/demo/keycloak-realm.json
+      curl -o setup.sh https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/token-exchange/demo/setup.sh
+      docker compose up --wait
+
+      # Configure Keycloak for token exchange
+      ./setup.sh
+
+      # Run the extension
+      boe run --extension token-exchange \
+        --config '{
+          "cluster": "127.0.0.1:8080",
+          "token_exchange_url": "localhost:8080/realms/demo/protocol/openid-connect/token",
+          "client_id": "gateway",
+          "client_secret": "gateway-secret",
+          "audience": "httpbin"
+        }' \
+        --cluster-insecure 127.0.0.1:8080
+
+      # Get a token as testuser and send it through Envoy
+      TOKEN=$(curl -s http://localhost:8080/realms/demo/protocol/openid-connect/token \
+        -d grant_type=password -d client_id=my-app -d client_secret=my-app-secret \
+        -d username=testuser -d password=password | jq -r .access_token)
+      curl -s http://localhost:10000/headers -H "Authorization: Bearer $TOKEN" | jq .
