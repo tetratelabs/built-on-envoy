@@ -57,7 +57,8 @@
         "code": "boe run --extension azure-content-safety --config '{\n  \"endpoint\": \"https://my-resource.cognitiveservices.azure.com\",\n  \"api_key\": \"your-api-key-here\",\n  \"fail_open\": true\n}'\n"
       }
     ],
-    "composerVersion": "0.2.1"
+    "composerVersion": "0.2.1",
+    "sourcePath": "composer/azure-content-safety"
   },
   {
     "name": "cedar-auth",
