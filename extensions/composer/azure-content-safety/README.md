@@ -132,7 +132,8 @@ boe run \
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `endpoint` | string | yes | | Azure Content Safety resource URL |
-| `api_key` | string | yes | | Azure API subscription key |
+| `api_key` | string | yes (or `api_key_file`) | | Azure API subscription key (inline) |
+| `api_key_file` | string | yes (or `api_key`) | | Path to a file containing the Azure API key |
 | `mode` | string | no | `"block"` | `"block"` to reject, `"monitor"` to log only |
 | `fail_open` | bool | no | `false` | If `true`, allow traffic through when Azure API errors occur; if `false` (default), return 500 |
 | `api_version` | string | no | `"2024-09-01"` | Azure API version |
