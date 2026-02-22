@@ -147,7 +147,7 @@ func (f *contentSafetyFilter) OnRequestBody(
 		if err != nil {
 			f.handle.Log(shared.LogLevelInfo,
 				"azure-content-safety: failed to parse %s request for task adherence: %s", reqFormat, err.Error())
-			return shared.BodyStatusContinue
+			return f.handleAPIError("task adherence parse", err)
 		}
 
 		taResult, err := f.client.AnalyzeTaskAdherence(taReq, f.config.taskAdherenceAPIVersion())

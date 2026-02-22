@@ -26,25 +26,6 @@ Unrecognized formats are passed through without inspection.
 ## Prerequisites
 
 - An [Azure AI Content Safety](https://azure.microsoft.com/en-us/products/ai-services/ai-content-safety) resource with an endpoint URL and API key.
-- Go 1.25+ (for building).
-- The `boe` CLI (see [CLI build instructions](../../../cli/)).
-
-## Building
-
-Build the Composer dynamic module (which includes this extension as an embedded plugin):
-
-```bash
-cd extensions/composer
-make build            # Build libcomposer.so
-make install          # Build and install to ~/.local/share/boe/extensions/
-```
-
-Then build the CLI:
-
-```bash
-cd cli
-make build
-```
 
 ## Running
 
