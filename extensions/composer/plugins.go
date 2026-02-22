@@ -15,5 +15,6 @@ import (
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/opa/embedded"               // OPA authorization plugin.
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/openapi-validator/embedded" // OpenAPI validator plugin.
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/saml/embedded"              // SAML SP plugin.
+	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/token-exchange/embedded"   // OAuth2 Token Exchange plugin.
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/waf/embedded"               // WAF plugin.
 )
