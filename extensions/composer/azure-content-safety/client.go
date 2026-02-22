@@ -26,6 +26,7 @@ const (
 type azureContentSafetyConfig struct {
 	Endpoint                string   `json:"endpoint"`
 	APIKey                  string   `json:"api_key"`
+	APIKeyFile              string   `json:"api_key_file"`
 	Mode                    string   `json:"mode"`
 	FailOpen                bool     `json:"fail_open"`
 	APIVersion              string   `json:"api_version"`

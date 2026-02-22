@@ -9,10 +9,49 @@ package impl
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 )
+
+// resolveFileOrInline returns the value for a config field that supports both
+// inline and file-based variants. If both are set, it returns an error.
+// If filePath is set, the file contents are read and returned.
+// Otherwise, inline is returned as-is.
+func resolveFileOrInline(inline, filePath, fieldName string) (string, error) {
+	if inline != "" && filePath != "" {
+		return "", fmt.Errorf("cannot specify both %s and %s_file", fieldName, fieldName)
+	}
+	if filePath != "" {
+		data, err := os.ReadFile(filePath) //nolint:gosec // filePath is from trusted config, not user input
+		if err != nil {
+			return "", fmt.Errorf("failed to read %s_file %q: %w", fieldName, filePath, err)
+		}
+		return strings.TrimSpace(string(data)), nil
+	}
+	return inline, nil
+}
+
+const (
+	decisionAllowed   = "allowed"
+	decisionBlocked   = "blocked"
+	decisionMonitored = "monitored"
+	decisionFailOpen  = "failopen"
+	decisionError     = "error"
+)
+
+// contentSafetyMetrics holds the metric IDs for the Azure Content Safety filter.
+type contentSafetyMetrics struct {
+	requestsTotal shared.MetricID
+	enabled       bool
+}
+
+func (m contentSafetyMetrics) inc(handle shared.HttpFilterHandle, decision string) {
+	if m.enabled {
+		handle.IncrementCounterValue(m.requestsTotal, 1, decision)
+	}
+}
 
 // contentSafetyConfigFactory implements shared.HttpFilterConfigFactory.
 type contentSafetyConfigFactory struct {
@@ -38,10 +77,16 @@ func (f *contentSafetyConfigFactory) Create(
 		handle.Log(shared.LogLevelError, "azure-content-safety: endpoint is required")
 		return nil, fmt.Errorf("endpoint is required")
 	}
-	if cfg.APIKey == "" {
-		handle.Log(shared.LogLevelError, "azure-content-safety: api_key is required")
-		return nil, fmt.Errorf("api_key is required")
+	apiKey, err := resolveFileOrInline(cfg.APIKey, cfg.APIKeyFile, "api_key")
+	if err != nil {
+		handle.Log(shared.LogLevelError, "azure-content-safety: %s", err.Error())
+		return nil, err
 	}
+	if apiKey == "" {
+		handle.Log(shared.LogLevelError, "azure-content-safety: api_key or api_key_file is required")
+		return nil, fmt.Errorf("api_key or api_key_file is required")
+	}
+	cfg.APIKey = apiKey
 	if cfg.Mode != "" && cfg.Mode != "block" && cfg.Mode != "monitor" {
 		handle.Log(shared.LogLevelError, "azure-content-safety: invalid mode %q, must be \"block\" or \"monitor\"", cfg.Mode)
 		return nil, fmt.Errorf("invalid mode %q", cfg.Mode)
@@ -52,32 +97,43 @@ func (f *contentSafetyConfigFactory) Create(
 	}
 	client := newAzureContentSafetyClient(cfg.Endpoint, cfg.APIKey, cfg.apiVersion(), logFunc)
 
+	var metrics contentSafetyMetrics
+	metricID, metricStatus := handle.DefineCounter("azure_content_safety_requests_total", "decision")
+	if metricStatus == shared.MetricsSuccess {
+		metrics.requestsTotal = metricID
+		metrics.enabled = true
+	}
+
 	return &contentSafetyFilterFactory{
-		config: &cfg,
-		client: client,
+		config:  &cfg,
+		client:  client,
+		metrics: metrics,
 	}, nil
 }
 
 // contentSafetyFilterFactory implements shared.HttpFilterFactory.
 type contentSafetyFilterFactory struct {
-	config *azureContentSafetyConfig
-	client *azureContentSafetyClient
+	config  *azureContentSafetyConfig
+	client  *azureContentSafetyClient
+	metrics contentSafetyMetrics
 }
 
 func (f *contentSafetyFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
 	return &contentSafetyFilter{
-		handle: handle,
-		config: f.config,
-		client: f.client,
+		handle:  handle,
+		config:  f.config,
+		client:  f.client,
+		metrics: &f.metrics,
 	}
 }
 
 // contentSafetyFilter implements shared.HttpFilter.
 type contentSafetyFilter struct {
 	shared.EmptyHttpFilter
-	handle shared.HttpFilterHandle
-	config *azureContentSafetyConfig
-	client *azureContentSafetyClient
+	handle  shared.HttpFilterHandle
+	config  *azureContentSafetyConfig
+	client  *azureContentSafetyClient
+	metrics *contentSafetyMetrics
 }
 
 func (f *contentSafetyFilter) OnRequestHeaders(
@@ -135,10 +191,13 @@ func (f *contentSafetyFilter) OnRequestBody(
 				[]byte("Request blocked: prompt injection detected"),
 				"azure_content_safety_prompt_blocked",
 			)
+			f.metrics.inc(f.handle, decisionBlocked)
 			return shared.BodyStatusStopNoBuffer
 		}
 		f.handle.Log(shared.LogLevelInfo,
 			"azure-content-safety: monitor mode - allowing request with detected prompt injection")
+		f.metrics.inc(f.handle, decisionMonitored)
+		return shared.BodyStatusContinue
 	}
 
 	// Task Adherence check (opt-in).
@@ -165,13 +224,17 @@ func (f *contentSafetyFilter) OnRequestBody(
 					[]byte("Request blocked: task adherence risk detected"),
 					"azure_content_safety_task_adherence_blocked",
 				)
+				f.metrics.inc(f.handle, decisionBlocked)
 				return shared.BodyStatusStopNoBuffer
 			}
 			f.handle.Log(shared.LogLevelInfo,
 				"azure-content-safety: monitor mode - allowing request with task adherence risk")
+			f.metrics.inc(f.handle, decisionMonitored)
+			return shared.BodyStatusContinue
 		}
 	}
 
+	f.metrics.inc(f.handle, decisionAllowed)
 	return shared.BodyStatusContinue
 }
 
@@ -231,10 +294,13 @@ func (f *contentSafetyFilter) OnResponseBody(
 				[]byte("Response blocked: harmful content detected"),
 				"azure_content_safety_response_blocked",
 			)
+			f.metrics.inc(f.handle, decisionBlocked)
 			return shared.BodyStatusStopNoBuffer
 		}
 		f.handle.Log(shared.LogLevelInfo,
 			"azure-content-safety: monitor mode - allowing response with detected harmful content")
+		f.metrics.inc(f.handle, decisionMonitored)
+		return shared.BodyStatusContinue
 	}
 
 	// Protected Material check (opt-in).
@@ -253,13 +319,17 @@ func (f *contentSafetyFilter) OnResponseBody(
 					[]byte("Response blocked: protected material detected"),
 					"azure_content_safety_protected_material_blocked",
 				)
+				f.metrics.inc(f.handle, decisionBlocked)
 				return shared.BodyStatusStopNoBuffer
 			}
 			f.handle.Log(shared.LogLevelInfo,
 				"azure-content-safety: monitor mode - allowing response with protected material")
+			f.metrics.inc(f.handle, decisionMonitored)
+			return shared.BodyStatusContinue
 		}
 	}
 
+	f.metrics.inc(f.handle, decisionAllowed)
 	return shared.BodyStatusContinue
 }
 
@@ -277,6 +347,7 @@ func (f *contentSafetyFilter) handleAPIError(apiName string, err error) shared.B
 	if f.config.FailOpen {
 		f.handle.Log(shared.LogLevelWarn,
 			"azure-content-safety: %s API error (fail-open): %s", apiName, err.Error())
+		f.metrics.inc(f.handle, decisionFailOpen)
 		return shared.BodyStatusContinue
 	}
 	f.handle.Log(shared.LogLevelError,
@@ -286,6 +357,7 @@ func (f *contentSafetyFilter) handleAPIError(apiName string, err error) shared.B
 		[]byte("Internal Server Error"),
 		"azure_content_safety_api_error",
 	)
+	f.metrics.inc(f.handle, decisionError)
 	return shared.BodyStatusStopNoBuffer
 }
 
