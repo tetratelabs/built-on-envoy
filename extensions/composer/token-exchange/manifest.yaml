@@ -76,6 +76,7 @@ examples:
       curl -o docker-compose.yaml https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/token-exchange/demo/docker-compose.yaml
       curl -o keycloak-realm.json https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/token-exchange/demo/keycloak-realm.json
       curl -o setup.sh https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/token-exchange/demo/setup.sh
+      chmod +x ./setup.sh
       docker compose up --wait
 
       # Configure Keycloak for token exchange
@@ -97,3 +98,8 @@ examples:
         -d grant_type=password -d client_id=my-app -d client_secret=my-app-secret \
         -d username=testuser -d password=password | jq -r .access_token)
       curl -s http://localhost:10000/headers -H "Authorization: Bearer $TOKEN" | jq .
+
+      # Or use the automated script
+      curl -o run.sh https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/token-exchange/demo/run.sh
+      chmod +x ./run.sh
+      ./run.sh
