@@ -43,8 +43,6 @@ func testMetrics() *tokenExchangeMetrics {
 func newMockFilterHandle(ctrl *gomock.Controller) *mocks.MockHttpFilterHandle {
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockHandle.EXPECT().IncrementCounterValue(gomock.Any(), gomock.Any()).AnyTimes()
-	mockHandle.EXPECT().IncrementCounterValue(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	return mockHandle
 }
 
@@ -84,10 +82,14 @@ func TestOnRequestHeaders(t *testing.T) {
 			ClientSecret:     "my-secret",
 		})
 
-		var capturedCluster string
-		var capturedHeaders [][2]string
-		var capturedBody []byte
-		var capturedTimeout uint64
+		f := &tokenExchangeFilter{handle: mockHandle, config: cfg, metrics: testMetrics()}
+
+		var (
+			capturedCluster string
+			capturedHeaders [][2]string
+			capturedBody    []byte
+			capturedTimeout uint64
+		)
 
 		mockHandle.EXPECT().HttpCallout(
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
@@ -97,8 +99,7 @@ func TestOnRequestHeaders(t *testing.T) {
 			capturedBody = body
 			capturedTimeout = timeout
 		}).Return(shared.HttpCalloutInitSuccess, uint64(1))
-
-		f := &tokenExchangeFilter{handle: mockHandle, config: cfg}
+		mockHandle.EXPECT().IncrementCounterValue(f.metrics.exchanges, uint64(1)).Return(shared.MetricsSuccess)
 		status := f.OnRequestHeaders(fake.NewFakeHeaderMap(map[string][]string{
 			"authorization": {"Bearer mytoken"},
 		}), false)
@@ -147,14 +148,15 @@ func TestOnRequestHeaders(t *testing.T) {
 			ActorTokenType:     "urn:ietf:params:oauth:token-type:access_token",
 		})
 
+		f := &tokenExchangeFilter{handle: mockHandle, config: cfg, metrics: testMetrics()}
+
 		var capturedBody []byte
 		mockHandle.EXPECT().HttpCallout(
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Do(func(_ string, _ [][2]string, body []byte, _ uint64, _ shared.HttpCalloutCallback) {
 			capturedBody = body
 		}).Return(shared.HttpCalloutInitSuccess, uint64(1))
-
-		f := &tokenExchangeFilter{handle: mockHandle, config: cfg}
+		mockHandle.EXPECT().IncrementCounterValue(f.metrics.exchanges, uint64(1)).Return(shared.MetricsSuccess)
 		status := f.OnRequestHeaders(fake.NewFakeHeaderMap(map[string][]string{
 			"authorization": {"Bearer mytoken"},
 		}), false)
@@ -218,14 +220,14 @@ func TestSTSCallback(t *testing.T) {
 				ctrl := gomock.NewController(t)
 				defer ctrl.Finish()
 				mockHandle := newMockFilterHandle(ctrl)
+				cb := &tokenExchangeCallback{handle: mockHandle, metrics: testMetrics()}
 
 				reqHeaders := fake.NewFakeHeaderMap(map[string][]string{
 					"authorization": {"Bearer old-token"},
 				})
 				mockHandle.EXPECT().RequestHeaders().Return(reqHeaders)
 				mockHandle.EXPECT().ContinueRequest()
-
-				cb := &tokenExchangeCallback{handle: mockHandle}
+				mockHandle.EXPECT().IncrementCounterValue(cb.metrics.exchangeResults, uint64(1), "success").Return(shared.MetricsSuccess)
 				cb.OnHttpCalloutDone(0, shared.HttpCalloutSuccess,
 					[][2]string{{":status", "200"}},
 					tt.body,
@@ -242,6 +244,7 @@ func TestSTSCallback(t *testing.T) {
 			headers        [][2]string
 			body           [][]byte
 			expectedStatus uint32
+			metricResult   string
 		}{
 			{
 				name:           "callout failure",
@@ -249,6 +252,7 @@ func TestSTSCallback(t *testing.T) {
 				headers:        nil,
 				body:           nil,
 				expectedStatus: http.StatusBadGateway,
+				metricResult:   metricResError,
 			},
 			{
 				name:           "missing status header",
@@ -256,6 +260,7 @@ func TestSTSCallback(t *testing.T) {
 				headers:        [][2]string{},
 				body:           nil,
 				expectedStatus: http.StatusBadGateway,
+				metricResult:   metricResError,
 			},
 			{
 				name:           "4xx with RFC error body",
@@ -263,6 +268,7 @@ func TestSTSCallback(t *testing.T) {
 				headers:        [][2]string{{":status", "403"}},
 				body:           [][]byte{[]byte(`{"error":"access_denied","error_description":"error description"}`)},
 				expectedStatus: http.StatusUnauthorized,
+				metricResult:   metricResRejected,
 			},
 			{
 				name:           "4xx with non-JSON body",
@@ -270,6 +276,7 @@ func TestSTSCallback(t *testing.T) {
 				headers:        [][2]string{{":status", "400"}},
 				body:           [][]byte{[]byte("bad request")},
 				expectedStatus: http.StatusUnauthorized,
+				metricResult:   metricResRejected,
 			},
 			{
 				name:           "5xx status",
@@ -277,6 +284,7 @@ func TestSTSCallback(t *testing.T) {
 				headers:        [][2]string{{":status", "500"}},
 				body:           [][]byte{[]byte("internal error")},
 				expectedStatus: http.StatusBadGateway,
+				metricResult:   metricResError,
 			},
 			{
 				name:           "invalid JSON body",
@@ -284,6 +292,7 @@ func TestSTSCallback(t *testing.T) {
 				headers:        [][2]string{{":status", "200"}},
 				body:           [][]byte{[]byte("{bad")},
 				expectedStatus: http.StatusBadGateway,
+				metricResult:   metricResError,
 			},
 			{
 				name:           "missing access_token",
@@ -291,6 +300,7 @@ func TestSTSCallback(t *testing.T) {
 				headers:        [][2]string{{":status", "200"}},
 				body:           [][]byte{[]byte(`{"token_type":"Bearer","issued_token_type":"urn:ietf:params:oauth:token-type:access_token"}`)},
 				expectedStatus: http.StatusBadGateway,
+				metricResult:   metricResError,
 			},
 			{
 				name:           "missing token_type",
@@ -298,6 +308,7 @@ func TestSTSCallback(t *testing.T) {
 				headers:        [][2]string{{":status", "200"}},
 				body:           [][]byte{[]byte(`{"access_token":"tok","issued_token_type":"urn:ietf:params:oauth:token-type:access_token"}`)},
 				expectedStatus: http.StatusBadGateway,
+				metricResult:   metricResError,
 			},
 			{
 				name:           "missing issued_token_type",
@@ -305,6 +316,7 @@ func TestSTSCallback(t *testing.T) {
 				headers:        [][2]string{{":status", "200"}},
 				body:           [][]byte{[]byte(`{"access_token":"tok","token_type":"Bearer"}`)},
 				expectedStatus: http.StatusBadGateway,
+				metricResult:   metricResError,
 			},
 			{
 				name:           "token_type N_A",
@@ -312,6 +324,7 @@ func TestSTSCallback(t *testing.T) {
 				headers:        [][2]string{{":status", "200"}},
 				body:           [][]byte{[]byte(`{"access_token":"tok","token_type":"N_A","issued_token_type":"urn:ietf:params:oauth:token-type:access_token"}`)},
 				expectedStatus: http.StatusBadGateway,
+				metricResult:   metricResError,
 			},
 		}
 		for _, tt := range tests {
@@ -319,11 +332,50 @@ func TestSTSCallback(t *testing.T) {
 				ctrl := gomock.NewController(t)
 				defer ctrl.Finish()
 				mockHandle := newMockFilterHandle(ctrl)
-				mockHandle.EXPECT().SendLocalResponse(tt.expectedStatus, gomock.Any(), gomock.Any(), gomock.Any())
+				cb := &tokenExchangeCallback{handle: mockHandle, metrics: testMetrics()}
 
-				cb := &tokenExchangeCallback{handle: mockHandle}
+				mockHandle.EXPECT().SendLocalResponse(tt.expectedStatus, gomock.Any(), gomock.Any(), gomock.Any())
+				mockHandle.EXPECT().IncrementCounterValue(cb.metrics.exchangeResults, uint64(1), tt.metricResult).Return(shared.MetricsSuccess)
 				cb.OnHttpCalloutDone(0, tt.result, tt.headers, tt.body)
 			})
 		}
 	})
+}
+
+func TestFullExchange(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := newMockFilterHandle(ctrl)
+
+	cfg := mustParseConfig(t, &tokenExchangeConfig{
+		Cluster:          "cluster",
+		TokenExchangeURL: "host/path",
+		ClientID:         "client",
+		ClientSecret:     "client-secret",
+	})
+
+	reqHeaders := fake.NewFakeHeaderMap(map[string][]string{
+		"authorization": {"Bearer original"},
+	})
+
+	f := &tokenExchangeFilter{handle: mockHandle, config: cfg, metrics: testMetrics()}
+
+	// Capture the callback and invoke it inline to simulate the STS response.
+	mockHandle.EXPECT().HttpCallout(
+		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+	).Do(func(_ string, _ [][2]string, _ []byte, _ uint64, cb shared.HttpCalloutCallback) {
+		cb.OnHttpCalloutDone(0, shared.HttpCalloutSuccess,
+			[][2]string{{":status", "200"}},
+			[][]byte{[]byte(`{"access_token":"new-token","token_type":"Bearer","issued_token_type":"urn:ietf:params:oauth:token-type:access_token"}`)},
+		)
+	}).Return(shared.HttpCalloutInitSuccess, uint64(1))
+
+	mockHandle.EXPECT().IncrementCounterValue(f.metrics.exchanges, uint64(1)).Return(shared.MetricsSuccess)
+	mockHandle.EXPECT().IncrementCounterValue(f.metrics.exchangeResults, uint64(1), "success").Return(shared.MetricsSuccess)
+	mockHandle.EXPECT().RequestHeaders().Return(reqHeaders)
+	mockHandle.EXPECT().ContinueRequest()
+
+	status := f.OnRequestHeaders(reqHeaders, false)
+	require.Equal(t, shared.HeadersStatusStopAllAndBuffer, status)
+	require.Equal(t, "Bearer new-token", reqHeaders.GetOne("authorization"))
 }
