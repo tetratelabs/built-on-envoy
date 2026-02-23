@@ -7,6 +7,7 @@ services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.1
     # master realm is configured with Require SSL = External requests, which in some docker envs, can lead to HTTPS required errors.
+    # See https://github.com/keycloak/keycloak/issues/25350.
     # To avoid this, we disable SSL requirement for the master realm right after startup.
     entrypoint: ["/bin/bash", "-c"]
     command:
