@@ -1,0 +1,99 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: token-exchange
+parent: composer
+categories:
+  - Security
+author: Tetrate
+featured: true
+description: OAuth2 token exchange for Envoy HTTP traffic
+longDescription: |
+  An OAuth 2.0 Token Exchange ([RFC 8693](https://datatracker.ietf.org/doc/html/rfc8693))
+  HTTP filter for Envoy Proxy. It intercepts incoming requests and exchanges the bearer
+  token for a new one connecting to an external Security Token Service (STS) before
+  forwarding the request upstream.
+
+  ## Features
+
+  * **RFC 8693 Compliant**: Token exchange implementation with all optional parameters.
+  * **Impersonation & Delegation**: Supports both semantics — omit `actor_token` for impersonation,
+    include it for delegation.
+  * **RFC Error Parsing**: Parses and logs error descriptions optionally returned by the STS. 
+
+  ## How It Works
+
+  The filter intercepts incoming HTTP requests, extracts the `Bearer` token from the
+  incoming `Authorization` header, and sends an HTTP callout to the configured STS endpoint.
+  The gateway authenticates via HTTP Basic auth using the configured client credentials and
+  exchanges the incoming token for a new one. On success, the original `Authorization` header is
+  replaced with the exchanged token before the request continues upstream.
+
+  ## Configuration
+
+  Required fields:
+  - `cluster`: Envoy cluster name that routes to the STS endpoint
+  - `token_exchange_url`: URL of the token exchange endpoint (e.g. "sts.example.com/oauth2/token").
+  - `client_id`: Client identifier for HTTP Basic authentication with the STS
+  - `client_secret`: Client secret for HTTP Basic authentication with the STS
+
+  Optional fields:
+  - `audience`: Logical name of the target service for the exchanged token
+  - `resource`: Absolute URI of the target resource (must not contain a fragment)
+  - `scope`: Space-delimited scope list for the requested token
+  - `requested_token_type`: Desired output token type URI
+  - `actor_token` / `actor_token_type`: For delegation semantics (both required together)
+  - `subject_token_type`: Input token type (defaults to `urn:ietf:params:oauth:token-type:access_token`)
+  - `timeout_ms`: HTTP callout timeout in milliseconds (defaults to `5000`)
+
+  ## Metrics
+
+  The extension emits the following Envoy counters:
+
+  | Metric | Type | Tags | Description |
+  |--------|------|------|-------------|
+  | `token_exchange_requests_total` | Counter | — | Incremented on each token exchange callout initiated |
+  | `token_exchange_results_total` | Counter | `result` (`success` / `rejected` / `error`) | Incremented after the STS response is processed |
+type: composer
+tags:
+  - oauth2
+  - tokenexchange
+  - security
+  - go
+  - http
+  - filter
+license: Apache-2.0
+examples:
+  - title: Token Exchange with Keycloak
+    description: |
+      Exchange a user's token for one scoped to a target audience using Keycloak
+      as the STS. It uses the impersonation semantics, the exchanged token still
+      identifies the original user but targets the httpbin audience.
+    code: |
+      # Start Keycloak
+      curl -o docker-compose.yaml https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/token-exchange/demo/docker-compose.yaml
+      curl -o keycloak-realm.json https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/token-exchange/demo/keycloak-realm.json
+      curl -o setup.sh https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/token-exchange/demo/setup.sh
+      docker compose up --wait
+
+      # Configure Keycloak for token exchange
+      ./setup.sh
+
+      # Run the extension
+      boe run --extension token-exchange \
+        --config '{
+          "cluster": "127.0.0.1:8080",
+          "token_exchange_url": "localhost:8080/realms/demo/protocol/openid-connect/token",
+          "client_id": "gateway",
+          "client_secret": "gateway-secret",
+          "audience": "httpbin"
+        }' \
+        --cluster-insecure 127.0.0.1:8080
+
+      # Get a token as testuser and send it through Envoy
+      TOKEN=$(curl -s http://localhost:8080/realms/demo/protocol/openid-connect/token \
+        -d grant_type=password -d client_id=my-app -d client_secret=my-app-secret \
+        -d username=testuser -d password=password | jq -r .access_token)
+      curl -s http://localhost:10000/headers -H "Authorization: Bearer $TOKEN" | jq .
