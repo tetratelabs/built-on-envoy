@@ -318,7 +318,7 @@ func loadLocalManifests(ctx context.Context, logger *slog.Logger, downloader *ex
 				fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, manifest.Name, internal.ANSIReset)
 				downloader.Logger.Info("building local dynamic module extension", "name", manifest.Name, "version", manifest.Version)
 				// Build dynamic module (currently supports Rust)
-				if err := extensions.CheckOrBuildDynamicModule(downloader.Logger, downloader.Dirs, manifest, path); err != nil {
+				if err := extensions.BuildDynamicModule(downloader.Logger, downloader.Dirs, manifest, path); err != nil {
 					return nil, err
 				}
 			}
