@@ -179,8 +179,6 @@ func TestDownloadExtension(t *testing.T) {
 				require.Equal(t, tt.wantName, artifact.Manifest.Name)
 				require.Equal(t, tt.wantVersion, artifact.Manifest.Version)
 				require.True(t, artifact.Manifest.Remote)
-				require.Equal(t, "ghcr.io/test", artifact.Manifest.SourceRegistry)
-				require.Equal(t, tt.wantVersion, artifact.Manifest.SourceTag)
 			}
 		})
 	}

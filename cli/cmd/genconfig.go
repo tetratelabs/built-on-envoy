@@ -76,6 +76,12 @@ func (g *GenConfig) Run(ctx context.Context, dirs *xdg.Directories, logger *slog
 	if err != nil {
 		return err
 	}
+	// Set the OCI registry info on downloaded manifests so that config generation
+	// produces oci:// URLs for remote extensions.
+	for _, m := range downloaded {
+		m.SourceRegistry = downloader.Registry
+		m.SourceTag = m.Version
+	}
 	local, err := loadLocalManifests(ctx, logger, downloader, g.Local, false)
 	if err != nil {
 		return err
