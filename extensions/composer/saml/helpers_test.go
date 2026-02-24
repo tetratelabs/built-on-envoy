@@ -153,6 +153,31 @@ func testFilterConfig(spKP, idpKP *testKeyPair) *samlFilterConfig {
 	}
 }
 
+// testFilterConfigURLMode creates a samlFilterConfig configured for URL-based
+// metadata fetching (idpMetadata is nil, idpMetadataURL and idpMetadataCluster are set).
+func testFilterConfigURLMode(spKP *testKeyPair) *samlFilterConfig {
+	cfg := testConfig(spKP, generateTestKeyPair("idp.example.com"))
+	cfg.IDPMetadataXML = ""
+	cfg.IDPMetadataURL = "https://idp.example.com/metadata"
+	cfg.IDPMetadataCluster = "idp_cluster"
+	return &samlFilterConfig{
+		config:             cfg,
+		idpMetadata:        nil,
+		idpMetadataURL:     "https://idp.example.com/metadata",
+		idpMetadataCluster: "idp_cluster",
+		metrics: &samlMetrics{
+			authnRequests:          shared.MetricID(1),
+			hasAuthnRequests:       true,
+			assertionsValidated:    shared.MetricID(2),
+			hasAssertionsValidated: true,
+			sessionsCreated:        shared.MetricID(3),
+			hasSessionsCreated:     true,
+			sessionsValidated:      shared.MetricID(4),
+			hasSessionsValidated:   true,
+		},
+	}
+}
+
 var noopLog logger = noopLogger{}
 
 type noopLogger struct{}

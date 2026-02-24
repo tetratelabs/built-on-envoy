@@ -7,6 +7,8 @@
 package saml
 
 import (
+	"sync"
+
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 )
 
@@ -25,9 +27,29 @@ type samlMetrics struct {
 // samlFilterConfig holds the parsed configuration and IdP metadata,
 // shared across all filter instances.
 type samlFilterConfig struct {
-	config      *Config
+	config  *Config
+	metrics *samlMetrics
+
+	// idpMetadata holds the parsed IdP metadata. When inline XML is used, this is
+	// populated at config time and is immutable. When idp_metadata_url is used, this
+	// starts as nil and is lazily populated on the first request via HttpCallout.
 	idpMetadata *IDPMetadata
-	metrics     *samlMetrics
+
+	// The following fields are only used when idp_metadata_url is configured.
+	// They coordinate the lazy fetch of IdP metadata across worker threads.
+
+	// idpMetadataURL is the URL to fetch IdP metadata from.
+	idpMetadataURL string
+	// idpMetadataCluster is the Envoy cluster name for the HttpCallout.
+	idpMetadataCluster string
+	// mu protects idpMetadata, metadataFetching, and pendingRequests during lazy init.
+	mu sync.Mutex
+	// metadataFetching indicates whether a metadata fetch is already in progress.
+	metadataFetching bool
+	// pendingRequests holds filter instances waiting for metadata to become available.
+	// When the fetch completes, each filter's auth flow is run and the request is
+	// either continued to upstream or a local response is sent.
+	pendingRequests []*samlHTTPFilter
 }
 
 // samlFilterFactory creates per-request filter instances.
@@ -58,16 +80,29 @@ func (f *HTTPFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, c
 		handle.Log(shared.LogLevelInfo, "saml: auto-generated ephemeral SP certificate and key (not provided in config)")
 	}
 
-	// Parse IdP metadata from the inline XML.
-	idpMeta, err := parseIDPMetadata([]byte(cfg.IDPMetadataXML))
-	if err != nil {
-		handle.Log(shared.LogLevelError, "saml: failed to parse idp metadata: %s", err.Error())
-		return nil, err
+	filterCfg := &samlFilterConfig{
+		config:  cfg,
+		metrics: &samlMetrics{},
 	}
-	handle.Log(shared.LogLevelInfo, "saml: parsed idp metadata for entity_id=%s, sso_url=%s", idpMeta.EntityID, idpMeta.SSOURL)
+
+	if cfg.IDPMetadataXML != "" {
+		// Inline mode: parse IdP metadata at config time.
+		idpMeta, err := parseIDPMetadata([]byte(cfg.IDPMetadataXML))
+		if err != nil {
+			handle.Log(shared.LogLevelError, "saml: failed to parse idp metadata: %s", err.Error())
+			return nil, err
+		}
+		handle.Log(shared.LogLevelInfo, "saml: parsed idp metadata for entity_id=%s, sso_url=%s", idpMeta.EntityID, idpMeta.SSOURL)
+		filterCfg.idpMetadata = idpMeta
+	} else {
+		// URL mode: metadata will be fetched lazily on the first request via HttpCallout.
+		filterCfg.idpMetadataURL = cfg.IDPMetadataURL
+		filterCfg.idpMetadataCluster = cfg.IDPMetadataCluster
+		handle.Log(shared.LogLevelInfo, "saml: idp metadata will be fetched from %s via cluster %s", cfg.IDPMetadataURL, cfg.IDPMetadataCluster)
+	}
 
 	// Define metrics.
-	metrics := &samlMetrics{}
+	metrics := filterCfg.metrics
 	if id, status := handle.DefineCounter("saml_authn_requests_total"); status == shared.MetricsSuccess {
 		metrics.authnRequests = id
 		metrics.hasAuthnRequests = true
@@ -83,12 +118,6 @@ func (f *HTTPFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, c
 	if id, status := handle.DefineCounter("saml_sessions_validated_total", "result"); status == shared.MetricsSuccess {
 		metrics.sessionsValidated = id
 		metrics.hasSessionsValidated = true
-	}
-
-	filterCfg := &samlFilterConfig{
-		config:      cfg,
-		idpMetadata: idpMeta,
-		metrics:     metrics,
 	}
 
 	handle.Log(shared.LogLevelDebug, "saml: config: %s", cfg.String())
