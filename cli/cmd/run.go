@@ -196,7 +196,9 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 			downloaded = append(downloaded, artifact.Manifest)
 
 		case extensions.ArtifactSource:
-			if artifact.Manifest.Type == extensions.TypeGo {
+			// If the downloaded artifact is the composer bundle, we need to find the path to the extension
+			// inside the composer source tree.
+			if artifact.Manifest.Type == extensions.TypeComposer {
 				var manifest *extensions.Manifest
 				extensionSrc := extensions.LocalCacheComposerExtensionSourceDir(downloader.Dirs, artifact.Manifest, name)
 				if extensionSrc == "" {

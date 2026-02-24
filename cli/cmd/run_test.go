@@ -690,7 +690,7 @@ func TestDownloadExtensions(t *testing.T) {
 		mock := &mockOCIClient{
 			annotations: map[string]string{
 				ocispec.AnnotationTitle:                 "my-go-src",
-				extensions.OCIAnnotationExtensionType:   string(extensions.TypeGo),
+				extensions.OCIAnnotationExtensionType:   string(extensions.TypeComposer),
 				extensions.OCIAnnotationArtifact:        extensions.ArtifactSource,
 				extensions.OCIAnnotationComposerVersion: "0.1.0",
 			},

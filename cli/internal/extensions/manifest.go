@@ -120,7 +120,7 @@ const (
 	TypeGo Type = "go"
 	// TypeComposer represents a Composer extension that bundles together
 	// multiple Go extensions.
-	// TypeComposer Type = "composer"
+	TypeComposer Type = "composer"
 
 	schemaURL = "manifest.schema.json"
 )
