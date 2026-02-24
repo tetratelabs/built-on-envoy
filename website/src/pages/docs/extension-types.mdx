@@ -22,12 +22,12 @@ They use the [Rust SDK](https://github.com/envoyproxy/envoy/tree/main/source/ext
 and are compiled to a C-compatible shared library that Envoy loads directly - no intermediate
 runtime or plugin loader is needed.
 
-**Manifest type:** `dynamic_module`
+**Manifest type:** `rust`
 
 ```yaml
 name: my-rust-extension
 version: 0.1.0
-type: dynamic_module
+type: rust
 ```
 
 ### How it Works
@@ -56,8 +56,6 @@ body modification, metadata, and local replies.
 > [special dynamic module](https://github.com/tetratelabs/built-on-envoy/tree/main/extensions/internal/goplugin)
 > is used to load the Go extensions at runtime.
 
-There are two packaging approaches for Go extensions, each with its own manifest type, advantages and limitations.
-
 **Manifest type:** `go`
 
 ```yaml
@@ -84,7 +82,6 @@ directory.
 
 See the [Writing Go Extensions](/docs/writing-go-extensions) guide for a complete walkthrough of the
 filter API, lifecycle callbacks, and build process.
-
 
 
 ## Lua Extensions
