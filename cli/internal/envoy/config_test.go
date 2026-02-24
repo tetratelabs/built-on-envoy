@@ -71,12 +71,14 @@ func TestParseCluster(t *testing.T) {
 	tests := []struct {
 		name          string
 		spec          string
+		tls           bool
 		expectedError string
 		check         func(t *testing.T, c *clusterv3.Cluster)
 	}{
 		{
-			name: "short",
+			name: "tls: short",
 			spec: "example.com:443",
+			tls:  true,
 			check: func(t *testing.T, c *clusterv3.Cluster) {
 				require.Equal(t, "example.com:443", c.Name)
 				require.Equal(t, clusterv3.Cluster_STRICT_DNS, c.GetType())
@@ -87,21 +89,70 @@ func TestParseCluster(t *testing.T) {
 			},
 		},
 		{
+			name:          "tls short: invalid missing port",
+			spec:          "example.com",
+			tls:           true,
+			expectedError: "invalid cluster spec \"example.com\": must be in the format host:tlsPort",
+		},
+		{
+			name:          "tls short: invalid bad port",
+			spec:          "example.com:abc",
+			tls:           true,
+			expectedError: "invalid port in cluster short format: strconv.ParseUint: parsing \"abc\": invalid syntax",
+		},
+		{
+			name: "insecure: short",
+			spec: "example.com:80",
+			tls:  false,
+			check: func(t *testing.T, c *clusterv3.Cluster) {
+				require.Equal(t, "example.com:80", c.Name)
+				require.Equal(t, clusterv3.Cluster_STRICT_DNS, c.GetType())
+				ep := c.LoadAssignment.Endpoints[0].LbEndpoints[0].GetEndpoint()
+				require.Equal(t, "example.com", ep.Address.GetSocketAddress().Address)
+				require.Equal(t, uint32(80), ep.Address.GetSocketAddress().GetPortValue())
+				require.Nil(t, c.TransportSocket, "short form should not include TLS")
+			},
+		},
+		{
+			name:          "insecure short: invalid missing port",
+			spec:          "example.com",
+			tls:           false,
+			expectedError: "invalid cluster spec \"example.com\": must be in the format host:port",
+		},
+		{
+			name:          "insecure short: invalid bad port",
+			spec:          "example.com:abc",
+			tls:           false,
+			expectedError: "invalid port in cluster short format: strconv.ParseUint: parsing \"abc\": invalid syntax",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, err := parseCluster(tt.spec, tt.tls)
+			if tt.expectedError != "" {
+				require.ErrorContains(t, err, tt.expectedError)
+			} else {
+				require.NoError(t, err)
+				tt.check(t, c)
+			}
+		})
+	}
+}
+
+func TestParseJSONCluster(t *testing.T) {
+	tests := []struct {
+		name          string
+		spec          string
+		expectedError string
+		check         func(t *testing.T, c *clusterv3.Cluster)
+	}{
+		{
 			name: "JSON",
 			spec: `{"name":"svc","type":"STRICT_DNS","load_assignment":{"cluster_name":"svc"}}`,
 			check: func(t *testing.T, c *clusterv3.Cluster) {
 				require.Equal(t, "svc", c.Name)
 			},
-		},
-		{
-			name:          "short: invalid missing port",
-			spec:          "example.com",
-			expectedError: "invalid cluster spec \"example.com\": must be JSON or in the format host:tlsPort",
-		},
-		{
-			name:          "short: invalid bad port",
-			spec:          "example.com:abc",
-			expectedError: "invalid port in cluster short format: strconv.ParseUint: parsing \"abc\": invalid syntax",
 		},
 		{
 			name:          "JSON invalid",
@@ -112,7 +163,7 @@ func TestParseCluster(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c, err := parseCluster(tt.spec)
+			c, err := parseJSONCluster(tt.spec)
 			if tt.expectedError != "" {
 				require.ErrorContains(t, err, tt.expectedError)
 			} else {

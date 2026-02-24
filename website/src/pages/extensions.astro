@@ -61,6 +61,7 @@ function formatTypeName(type: string): string {
 								))}
 							</select>
 						</div>
+						<!-- Remove the type filtering for now
 						<div class="type-filter">
 							<select id="type-filter" aria-label="Filter by type">
 								<option value="">All Types</option>
@@ -69,6 +70,7 @@ function formatTypeName(type: string): string {
 								))}
 							</select>
 						</div>
+						-->
 					</div>
 				</div>
 			</section>
@@ -83,6 +85,7 @@ function formatTypeName(type: string): string {
 										<ExtensionCard
 											name={ext.name}
 											type={ext.type}
+											categories={ext.categories}
 											description={ext.description}
 											href={`/extensions/${ext.name}`}
 											tags={ext.tags}

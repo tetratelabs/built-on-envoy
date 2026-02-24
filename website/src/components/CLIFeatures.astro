@@ -14,13 +14,11 @@ import { CLI_NAME } from '../constants';
 					<code>{CLI_NAME} list</code>
 					<p>Browse available extensions</p>
 				</div>
-
 				<div class="cli-item">
 					<h4>Run</h4>
 					<code>{CLI_NAME} run --extension name</code>
 					<p>Start Envoy with extensions</p>
 				</div>
-
 				<div class="cli-item">
 					<h4>Generate Config</h4>
 					<code>{CLI_NAME} gen-config --extension name</code>
@@ -31,25 +29,21 @@ import { CLI_NAME } from '../constants';
 
 		<div class="cli-section">
 			<h3 class="cli-section-title">For<br/>Devs</h3>
-			<div class="cli-grid">
+			<div class="cli-grid cli-grid">
 				<div class="cli-item">
 					<h4>Scaffold</h4>
 					<code>{CLI_NAME} create name</code>
 					<p>Create new extension template</p>
 				</div>
-
 				<div class="cli-item">
 					<h4>Test Locally</h4>
 					<code>{CLI_NAME} run --local ./path</code>
-					<p>Iterate on local extensions</p>
+					<p>Build and run local extensions</p>
 				</div>
-
 				<div class="cli-item">
-					<h4>Share</h4>
-					<div style="text-align: left;">
-						<p><span class="output-info">→</span> Open a pull request</p>
-						<p><span class="output-info">→</span> Add it to the extension catalog!</p>
-					</div>
+					<h4>Test in Docker</h4>
+					<code>{CLI_NAME} run --docker --local ./path</code>
+					<p>Build and run local extensions in Docker</p>
 				</div>
 			</div>
 		</div>

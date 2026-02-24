@@ -15,6 +15,7 @@ const featuredExtensions = loadExtensions().filter(ext => ext.featured === true)
 				<ExtensionCard
 					name={ext.name}
 					type={ext.type}
+					categories={ext.categories}
 					description={ext.description}
 					href={`/extensions/${ext.name}`}
 					tags={ext.tags}

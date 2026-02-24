@@ -66,8 +66,15 @@ Flags:
       --config=CONFIG              Optional JSON config string for extensions.
                                    Applied in order to combined --extension and
                                    --local flags.
-      --cluster=CLUSTER            Optional additional Envoy cluster. Supports
-                                   JSON or short format (host:tlsPort).
+      --cluster=CLUSTER,...        Optional additional Envoy cluster provided in
+                                   the host:tlsPort pattern.
+      --cluster-insecure=CLUSTER-INSECURE,...
+                                   Optional additional Envoy cluster (with TLS
+                                   transport disabled) provided in the host:port
+                                   pattern.
+      --cluster-json=CLUSTER-JSON
+                                   Optional additional Envoy cluster providing
+                                   the complete cluster config in JSON format.
       --docker                     Run Envoy as a Docker container instead of
                                    using func-e ($BOE_RUN_DOCKER).
       --registry="ghcr.io/tetratelabs/built-on-envoy"

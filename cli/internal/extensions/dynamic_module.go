@@ -34,6 +34,14 @@ func CheckOrBuildDynamicModule(logger *slog.Logger, dirs *xdg.Directories, manif
 		return nil
 	}
 
+	return BuildDynamicModule(logger, dirs, manifest, path)
+}
+
+// BuildDynamicModule builds the dynamic module from source. The source code is expected to be at the given path.
+// The built library will be saved in the local cache directory.
+func BuildDynamicModule(logger *slog.Logger, dirs *xdg.Directories, manifest *Manifest, path string) error {
+	destLib := LocalCacheExtension(dirs, manifest)
+
 	// Build the Rust project and make sure the output is in current path.
 	// #nosec G204
 	cmd := exec.Command("cargo", "build", "--release", "--target-dir", "./target")

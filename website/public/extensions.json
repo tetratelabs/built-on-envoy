@@ -60,7 +60,8 @@
         "code": "boe run --extension cedar-auth --config '{\n  \"policy_file\": \"/tmp/policy.cedar\",\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\",\n  \"fail_open\": true\n}'\n"
       }
     ],
-    "composerVersion": "0.2.1"
+    "composerVersion": "0.2.1",
+    "sourcePath": "composer/cedar"
   },
   {
     "name": "coraza-waf",
@@ -91,7 +92,8 @@
         "code": "# Start WAF with recommended OWASP CRS rules and enforcement enabled\nboe run --extension coraza-waf --config '\n  {\n    \"directives\": [\n      \"Include @recommended.conf\",\n      \"SecRuleEngine On\",\n      \"SecResponseBodyAccess Off\",\n      \"Include @crs-setup.conf\",\n      \"Include @owasp_crs/*.conf\"\n    ]\n  }'\n\n# Try sending a SQL injection payload and see the request rejected\ncurl -v http://localhost:10000/post -X POST --data \"1%27%20ORDER%20BY%203--%2B\"\n\n\u003c HTTP/1.1 403 Forbidden\n\u003c content-length: 22\n\u003c content-type: text/plain\n\u003c date: Thu, 12 Feb 2026 10:28:16 GMT\n\u003c server: envoy\n\u003c\nRequest blocked by WAF\n"
       }
     ],
-    "composerVersion": "0.2.1"
+    "composerVersion": "0.2.1",
+    "sourcePath": "composer/waf"
   },
   {
     "name": "example-go",
@@ -117,14 +119,14 @@
         "code": "boe run --extension example\n"
       }
     ],
-    "composerVersion": "0.2.1"
+    "composerVersion": "0.2.1",
+    "sourcePath": "composer/example"
   },
   {
     "name": "example-lua",
     "version": "1.0.0",
     "categories": [
-      "Examples",
-      "Observability"
+      "Examples"
     ],
     "author": "Tetrate",
     "description": "Comprehensive example demonstrating Envoy Lua HTTP filter capabilities",
@@ -154,14 +156,14 @@
     ],
     "lua": {
       "path": "plugin.lua"
-    }
+    },
+    "sourcePath": "example-lua"
   },
   {
     "name": "ip-restriction",
     "version": "0.1.0",
     "categories": [
-      "Security",
-      "Examples"
+      "Security"
     ],
     "author": "Tetrate",
     "featured": true,
@@ -193,7 +195,8 @@
         "description": "Works with both IPv4 and IPv6 addresses",
         "code": "boe run --extension ip-restriction --config '\n  {\n    \"allow_addresses\": [\n      \"127.0.0.1\",\n      \"::1\",\n      \"2001:db8::1\"\n    ]\n  }'\n"
       }
-    ]
+    ],
+    "sourcePath": "ip-restriction"
   },
   {
     "name": "jwe-decrypt",
@@ -243,7 +246,8 @@
         "code": "boe run --extension jwe-decrypt --config '{\n  \"inline_key\": \"LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQo...base64-encoded-key...\"\n  \"input_header\": \"X-JWE-Token\",\n  \"output_metadata\": \"jwe_decrypted_payload\",\n}'\n"
       }
     ],
-    "composerVersion": "0.2.1"
+    "composerVersion": "0.2.1",
+    "sourcePath": "composer/jwe-decrypt"
   },
   {
     "name": "opa",
@@ -301,7 +305,8 @@
         "code": "boe run --extension opa --config '{\n  \"policy_file\": \"/tmp/policy.rego\",\n  \"fail_open\": true\n}'\n"
       }
     ],
-    "composerVersion": "0.2.1"
+    "composerVersion": "0.2.1",
+    "sourcePath": "composer/opa"
   },
   {
     "name": "openapi-validator",
@@ -347,7 +352,8 @@
         "code": "boe run --extension openapi-validator --config '{\n  \"spec_file\": \"/path/to/openapi.yaml\",\n  \"deny_status\": 422,\n  \"deny_body\": \"Request does not conform to API specification\",\n  \"deny_headers\": {\"content-type\": \"text/plain\"}\n}'\n"
       }
     ],
-    "composerVersion": "0.2.1"
+    "composerVersion": "0.2.1",
+    "sourcePath": "composer/openapi-validator"
   },
   {
     "name": "saml",
@@ -393,6 +399,38 @@
         "code": "# Start keycloack\ncurl -o docker-compose.yaml https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yaml\ndocker compose -f docker-compose.yaml up --wait\n\n# Download the IdP metadata\ncurl http://localhost:8080/realms/saml-demo/protocol/saml/descriptor -o idp-metadata.xml\n\n# Run the plugin\nboe run --extension saml --config '\n  {\n    \"entity_id\": \"http://localhost:10000\",\n    \"acs_path\": \"/saml/acs\",\n    \"idp_metadata_xml_file\": \"idp-metadata.xml\",\n    \"attribute_headers\": {\n      \"email\": \"x-saml-email\",\n      \"Role\": \"x-saml-role\"\n    },\n    \"bypass_paths\": [\"/health\", \"/ready\", \"/status/409\"],\n  }'\n\n# Test the plugin in the browser and login as testuser/testpass and check how the headers are set\nopen http://localhost:10000/headers\n\n# Clear the session cookies and then open again the browser and check how authentication is bypassed\nopen http://localhost:10000/status/409\n\n# Cleanup keycloak\ndocker compose -f docker-compose.yaml down -v\n"
       }
     ],
-    "composerVersion": "0.2.1"
+    "composerVersion": "0.2.1",
+    "sourcePath": "composer/saml"
+  },
+  {
+    "name": "token-exchange",
+    "version": "0.2.1",
+    "parent": "composer",
+    "categories": [
+      "Security"
+    ],
+    "author": "Tetrate",
+    "featured": true,
+    "description": "OAuth2 token exchange for Envoy HTTP traffic",
+    "longDescription": "An OAuth 2.0 Token Exchange ([RFC 8693](https://datatracker.ietf.org/doc/html/rfc8693))\nHTTP filter for Envoy Proxy. It intercepts incoming requests and exchanges the bearer\ntoken for a new one connecting to an external Security Token Service (STS) before\nforwarding the request upstream.\n\n## Features\n\n* **RFC 8693 Compliant**: Token exchange implementation with all optional parameters.\n* **Impersonation \u0026 Delegation**: Supports both semantics — omit `actor_token` for impersonation,\n  include it for delegation.\n* **RFC Error Parsing**: Parses and logs error descriptions optionally returned by the STS. \n\n## How It Works\n\nThe filter intercepts incoming HTTP requests, extracts the `Bearer` token from the\nincoming `Authorization` header, and sends an HTTP callout to the configured STS endpoint.\nThe gateway authenticates via HTTP Basic auth using the configured client credentials and\nexchanges the incoming token for a new one. On success, the original `Authorization` header is\nreplaced with the exchanged token before the request continues upstream.\n\n## Configuration\n\nRequired fields:\n- `cluster`: Envoy cluster name that routes to the STS endpoint\n- `token_exchange_url`: URL of the token exchange endpoint (e.g. \"sts.example.com/oauth2/token\").\n- `client_id`: Client identifier for HTTP Basic authentication with the STS\n- `client_secret`: Client secret for HTTP Basic authentication with the STS\n\nOptional fields:\n- `audience`: Logical name of the target service for the exchanged token\n- `resource`: Absolute URI of the target resource (must not contain a fragment)\n- `scope`: Space-delimited scope list for the requested token\n- `requested_token_type`: Desired output token type URI\n- `actor_token` / `actor_token_type`: For delegation semantics (both required together)\n- `subject_token_type`: Input token type (defaults to `urn:ietf:params:oauth:token-type:access_token`)\n- `timeout_ms`: HTTP callout timeout in milliseconds (defaults to `5000`)\n\n## Metrics\n\nThe extension emits the following Envoy counters:\n\n| Metric | Type | Tags | Description |\n|--------|------|------|-------------|\n| `token_exchange_requests_total` | Counter | — | Incremented on each token exchange callout initiated |\n| `token_exchange_results_total` | Counter | `result` (`success` / `rejected` / `error`) | Incremented after the STS response is processed |\n",
+    "type": "composer",
+    "tags": [
+      "oauth2",
+      "tokenexchange",
+      "security",
+      "go",
+      "http",
+      "filter"
+    ],
+    "license": "Apache-2.0",
+    "examples": [
+      {
+        "title": "Token Exchange with Keycloak",
+        "description": "Exchange a user's token for one scoped to a target audience using Keycloak\nas the STS. It uses the impersonation semantics, the exchanged token still\nidentifies the original user but targets the httpbin audience.\n",
+        "code": "# Start Keycloak\ncurl -o docker-compose.yaml https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/token-exchange/demo/docker-compose.yaml\ncurl -o keycloak-realm.json https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/token-exchange/demo/keycloak-realm.json\ncurl -o setup.sh https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/token-exchange/demo/setup.sh\ndocker compose up --wait\n\n# Configure Keycloak for token exchange\n./setup.sh\n\n# Run the extension\nboe run --extension token-exchange \\\n  --config '{\n    \"cluster\": \"127.0.0.1:8080\",\n    \"token_exchange_url\": \"localhost:8080/realms/demo/protocol/openid-connect/token\",\n    \"client_id\": \"gateway\",\n    \"client_secret\": \"gateway-secret\",\n    \"audience\": \"httpbin\"\n  }' \\\n  --cluster-insecure 127.0.0.1:8080\n\n# Get a token as testuser and send it through Envoy\nTOKEN=$(curl -s http://localhost:8080/realms/demo/protocol/openid-connect/token \\\n  -d grant_type=password -d client_id=my-app -d client_secret=my-app-secret \\\n  -d username=testuser -d password=password | jq -r .access_token)\ncurl -s http://localhost:10000/headers -H \"Authorization: Bearer $TOKEN\" | jq .\n"
+      }
+    ],
+    "composerVersion": "0.2.1",
+    "sourcePath": "composer/token-exchange"
   }
 ]

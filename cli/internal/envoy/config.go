@@ -11,7 +11,6 @@ import (
 	"log/slog"
 	"net"
 	"strconv"
-	"strings"
 
 	accesslogv3 "github.com/envoyproxy/go-control-plane/envoy/config/accesslog/v3"
 	bootstrapv3 "github.com/envoyproxy/go-control-plane/envoy/config/bootstrap/v3"
@@ -47,8 +46,12 @@ type ConfigGenerationParams struct {
 	Extensions []*extensions.Manifest
 	// Configs specifies optional JSON config strings for each extension (by index).
 	Configs []string
-	// Clusters specifies additional Envoy cluster JSON strings to include in the configuration.
+	// Clusters specifies additional Envoy cluster (with TLS) from short names to include in the configuration.
 	Clusters []string
+	// ClustersInsecure specifies additional Envoy cluster (without TLS) from short names to include in the configuration.
+	ClustersInsecure []string
+	// ClustersJSON specifies additional Envoy cluster JSON strings to include in the configuration.
+	ClustersJSON []string
 }
 
 // GeneratedConfigResources holds the generated Envoy resources for an extension.
@@ -135,9 +138,25 @@ func generateConfig(params *ConfigGenerationParams) (GeneratedConfigResources, e
 	}
 
 	for i, clusterSpec := range params.Clusters {
-		cluster, err := parseCluster(clusterSpec)
+		cluster, err := parseCluster(clusterSpec, true)
 		if err != nil {
 			return GeneratedConfigResources{}, fmt.Errorf("failed to parse --cluster[%d]: %w", i, err)
+		}
+		clusters = append(clusters, cluster)
+	}
+
+	for i, clusterSpec := range params.ClustersInsecure {
+		cluster, err := parseCluster(clusterSpec, false)
+		if err != nil {
+			return GeneratedConfigResources{}, fmt.Errorf("failed to parse --cluster-insecure[%d]: %w", i, err)
+		}
+		clusters = append(clusters, cluster)
+	}
+
+	for i, clusterSpec := range params.ClustersJSON {
+		cluster, err := parseJSONCluster(clusterSpec)
+		if err != nil {
+			return GeneratedConfigResources{}, fmt.Errorf("failed to parse --cluster-json[%d]: %w", i, err)
 		}
 		clusters = append(clusters, cluster)
 	}
@@ -148,30 +167,36 @@ func generateConfig(params *ConfigGenerationParams) (GeneratedConfigResources, e
 	}, nil
 }
 
-// parseCluster parses a cluster specification. It supports:
-//   - short format "host:tlsPort" that generates a STRICT_DNS cluster with TLS.
-//     The cluster name is derived as "host:tlsPort".
-//   - raw JSON for full control over the cluster configuration.
-func parseCluster(spec string) (*clusterv3.Cluster, error) {
-	if strings.HasPrefix(spec, "{") {
-		var cluster clusterv3.Cluster
-		if err := protojson.Unmarshal([]byte(spec), &cluster); err != nil {
-			return nil, fmt.Errorf("invalid JSON cluster spec: %w", err)
-		}
-		return &cluster, nil
+// parseJSONCluster parses a cluster specification in JSON format.
+func parseJSONCluster(spec string) (*clusterv3.Cluster, error) {
+	var cluster clusterv3.Cluster
+	if err := protojson.Unmarshal([]byte(spec), &cluster); err != nil {
+		return nil, fmt.Errorf("invalid JSON cluster spec: %w", err)
 	}
-	// Fall back to short format parsing (host:tlsPort)
-	host, portStr, err := net.SplitHostPort(spec)
+	return &cluster, nil
+}
+
+// parseCluster parses a cluster specification:
+// - in short format "host:tlsPort" that generates a STRICT_DNS cluster with TLS.
+// - in short format "host:port" that generates a STRICT_DNS cluster without TLS.
+// The cluster name is derived as "host:tlsPort" or "host:port".
+func parseCluster(shortSpec string, tls bool) (*clusterv3.Cluster, error) {
+	host, portStr, err := net.SplitHostPort(shortSpec)
 	if err != nil {
-		return nil, fmt.Errorf("invalid cluster spec %q: must be JSON or in the format host:tlsPort", spec)
+		portFormat := "tlsPort"
+		if !tls {
+			portFormat = "port"
+		}
+		return nil, fmt.Errorf("invalid cluster spec %q: must be in the format host:%s", shortSpec, portFormat)
 	}
+
 	port, err := strconv.ParseUint(portStr, 10, 32)
 	if err != nil {
 		return nil, fmt.Errorf("invalid port in cluster short format: %w", err)
 	}
 	// The cluster name is the host and port combined, e.g. "example.com:443"
-	// we can reuse spec as the name since it is already in the correct format.
-	return buildTestUpstreamCluster(spec, host, uint32(port))
+	// we can reuse shortSpec as the name since it is already in the correct format.
+	return buildTestUpstreamCluster(shortSpec, host, uint32(port), tls)
 }
 
 // buildFullConfig creates the EnvoyConfiguration based on the provided parameters.
@@ -182,7 +207,7 @@ func parseCluster(spec string) (*clusterv3.Cluster, error) {
 // proto on our own, or marshal the config manually.
 // TODO(nacx): Is there a wrapper for `admin` and `static_resources` we could use other than Bootstrap?
 func buildFullConfig(adminPort, listenerPort uint32, filters []*hcmv3.HttpFilter, clusters []*clusterv3.Cluster) (*bootstrapv3.Bootstrap, error) {
-	testupstreamCluster, err := buildTestUpstreamCluster("httpbin", "httpbin.org", 443)
+	testupstreamCluster, err := buildTestUpstreamCluster("httpbin", "httpbin.org", 443, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build test upstream cluster: %w", err)
 	}
@@ -310,14 +335,8 @@ func buildHTTPConnectionManager(filters []*hcmv3.HttpFilter, testUpstreamCluster
 	}, nil
 }
 
-func buildTestUpstreamCluster(name string, hostname string, port uint32) (*clusterv3.Cluster, error) {
-	tlsContext := &tlsv3.UpstreamTlsContext{Sni: hostname}
-	tlsContextAny, err := anypb.New(tlsContext)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal TLS context to Any: %w", err)
-	}
-
-	return &clusterv3.Cluster{
+func buildTestUpstreamCluster(name string, hostname string, port uint32, tls bool) (*clusterv3.Cluster, error) {
+	cluster := &clusterv3.Cluster{
 		Name: name,
 		ClusterDiscoveryType: &clusterv3.Cluster_Type{
 			Type: clusterv3.Cluster_STRICT_DNS,
@@ -348,13 +367,25 @@ func buildTestUpstreamCluster(name string, hostname string, port uint32) (*clust
 				},
 			},
 		},
-		TransportSocket: &corev3.TransportSocket{
-			Name: "envoy.transport_sockets.tls",
-			ConfigType: &corev3.TransportSocket_TypedConfig{
-				TypedConfig: tlsContextAny,
-			},
+	}
+
+	if !tls {
+		return cluster, nil
+	}
+
+	// Add TLS context
+	tlsContext := &tlsv3.UpstreamTlsContext{Sni: hostname}
+	tlsContextAny, err := anypb.New(tlsContext)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal TLS context to Any: %w", err)
+	}
+	cluster.TransportSocket = &corev3.TransportSocket{
+		Name: "envoy.transport_sockets.tls",
+		ConfigType: &corev3.TransportSocket_TypedConfig{
+			TypedConfig: tlsContextAny,
 		},
-	}, nil
+	}
+	return cluster, nil
 }
 
 // ProtoToYaml converts a proto Message to YAML
