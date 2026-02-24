@@ -21,6 +21,8 @@ export interface Extension {
 	license: string;
 	featured?: boolean;
 	composerVersion?: string;
+	minEnvoyVersion?: string;
+	maxEnvoyVersion?: string;
 	examples?: Example[];
 	sourcePath: string;
 	sourceUrl: string;

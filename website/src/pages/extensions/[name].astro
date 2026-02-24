@@ -76,6 +76,16 @@ const { extension } = Astro.props as { extension: Extension };
 									<span class="meta-label">Version</span>
 									<span class="meta-value">{extension.version}</span>
 								</div>
+								{(extension.minEnvoyVersion || extension.maxEnvoyVersion) && (
+									<div class="meta-item">
+										<span class="meta-label">Envoy Version</span>
+										<span class="meta-value">
+											{extension.minEnvoyVersion && `>= ${extension.minEnvoyVersion}`}
+											{extension.minEnvoyVersion && extension.maxEnvoyVersion && <br/>}
+											{extension.maxEnvoyVersion && `<= ${extension.maxEnvoyVersion}`}
+										</span>
+									</div>
+								)}
 								<div class="meta-item">
 									<span class="meta-label">Author</span>
 									<span class="meta-value">{extension.author}</span>
