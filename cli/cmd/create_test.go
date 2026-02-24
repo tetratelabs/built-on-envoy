@@ -45,16 +45,16 @@ Arguments:
   <name>    Name of the extension.
 
 Flags:
-  -h, --help               Show context-sensitive help.
+  -h, --help           Show context-sensitive help.
 
-      --type="composer"    Type of the extension.
-      --path=STRING        Output directory for the extension. Defaults to the
-                           extension name.
+      --type="go"      Type of the extension (go, rust).
+      --path=STRING    Output directory for the extension. Defaults to the
+                       extension name.
 `, internaltesting.WrapHelp(createHelp))
 	require.Equal(t, expected, buf.String())
 }
 
-func TestCreate_Run(t *testing.T) {
+func TestCreateGo_Run(t *testing.T) {
 	// Ensure go is available as the command runs `go mod tidy`
 	if _, err := exec.LookPath("go"); err != nil {
 		t.Skip("go not found in PATH")
@@ -64,7 +64,7 @@ func TestCreate_Run(t *testing.T) {
 	name := "my-extension"
 
 	c := &Create{
-		Type: "composer",
+		Type: "go",
 		Name: name,
 		Path: tmpDir,
 	}
@@ -101,6 +101,7 @@ func TestCreate_Run(t *testing.T) {
 		manifest, err := os.ReadFile(filepath.Join(repoPath, "manifest.yaml"))
 		require.NoError(t, err)
 		assert.Contains(t, string(manifest), "name: "+name)
+		assert.Contains(t, string(manifest), "type: go")
 
 		// verify plugin.go content
 		// #nosec G304
@@ -116,7 +117,7 @@ func TestCreateRust_Run(t *testing.T) {
 	name := "my-rust-extension"
 
 	c := &Create{
-		Type: "dynamic_module_rust",
+		Type: "rust",
 		Name: name,
 		Path: tmpDir,
 	}
@@ -147,7 +148,7 @@ func TestCreateRust_Run(t *testing.T) {
 	manifest, err := os.ReadFile(filepath.Join(repoPath, "manifest.yaml"))
 	require.NoError(t, err)
 	assert.Contains(t, string(manifest), "name: "+name)
-	assert.Contains(t, string(manifest), "type: dynamic_module")
+	assert.Contains(t, string(manifest), "type: rust")
 
 	// verify Cargo.toml content
 	// #nosec G304

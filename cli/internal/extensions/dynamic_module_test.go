@@ -16,7 +16,7 @@ import (
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
-func TestCheckOrBuildDynamicModule_Unsupported(t *testing.T) {
+func TestCheckOrBuildRustDynamicModule_Unsupported(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 	fakeDirs := &xdg.Directories{DataHome: t.TempDir()}
 	tempDir := t.TempDir()
@@ -24,7 +24,7 @@ func TestCheckOrBuildDynamicModule_Unsupported(t *testing.T) {
 	manifest := &Manifest{
 		Name:    "test-extension",
 		Version: "1.0.0",
-		Type:    TypeDynamicModule,
+		Type:    TypeRust,
 	}
 
 	// Test with directory that has no Cargo.toml (unsupported type)
@@ -34,14 +34,14 @@ func TestCheckOrBuildDynamicModule_Unsupported(t *testing.T) {
 	require.Contains(t, err.Error(), "no Cargo.toml found")
 }
 
-func TestCheckOrBuildDynamicModule(t *testing.T) {
+func TestCheckOrBuildRustDynamicModule(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 	extensionPath := "../../../extensions/ip-restriction"
 	fakeDirs := &xdg.Directories{DataHome: t.TempDir()}
 
 	manifest, err := LoadLocalManifest(extensionPath + "/manifest.yaml")
 	require.NoError(t, err)
-	require.Equal(t, TypeDynamicModule, manifest.Type)
+	require.Equal(t, TypeRust, manifest.Type)
 
 	err = CheckOrBuildDynamicModule(logger, fakeDirs, manifest, extensionPath)
 	require.NoError(t, err)

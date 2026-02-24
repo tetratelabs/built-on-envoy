@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
@@ -64,16 +65,13 @@ func BuildDynamicModule(logger *slog.Logger, dirs *xdg.Directories, manifest *Ma
 
 	// Find the built library in target/release
 	// Note: Cargo may build with platform-specific extension (.dylib on macOS), but we use .so
-	var srcLib string
-	for _, ext := range []string{"so", "dylib"} {
-		candidate := filepath.Join(path, "target", "release", fmt.Sprintf("lib%s.%s", rustLibName, ext))
-		if _, err := os.Stat(candidate); err == nil {
-			srcLib = candidate
-			break
-		}
+	ext := "so"
+	if runtime.GOOS == "darwin" {
+		ext = "dylib"
 	}
-	if srcLib == "" {
-		return fmt.Errorf("built library not found at %s/target/release/lib%s.{so,dylib}", path, rustLibName)
+	srcLib := filepath.Join(path, "target", "release", fmt.Sprintf("lib%s.%s", rustLibName, ext))
+	if _, err := os.Stat(srcLib); err != nil {
+		return fmt.Errorf("built library not found at %s/target/release/lib%s.%s", path, rustLibName, ext)
 	}
 
 	logger.Debug("built Rust dynamic module library", "lib", srcLib)

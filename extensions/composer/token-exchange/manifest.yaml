@@ -54,9 +54,9 @@ longDescription: |
 
   | Metric | Type | Tags | Description |
   |--------|------|------|-------------|
-  | `token_exchange_requests_total` | Counter | — | Incremented on each token exchange callout initiated |
+  | `token_exchange_requests_total` | Counter | - | Incremented on each token exchange callout initiated |
   | `token_exchange_results_total` | Counter | `result` (`success` / `rejected` / `error`) | Incremented after the STS response is processed |
-type: composer
+type: go
 tags:
   - oauth2
   - tokenexchange

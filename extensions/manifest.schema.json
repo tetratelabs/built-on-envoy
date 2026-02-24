@@ -81,7 +81,8 @@
       "enum": [
         "lua",
         "wasm",
-        "dynamic_module",
+        "rust",
+        "go",
         "composer"
       ]
     },
@@ -191,7 +192,7 @@
       },
       "then": {
         "properties": {
-          "type": { "const": "composer" },
+          "type": { "const": "go" },
           "version": false,
           "composerVersion": false
         }
@@ -212,7 +213,7 @@
         "allOf": [
           {
             "properties": {
-              "type": { "const": "composer" }
+              "type": { "const": "go" }
             }
           },
           {

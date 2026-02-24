@@ -379,14 +379,14 @@ func TestLoadLocalManifests(t *testing.T) {
 		require.ErrorIs(t, err, errFailedToLoadLocalManifest)
 	})
 
-	t.Run("invalid composer path", func(t *testing.T) {
-		// Create a temporary directory and create an template composer plugin with
-		// createComposerHTTPFilter.
+	t.Run("invalid Go path", func(t *testing.T) {
+		// Create a temporary directory and create an template Go plugin with
+		// createGoExtension.
 		tempDir := t.TempDir()
-		err := createComposerHTTPFilter(logger, downloader.Dirs, tempDir, "test_custom")
+		err := createGoExtension(logger, downloader.Dirs, tempDir, "test_custom")
 		require.NoError(t, err)
 
-		// Remove go.mod and go.sum to simulate invalid composer extension.
+		// Remove go.mod and go.sum to simulate invalid Go extension.
 		err = os.Remove(tempDir + "/test_custom/go.mod")
 		require.NoError(t, err)
 		err = os.Remove(tempDir + "/test_custom/go.sum")
@@ -397,11 +397,11 @@ func TestLoadLocalManifests(t *testing.T) {
 		require.Contains(t, err.Error(), "failed to run 'go mod tidy'")
 	})
 
-	t.Run("valid composer path", func(t *testing.T) {
-		// Create a temporary directory and create an template composer plugin with
-		// createComposerHTTPFilter.
+	t.Run("valid Go path", func(t *testing.T) {
+		// Create a temporary directory and create an template Go plugin with
+		// createGoExtension.
 		tempDir := t.TempDir()
-		err := createComposerHTTPFilter(logger, downloader.Dirs, tempDir, "test_valid")
+		err := createGoExtension(logger, downloader.Dirs, tempDir, "test_valid")
 		require.NoError(t, err)
 
 		manifests, err := loadLocalManifests(t.Context(), logger, downloader, []string{tempDir + "/test_valid"}, false)
@@ -582,11 +582,11 @@ func TestDownloadExtensions(t *testing.T) {
 		require.True(t, manifests[0].Remote)
 	})
 
-	t.Run("binary dynamic module extension", func(t *testing.T) {
+	t.Run("binary Rust extension", func(t *testing.T) {
 		mock := &mockOCIClient{
 			annotations: map[string]string{
 				ocispec.AnnotationTitle:               "my-dym",
-				extensions.OCIAnnotationExtensionType: string(extensions.TypeDynamicModule),
+				extensions.OCIAnnotationExtensionType: string(extensions.TypeRust),
 				extensions.OCIAnnotationArtifact:      extensions.ArtifactBinary,
 			},
 		}
@@ -596,10 +596,10 @@ func TestDownloadExtensions(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, manifests, 1)
 		require.Equal(t, "my-dym", manifests[0].Name)
-		require.Equal(t, extensions.TypeDynamicModule, manifests[0].Type)
+		require.Equal(t, extensions.TypeRust, manifests[0].Type)
 	})
 
-	t.Run("binary composer extension", func(t *testing.T) {
+	t.Run("binary Go extension", func(t *testing.T) {
 		dataHome := t.TempDir()
 		composerVersion := "0.1.0"
 
@@ -610,19 +610,19 @@ func TestDownloadExtensions(t *testing.T) {
 
 		mock := &mockOCIClient{
 			annotations: map[string]string{
-				ocispec.AnnotationTitle:                 "my-composer-ext",
-				extensions.OCIAnnotationExtensionType:   string(extensions.TypeComposer),
+				ocispec.AnnotationTitle:                 "my-go-ext",
+				extensions.OCIAnnotationExtensionType:   string(extensions.TypeGo),
 				extensions.OCIAnnotationArtifact:        extensions.ArtifactBinary,
 				extensions.OCIAnnotationComposerVersion: composerVersion,
 			},
 		}
 		d := newTestDownloader(t, dataHome, mock)
 
-		manifests, err := downloadExtensions(t.Context(), d, []string{"my-composer-ext:1.0.0"}, false)
+		manifests, err := downloadExtensions(t.Context(), d, []string{"my-go-ext:1.0.0"}, false)
 		require.NoError(t, err)
 		require.Len(t, manifests, 1)
-		require.Equal(t, "my-composer-ext", manifests[0].Name)
-		require.Equal(t, extensions.TypeComposer, manifests[0].Type)
+		require.Equal(t, "my-go-ext", manifests[0].Name)
+		require.Equal(t, extensions.TypeGo, manifests[0].Type)
 	})
 
 	t.Run("multiple extensions", func(t *testing.T) {
@@ -686,33 +686,33 @@ func TestDownloadExtensions(t *testing.T) {
 		require.Contains(t, err.Error(), "unknown artifact type")
 	})
 
-	t.Run("source composer extension with missing source dir", func(t *testing.T) {
+	t.Run("source Go extension with missing source dir", func(t *testing.T) {
 		mock := &mockOCIClient{
 			annotations: map[string]string{
-				ocispec.AnnotationTitle:                 "my-composer-src",
-				extensions.OCIAnnotationExtensionType:   string(extensions.TypeComposer),
+				ocispec.AnnotationTitle:                 "my-go-src",
+				extensions.OCIAnnotationExtensionType:   string(extensions.TypeGo),
 				extensions.OCIAnnotationArtifact:        extensions.ArtifactSource,
 				extensions.OCIAnnotationComposerVersion: "0.1.0",
 			},
 		}
 		d := newTestDownloader(t, t.TempDir(), mock)
 
-		_, err := downloadExtensions(t.Context(), d, []string{"my-composer-src:1.0.0"}, false)
+		_, err := downloadExtensions(t.Context(), d, []string{"my-go-src:1.0.0"}, false)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "missing expected source directory")
 	})
 
-	t.Run("source dynamic module extension with no Cargo.toml", func(t *testing.T) {
+	t.Run("source Rust extension with no Cargo.toml", func(t *testing.T) {
 		mock := &mockOCIClient{
 			annotations: map[string]string{
-				ocispec.AnnotationTitle:               "my-dym-src",
-				extensions.OCIAnnotationExtensionType: string(extensions.TypeDynamicModule),
+				ocispec.AnnotationTitle:               "my-rust-src",
+				extensions.OCIAnnotationExtensionType: string(extensions.TypeRust),
 				extensions.OCIAnnotationArtifact:      extensions.ArtifactSource,
 			},
 		}
 		d := newTestDownloader(t, t.TempDir(), mock)
 
-		_, err := downloadExtensions(t.Context(), d, []string{"my-dym-src:1.0.0"}, true)
+		_, err := downloadExtensions(t.Context(), d, []string{"my-rust-src:1.0.0"}, true)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "no Cargo.toml found")
 	})
@@ -765,37 +765,37 @@ func TestValidateComposerCompat(t *testing.T) {
 		wantErr    string
 	}{
 		{
-			name: "no composer extensions",
+			name: "no Go extensions",
 			extensions: []*extensions.Manifest{
-				{Name: "ext-1", Version: "1.0.0", Type: extensions.TypeDynamicModule},
+				{Name: "ext-1", Version: "1.0.0", Type: extensions.TypeRust},
 				{Name: "ext-2", Version: "2.0.0", Type: extensions.TypeLua},
 			},
 		},
 		{
-			name: "single composer extension",
+			name: "single Go extension",
 			extensions: []*extensions.Manifest{
-				{Name: "ext-1", Version: "1.0.0", Type: extensions.TypeComposer, ComposerVersion: "1.2.3"},
-				{Name: "ext-2", Version: "2.0.0", Type: extensions.TypeDynamicModule},
+				{Name: "ext-1", Version: "1.0.0", Type: extensions.TypeGo, ComposerVersion: "1.2.3"},
+				{Name: "ext-2", Version: "2.0.0", Type: extensions.TypeRust},
 			},
 		},
 		{
-			name: "multiple composer extensions with same version",
+			name: "multiple Go extensions with same version",
 			extensions: []*extensions.Manifest{
-				{Name: "ext-1", Version: "1.0.0", Type: extensions.TypeComposer, ComposerVersion: "1.2.3"},
-				{Name: "ext-2", Version: "2.0.0", Type: extensions.TypeComposer, ComposerVersion: "1.2.3"},
+				{Name: "ext-1", Version: "1.0.0", Type: extensions.TypeGo, ComposerVersion: "1.2.3"},
+				{Name: "ext-2", Version: "2.0.0", Type: extensions.TypeGo, ComposerVersion: "1.2.3"},
 			},
 		},
 		{
-			name: "multiple composer extensions with different versions",
+			name: "multiple Go extensions with different versions",
 			extensions: []*extensions.Manifest{
-				{Name: "ext-1", Version: "1.0.0", Type: extensions.TypeComposer, ComposerVersion: "1.2.3"},
-				{Name: "ext-2", Version: "2.0.0", Type: extensions.TypeComposer, ComposerVersion: "2.0.0"},
-				{Name: "ext-3", Version: "2.0.0", Type: extensions.TypeComposer, ComposerVersion: "2.0.0"},
+				{Name: "ext-1", Version: "1.0.0", Type: extensions.TypeGo, ComposerVersion: "1.2.3"},
+				{Name: "ext-2", Version: "2.0.0", Type: extensions.TypeGo, ComposerVersion: "2.0.0"},
+				{Name: "ext-3", Version: "2.0.0", Type: extensions.TypeGo, ComposerVersion: "2.0.0"},
 			},
-			wantErr: `incompatible composer versions found:
+			wantErr: `incompatible Go versions found:
   - version 1.2.3 used by extensions: ext-1
   - version 2.0.0 used by extensions: ext-2, ext-3
-all composer extensions must use the same composer version`,
+all Go extensions must use the same composer version`,
 		},
 	}
 

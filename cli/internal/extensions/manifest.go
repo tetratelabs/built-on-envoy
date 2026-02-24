@@ -114,10 +114,13 @@ const (
 	TypeLua Type = "lua"
 	// TypeWasm represents a Wasm extension.
 	TypeWasm Type = "wasm"
-	// TypeDynamicModule represents a Dynamic Module extension.
-	TypeDynamicModule Type = "dynamic_module"
-	// TypeComposer represents a Composer extension.
-	TypeComposer Type = "composer"
+	// TypeRust represents a Rust extension.
+	TypeRust Type = "rust"
+	// TypeGo represents a Go extension.
+	TypeGo Type = "go"
+	// TypeComposer represents a Composer extension that bundles together
+	// multiple Go extensions.
+	// TypeComposer Type = "composer"
 
 	schemaURL = "manifest.schema.json"
 )
@@ -232,7 +235,7 @@ func loadManifest(fsys fs.FS, path string, validate bool) (*Manifest, error) {
 
 // resolveVersions resolves the version and composer version for a manifest if it has a parent.
 func resolveVersions(m *Manifest, all map[string]*Manifest) error {
-	if m.Type == TypeComposer && m.Parent != "" {
+	if m.Type == TypeGo && m.Parent != "" {
 		parent, ok := all[m.Parent]
 		if !ok {
 			return fmt.Errorf("%w: %s", ErrParentManifestNotFound, m.Parent)
