@@ -246,6 +246,12 @@ func resolveVersions(m *Manifest, all map[string]*Manifest) error {
 		if m.ComposerVersion == "" {
 			m.ComposerVersion = parent.Version
 		}
+		if m.MinEnvoyVersion == "" {
+			m.MinEnvoyVersion = parent.MinEnvoyVersion
+		}
+		if m.MaxEnvoyVersion == "" {
+			m.MaxEnvoyVersion = parent.MaxEnvoyVersion
+		}
 	}
 	return nil
 }
