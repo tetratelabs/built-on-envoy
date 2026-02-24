@@ -5,6 +5,7 @@
 
 name: ip-restriction
 version: 0.1.1
+minEnvoyVersion: 1.37.0
 categories:
   - Security
 author: Tetrate

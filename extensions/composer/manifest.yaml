@@ -6,6 +6,7 @@
 name: composer
 version: 0.2.2
 composerVersion: 0.2.2
+minEnvoyVersion: 1.37.0
 categories:
   - Misc
 author: Tetrate
