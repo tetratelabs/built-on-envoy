@@ -196,6 +196,7 @@
         "code": "boe run --extension ip-restriction --config '\n  {\n    \"allow_addresses\": [\n      \"127.0.0.1\",\n      \"::1\",\n      \"2001:db8::1\"\n    ]\n  }'\n"
       }
     ],
+    "minEnvoyVersion": "1.37.0",
     "sourcePath": "ip-restriction"
   },
   {
