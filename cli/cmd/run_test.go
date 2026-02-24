@@ -542,7 +542,7 @@ func (m *mockOCIClient) FetchManifest(_ context.Context, tag string, _ *ocispec.
 // newTestDownloader creates a Downloader with the given mock client and data directory.
 func newTestDownloader(t *testing.T, dataHome string, mock *mockOCIClient) *extensions.Downloader {
 	logger := internaltesting.NewTLogger(t)
-	d := &extensions.Downloader{Logger: logger, Registry: "ghcr.io/test", Dirs: &xdg.Directories{DataHome: dataHome}}
+	d := &extensions.Downloader{Logger: logger, Dirs: &xdg.Directories{DataHome: dataHome}}
 	d.SetClientFactory(func(_ *slog.Logger, _, _, _ string, _ bool) (oci.RepositoryClient, error) {
 		return mock, nil
 	})
@@ -580,8 +580,6 @@ func TestDownloadExtensions(t *testing.T) {
 		require.Equal(t, "my-lua-ext", manifests[0].Name)
 		require.Equal(t, "1.0.0", manifests[0].Version)
 		require.True(t, manifests[0].Remote)
-		require.Empty(t, manifests[0].SourceRegistry)
-		require.Empty(t, manifests[0].SourceTag)
 	})
 
 	t.Run("binary dynamic module extension", func(t *testing.T) {
@@ -599,8 +597,6 @@ func TestDownloadExtensions(t *testing.T) {
 		require.Len(t, manifests, 1)
 		require.Equal(t, "my-dym", manifests[0].Name)
 		require.Equal(t, extensions.TypeDynamicModule, manifests[0].Type)
-		require.Empty(t, manifests[0].SourceRegistry)
-		require.Empty(t, manifests[0].SourceTag)
 	})
 
 	t.Run("binary composer extension", func(t *testing.T) {
@@ -627,8 +623,6 @@ func TestDownloadExtensions(t *testing.T) {
 		require.Len(t, manifests, 1)
 		require.Equal(t, "my-composer-ext", manifests[0].Name)
 		require.Equal(t, extensions.TypeComposer, manifests[0].Type)
-		require.Empty(t, manifests[0].SourceRegistry)
-		require.Empty(t, manifests[0].SourceTag)
 	})
 
 	t.Run("multiple extensions", func(t *testing.T) {
