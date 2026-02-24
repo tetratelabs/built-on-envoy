@@ -136,7 +136,7 @@ func TestDynamicModuleFilterGenerator(t *testing.T) {
 	dirs := &xdg.Directories{DataHome: t.TempDir()}
 	manifest := &extensions.Manifest{
 		Name:    "test-dynamic-module",
-		Type:    extensions.TypeDynamicModule,
+		Type:    extensions.TypeRust,
 		Version: "v1.0.0",
 		Remote:  true,
 	}
@@ -209,7 +209,7 @@ func TestComposerFilterGenerator(t *testing.T) {
 	dirs := &xdg.Directories{DataHome: t.TempDir()}
 	manifest := &extensions.Manifest{
 		Name:            "test-composer",
-		Type:            extensions.TypeComposer,
+		Type:            extensions.TypeGo,
 		Version:         "v0.0.1",
 		ComposerVersion: "v1.0.0",
 		Remote:          true,

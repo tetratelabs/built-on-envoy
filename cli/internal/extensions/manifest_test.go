@@ -36,17 +36,17 @@ func TestAllManifestsAreLoaded(t *testing.T) {
 	require.Len(t, Manifests, count)
 }
 
-func TestValidateComposerManifest(t *testing.T) {
+func TestValidateGoManifest(t *testing.T) {
 	tests := []struct {
 		name    string
 		want    string
 		wantErr bool
 	}{
-		{"composer_empty_version.yaml", "", true},
-		{"composer_invalid_version.yaml", "", true},
-		{"composer_missing_version.yaml", "", true},
-		{"composer_missing_composer_version.yaml", "", true},
-		{"composer_valid.yaml", "1.2.3", false},
+		{"go_empty_version.yaml", "", true},
+		{"go_invalid_version.yaml", "", true},
+		{"go_missing_version.yaml", "", true},
+		{"go_missing_composer_version.yaml", "", true},
+		{"go_valid.yaml", "1.2.3", false},
 	}
 
 	for _, tt := range tests {
@@ -270,7 +270,7 @@ func TestValidateParentManifest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			manifestPath := filepath.Join("testdata", tt.name)
 			_, err := LoadLocalManifest(manifestPath)
-			require.Equal(t, tt.wantErr, err != nil)
+			require.Equal(t, tt.wantErr, err != nil, err)
 		})
 	}
 }
@@ -278,7 +278,7 @@ func TestValidateParentManifest(t *testing.T) {
 func TestResolveVersionsMissingParent(t *testing.T) {
 	m := &Manifest{
 		Name:   "child",
-		Type:   TypeComposer,
+		Type:   TypeGo,
 		Parent: "nonexistent-parent",
 	}
 	err := resolveVersions(m, map[string]*Manifest{})

@@ -38,7 +38,7 @@ longDescription: |
   | `deny_status` | integer | no | 400 | HTTP status code on validation failure |
   | `deny_body` | string | no | (error message) | Response body on failure |
   | `deny_headers` | object | no | - | Additional response headers on failure |
-type: composer
+type: go
 featured: true
 tags:
   - go
