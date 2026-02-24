@@ -238,6 +238,7 @@ func (p *Plugin) OnResponseTrailers(trailers shared.HeaderMap) shared.TrailersSt
 
 // PluginFactory creates instances of Plugin.
 type PluginFactory struct {
+	shared.EmptyHttpFilterFactory
 	statsCollector *statsCollector
 }
 

@@ -302,6 +302,7 @@ func parsePath(fullPath string) ([]string, map[string][]string) {
 
 // cedarHttpFilterFactory creates filter instances per-request.
 type cedarHttpFilterFactory struct { //nolint:revive
+	shared.EmptyHttpFilterFactory
 	config *cedarParsedConfig
 }
 

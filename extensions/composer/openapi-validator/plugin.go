@@ -283,6 +283,7 @@ func (o *openAPIValidatorHttpFilter) sendDenyResponse(validationErr error) {
 
 // openAPIValidatorHttpFilterFactory creates filter instances per-request.
 type openAPIValidatorHttpFilterFactory struct { //nolint:revive
+	shared.EmptyHttpFilterFactory
 	config *openAPIValidatorParsedConfig
 }
 

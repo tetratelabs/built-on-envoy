@@ -95,6 +95,7 @@ func (f *jweDecryptHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool
 
 // This is the factory for the HTTP filter.
 type jweDecryptHttpFilterFactory struct { //nolint:revive
+	shared.EmptyHttpFilterFactory
 	config *jweDecryptConfig
 }
 
