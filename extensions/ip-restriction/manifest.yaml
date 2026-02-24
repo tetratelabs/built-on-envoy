@@ -4,7 +4,7 @@
 # the root of the repo.
 
 name: ip-restriction
-version: 0.1.0
+version: 0.1.1
 minEnvoyVersion: 1.37.0
 categories:
   - Security
@@ -57,7 +57,7 @@ tags:
   - dynamic-module
   - example
 license: Apache-2.0
-type: dynamic_module
+type: rust
 examples:
   - title: Allow Specific IPs
     description: Only allow requests from localhost and a specific IP

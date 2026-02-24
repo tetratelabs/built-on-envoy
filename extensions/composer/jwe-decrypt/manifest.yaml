@@ -22,7 +22,7 @@ longDescription: |
   JWT so that Envoy's built-in
   [JWT Authentication filter](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/jwt_authn_filter)
   can read it, extract the token claims and use them for authorization.
-type: composer
+type: go
 featured: true
 tags:
   - go

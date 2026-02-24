@@ -53,7 +53,7 @@ func (d *Downloader) DownloadComposer(ctx context.Context, version string) (Down
 	d.Logger.Info("downloading composer", "repository", d.Registry, "version", version)
 	return d.download(ctx, d.Registry+"/composer-lite", version, func(manifest *ocispec.Manifest) string {
 		extensionManifest := ManifestFromOCI(manifest)
-		if isComposerSourceArtifact(manifest) {
+		if isGoSourceArtifact(manifest) {
 			return LocalCacheComposerSourceArtifactDir(d.Dirs, extensionManifest)
 		}
 		// use the composer version resolved from the manifest, as the input parameter one could be
@@ -70,7 +70,7 @@ func (d *Downloader) DownloadExtension(ctx context.Context, name, version string
 
 	artifact, err := d.download(ctx, repository, version, func(manifest *ocispec.Manifest) string {
 		extensionManifest := ManifestFromOCI(manifest)
-		if isComposerSourceArtifact(manifest) {
+		if isGoSourceArtifact(manifest) {
 			return LocalCacheComposerSourceArtifactDir(d.Dirs, extensionManifest)
 		}
 		return LocalCacheExtensionDir(d.Dirs, extensionManifest)
@@ -144,7 +144,7 @@ func (d *Downloader) download(
 
 		extensionManifest := ManifestFromOCI(manifest)
 		sourceRepo := SourceRepositoryName(d.Registry, extensionManifest)
-		if extensionManifest.Type == TypeComposer {
+		if extensionManifest.Type == TypeGo {
 			version = extensionManifest.ComposerVersion
 		}
 
@@ -176,13 +176,13 @@ func (d *Downloader) download(
 		Manifest:       ManifestFromOCI(manifest),
 		Path:           downloadDir,
 		ArtifactType:   manifest.Annotations[OCIAnnotationArtifact],
-		ComposerBundle: isComposerSourceArtifact(manifest),
+		ComposerBundle: isGoSourceArtifact(manifest),
 	}, nil
 }
 
-// isComposerSourceArtifact checks if the downloaded artifact is a composer source artifact.
-func isComposerSourceArtifact(manifest *ocispec.Manifest) bool {
-	return Type(manifest.Annotations[OCIAnnotationExtensionType]) == TypeComposer &&
+// isGoSourceArtifact checks if the downloaded artifact is a composer source artifact.
+func isGoSourceArtifact(manifest *ocispec.Manifest) bool {
+	return Type(manifest.Annotations[OCIAnnotationExtensionType]) == TypeGo &&
 		manifest.Annotations[OCIAnnotationArtifact] == ArtifactSource
 }
 

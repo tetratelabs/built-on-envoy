@@ -11,7 +11,7 @@ author: Test Author
 description: A child extension that inherits parent version
 longDescription: |
   This is a child extension.
-type: dynamic_module
+type: rust
 tags:
   - test
 license: Apache-2.0

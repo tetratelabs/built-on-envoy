@@ -20,14 +20,14 @@ func LocalCacheManifest(dirs *xdg.Directories, manifest *Manifest) string {
 
 // LocalCacheExtensionDir returns the local cache directory for the given extension manifest.
 // Different extension types are organized in different directory structures:
-// - composer: extensions/goplugin/<name>/<version>
-// - dynamic_module: extensions/dym/<name>/<version>
+// - go: extensions/goplugin/<name>/<version>
+// - rust: extensions/dym/<name>/<version>
 // - others: extensions/<name>/<version>
 func LocalCacheExtensionDir(dirs *xdg.Directories, manifest *Manifest) string {
 	switch manifest.Type {
-	case TypeComposer:
+	case TypeGo:
 		return filepath.Join(dirs.DataHome, "extensions", "goplugin", manifest.Name, manifest.Version)
-	case TypeDynamicModule:
+	case TypeRust:
 		return filepath.Join(dirs.DataHome, "extensions", "dym", manifest.Name, manifest.Version)
 	default:
 		return filepath.Join(dirs.DataHome, "extensions", manifest.Name, manifest.Version)
@@ -36,18 +36,18 @@ func LocalCacheExtensionDir(dirs *xdg.Directories, manifest *Manifest) string {
 
 // LocalCacheExtension returns the local cache path for the extension library based on the manifest.
 // Returns the appropriate library file name for each extension type:
-// - composer: plugin.so (Go plugin)
-// - dynamic_module: lib<name>.so (uses original name from manifest)
+// - go: plugin.so (Go plugin)
+// - rust: lib<name>.so (uses original name from manifest)
 // - others: plugin.so (default)
 func LocalCacheExtension(dirs *xdg.Directories, manifest *Manifest) string {
 	dir := LocalCacheExtensionDir(dirs, manifest)
 
 	switch manifest.Type {
-	case TypeDynamicModule:
+	case TypeRust:
 		// Use the original manifest name for the library
 		return filepath.Join(dir, fmt.Sprintf("lib%s.so", manifest.Name))
 	default:
-		// Default for composer and other types
+		// Default for Go and other types
 		return filepath.Join(dir, "plugin.so")
 	}
 }

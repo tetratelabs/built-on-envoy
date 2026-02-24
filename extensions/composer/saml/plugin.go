@@ -32,6 +32,7 @@ type samlFilterConfig struct {
 
 // samlFilterFactory creates per-request filter instances.
 type samlFilterFactory struct {
+	shared.EmptyHttpFilterFactory
 	cfg *samlFilterConfig
 }
 

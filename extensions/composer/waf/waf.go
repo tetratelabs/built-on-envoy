@@ -20,6 +20,7 @@ import (
 )
 
 type wafPluginFactory struct {
+	shared.EmptyHttpFilterFactory
 	config coraza.WAF
 	mode   waf.WAFMode
 }

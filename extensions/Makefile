@@ -98,7 +98,7 @@ CODE_IMAGE := $(HUB)/extension-src-$(NAME):$(VERSION)$(IMAGE_NONCE)
 push_code: create_builder
 	@echo "Building and pushing extension image (source code only): $(CODE_IMAGE)"
 # Make sure we don't include git-ignored build artifacts in the source images
-	@rm -f ./${EXTENSION_PATH}/target
+	@rm -rf ./${EXTENSION_PATH}/target
 	@docker buildx build \
 		--builder $(BUILDER_NAME) \
 		--output type=registry,oci-mediatypes=true$(registry_output) \

@@ -35,7 +35,7 @@ longDescription: |
 
   The WAF comes with support for OWASP ModSecurity Core Rule Set (CRS) and allows
   custom rule configuration for specific security requirements.
-type: composer
+type: go
 tags:
   - go
   - http

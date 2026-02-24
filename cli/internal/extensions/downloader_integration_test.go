@@ -153,7 +153,7 @@ func TestFallbackToSourceDynamicModule(t *testing.T) {
 		"--push",
 		"--annotation", "index,manifest:org.opencontainers.image.title=test-dynamic-module",
 		"--annotation", "index,manifest:org.opencontainers.image.version=1.0.0",
-		"--annotation", "index,manifest:io.tetratelabs.built-on-envoy.extension.type=dynamic_module",
+		"--annotation", "index,manifest:io.tetratelabs.built-on-envoy.extension.type=rust",
 		"--annotation", "index,manifest:io.tetratelabs.built-on-envoy.extension.artifact=binary",
 		"testdata/extension-binary",
 	)
@@ -185,7 +185,7 @@ func TestFallbackToSourceDynamicModule(t *testing.T) {
 		"--provenance=false",
 		"--annotation", "org.opencontainers.image.title=test-dynamic-module",
 		"--annotation", "org.opencontainers.image.version=1.0.0",
-		"--annotation", "io.tetratelabs.built-on-envoy.extension.type=dynamic_module",
+		"--annotation", "io.tetratelabs.built-on-envoy.extension.type=rust",
 		"--annotation", "io.tetratelabs.built-on-envoy.extension.artifact=source",
 		"testdata/extension-src",
 	)
@@ -216,7 +216,7 @@ func TestFallbackToSourceComposer(t *testing.T) {
 		"--annotation", "index,manifest:org.opencontainers.image.title=test-composer",
 		"--annotation", "index,manifest:org.opencontainers.image.version=1.0.0",
 		"--annotation", "index,manifest:io.tetratelabs.built-on-envoy.extension.composer_version=1.0.0",
-		"--annotation", "index,manifest:io.tetratelabs.built-on-envoy.extension.type=composer",
+		"--annotation", "index,manifest:io.tetratelabs.built-on-envoy.extension.type=go",
 		"--annotation", "index,manifest:io.tetratelabs.built-on-envoy.extension.artifact=binary",
 		"testdata/composer-binary",
 	)

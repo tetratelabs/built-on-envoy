@@ -112,7 +112,7 @@ func TestCreateRustWithDockerSupport(t *testing.T) {
 
 	// Create a new extension
 	process := internaltesting.RunCLI(t, cliBin, "create", "test-docker", "--path", tmpDir,
-		"--type", "dynamic_module_rust")
+		"--type", "rust")
 	status, err := process.Wait()
 	require.NoError(t, err)
 	require.Equal(t, 0, status.ExitCode())

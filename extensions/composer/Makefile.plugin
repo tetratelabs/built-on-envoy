@@ -59,7 +59,7 @@ BASE_OCI_ANNOTATIONS := \
 	--annotation "org.opencontainers.image.created=$(TIMESTAMP)" \
 	--annotation "org.opencontainers.image.revision=$(COMMIT_SHA)" \
 	--annotation "org.opencontainers.image.authors=$(AUTHOR)" \
-	--annotation "io.tetratelabs.built-on-envoy.extension.type=composer" \
+	--annotation "io.tetratelabs.built-on-envoy.extension.type=go" \
 	--annotation "io.tetratelabs.built-on-envoy.extension.composer_version=$(COMPOSER_VERSION)"
 
 # Artifact type annotations
