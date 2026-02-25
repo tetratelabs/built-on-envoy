@@ -210,8 +210,8 @@ func TestComposerFilterGenerator(t *testing.T) {
 	manifest := &extensions.Manifest{
 		Name:            "test-composer",
 		Type:            extensions.TypeComposer,
-		Version:         "v0.0.1",
-		ComposerVersion: "v1.0.0",
+		Version:         "0.0.1",
+		ComposerVersion: "1.0.0",
 		Remote:          true,
 	}
 
@@ -328,11 +328,11 @@ func TestComposerFilterGenerator(t *testing.T) {
 	ociManifest := &extensions.Manifest{
 		Name:            "test-composer",
 		Type:            extensions.TypeComposer,
-		Version:         "v0.0.1",
-		ComposerVersion: "v1.0.0",
+		Version:         "0.0.1",
+		ComposerVersion: "1.0.0",
 		Remote:          true,
 		SourceRegistry:  "ghcr.io/tetratelabs/built-on-envoy",
-		SourceTag:       "v0.0.1",
+		SourceTag:       "0.0.1",
 	}
 
 	// Composer binary is already created from earlier in the test
@@ -355,7 +355,7 @@ func TestComposerFilterGenerator(t *testing.T) {
 								configStruct := &structpb.Struct{
 									Fields: map[string]*structpb.Value{
 										"name":         structpb.NewStringValue(ociManifest.Name),
-										"url":          structpb.NewStringValue("oci://ghcr.io/tetratelabs/built-on-envoy/extension-test-composer:v0.0.1"),
+										"url":          structpb.NewStringValue("oci://ghcr.io/tetratelabs/built-on-envoy/extension-test-composer:0.0.1"),
 										"config":       structpb.NewNullValue(),
 										"strict_check": structpb.NewBoolValue(false),
 									},

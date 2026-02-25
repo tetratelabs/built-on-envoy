@@ -36,3 +36,15 @@ jobs:
 
       - name: Run tests
         run: make test
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Run imagefetcher e2e tests
+        env:
+          TEST_BOE_REGISTRY: ghcr.io/tetratelabs/built-on-envoy
+        run: go test -tags e2e -timeout 5m -v ./goplugin/imagefetcher/

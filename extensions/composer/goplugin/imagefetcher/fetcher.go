@@ -31,6 +31,7 @@ type Option struct {
 	PullSecret []byte // Docker config JSON content for registry auth
 	Insecure   bool   // Allow HTTP and self-signed TLS
 	CacheDir   string // Root directory for caching fetched plugin binaries
+	Platform   string // Target platform (e.g. "linux/arm64"). Defaults to runtime OS/arch.
 }
 
 // maxPluginSize is the upper bound for a plugin's size (512 MB).
@@ -98,11 +99,15 @@ func buildRemoteOpts(ctx context.Context, opt Option) []remote.Option {
 		remoteOpts = append(remoteOpts, remote.WithTransport(t))
 	}
 
+	p := v1.Platform{OS: runtime.GOOS, Architecture: runtime.GOARCH}
+	if opt.Platform != "" {
+		parts := strings.SplitN(opt.Platform, "/", 2)
+		if len(parts) == 2 {
+			p = v1.Platform{OS: parts[0], Architecture: parts[1]}
+		}
+	}
 	remoteOpts = append(remoteOpts,
-		remote.WithPlatform(v1.Platform{
-			Architecture: runtime.GOARCH,
-			OS:           runtime.GOOS,
-		}),
+		remote.WithPlatform(p),
 		remote.WithContext(ctx),
 	)
 

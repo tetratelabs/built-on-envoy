@@ -363,11 +363,47 @@ func TestOptionFromEnv(t *testing.T) {
 			},
 		},
 		{
+			name: "cache dir from BOE_DATA_HOME",
+			envs: map[string]string{"BOE_DATA_HOME": "/boe/data"},
+			wantOpt: Option{
+				CacheDir: filepath.Join("/boe/data", "goplugin-cache"),
+			},
+		},
+		{
+			name: "GOPLUGIN_CACHE_DIR takes precedence over BOE_DATA_HOME",
+			envs: map[string]string{
+				"GOPLUGIN_CACHE_DIR": "/custom/cache",
+				"BOE_DATA_HOME":     "/boe/data",
+			},
+			wantOpt: Option{
+				CacheDir: "/custom/cache",
+			},
+		},
+		{
 			name: "insecure true",
 			envs: map[string]string{"GOPLUGIN_INSECURE": "true"},
 			wantOpt: Option{
 				CacheDir: filepath.Join(os.TempDir(), "goplugin-cache"),
 				Insecure: true,
+			},
+		},
+		{
+			name: "insecure from BOE_REGISTRY_INSECURE",
+			envs: map[string]string{"BOE_REGISTRY_INSECURE": "true"},
+			wantOpt: Option{
+				CacheDir: filepath.Join(os.TempDir(), "goplugin-cache"),
+				Insecure: true,
+			},
+		},
+		{
+			name: "GOPLUGIN_INSECURE takes precedence over BOE_REGISTRY_INSECURE",
+			envs: map[string]string{
+				"GOPLUGIN_INSECURE":    "false",
+				"BOE_REGISTRY_INSECURE": "true",
+			},
+			wantOpt: Option{
+				CacheDir: filepath.Join(os.TempDir(), "goplugin-cache"),
+				Insecure: false,
 			},
 		},
 		{
@@ -411,7 +447,7 @@ func TestOptionFromEnv(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Clear all relevant env vars first.
-			for _, key := range []string{"GOPLUGIN_CACHE_DIR", "GOPLUGIN_PULL_SECRET", "GOPLUGIN_INSECURE"} {
+			for _, key := range []string{"GOPLUGIN_CACHE_DIR", "GOPLUGIN_PULL_SECRET", "GOPLUGIN_INSECURE", "BOE_DATA_HOME", "BOE_REGISTRY_INSECURE"} {
 				t.Setenv(key, "")
 				os.Unsetenv(key) //nolint:errcheck // best-effort cleanup
 			}
