@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
+	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/utility"
 )
 
 // samlHTTPFilter is the per-request HTTP filter implementation.
@@ -46,14 +47,20 @@ type logger interface {
 func (f *samlHTTPFilter) OnRequestHeaders(headers shared.HeaderMap, endStream bool) shared.HeadersStatus {
 	path := getRequestPath(f.handle)
 	method := getRequestMethod(f.handle)
-	f.requestID = headers.GetOne("x-request-id")
-
+	// Create a copy if we store this value because the underlying memory of the header value are managed
+	// by Envoy.
+	f.requestID = strings.Clone(headers.GetOne("x-request-id"))
+	scheme, _ := f.handle.GetAttributeString(shared.AttributeIDRequestScheme)
+	f.requestScheme = strings.Clone(scheme)
+	host, _ := f.handle.GetAttributeString(shared.AttributeIDRequestHost)
+	f.requestHost = strings.Clone(host)
 	f.handle.Log(shared.LogLevelDebug, "saml: [%s] handling %s %s", f.requestID, method, path)
 
 	cfg := f.cfg.config
 	idpMeta := f.cfg.idpMetadata
 
 	// 1. Check bypass paths.
+	// TODO(wbpcode): optimize this if cfg.BypassPaths is large (e.g. use a trie or hash set).
 	for _, bp := range cfg.BypassPaths {
 		if path == bp {
 			f.handle.Log(shared.LogLevelDebug, "saml: [%s] bypassing auth for path %s", f.requestID, path)
@@ -71,8 +78,6 @@ func (f *samlHTTPFilter) OnRequestHeaders(headers shared.HeaderMap, endStream bo
 	// 3. ACS endpoint — buffer the POST body.
 	if path == cfg.ACSPath && strings.EqualFold(method, "POST") {
 		f.isACSRequest = true
-		f.requestScheme, _ = f.handle.GetAttributeString(shared.AttributeIDRequestScheme)
-		f.requestHost, _ = f.handle.GetAttributeString(shared.AttributeIDRequestHost)
 		if endStream {
 			// Empty POST body — this shouldn't happen for a valid SAML response.
 			f.handle.Log(shared.LogLevelError, "saml: [%s] ACS POST with empty body", f.requestID)
@@ -106,10 +111,8 @@ func (f *samlHTTPFilter) OnRequestHeaders(headers shared.HeaderMap, endStream bo
 	}
 
 	// 5. No valid session — redirect to IdP.
-	scheme, _ := f.handle.GetAttributeString(shared.AttributeIDRequestScheme)
-	host, _ := f.handle.GetAttributeString(shared.AttributeIDRequestHost)
-	originalURL := buildOriginalURL(f.handle)
-	redirectURL, err := generateAuthnRequest(f.handle, cfg, idpMeta, scheme, host, originalURL)
+	originalURL := f.buildOriginalURL()
+	redirectURL, err := generateAuthnRequest(f.handle, cfg, idpMeta, f.requestScheme, f.requestHost, originalURL)
 	if err != nil {
 		f.handle.Log(shared.LogLevelError, "saml: [%s] failed to generate AuthnRequest: %s", f.requestID, err.Error())
 		f.handle.SendLocalResponse(500, nil, []byte("Internal Server Error"), "saml")
@@ -138,15 +141,35 @@ func (f *samlHTTPFilter) OnRequestBody(_ shared.BodyBuffer, endStream bool) shar
 		return shared.BodyStatusStopAndBuffer
 	}
 
+	// We have the full body; process the ACS POST.
+	if f.onRequestComplete() {
+		// If onRequestComplete returns true, we should continue processing the request.
+		return shared.BodyStatusContinue
+	}
+	// Otherwise, we've already sent a local response (success or error), so stop processing.
+	return shared.BodyStatusStopNoBuffer
+}
+
+func (f *samlHTTPFilter) OnRequestTrailers(_ shared.HeaderMap) shared.TrailersStatus {
+	if !f.isACSRequest {
+		return shared.TrailersStatusContinue
+	}
+
+	// Now we have received trailers that indicate the end of the request. This happens if the
+	// request contains a trailers after the body.
+	if f.onRequestComplete() {
+		return shared.TrailersStatusContinue
+	}
+	return shared.TrailersStatusStop
+}
+
+func (f *samlHTTPFilter) onRequestComplete() bool {
 	cfg := f.cfg.config
 	idpMeta := f.cfg.idpMetadata
 
-	// Access the full buffered body. We use BufferedRequestBody() rather than the
-	// body parameter because the latter may only contain the final chunk, not the
-	// entire accumulated body from previous StopAndBuffer calls.
-	buffered := f.handle.BufferedRequestBody()
-	chunks := buffered.GetChunks()
-	bodyStr := parseFormBody(chunks)
+	// Access the full buffered body. We use a utility function that provided by the SDK to read the
+	// whole body.
+	bodyStr := string(utility.ReadWholeRequestBody(f.handle))
 	f.handle.Log(shared.LogLevelDebug, "saml: [%s] ACS body size: %d bytes", f.requestID, len(bodyStr))
 
 	// Process the ACS POST.
@@ -163,7 +186,7 @@ func (f *samlHTTPFilter) OnRequestBody(_ shared.BodyBuffer, endStream bool) shar
 		f.handle.SendLocalResponse(401, [][2]string{
 			{"content-type", "text/plain"},
 		}, []byte("Unauthorized: "+publicMsg), "saml-acs-error")
-		return shared.BodyStatusStopNoBuffer
+		return false
 	}
 	f.incrementAssertionsValidated("success")
 
@@ -172,7 +195,7 @@ func (f *samlHTTPFilter) OnRequestBody(_ shared.BodyBuffer, endStream bool) shar
 	if err != nil {
 		f.handle.Log(shared.LogLevelError, "saml: [%s] failed to create session token: %s", f.requestID, err.Error())
 		f.handle.SendLocalResponse(500, nil, []byte("Internal Server Error"), "saml")
-		return shared.BodyStatusStopNoBuffer
+		return false
 	}
 	f.incrementSessionsCreated()
 
@@ -184,8 +207,7 @@ func (f *samlHTTPFilter) OnRequestBody(_ shared.BodyBuffer, endStream bool) shar
 		{"set-cookie", cookie},
 		{"cache-control", "no-cache, no-store"},
 	}, nil, "saml-acs-redirect")
-
-	return shared.BodyStatusStopNoBuffer
+	return false
 }
 
 // setUpstreamHeaders sets the authenticated user's identity headers on the request
@@ -268,10 +290,10 @@ func (f *samlHTTPFilter) incrementSessionsValidated(result string) {
 }
 
 // buildOriginalURL reconstructs the original request URL from attributes.
-func buildOriginalURL(handle shared.HttpFilterHandle) string {
-	scheme, _ := handle.GetAttributeString(shared.AttributeIDRequestScheme)
-	host, _ := handle.GetAttributeString(shared.AttributeIDRequestHost)
-	path, _ := handle.GetAttributeString(shared.AttributeIDRequestPath)
+func (f *samlHTTPFilter) buildOriginalURL() string {
+	path, _ := f.handle.GetAttributeString(shared.AttributeIDRequestPath)
+	scheme := f.requestScheme
+	host := f.requestHost
 
 	if scheme == "" {
 		scheme = "https"

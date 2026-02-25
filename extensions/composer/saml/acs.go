@@ -198,13 +198,3 @@ func extractSAMLError(err error) *validationError {
 		PrivateErr: err,
 	}
 }
-
-// parseFormBody is a simple parser for application/x-www-form-urlencoded bodies
-// from Envoy's BodyBuffer chunks.
-func parseFormBody(chunks [][]byte) string {
-	var sb strings.Builder
-	for _, chunk := range chunks {
-		sb.Write(chunk)
-	}
-	return sb.String()
-}
