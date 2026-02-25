@@ -7,6 +7,7 @@
 package imagefetcher
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -28,13 +29,13 @@ import (
 func OptionFromEnv() Option {
 	opt := Option{}
 
-	switch {
-	case os.Getenv("GOPLUGIN_CACHE_DIR") != "":
-		opt.CacheDir = os.Getenv("GOPLUGIN_CACHE_DIR")
-	case os.Getenv("BOE_DATA_HOME") != "":
-		opt.CacheDir = filepath.Join(os.Getenv("BOE_DATA_HOME"), "goplugin-cache")
-	default:
-		opt.CacheDir = filepath.Join(os.TempDir(), "goplugin-cache")
+	opt.CacheDir = os.Getenv("GOPLUGIN_CACHE_DIR")
+	if opt.CacheDir == "" {
+		baseDir := cmp.Or(
+			os.Getenv("BOE_DATA_HOME"),
+			os.TempDir(),
+		)
+		opt.CacheDir = filepath.Join(baseDir, "goplugin-cache")
 	}
 
 	if secretPath := os.Getenv("GOPLUGIN_PULL_SECRET"); secretPath != "" {
@@ -46,11 +47,10 @@ func OptionFromEnv() Option {
 		}
 	}
 
-	if v := os.Getenv("GOPLUGIN_INSECURE"); v != "" {
-		opt.Insecure = v == "true"
-	} else if os.Getenv("BOE_REGISTRY_INSECURE") == "true" {
-		opt.Insecure = true
-	}
+	opt.Insecure = cmp.Or(
+		os.Getenv("GOPLUGIN_INSECURE"),
+		os.Getenv("BOE_REGISTRY_INSECURE"),
+	) == "true"
 
 	return opt
 }

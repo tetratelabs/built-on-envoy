@@ -44,7 +44,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      - name: Run imagefetcher e2e tests
+      - name: Run e2e tests
         env:
           TEST_BOE_REGISTRY: ghcr.io/tetratelabs/built-on-envoy
-        run: go test -tags e2e -timeout 5m -v ./goplugin/imagefetcher/
+        run: go test -tags e2e -timeout 5m -v ./...
