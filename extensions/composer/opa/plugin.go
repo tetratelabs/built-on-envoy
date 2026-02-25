@@ -13,12 +13,12 @@ import (
 	"fmt"
 	"maps"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 	"github.com/open-policy-agent/opa/v1/rego"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 // defaultDecisionPath is the default OPA rule path to query if not specified in config.
@@ -26,11 +26,8 @@ const defaultDecisionPath = "envoy.authz.allow"
 
 // opaConfig represents the JSON configuration for this filter.
 type opaConfig struct {
-	// PolicyFiles is the paths to the .rego policy files.
-	PolicyFiles []string `json:"policy_files"`
-	// InlinePolicies provides the policies directly in the config as strings.
-	// This takes precedence over PolicyFiles if both are provided.
-	InlinePolicies []string `json:"inline_policies"`
+	// Policies contains the OPA policies to load, which can be specified as either inline strings or file paths.
+	Policies []pkg.DataSource `json:"policies"`
 	// DecisionPath is the OPA rule path to query (default: "envoy.authz.allow").
 	DecisionPath string `json:"decision_path"`
 	// FailOpen allows requests if there is an error evaluating the policy.
@@ -316,28 +313,25 @@ func (o *OPAHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle
 		return nil, err
 	}
 
-	if len(cfg.PolicyFiles) == 0 && len(cfg.InlinePolicies) == 0 {
-		handle.Log(shared.LogLevelError, "opa: either policy_files or inline_policies must be provided")
-		return nil, fmt.Errorf("either policy_files or inline_policies must be provided")
+	if len(cfg.Policies) == 0 {
+		handle.Log(shared.LogLevelError, "opa: no policies provided in config")
+		return nil, fmt.Errorf("no policies provided in config")
 	}
 
-	modules := make(map[string]string, len(cfg.PolicyFiles)+len(cfg.InlinePolicies))
+	modules := make(map[string]string, len(cfg.Policies))
 
-	// Load policies from files.
-	for _, path := range cfg.PolicyFiles {
-		handle.Log(shared.LogLevelDebug, "opa: loading policy file %s", path)
-		policyBytes, err := os.ReadFile(filepath.Clean(path))
+	for i, p := range cfg.Policies {
+		content, err := p.Content()
 		if err != nil {
-			handle.Log(shared.LogLevelError, "opa: failed to read policy file %s: %s", path, err.Error())
-			return nil, fmt.Errorf("failed to read policy file %s: %w", path, err)
+			handle.Log(shared.LogLevelError, "opa: failed to load policy #%d: %s", i+1, err.Error())
+			return nil, fmt.Errorf("failed to load policy #%d: %w", i+1, err)
 		}
-		modules[path] = string(policyBytes)
-	}
-
-	// Add inline policies.
-	for i, p := range cfg.InlinePolicies {
-		handle.Log(shared.LogLevelDebug, "opa: adding inline policy #%d", i+1)
-		modules[fmt.Sprintf("inline_policy_%d.rego", i+1)] = p
+		moduleName := p.File
+		if moduleName == "" {
+			moduleName = fmt.Sprintf("inline_policy_%d.rego", i+1)
+		}
+		handle.Log(shared.LogLevelDebug, "opa: loaded policy #%d (source=%s)", i+1, moduleName)
+		modules[moduleName] = string(content)
 	}
 
 	handle.Log(shared.LogLevelDebug, "opa: loaded %d policies (decision_path=%s, dry_run=%v, fail_open=%v)",

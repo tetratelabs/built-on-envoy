@@ -16,6 +16,8 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 // Helper to create a temporary policy file for testing.
@@ -90,7 +92,7 @@ func TestConfigFactory_Create_ValidConfig(t *testing.T) {
 	policyFile := createTestPolicyFile(t, policy)
 
 	configJSON, err := json.Marshal(cedarConfig{
-		PolicyFile:        policyFile,
+		Policy:            pkg.DataSource{File: policyFile},
 		PrincipalType:     "User",
 		PrincipalIDHeader: "x-user-id",
 	})
@@ -153,13 +155,15 @@ func TestConfigFactory_Create_MissingPolicyFile(t *testing.T) {
 	filterFactory, err := factory.Create(mockHandle, configJSON)
 	require.Error(t, err)
 	require.Nil(t, filterFactory)
-	require.Contains(t, err.Error(), "policy_file or inline_policy is required")
+	require.ErrorIs(t, err, pkg.ErrDataSourceNeitherSet)
 }
 
 func TestConfigFactory_Create_InlinePolicyAndPolicyFile(t *testing.T) {
 	configJSON, err := json.Marshal(cedarConfig{
-		PolicyFile:        "some_policy_file.cedar",
-		InlinePolicy:      "permit(principal, action, resource);",
+		Policy: pkg.DataSource{
+			File:   "some_policy_file.cedar",
+			Inline: "permit(principal, action, resource);",
+		},
 		PrincipalType:     "User",
 		PrincipalIDHeader: "x-user-id",
 	})
@@ -175,7 +179,7 @@ func TestConfigFactory_Create_InlinePolicyAndPolicyFile(t *testing.T) {
 	filterFactory, err := factory.Create(mockHandle, configJSON)
 	require.Error(t, err)
 	require.Nil(t, filterFactory)
-	require.Contains(t, err.Error(), "cannot specify both policy_file and inline_policy")
+	require.ErrorIs(t, err, pkg.ErrDataSourceBothSet)
 }
 
 func TestConfigFactory_Create_MissingPrincipalType(t *testing.T) {
@@ -183,7 +187,7 @@ func TestConfigFactory_Create_MissingPrincipalType(t *testing.T) {
 	policyFile := createTestPolicyFile(t, policy)
 
 	configJSON, err := json.Marshal(cedarConfig{
-		PolicyFile:        policyFile,
+		Policy:            pkg.DataSource{File: policyFile},
 		PrincipalIDHeader: "x-user-id",
 	})
 	require.NoError(t, err)
@@ -206,7 +210,7 @@ func TestConfigFactory_Create_MissingPrincipalIDHeader(t *testing.T) {
 	policyFile := createTestPolicyFile(t, policy)
 
 	configJSON, err := json.Marshal(cedarConfig{
-		PolicyFile:    policyFile,
+		Policy:        pkg.DataSource{File: policyFile},
 		PrincipalType: "User",
 	})
 	require.NoError(t, err)
@@ -226,7 +230,7 @@ func TestConfigFactory_Create_MissingPrincipalIDHeader(t *testing.T) {
 
 func TestConfigFactory_Create_PolicyFileNotFound(t *testing.T) {
 	configJSON, err := json.Marshal(cedarConfig{
-		PolicyFile:        "/nonexistent/policy.cedar",
+		Policy:            pkg.DataSource{File: "/nonexistent/policy.cedar"},
 		PrincipalType:     "User",
 		PrincipalIDHeader: "x-user-id",
 	})
@@ -242,7 +246,7 @@ func TestConfigFactory_Create_PolicyFileNotFound(t *testing.T) {
 	filterFactory, err := factory.Create(mockHandle, configJSON)
 	require.Error(t, err)
 	require.Nil(t, filterFactory)
-	require.Contains(t, err.Error(), "failed to read policy file")
+	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
 func TestConfigFactory_Create_InvalidCedarPolicy(t *testing.T) {
@@ -251,12 +255,12 @@ func TestConfigFactory_Create_InvalidCedarPolicy(t *testing.T) {
 		cfg  cedarConfig
 	}{
 		{"inline", cedarConfig{
-			InlinePolicy:      "this is not valid cedar {{{",
+			Policy:            pkg.DataSource{Inline: "this is not valid cedar {{{"},
 			PrincipalType:     "User",
 			PrincipalIDHeader: "x-user-id",
 		}},
 		{"file", cedarConfig{
-			PolicyFile:        createTestPolicyFile(t, "this is not valid cedar {{{"),
+			Policy:            pkg.DataSource{File: createTestPolicyFile(t, "this is not valid cedar {{{")},
 			PrincipalType:     "User",
 			PrincipalIDHeader: "x-user-id",
 		}},
@@ -285,7 +289,7 @@ func TestConfigFactory_Create_InvalidCedarPolicy(t *testing.T) {
 func TestConfigFactory_Create_PolicyFileReadError(t *testing.T) {
 	nonExistent := filepath.Join(t.TempDir(), "does-not-exist.cedar")
 	cfg := cedarConfig{
-		PolicyFile:        nonExistent,
+		Policy:            pkg.DataSource{File: nonExistent},
 		PrincipalType:     "User",
 		PrincipalIDHeader: "x-user-id",
 	}
@@ -315,7 +319,7 @@ func TestConfigFactory_Create_ValidConfigWithEntities(t *testing.T) {
 	entitiesFile := createTestEntitiesFile(t, entities)
 
 	configJSON, err := json.Marshal(cedarConfig{
-		PolicyFile:        policyFile,
+		Policy:            pkg.DataSource{File: policyFile},
 		EntitiesFile:      entitiesFile,
 		PrincipalType:     "User",
 		PrincipalIDHeader: "x-user-id",
@@ -340,7 +344,7 @@ func TestConfigFactory_Create_EntitiesFileNotFound(t *testing.T) {
 	policyFile := createTestPolicyFile(t, policy)
 
 	configJSON, err := json.Marshal(cedarConfig{
-		PolicyFile:        policyFile,
+		Policy:            pkg.DataSource{File: policyFile},
 		EntitiesFile:      "/nonexistent/entities.json",
 		PrincipalType:     "User",
 		PrincipalIDHeader: "x-user-id",
@@ -366,7 +370,7 @@ func TestConfigFactory_Create_InvalidEntitiesJSON(t *testing.T) {
 	entitiesFile := createTestEntitiesFile(t, "not valid json {{{")
 
 	configJSON, err := json.Marshal(cedarConfig{
-		PolicyFile:        policyFile,
+		Policy:            pkg.DataSource{File: policyFile},
 		EntitiesFile:      entitiesFile,
 		PrincipalType:     "User",
 		PrincipalIDHeader: "x-user-id",
@@ -391,7 +395,7 @@ func TestConfigFactory_Create_DefaultEntityTypes(t *testing.T) {
 	policyFile := createTestPolicyFile(t, policy)
 
 	cfg := cedarConfig{
-		PolicyFile:        policyFile,
+		Policy:            pkg.DataSource{File: policyFile},
 		PrincipalType:     "User",
 		PrincipalIDHeader: "x-user-id",
 	}
@@ -421,7 +425,7 @@ func TestConfigFactory_Create_CustomEntityTypes(t *testing.T) {
 	policyFile := createTestPolicyFile(t, policy)
 
 	cfg := cedarConfig{
-		PolicyFile:        policyFile,
+		Policy:            pkg.DataSource{File: policyFile},
 		PrincipalType:     "User",
 		PrincipalIDHeader: "x-user-id",
 		ActionType:        "HttpMethod",
@@ -456,7 +460,7 @@ forbid(principal, action == Action::"DELETE", resource);
 	policyFile := createTestPolicyFile(t, policy)
 
 	configJSON, err := json.Marshal(cedarConfig{
-		PolicyFile:        policyFile,
+		Policy:            pkg.DataSource{File: policyFile},
 		PrincipalType:     "User",
 		PrincipalIDHeader: "x-user-id",
 	})
@@ -479,7 +483,7 @@ forbid(principal, action == Action::"DELETE", resource);
 
 func TestOnRequestHeaders_Allow(t *testing.T) {
 	policy := `permit(principal, action == Action::"GET", resource);`
-	filter, _ := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+	filter, _ := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 
 	headers := fake.NewFakeHeaderMap(map[string][]string{
 		":method":    {"GET"},
@@ -495,7 +499,7 @@ func TestOnRequestHeaders_Allow(t *testing.T) {
 
 func TestOnRequestHeaders_Deny(t *testing.T) {
 	policy := `forbid(principal, action, resource);`
-	filter, mockHandle := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+	filter, mockHandle := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 	mockHandle.EXPECT().SendLocalResponse(
 		uint32(403),
 		gomock.Any(),
@@ -518,7 +522,7 @@ func TestOnRequestHeaders_Deny(t *testing.T) {
 func TestOnRequestHeaders_DenyDefaultNoPermit(t *testing.T) {
 	// Cedar's default behavior: if no permit policy matches, deny.
 	policy := `permit(principal == User::"admin", action, resource);`
-	filter, mockHandle := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+	filter, mockHandle := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 	mockHandle.EXPECT().SendLocalResponse(
 		uint32(403),
 		gomock.Any(),
@@ -541,7 +545,7 @@ func TestOnRequestHeaders_DenyDefaultNoPermit(t *testing.T) {
 func TestOnRequestHeaders_DenyWithCustomStatus(t *testing.T) {
 	policy := `forbid(principal, action, resource);`
 	filter, mockHandle := createTestFilter(t, &cedarConfig{
-		PolicyFile: createTestPolicyFile(t, policy),
+		Policy:     pkg.DataSource{Inline: policy},
 		DenyStatus: 401,
 		DenyBody:   "Unauthorized",
 	})
@@ -572,7 +576,7 @@ func TestOnRequestHeaders_DenyWithCustomStatus(t *testing.T) {
 func TestOnRequestHeaders_DenyWithCustomHeaders(t *testing.T) {
 	policy := `forbid(principal, action, resource);`
 	filter, mockHandle := createTestFilter(t, &cedarConfig{
-		PolicyFile:  createTestPolicyFile(t, policy),
+		Policy:      pkg.DataSource{File: createTestPolicyFile(t, policy)},
 		DenyHeaders: map[string]string{"www-authenticate": "Bearer"},
 	})
 
@@ -600,7 +604,7 @@ func TestOnRequestHeaders_DenyWithCustomHeaders(t *testing.T) {
 
 func TestOnRequestHeaders_DryRunAllow(t *testing.T) {
 	policy := `permit(principal, action, resource);`
-	filter, _ := createTestFilter(t, &cedarConfig{PolicyFile: createTestPolicyFile(t, policy), DryRun: true})
+	filter, _ := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}, DryRun: true})
 
 	headers := fake.NewFakeHeaderMap(map[string][]string{
 		":method":    {"GET"},
@@ -617,7 +621,7 @@ func TestOnRequestHeaders_DryRunAllow(t *testing.T) {
 func TestOnRequestHeaders_DryRunDeny(t *testing.T) {
 	policy := `forbid(principal, action, resource);`
 	// In dry-run mode, even denied requests should continue.
-	filter, _ := createTestFilter(t, &cedarConfig{PolicyFile: createTestPolicyFile(t, policy), DryRun: true})
+	filter, _ := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}, DryRun: true})
 
 	headers := fake.NewFakeHeaderMap(map[string][]string{
 		":method":    {"GET"},
@@ -633,7 +637,7 @@ func TestOnRequestHeaders_DryRunDeny(t *testing.T) {
 
 func TestOnRequestHeaders_MissingPrincipalHeader_FailOpen(t *testing.T) {
 	policy := `permit(principal, action, resource);`
-	filter, _ := createTestFilter(t, &cedarConfig{PolicyFile: createTestPolicyFile(t, policy), FailOpen: true})
+	filter, _ := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}, FailOpen: true})
 
 	// No x-user-id header.
 	headers := fake.NewFakeHeaderMap(map[string][]string{
@@ -695,7 +699,7 @@ func createTestFilterWithMetricExpectation(t *testing.T, cfg *cedarConfig, expec
 
 func TestOnRequestHeaders_Metrics_Allowed(t *testing.T) {
 	policy := `permit(principal, action, resource);`
-	filter, _ := createTestFilterWithMetricExpectation(t, &cedarConfig{PolicyFile: createTestPolicyFile(t, policy)}, decisionAllowed)
+	filter, _ := createTestFilterWithMetricExpectation(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}}, decisionAllowed)
 
 	headers := fake.NewFakeHeaderMap(map[string][]string{
 		":method":    {"GET"},
@@ -711,7 +715,7 @@ func TestOnRequestHeaders_Metrics_Allowed(t *testing.T) {
 
 func TestOnRequestHeaders_Metrics_Denied(t *testing.T) {
 	policy := `forbid(principal, action, resource);`
-	filter, mockHandle := createTestFilterWithMetricExpectation(t, &cedarConfig{PolicyFile: createTestPolicyFile(t, policy)}, decisionDenied)
+	filter, mockHandle := createTestFilterWithMetricExpectation(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}}, decisionDenied)
 	mockHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "cedar_denied")
 
 	headers := fake.NewFakeHeaderMap(map[string][]string{
@@ -728,7 +732,7 @@ func TestOnRequestHeaders_Metrics_Denied(t *testing.T) {
 
 func TestOnRequestHeaders_Metrics_FailOpen(t *testing.T) {
 	policy := `permit(principal, action, resource);`
-	filter, _ := createTestFilterWithMetricExpectation(t, &cedarConfig{PolicyFile: createTestPolicyFile(t, policy), FailOpen: true}, decisionFailOpen)
+	filter, _ := createTestFilterWithMetricExpectation(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}, FailOpen: true}, decisionFailOpen)
 
 	// No x-user-id header triggers an error, which should be allowed via fail_open.
 	headers := fake.NewFakeHeaderMap(map[string][]string{
@@ -744,7 +748,7 @@ func TestOnRequestHeaders_Metrics_FailOpen(t *testing.T) {
 
 func TestOnRequestHeaders_Metrics_DryRunAllow(t *testing.T) {
 	policy := `forbid(principal, action, resource);`
-	filter, _ := createTestFilterWithMetricExpectation(t, &cedarConfig{PolicyFile: createTestPolicyFile(t, policy), DryRun: true}, decisionDryAllow)
+	filter, _ := createTestFilterWithMetricExpectation(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}, DryRun: true}, decisionDryAllow)
 
 	headers := fake.NewFakeHeaderMap(map[string][]string{
 		":method":    {"GET"},
@@ -760,7 +764,7 @@ func TestOnRequestHeaders_Metrics_DryRunAllow(t *testing.T) {
 
 func TestOnRequestHeaders_MissingPrincipalHeader_FailClosed(t *testing.T) {
 	policy := `permit(principal, action, resource);`
-	filter, mockHandle := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+	filter, mockHandle := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 
 	mockHandle.EXPECT().SendLocalResponse(
 		uint32(403), gomock.Nil(), []byte("Forbidden"), "cedar_denied",
@@ -783,7 +787,7 @@ func TestOnRequestHeaders_PolicyUsesMethod(t *testing.T) {
 	policy := `permit(principal, action == Action::"GET", resource);`
 
 	t.Run("GET is allowed", func(t *testing.T) {
-		filter, _ := createTestFilter(t, &cedarConfig{PolicyFile: createTestPolicyFile(t, policy)})
+		filter, _ := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 
 		headers := fake.NewFakeHeaderMap(map[string][]string{
 			":method":    {"GET"},
@@ -795,7 +799,7 @@ func TestOnRequestHeaders_PolicyUsesMethod(t *testing.T) {
 	})
 
 	t.Run("POST is denied", func(t *testing.T) {
-		filter, mockHandle := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+		filter, mockHandle := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 		mockHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "cedar_denied")
 
 		headers := fake.NewFakeHeaderMap(map[string][]string{
@@ -812,7 +816,7 @@ func TestOnRequestHeaders_PolicyUsesPath(t *testing.T) {
 	policy := `permit(principal, action, resource == Resource::"/public/resource");`
 
 	t.Run("matching path is allowed", func(t *testing.T) {
-		filter, _ := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+		filter, _ := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 
 		headers := fake.NewFakeHeaderMap(map[string][]string{
 			":method":    {"GET"},
@@ -824,7 +828,7 @@ func TestOnRequestHeaders_PolicyUsesPath(t *testing.T) {
 	})
 
 	t.Run("non-matching path is denied", func(t *testing.T) {
-		filter, mockHandle := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+		filter, mockHandle := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 		mockHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "cedar_denied")
 
 		headers := fake.NewFakeHeaderMap(map[string][]string{
@@ -841,7 +845,7 @@ func TestOnRequestHeaders_PolicyUsesPrincipal(t *testing.T) {
 	policy := `permit(principal == User::"admin", action, resource);`
 
 	t.Run("matching principal is allowed", func(t *testing.T) {
-		filter, _ := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+		filter, _ := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 
 		headers := fake.NewFakeHeaderMap(map[string][]string{
 			":method":    {"GET"},
@@ -853,7 +857,7 @@ func TestOnRequestHeaders_PolicyUsesPrincipal(t *testing.T) {
 	})
 
 	t.Run("non-matching principal is denied", func(t *testing.T) {
-		filter, mockHandle := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+		filter, mockHandle := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 		mockHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "cedar_denied")
 
 		headers := fake.NewFakeHeaderMap(map[string][]string{
@@ -870,7 +874,7 @@ func TestOnRequestHeaders_PolicyUsesContext(t *testing.T) {
 	policy := `permit(principal, action, resource) when { context.request.headers.authorization == "Bearer valid-token" };`
 
 	t.Run("matching header is allowed", func(t *testing.T) {
-		filter, _ := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+		filter, _ := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 
 		headers := fake.NewFakeHeaderMap(map[string][]string{
 			":method":       {"GET"},
@@ -883,7 +887,7 @@ func TestOnRequestHeaders_PolicyUsesContext(t *testing.T) {
 	})
 
 	t.Run("non-matching header is denied", func(t *testing.T) {
-		filter, mockHandle := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+		filter, mockHandle := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 		mockHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "cedar_denied")
 
 		headers := fake.NewFakeHeaderMap(map[string][]string{
@@ -906,7 +910,7 @@ func TestOnRequestHeaders_WhenMethodAndHost(t *testing.T) {
 	};`
 
 	t.Run("GET to matching host is allowed", func(t *testing.T) {
-		filter, _ := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+		filter, _ := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 
 		headers := fake.NewFakeHeaderMap(map[string][]string{
 			":method":    {"GET"},
@@ -918,7 +922,7 @@ func TestOnRequestHeaders_WhenMethodAndHost(t *testing.T) {
 	})
 
 	t.Run("GET to different host is denied", func(t *testing.T) {
-		filter, mockHandle := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+		filter, mockHandle := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 		mockHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "cedar_denied")
 
 		headers := fake.NewFakeHeaderMap(map[string][]string{
@@ -931,7 +935,7 @@ func TestOnRequestHeaders_WhenMethodAndHost(t *testing.T) {
 	})
 
 	t.Run("POST to matching host is denied", func(t *testing.T) {
-		filter, mockHandle := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+		filter, mockHandle := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 		mockHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "cedar_denied")
 
 		headers := fake.NewFakeHeaderMap(map[string][]string{
@@ -951,7 +955,7 @@ func TestOnRequestHeaders_WhenSchemeAndPath(t *testing.T) {
 	};`
 
 	t.Run("HTTPS to matching path is allowed", func(t *testing.T) {
-		filter, _ := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+		filter, _ := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 
 		headers := fake.NewFakeHeaderMap(map[string][]string{
 			":method":    {"GET"},
@@ -964,7 +968,7 @@ func TestOnRequestHeaders_WhenSchemeAndPath(t *testing.T) {
 	})
 
 	t.Run("HTTP is denied", func(t *testing.T) {
-		filter, mockHandle := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+		filter, mockHandle := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 		mockHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "cedar_denied")
 
 		headers := fake.NewFakeHeaderMap(map[string][]string{
@@ -983,7 +987,7 @@ func TestOnRequestHeaders_Unless(t *testing.T) {
 	policy := `permit(principal, action, resource) unless { context.request.method == "DELETE" };`
 
 	t.Run("GET is allowed", func(t *testing.T) {
-		filter, _ := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+		filter, _ := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 
 		headers := fake.NewFakeHeaderMap(map[string][]string{
 			":method":    {"GET"},
@@ -995,7 +999,7 @@ func TestOnRequestHeaders_Unless(t *testing.T) {
 	})
 
 	t.Run("POST is allowed", func(t *testing.T) {
-		filter, _ := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+		filter, _ := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 
 		headers := fake.NewFakeHeaderMap(map[string][]string{
 			":method":    {"POST"},
@@ -1007,7 +1011,7 @@ func TestOnRequestHeaders_Unless(t *testing.T) {
 	})
 
 	t.Run("DELETE is denied", func(t *testing.T) {
-		filter, mockHandle := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+		filter, mockHandle := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 		mockHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "cedar_denied")
 
 		headers := fake.NewFakeHeaderMap(map[string][]string{
@@ -1025,7 +1029,7 @@ func TestOnRequestHeaders_WhenParsedPathContains(t *testing.T) {
 	policy := `permit(principal, action, resource) when { context.parsed_path.contains("api") };`
 
 	t.Run("path with api segment is allowed", func(t *testing.T) {
-		filter, _ := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+		filter, _ := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 
 		headers := fake.NewFakeHeaderMap(map[string][]string{
 			":method":    {"GET"},
@@ -1037,7 +1041,7 @@ func TestOnRequestHeaders_WhenParsedPathContains(t *testing.T) {
 	})
 
 	t.Run("path without api segment is denied", func(t *testing.T) {
-		filter, mockHandle := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+		filter, mockHandle := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 		mockHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "cedar_denied")
 
 		headers := fake.NewFakeHeaderMap(map[string][]string{
@@ -1061,7 +1065,7 @@ permit(principal == User::"admin", action, resource) when {
 };
 `
 	t.Run("GET by any user is allowed", func(t *testing.T) {
-		filter, _ := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+		filter, _ := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 
 		headers := fake.NewFakeHeaderMap(map[string][]string{
 			":method":    {"GET"},
@@ -1073,7 +1077,7 @@ permit(principal == User::"admin", action, resource) when {
 	})
 
 	t.Run("POST by admin with valid token is allowed", func(t *testing.T) {
-		filter, _ := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+		filter, _ := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 
 		headers := fake.NewFakeHeaderMap(map[string][]string{
 			":method":       {"POST"},
@@ -1086,7 +1090,7 @@ permit(principal == User::"admin", action, resource) when {
 	})
 
 	t.Run("POST by admin without token is denied", func(t *testing.T) {
-		filter, mockHandle := createTestFilter(t, &cedarConfig{PolicyFile: createTestPolicyFile(t, policy)})
+		filter, mockHandle := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 		mockHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "cedar_denied")
 
 		headers := fake.NewFakeHeaderMap(map[string][]string{
@@ -1099,7 +1103,7 @@ permit(principal == User::"admin", action, resource) when {
 	})
 
 	t.Run("POST by non-admin is denied", func(t *testing.T) {
-		filter, mockHandle := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+		filter, mockHandle := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 		mockHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "cedar_denied")
 
 		headers := fake.NewFakeHeaderMap(map[string][]string{
@@ -1125,7 +1129,7 @@ func TestOnRequestHeaders_PolicyWithEntities(t *testing.T) {
 
 	t.Run("member of group is allowed", func(t *testing.T) {
 		filter, _ := createTestFilter(t, &cedarConfig{
-			PolicyFile:   policyFile,
+			Policy:       pkg.DataSource{File: policyFile},
 			EntitiesFile: entitiesFile,
 		})
 
@@ -1140,7 +1144,7 @@ func TestOnRequestHeaders_PolicyWithEntities(t *testing.T) {
 
 	t.Run("non-member is denied", func(t *testing.T) {
 		filter, mockHandle := createTestFilter(t, &cedarConfig{
-			PolicyFile:   policyFile,
+			Policy:       pkg.DataSource{File: policyFile},
 			EntitiesFile: entitiesFile,
 		})
 		mockHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "cedar_denied")
@@ -1163,7 +1167,7 @@ forbid(principal, action == Action::"DELETE", resource);
 `
 
 	t.Run("GET is allowed", func(t *testing.T) {
-		filter, _ := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+		filter, _ := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 
 		headers := fake.NewFakeHeaderMap(map[string][]string{
 			":method":    {"GET"},
@@ -1175,7 +1179,7 @@ forbid(principal, action == Action::"DELETE", resource);
 	})
 
 	t.Run("DELETE is denied", func(t *testing.T) {
-		filter, mockHandle := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+		filter, mockHandle := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 		mockHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "cedar_denied")
 
 		headers := fake.NewFakeHeaderMap(map[string][]string{
@@ -1188,7 +1192,7 @@ forbid(principal, action == Action::"DELETE", resource);
 	})
 
 	t.Run("POST is denied (no matching permit)", func(t *testing.T) {
-		filter, mockHandle := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+		filter, mockHandle := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 		mockHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "cedar_denied")
 
 		headers := fake.NewFakeHeaderMap(map[string][]string{
@@ -1232,7 +1236,7 @@ func TestParsePath_MultiValueQuery(t *testing.T) {
 
 func TestBuildContext_BasicRequest(t *testing.T) {
 	policy := `permit(principal, action, resource);`
-	filter, _ := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+	filter, _ := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 
 	headers := fake.NewFakeHeaderMap(map[string][]string{
 		":method":       {"POST"},
@@ -1255,7 +1259,7 @@ func TestBuildContext_MTLSAttributes(t *testing.T) {
 	policy := `permit(principal, action, resource);`
 	policyFile := createTestPolicyFile(t, policy)
 	cfg := cedarConfig{
-		PolicyFile:        policyFile,
+		Policy:            pkg.DataSource{File: policyFile},
 		PrincipalType:     "User",
 		PrincipalIDHeader: "x-user-id",
 	}
@@ -1305,7 +1309,7 @@ func TestOnRequestHeaders_PolicyUsesSPIFFE(t *testing.T) {
 	policy := `permit(principal, action, resource) when { context.source.certificate.uri_san == "spiffe://cluster.local/ns/default/sa/trusted" };`
 	policyFile := createTestPolicyFile(t, policy)
 	cfg := cedarConfig{
-		PolicyFile:        policyFile,
+		Policy:            pkg.DataSource{File: policyFile},
 		PrincipalType:     "User",
 		PrincipalIDHeader: "x-user-id",
 	}
@@ -1383,7 +1387,7 @@ func TestOnRequestHeaders_PolicyUsesSPIFFE(t *testing.T) {
 
 func TestBuildRequest_BasicRequest(t *testing.T) {
 	policy := `permit(principal, action, resource);`
-	filter, _ := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+	filter, _ := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 
 	headers := fake.NewFakeHeaderMap(map[string][]string{
 		":method":    {"GET"},
@@ -1406,7 +1410,7 @@ func TestBuildRequest_BasicRequest(t *testing.T) {
 
 func TestBuildRequest_MissingPrincipalHeader(t *testing.T) {
 	policy := `permit(principal, action, resource);`
-	filter, _ := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+	filter, _ := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 
 	headers := fake.NewFakeHeaderMap(map[string][]string{
 		":method":    {"GET"},
@@ -1421,7 +1425,7 @@ func TestBuildRequest_MissingPrincipalHeader(t *testing.T) {
 
 func TestBuildRequest_PathWithQueryString(t *testing.T) {
 	policy := `permit(principal, action, resource);`
-	filter, _ := createTestFilter(t, &cedarConfig{InlinePolicy: policy})
+	filter, _ := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
 
 	headers := fake.NewFakeHeaderMap(map[string][]string{
 		":method":    {"GET"},
@@ -1440,7 +1444,7 @@ func TestBuildRequest_PathWithQueryString(t *testing.T) {
 func TestBuildRequest_CustomEntityTypes(t *testing.T) {
 	policy := `permit(principal, action, resource);`
 	filter, _ := createTestFilter(t, &cedarConfig{
-		PolicyFile:   createTestPolicyFile(t, policy),
+		Policy:       pkg.DataSource{File: createTestPolicyFile(t, policy)},
 		ActionType:   "HttpMethod",
 		ResourceType: "Endpoint",
 	})
@@ -1479,7 +1483,7 @@ func TestFilterFactory_Create(t *testing.T) {
 	policy := `permit(principal, action, resource);`
 	policyFile := createTestPolicyFile(t, policy)
 	cfg := cedarConfig{
-		PolicyFile:        policyFile,
+		Policy:            pkg.DataSource{File: policyFile},
 		PrincipalType:     "User",
 		PrincipalIDHeader: "x-user-id",
 	}

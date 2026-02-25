@@ -13,19 +13,18 @@ import (
 	"maps"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 
 	cedarlib "github.com/cedar-policy/cedar-go"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 // cedarConfig represents the JSON configuration for this filter.
 type cedarConfig struct {
-	// PolicyFile is the path to the .cedar policy file.
-	PolicyFile string `json:"policy_file"`
-	// InlinePolicy provides a Cedar policy directly in the configuration, useful for testing or simple policies.
-	InlinePolicy string `json:"inline_policy"`
+	// Policy to evaluate, specified either as a file path or inline string.
+	Policy pkg.DataSource `json:"policy"`
 	// EntitiesFile is the optional path to a JSON entities file.
 	EntitiesFile string `json:"entities_file"`
 	// PrincipalType is the Cedar entity type for the principal (e.g., "User").
@@ -330,15 +329,6 @@ func (c *CedarHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHand
 		return nil, err
 	}
 
-	if cfg.PolicyFile == "" && cfg.InlinePolicy == "" {
-		handle.Log(shared.LogLevelError, "cedar: policy_file or inline_policy is required")
-		return nil, fmt.Errorf("policy_file or inline_policy is required")
-	}
-	if cfg.PolicyFile != "" && cfg.InlinePolicy != "" {
-		handle.Log(shared.LogLevelError, "cedar: cannot specify both policy_file and inline_policy")
-		return nil, fmt.Errorf("cannot specify both policy_file and inline_policy")
-	}
-
 	if cfg.PrincipalType == "" {
 		handle.Log(shared.LogLevelError, "cedar: principal_type is required")
 		return nil, fmt.Errorf("principal_type is required")
@@ -349,20 +339,19 @@ func (c *CedarHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHand
 		return nil, fmt.Errorf("principal_id_header is required")
 	}
 
-	handle.Log(shared.LogLevelDebug, "cedar: loading policy from %s (principal_type=%s, principal_id_header=%s, dry_run=%v, fail_open=%v)",
-		cfg.PolicyFile, cfg.PrincipalType, cfg.PrincipalIDHeader, cfg.DryRun, cfg.FailOpen)
-
-	var policyBytes []byte
-	var err error
-	if cfg.PolicyFile != "" {
-		policyBytes, err = os.ReadFile(filepath.Clean(cfg.PolicyFile))
-		if err != nil {
-			handle.Log(shared.LogLevelError, "cedar: failed to read policy file: %s", err.Error())
-			return nil, fmt.Errorf("failed to read policy file: %w", err)
-		}
-	} else {
-		policyBytes = []byte(cfg.InlinePolicy)
+	if err := cfg.Policy.Validate(); err != nil {
+		handle.Log(shared.LogLevelError, "cedar: invalid 'policy' configuration: %s", err.Error())
+		return nil, fmt.Errorf("invalid 'policy' configuration: %w", err)
 	}
+
+	policyBytes, err := cfg.Policy.Content()
+	if err != nil {
+		handle.Log(shared.LogLevelError, "cedar: failed to get policy content: %s", err.Error())
+		return nil, fmt.Errorf("failed to get policy content: %w", err)
+	}
+
+	handle.Log(shared.LogLevelDebug, "cedar: loading policy (principal_type=%s, principal_id_header=%s, dry_run=%v, fail_open=%v)",
+		cfg.PrincipalType, cfg.PrincipalIDHeader, cfg.DryRun, cfg.FailOpen)
 
 	policySet, err := cedarlib.NewPolicySetFromBytes("policy.cedar", policyBytes)
 	if err != nil {
