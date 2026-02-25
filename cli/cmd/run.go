@@ -186,7 +186,7 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 
 		switch artifact.ArtifactType {
 		case extensions.ArtifactBinary:
-			if artifact.Manifest.Type == extensions.TypeComposer {
+			if artifact.Manifest.Type == extensions.TypeGo {
 				// Ensure the composer is downloaded before running any extensions that may depend on it.
 				if err = extensions.CheckOrDownloadLibComposer(ctx, downloader, artifact.Manifest.ComposerVersion); err != nil {
 					return nil, fmt.Errorf("failed to download libcomposer %s for extension %s: %w",
@@ -196,11 +196,13 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 			downloaded = append(downloaded, artifact.Manifest)
 
 		case extensions.ArtifactSource:
+			// If the downloaded artifact is the composer bundle, we need to find the path to the extension
+			// inside the composer source tree.
 			if artifact.Manifest.Type == extensions.TypeComposer {
 				var manifest *extensions.Manifest
 				extensionSrc := extensions.LocalCacheComposerExtensionSourceDir(downloader.Dirs, artifact.Manifest, name)
 				if extensionSrc == "" {
-					return nil, fmt.Errorf("invalid source artifact for composer extension %s: missing expected source directory: %s", name, artifact.Path)
+					return nil, fmt.Errorf("invalid source artifact for Go extension %s: missing expected source directory: %s", name, artifact.Path)
 				}
 				downloader.Logger.Info("loading downloaded extension manifest", "path", extensionSrc)
 
@@ -213,24 +215,24 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 
 				if build {
 					fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)
-					downloader.Logger.Info("building downloaded composer extension", "name", manifest.Name, "version", manifest.Version)
+					downloader.Logger.Info("building downloaded Go extension", "name", manifest.Name, "version", manifest.Version)
 					if err = extensions.BuildLibComposer(downloader.Logger, downloader.Dirs, artifact.Path, manifest.ComposerVersion, false); err != nil {
 						return nil, fmt.Errorf("failed to build libcomposer %s for extension %s: %w",
 							artifact.Manifest.Version, name, err)
 					}
 					if err = extensions.BuildExtensionFromPath(downloader.Logger, downloader.Dirs, manifest, extensionSrc); err != nil {
-						return nil, fmt.Errorf("failed to build dynamic module for extension %s from source artifact: %w", name, err)
+						return nil, fmt.Errorf("failed to build Go extension %s from source artifact: %w", name, err)
 					}
 				}
 
 				downloaded = append(downloaded, manifest)
 			} else {
-				if artifact.Manifest.Type == extensions.TypeDynamicModule && build {
+				if artifact.Manifest.Type == extensions.TypeRust && build {
 					fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)
-					downloader.Logger.Info("building downloaded dynamic module extension", "name", artifact.Manifest.Name, "version", artifact.Manifest.Version)
+					downloader.Logger.Info("building downloaded Rust extension", "name", artifact.Manifest.Name, "version", artifact.Manifest.Version)
 
 					if err = extensions.CheckOrBuildDynamicModule(downloader.Logger, downloader.Dirs, artifact.Manifest, artifact.Path); err != nil {
-						return nil, fmt.Errorf("failed to build dynamic module for extension %s from source artifact: %w", name, err)
+						return nil, fmt.Errorf("failed to build Rust extension %s from source artifact: %w", name, err)
 					}
 				}
 				downloaded = append(downloaded, artifact.Manifest)
@@ -305,18 +307,18 @@ func loadLocalManifests(ctx context.Context, logger *slog.Logger, downloader *ex
 
 		if build {
 			switch manifest.Type {
-			case extensions.TypeComposer:
+			case extensions.TypeGo:
 				fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, manifest.Name, internal.ANSIReset)
-				downloader.Logger.Info("building local composer extension", "name", manifest.Name, "version", manifest.Version)
+				downloader.Logger.Info("building local Go extension", "name", manifest.Name, "version", manifest.Version)
 				if err := extensions.BuildExtensionFromPath(downloader.Logger, downloader.Dirs, manifest, path); err != nil {
 					return nil, err
 				}
 				if err := extensions.CheckOrDownloadLibComposer(ctx, downloader, manifest.ComposerVersion); err != nil {
 					return nil, err
 				}
-			case extensions.TypeDynamicModule:
+			case extensions.TypeRust:
 				fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, manifest.Name, internal.ANSIReset)
-				downloader.Logger.Info("building local dynamic module extension", "name", manifest.Name, "version", manifest.Version)
+				downloader.Logger.Info("building local Rust extension", "name", manifest.Name, "version", manifest.Version)
 				// Build dynamic module (currently supports Rust)
 				if err := extensions.BuildDynamicModule(downloader.Logger, downloader.Dirs, manifest, path); err != nil {
 					return nil, err
@@ -359,7 +361,7 @@ func validateEnvoyCompat(envoyVersion string, extensions []*extensions.Manifest)
 func validateComposerCompat(manifests []*extensions.Manifest) error {
 	versions := make(map[string][]string)
 	for _, ext := range manifests {
-		if ext.Type == extensions.TypeComposer {
+		if ext.Type == extensions.TypeGo {
 			versions[ext.ComposerVersion] = append(versions[ext.ComposerVersion], ext.Name)
 		}
 	}
@@ -373,8 +375,8 @@ func validateComposerCompat(manifests []*extensions.Manifest) error {
 			fmt.Fprintf(&b, "  - version %s used by extensions: %s\n",
 				version, strings.Join(versions[version], ", "))
 		}
-		return fmt.Errorf("incompatible composer versions found:\n%s"+
-			"all composer extensions must use the same composer version", b.String())
+		return fmt.Errorf("incompatible Go versions found:\n%s"+
+			"all Go extensions must use the same composer version", b.String())
 	}
 
 	return nil

@@ -15,19 +15,29 @@ set -uo pipefail
 KC=http://localhost:8080
 
 echo "Waiting for Keycloak..."
-until curl -sf "$KC/realms/master" > /dev/null 2>&1; do sleep 2; done
+until curl -sf "$KC/realms/demo" > /dev/null 2>&1; do sleep 2; done
 echo "Keycloak is ready."
 
-auth() { echo "Authorization: Bearer $ADMIN_TOKEN"; }
+# Get admin access token
+ADMIN_KC_TOKEN=""
+retries=0
+max_retries=3
+while [ -z "$ADMIN_KC_TOKEN" ] || [ "$ADMIN_KC_TOKEN" = "null" ]; do
+  retries=$((retries + 1))
+  if [ "$retries" -gt $max_retries ]; then
+    echo "ERROR: failed to obtain admin token after $max_retries attempts. Is Keycloak reachable?"
+    exit 1
+  fi
+  [ "$retries" -gt 1 ] && echo "  retrying in 3s..." && sleep 3
+  ADMIN_KC_TOKEN=$(curl -s "$KC/realms/master/protocol/openid-connect/token" \
+    -d grant_type=password -d client_id=admin-cli \
+    -d username=admin -d password=admin | jq -r .access_token)
+done
 
-# Get admin access token.
-ADMIN_TOKEN=$(curl -s "$KC/realms/master/protocol/openid-connect/token" \
-  -d grant_type=password -d client_id=admin-cli \
-  -d username=admin -d password=admin | jq -r .access_token)
+auth() { echo "Authorization: Bearer $ADMIN_KC_TOKEN"; }
 
 get_client_id() {
-  curl -s "$KC/admin/realms/demo/clients?clientId=$1" \
-    -H "$(auth)" | jq -r '.[0].id'
+  curl -s "$KC/admin/realms/demo/clients?clientId=$1" -H "$(auth)" | jq -r '.[0].id'
 }
 
 MY_APP_ID=$(get_client_id my-app)

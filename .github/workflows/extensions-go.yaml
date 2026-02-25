@@ -12,7 +12,7 @@ env:
   GOPROXY: https://proxy.golang.org
 
 jobs:
-  composer-checks:
+  go-checks:
     runs-on: ubuntu-latest
     defaults:
       run:

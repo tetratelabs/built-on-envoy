@@ -69,14 +69,8 @@ func validateManifest(t *testing.T, path string, knownExtensions map[string]bool
 	knownExtensions[manifest.Name] = true
 	require.NotNil(t, sdk.GetHttpFilterConfigFactory(manifest.Name), "plugin '%s' is not registered into the binary, please ensure it is properly initialized or imported in the plugins.go", manifest.Name)
 
-	// Validate type
-	require.Equal(t, "composer", manifest.Type, "type must be 'composer'")
-
-	// Validate version.
+	require.Equal(t, "go", manifest.Type, "type must be 'go'")
 	require.Empty(t, manifest.Version, "in-tree composer plugins should not have a version")
-
 	require.Empty(t, manifest.ComposerVersion, "in-tree composer plugins should not have a composerVersion")
-
-	// Validate parent.
 	require.Equal(t, "composer", manifest.Parent, "composer plugins must have parent composer")
 }

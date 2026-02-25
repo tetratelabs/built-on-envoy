@@ -4,15 +4,14 @@
 # the root of the repo.
 
 name: test-extension
-version: 1.0.0
+composerVersion: 1.0.0
 categories:
   - Security
 author: Test Author
 description: A test extension
 longDescription: |
   This is a longer description of the test extension.
-type: composer
-composerVersion: 1.2.3
+type: go
 tags:
   - test
 license: Apache-2.0

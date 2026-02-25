@@ -287,6 +287,7 @@ func interpretResult(rs rego.ResultSet) (bool, policyResponse) {
 
 // opaHttpFilterFactory creates filter instances per-request.
 type opaHttpFilterFactory struct { //nolint:revive
+	shared.EmptyHttpFilterFactory
 	config *opaParsedConfig
 }
 

@@ -169,12 +169,12 @@ func setupDynamicModuleSearchPath(params *ConfigGenerationParams) (string, func(
 	var composerVersion string
 	for _, ext := range params.Extensions {
 		switch ext.Type {
-		case extensions.TypeComposer:
+		case extensions.TypeGo:
 			// At this point all extensions are guaranteed to use the same version of
 			// composer.
 			composerVersion = ext.ComposerVersion
 
-		case extensions.TypeDynamicModule:
+		case extensions.TypeRust:
 			// Get the path to the Rust dynamic module library
 			libPath := extensions.LocalCacheExtension(params.Dirs, ext)
 			if _, err := os.Stat(libPath); os.IsNotExist(err) {

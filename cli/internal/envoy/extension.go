@@ -68,9 +68,9 @@ func GenerateFilterConfig(logger *slog.Logger, manifest *extensions.Manifest, di
 		generator = LuaFilterGenerator{Logger: logger}
 	case extensions.TypeWasm:
 		generator = WasmFilterGenerator{Logger: logger}
-	case extensions.TypeDynamicModule:
+	case extensions.TypeRust:
 		generator = DynamicModuleFilterGenerator{Logger: logger}
-	case extensions.TypeComposer:
+	case extensions.TypeGo:
 		generator = ComposerFilterGenerator{Logger: logger}
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedExtensionType, manifest.Type)

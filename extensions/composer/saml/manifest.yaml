@@ -59,11 +59,11 @@ longDescription: |
 
   | Metric | Type | Tags | Description |
   |--------|------|------|-------------|
-  | `saml_authn_requests_total` | Counter | — | Incremented on each IdP redirect |
+  | `saml_authn_requests_total` | Counter | - | Incremented on each IdP redirect |
   | `saml_assertions_validated_total` | Counter | `result` (`success` / `failure`) | Incremented after SAML response validation |
-  | `saml_sessions_created_total` | Counter | — | Incremented on successful ACS processing |
+  | `saml_sessions_created_total` | Counter | - | Incremented on successful ACS processing |
   | `saml_sessions_validated_total` | Counter | `result` (`valid` / `expired` / `invalid`) | Incremented on session cookie validation |
-type: composer
+type: go
 tags:
   - saml
   - sso
@@ -76,7 +76,7 @@ license: Apache-2.0
 examples:
   - title: Basic SAML SSO
     description: |
-      Minimal setup — only the IdP metadata is needed. An ephemeral SP certificate
+      Minimal setup - only the IdP metadata is needed. An ephemeral SP certificate
       and key are auto-generated.
     code: |
       # Start keycloack

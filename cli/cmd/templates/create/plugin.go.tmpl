@@ -51,6 +51,7 @@ func (f *customHttpFilter) OnResponseTrailers(trailers shared.HeaderMap) shared.
 
 // This is the factory for the HTTP filter.
 type customHttpFilterFactory struct {
+	shared.EmptyHttpFilterFactory
 	config *customHttpFilterConfig
 }
 

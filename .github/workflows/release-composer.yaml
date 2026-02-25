@@ -39,7 +39,7 @@ jobs:
           IMAGE_NONCE: ${{ inputs.nonce }}
         run: make -C extensions/composer push_image
       
-      - name: Build and Push Lite Composer
+      - name: Build and Push Composer Lite
         env:
           COMPOSER_LITE: true
           IMAGE_NONCE: ${{ inputs.nonce }}

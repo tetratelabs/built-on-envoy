@@ -19,35 +19,35 @@ func TestLocalCacheManifest(t *testing.T) {
 	dirs := &xdg.Directories{DataHome: "/home/user/.local/share"}
 
 	require.Equal(t, "/home/user/.local/share/extensions/dym/test/1.0.1/manifest.yaml",
-		LocalCacheManifest(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeDynamicModule}))
+		LocalCacheManifest(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeRust}))
 
 	require.Equal(t, "/home/user/.local/share/extensions/goplugin/test/1.0.1/manifest.yaml",
-		LocalCacheManifest(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeComposer}))
+		LocalCacheManifest(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeGo}))
 }
 
 func TestLocalCacheExtensionDirs(t *testing.T) {
 	dirs := &xdg.Directories{DataHome: "/home/user/.local/share"}
 
-	// Test dynamic_module type
+	// Test rust type
 	require.Equal(t, "/home/user/.local/share/extensions/dym/test/1.0.1",
-		LocalCacheExtensionDir(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeDynamicModule}))
+		LocalCacheExtensionDir(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeRust}))
 
 	require.Equal(t, "/home/user/.local/share/extensions/dym/test/1.0.1/libtest.so",
-		LocalCacheExtension(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeDynamicModule}))
+		LocalCacheExtension(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeRust}))
 
-	// Test dynamic_module with dashes in name (uses original name)
+	// Test rust with dashes in name (uses original name)
 	require.Equal(t, "/home/user/.local/share/extensions/dym/ip-restriction/1.0.0",
-		LocalCacheExtensionDir(dirs, &Manifest{Name: "ip-restriction", Version: "1.0.0", Type: TypeDynamicModule}))
+		LocalCacheExtensionDir(dirs, &Manifest{Name: "ip-restriction", Version: "1.0.0", Type: TypeRust}))
 
 	require.Equal(t, "/home/user/.local/share/extensions/dym/ip-restriction/1.0.0/libip-restriction.so",
-		LocalCacheExtension(dirs, &Manifest{Name: "ip-restriction", Version: "1.0.0", Type: TypeDynamicModule}))
+		LocalCacheExtension(dirs, &Manifest{Name: "ip-restriction", Version: "1.0.0", Type: TypeRust}))
 
-	// Test composer type
+	// Test go type
 	require.Equal(t, "/home/user/.local/share/extensions/goplugin/test/1.0.1",
-		LocalCacheExtensionDir(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeComposer}))
+		LocalCacheExtensionDir(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeGo}))
 
 	require.Equal(t, "/home/user/.local/share/extensions/goplugin/test/1.0.1/plugin.so",
-		LocalCacheExtension(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeComposer}))
+		LocalCacheExtension(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeGo}))
 
 	// Test other types (default)
 	require.Equal(t, "/home/user/.local/share/extensions/test/1.0.1",
@@ -77,7 +77,7 @@ author: Test
 description: Test extension
 longDescription: |
   Test long description
-type: composer
+type: go
 tags:
   - test
 license: Apache-2.0
@@ -91,7 +91,7 @@ examples:
 func TestLocalCacheComposerExtensionSourceDir(t *testing.T) {
 	t.Run("finds matching extension in source directory", func(t *testing.T) {
 		dirs := &xdg.Directories{DataHome: t.TempDir()}
-		manifest := &Manifest{Name: "my-set", Version: "1.0.0", Type: TypeComposer}
+		manifest := &Manifest{Name: "my-set", Version: "1.0.0", Type: TypeGo}
 
 		// Create the source artifact directory structure with two extensions
 		base := LocalCacheComposerSourceArtifactDir(dirs, manifest)
@@ -113,7 +113,7 @@ func TestLocalCacheComposerExtensionSourceDir(t *testing.T) {
 
 	t.Run("returns empty string when extension not found", func(t *testing.T) {
 		dirs := &xdg.Directories{DataHome: t.TempDir()}
-		manifest := &Manifest{Name: "my-set", Version: "1.0.0", Type: TypeComposer}
+		manifest := &Manifest{Name: "my-set", Version: "1.0.0", Type: TypeGo}
 
 		// Create one extension
 		base := LocalCacheComposerSourceArtifactDir(dirs, manifest)
@@ -128,7 +128,7 @@ func TestLocalCacheComposerExtensionSourceDir(t *testing.T) {
 
 	t.Run("returns empty string when base directory does not exist", func(t *testing.T) {
 		dirs := &xdg.Directories{DataHome: t.TempDir()}
-		manifest := &Manifest{Name: "missing", Version: "1.0.0", Type: TypeComposer}
+		manifest := &Manifest{Name: "missing", Version: "1.0.0", Type: TypeGo}
 
 		// Don't create any directories base path doesn't exist
 		require.Empty(t, LocalCacheComposerExtensionSourceDir(dirs, manifest, "anything"))
@@ -136,7 +136,7 @@ func TestLocalCacheComposerExtensionSourceDir(t *testing.T) {
 
 	t.Run("returns empty string when manifest is invalid", func(t *testing.T) {
 		dirs := &xdg.Directories{DataHome: t.TempDir()}
-		manifest := &Manifest{Name: "my-set", Version: "1.0.0", Type: TypeComposer}
+		manifest := &Manifest{Name: "my-set", Version: "1.0.0", Type: TypeGo}
 
 		base := LocalCacheComposerSourceArtifactDir(dirs, manifest)
 
@@ -152,7 +152,7 @@ func TestLocalCacheComposerExtensionSourceDir(t *testing.T) {
 
 	t.Run("handles nested directory structures", func(t *testing.T) {
 		dirs := &xdg.Directories{DataHome: t.TempDir()}
-		manifest := &Manifest{Name: "my-set", Version: "2.0.0", Type: TypeComposer}
+		manifest := &Manifest{Name: "my-set", Version: "2.0.0", Type: TypeGo}
 
 		base := LocalCacheComposerSourceArtifactDir(dirs, manifest)
 

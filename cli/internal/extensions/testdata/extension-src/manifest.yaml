@@ -13,7 +13,7 @@ longDescription: Dynamic module test
 tags:
   - test
 license: Apache-2.0
-type: dynamic_module
+type: rust
 examples:
   - title: Test Dynamic Module
     description: Test the dynamic module extension

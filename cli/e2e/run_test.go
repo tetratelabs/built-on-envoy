@@ -77,7 +77,7 @@ func TestLuaLocalExtension(t *testing.T) {
 	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
 }
 
-func TestDockerRemoteDockerExtension(t *testing.T) {
+func TestDockerRemoteExtension(t *testing.T) {
 	internaltesting.SkipIfTestRegistryNotConfigured(t)
 
 	// Run the remote extension in Docker.
@@ -109,7 +109,7 @@ func TestDockerRemoteDockerExtension(t *testing.T) {
 	}, 2*time.Minute, 200*time.Millisecond)
 }
 
-func TestDynamicModuleRemoteExtension(t *testing.T) {
+func TestRustRemoteExtension(t *testing.T) {
 	internaltesting.SkipIfTestRegistryNotConfigured(t)
 
 	// Run the remote extension.
@@ -135,7 +135,7 @@ func TestDynamicModuleRemoteExtension(t *testing.T) {
 	require.NoError(t, internaltesting.CheckRequest(req, checkDenied))
 }
 
-func TestDynamicModuleLocalExtension(t *testing.T) {
+func TestRustLocalExtension(t *testing.T) {
 	extensionPath := "../../extensions/ip-restriction"
 	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin,
 		"--log-level", "dynamic_modules:debug",
@@ -158,12 +158,12 @@ func TestDynamicModuleLocalExtension(t *testing.T) {
 	require.NoError(t, internaltesting.CheckRequest(req, checkDenied))
 }
 
-func TestDynamicModuleCreateAndRun(t *testing.T) {
+func TestRustCreateAndRun(t *testing.T) {
 	dataDir := t.TempDir()
 
 	// Create a brand new extension
 	process := internaltesting.RunCLI(t, cliBin, "create", "rust-e2e",
-		"--type", "dynamic_module_rust",
+		"--type", "rust",
 		"--path", dataDir,
 	)
 	status, err := process.Wait()

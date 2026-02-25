@@ -35,6 +35,7 @@ type tokenExchangeMetrics struct {
 
 // tokenExchangeFilterFactory creates filter instances with the parsed config.
 type tokenExchangeFilterFactory struct {
+	shared.EmptyHttpFilterFactory
 	config  *tokenExchangeConfig
 	metrics *tokenExchangeMetrics
 }
@@ -70,7 +71,7 @@ func (f *tokenExchangeHttpFilterConfigFactory) Create(handle shared.HttpFilterCo
 
 	handle.Log(shared.LogLevelInfo, "token-exchange: loaded token exchange config for cluster=%s url=%s",
 		cfg.Cluster, cfg.TokenExchangeURL)
-	return &tokenExchangeFilterFactory{cfg, metrics}, nil
+	return &tokenExchangeFilterFactory{config: cfg, metrics: metrics}, nil
 }
 
 // WellKnownHttpFilterConfigFactories is used to load the plugin.

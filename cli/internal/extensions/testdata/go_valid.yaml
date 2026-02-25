@@ -11,8 +11,8 @@ author: Test Author
 description: A test extension
 longDescription: |
   This is a longer description of the test extension.
-type: composer
-composerVersion: ""
+type: go
+composerVersion: 1.2.3
 tags:
   - test
 license: Apache-2.0

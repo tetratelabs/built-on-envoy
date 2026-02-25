@@ -6,13 +6,28 @@
 services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.1
+    # master realm is configured with Require SSL = External requests, which in some docker envs, can lead to HTTPS required errors.
+    # See https://github.com/keycloak/keycloak/issues/25350.
+    # To avoid this, we disable SSL requirement for the master realm right after startup.
+    entrypoint: ["/bin/bash", "-c"]
     command:
-      - start-dev
-      - --import-realm
-      - --features=token-exchange,admin-fine-grained-authz
+      - |
+        # keycloak in the background
+        /opt/keycloak/bin/kc.sh start-dev --import-realm --features=token-exchange,admin-fine-grained-authz &
+        sleep 3
+        echo "Waiting for Keycloak Admin API to wake up..."
+        until /opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080 --realm master --user "$$KC_BOOTSTRAP_ADMIN_USERNAME" --password "$$KC_BOOTSTRAP_ADMIN_PASSWORD" > /dev/null 2>&1; do
+          echo "API not ready yet, retrying in 2 seconds..."
+          sleep 2
+        done
+        echo "Successfully logged in! Disabling SSL requirement for the master realm..."
+        /opt/keycloak/bin/kcadm.sh update realms/master -s sslRequired=NONE
+        echo "Master realm updated successfully. Keycloak is ready."
+        # Keep the container running
+        wait
     environment:
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
     ports:
       - "8080:8080"
     volumes:

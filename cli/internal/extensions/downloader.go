@@ -144,7 +144,7 @@ func (d *Downloader) download(
 
 		extensionManifest := ManifestFromOCI(manifest)
 		sourceRepo := SourceRepositoryName(d.Registry, extensionManifest)
-		if extensionManifest.Type == TypeComposer {
+		if extensionManifest.Type == TypeGo {
 			version = extensionManifest.ComposerVersion
 		}
 

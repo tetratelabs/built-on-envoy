@@ -86,7 +86,7 @@ longDescription: |
   | `denied` | The policy denied the request (or an error occurred with fail-open disabled). |
   | `failopen` | An error occurred during policy evaluation and the request was allowed because fail-open mode is enabled. |
   | `dryrun_allow` | The policy denied the request but it was allowed because dry-run mode is enabled. |
-type: composer
+type: go
 featured: true
 tags:
   - go

@@ -136,7 +136,7 @@ func TestDynamicModuleFilterGenerator(t *testing.T) {
 	dirs := &xdg.Directories{DataHome: t.TempDir()}
 	manifest := &extensions.Manifest{
 		Name:    "test-dynamic-module",
-		Type:    extensions.TypeDynamicModule,
+		Type:    extensions.TypeRust,
 		Version: "v1.0.0",
 		Remote:  true,
 	}
@@ -209,9 +209,9 @@ func TestComposerFilterGenerator(t *testing.T) {
 	dirs := &xdg.Directories{DataHome: t.TempDir()}
 	manifest := &extensions.Manifest{
 		Name:            "test-composer",
-		Type:            extensions.TypeComposer,
-		Version:         "0.0.1",
-		ComposerVersion: "1.0.0",
+		Type:            extensions.TypeGo,
+		Version:         "v0.0.1",
+		ComposerVersion: "v1.0.0",
 		Remote:          true,
 	}
 
@@ -327,9 +327,9 @@ func TestComposerFilterGenerator(t *testing.T) {
 	// Case 5: Remote extension with SourceRegistry generates oci:// URL
 	ociManifest := &extensions.Manifest{
 		Name:            "test-composer",
-		Type:            extensions.TypeComposer,
-		Version:         "0.0.1",
-		ComposerVersion: "1.0.0",
+		Type:            extensions.TypeGo,
+		Version:         "v0.0.1",
+		ComposerVersion: "v1.0.0",
 		Remote:          true,
 		SourceRegistry:  "ghcr.io/tetratelabs/built-on-envoy",
 		SourceTag:       "0.0.1",
