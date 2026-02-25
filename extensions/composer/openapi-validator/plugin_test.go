@@ -486,6 +486,9 @@ func TestOnRequestBody_ValidJsonBody(t *testing.T) {
 
 	mockHandle.EXPECT().RequestHeaders().Return(headers).AnyTimes()
 	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBody)
+	// Simulate the ReceivedRequestBody being the same as BufferedRequestBody,
+	// which can happen due to Envoy's buffering logic.
+	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBody)
 
 	bodyStatus := filter.OnRequestBody(fakeBody, true)
 	require.Equal(t, shared.BodyStatusContinue, bodyStatus)
@@ -511,6 +514,7 @@ func TestOnRequestBody_InvalidJsonBody(t *testing.T) {
 
 	mockHandle.EXPECT().RequestHeaders().Return(headers).AnyTimes()
 	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBody)
+	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBody)
 	mockHandle.EXPECT().SendLocalResponse(
 		uint32(400),
 		gomock.Any(),
@@ -566,6 +570,7 @@ func TestOnRequestBody_WithTrailers(t *testing.T) {
 	fakeBuffered := fake.NewFakeBodyBuffer(body)
 	mockHandle.EXPECT().RequestHeaders().Return(headers).AnyTimes()
 	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBuffered)
+	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBuffered)
 
 	trailers := fake.NewFakeHeaderMap(map[string][]string{})
 	trailersStatus := filter.OnRequestTrailers(trailers)
@@ -624,7 +629,7 @@ func TestOnRequestBody_NoBodyLimit(t *testing.T) {
 
 	mockHandle.EXPECT().RequestHeaders().Return(headers).AnyTimes()
 	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBody)
-
+	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBody)
 	bodyStatus := filter.OnRequestBody(fakeBody, true)
 	require.Equal(t, shared.BodyStatusContinue, bodyStatus)
 }
@@ -664,18 +669,21 @@ func TestOnRequestBody_DryRunAllowsInvalidBody(t *testing.T) {
 	require.Equal(t, shared.HeadersStatusStop, status)
 
 	// Missing required field "name".
-	body := []byte(`{"email": "alice@example.com"}`)
-	fakeBody := fake.NewFakeBodyBuffer(body)
+	bufferedBody := []byte(`{"email": `)
+	receivedBody := []byte(`"alice@example.com"}`)
+	fakeBufferedBody := fake.NewFakeBodyBuffer(bufferedBody)
+	fakeReceivedBody := fake.NewFakeBodyBuffer(receivedBody)
 
 	mockHandle.EXPECT().RequestHeaders().Return(headers).AnyTimes()
-	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBody)
+	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBufferedBody)
+	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeReceivedBody)
 
-	bodyStatus := filter.OnRequestBody(fakeBody, true)
+	bodyStatus := filter.OnRequestBody(fakeReceivedBody, true)
 	require.Equal(t, shared.BodyStatusContinue, bodyStatus)
 }
 
 func TestOnRequestBody_DryRunAllowsOversizedBody(t *testing.T) {
-	filter, mockHandle := createTestFilter(t, testSpec, &openAPIValidatorConfig{
+	filter, _ := createTestFilter(t, testSpec, &openAPIValidatorConfig{
 		DryRun:       true,
 		MaxBodyBytes: 10,
 	})
@@ -692,7 +700,6 @@ func TestOnRequestBody_DryRunAllowsOversizedBody(t *testing.T) {
 	require.Equal(t, shared.HeadersStatusStop, status)
 
 	body := fake.NewFakeBodyBuffer([]byte(`{"name": "alice", "email": "alice@example.com"}`))
-	mockHandle.EXPECT().ContinueRequest()
 
 	bodyStatus := filter.OnRequestBody(body, true)
 	require.Equal(t, shared.BodyStatusContinue, bodyStatus)

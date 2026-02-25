@@ -229,6 +229,8 @@ func TestOnRequestBody_ACS_InvalidSAMLResponse(t *testing.T) {
 	// Provide a body with no SAMLResponse field.
 	bufferedBody := fake.NewFakeBodyBuffer([]byte("RelayState=https://sp.example.com/page"))
 	handle.EXPECT().BufferedRequestBody().Return(bufferedBody)
+	// Simulate the case where the buffered body is the same as the received body.
+	handle.EXPECT().ReceivedRequestBody().Return(bufferedBody)
 
 	body := fake.NewFakeBodyBuffer(nil)
 	status := f.OnRequestBody(body, true)
@@ -385,8 +387,10 @@ func TestMetrics_AssertionsValidated_Failure(t *testing.T) {
 	handle.EXPECT().SendLocalResponse(uint32(401), gomock.Any(), gomock.Any(), gomock.Eq("saml-acs-error"))
 
 	// Provide a body with no SAMLResponse field.
-	bufferedBody := fake.NewFakeBodyBuffer([]byte("RelayState=https://sp.example.com/page"))
+	bufferedBody := fake.NewFakeBodyBuffer([]byte("RelayState="))
+	receivedBody := fake.NewFakeBodyBuffer([]byte("https://sp.example.com/page"))
 	handle.EXPECT().BufferedRequestBody().Return(bufferedBody)
+	handle.EXPECT().ReceivedRequestBody().Return(receivedBody)
 
 	// Expect assertionsValidated counter (metric ID 2) to be incremented with "failure" tag.
 	handle.EXPECT().IncrementCounterValue(shared.MetricID(2), uint64(1), "failure").Return(shared.MetricsSuccess)
@@ -394,6 +398,34 @@ func TestMetrics_AssertionsValidated_Failure(t *testing.T) {
 	body := fake.NewFakeBodyBuffer(nil)
 	status := f.OnRequestBody(body, true)
 	require.Equal(t, shared.BodyStatusStopNoBuffer, status)
+}
+
+func TestMetrics_AssertionsValidated_Failure_WithTrailers(t *testing.T) {
+	f, handle, ctrl := newTestFilter(t)
+	defer ctrl.Finish()
+
+	f.isACSRequest = true
+
+	handle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	handle.EXPECT().SendLocalResponse(uint32(401), gomock.Any(), gomock.Any(), gomock.Eq("saml-acs-error"))
+
+	// Provide a body with no SAMLResponse field.
+	bufferedBody := fake.NewFakeBodyBuffer([]byte("RelayState="))
+	receivedBody := fake.NewFakeBodyBuffer([]byte("https://sp.example.com/page"))
+	handle.EXPECT().BufferedRequestBody().Return(bufferedBody)
+	handle.EXPECT().ReceivedRequestBody().Return(receivedBody)
+
+	// Expect assertionsValidated counter (metric ID 2) to be incremented with "failure" tag.
+	handle.EXPECT().IncrementCounterValue(shared.MetricID(2), uint64(1), "failure").Return(shared.MetricsSuccess)
+
+	body := fake.NewFakeBodyBuffer(nil)
+	status := f.OnRequestBody(body, false)
+	require.Equal(t, shared.BodyStatusStopAndBuffer, status)
+
+	// Simulate receiving trailers after body.
+	trailers := fake.NewFakeHeaderMap(map[string][]string{})
+	trailerStatus := f.OnRequestTrailers(trailers)
+	require.Equal(t, shared.TrailersStatusStop, trailerStatus)
 }
 
 func TestMetrics_SessionsValidated_Valid(t *testing.T) {

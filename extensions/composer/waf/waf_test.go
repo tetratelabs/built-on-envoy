@@ -92,7 +92,7 @@ func Test_DisableWaf(t *testing.T) {
 			"expected response trailer status to continue when WAF is disabled")
 
 		// Ensure destroy is called.
-		wafPlugin.OnDestroy()
+		wafPlugin.OnStreamComplete()
 	})
 
 	t.Run("Get source address", func(t *testing.T) {
@@ -137,7 +137,7 @@ func Test_DisableWaf(t *testing.T) {
 		assert.Equal(t, 8080, port, "expected port 8080")
 
 		// Ensure destroy is called.
-		wafPlugin.OnDestroy()
+		wafPlugin.OnStreamComplete()
 	})
 
 	t.Run("Get request protocol", func(t *testing.T) {
@@ -165,7 +165,7 @@ func Test_DisableWaf(t *testing.T) {
 		assert.Equal(t, "HTTP/2", protocol, "expected protocol HTTP/2")
 
 		// Ensure destroy is called.
-		wafPlugin.OnDestroy()
+		wafPlugin.OnStreamComplete()
 	})
 }
 
@@ -220,7 +220,7 @@ func Test_RequestOnlyWaf(t *testing.T) {
 		assert.False(t, wafPlugin.isUpgrade, "expected isUpgrade to be false for non-upgrade request")
 
 		// Ensure destroy is called.
-		wafPlugin.OnDestroy()
+		wafPlugin.OnStreamComplete()
 	})
 
 	t.Run("Handle request with upgrade", func(t *testing.T) {
@@ -263,7 +263,7 @@ func Test_RequestOnlyWaf(t *testing.T) {
 			"expected final body status to continue for upgrade request")
 
 		// Ensure destroy is called.
-		wafPlugin.OnDestroy()
+		wafPlugin.OnStreamComplete()
 	})
 
 	t.Run("Handle request with body", func(t *testing.T) {
@@ -305,7 +305,7 @@ func Test_RequestOnlyWaf(t *testing.T) {
 			"expected no immediate response from WAF for simple request body")
 
 		// Ensure destroy is called.
-		wafPlugin.OnDestroy()
+		wafPlugin.OnStreamComplete()
 	})
 
 	t.Run("Handle request with body and trailers", func(t *testing.T) {
@@ -347,7 +347,7 @@ func Test_RequestOnlyWaf(t *testing.T) {
 			"expected no immediate response from WAF for simple request trailers")
 
 		// Ensure destroy is called.
-		wafPlugin.OnDestroy()
+		wafPlugin.OnStreamComplete()
 	})
 
 	t.Run("Response should be no-op in request only mode", func(t *testing.T) {
@@ -390,7 +390,7 @@ func Test_RequestOnlyWaf(t *testing.T) {
 			"expected response trailers to be no-op in request only mode")
 
 		// Ensure destroy is called.
-		wafPlugin.OnDestroy()
+		wafPlugin.OnStreamComplete()
 	})
 }
 
@@ -452,7 +452,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 			"expected trailer status to continue in response only mode")
 
 		// Ensure destroy is called.
-		wafPlugin.OnDestroy()
+		wafPlugin.OnStreamComplete()
 	})
 
 	t.Run("Header only response", func(t *testing.T) {
@@ -485,7 +485,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 			"expected response header status to continue for header only response")
 
 		// Ensure destroy is called.
-		wafPlugin.OnDestroy()
+		wafPlugin.OnStreamComplete()
 	})
 
 	t.Run("Handle response with upgrade", func(t *testing.T) {
@@ -532,7 +532,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 			"expected final response body status to continue for upgrade response")
 
 		// Ensure destroy is called.
-		wafPlugin.OnDestroy()
+		wafPlugin.OnStreamComplete()
 	})
 
 	t.Run("Handle response with body", func(t *testing.T) {
@@ -576,7 +576,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 			"expected no immediate response from WAF for simple response body")
 
 		// Ensure destroy is called.
-		wafPlugin.OnDestroy()
+		wafPlugin.OnStreamComplete()
 	})
 
 	t.Run("Handle response with body and trailers", func(t *testing.T) {
@@ -621,7 +621,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 			"expected no immediate response from WAF for simple response trailers")
 
 		// Ensure destroy is called.
-		wafPlugin.OnDestroy()
+		wafPlugin.OnStreamComplete()
 	})
 
 	t.Run("Handle response with SSE", func(t *testing.T) {
@@ -664,7 +664,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 			"expected response body status to continue for SSE response")
 
 		// Ensure destroy is called.
-		wafPlugin.OnDestroy()
+		wafPlugin.OnStreamComplete()
 	})
 }
 
@@ -754,6 +754,6 @@ func Test_FullWaf(t *testing.T) {
 			"expected no immediate response from WAF for full response trailers")
 
 		// Ensure destroy is called.
-		wafPlugin.OnDestroy()
+		wafPlugin.OnStreamComplete()
 	})
 }
