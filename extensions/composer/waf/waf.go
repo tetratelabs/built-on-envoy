@@ -342,7 +342,7 @@ func (p *wafPlugin) OnResponseTrailers(_ shared.HeaderMap) shared.TrailersStatus
 	return shared.TrailersStatusContinue
 }
 
-func (p *wafPlugin) OnDestroy() {
+func (p *wafPlugin) OnStreamComplete() {
 	if p.context != nil {
 		p.context.ProcessLogging()
 		err := p.context.Close()
