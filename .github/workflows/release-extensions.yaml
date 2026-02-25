@@ -80,8 +80,8 @@ jobs:
             echo "Old version: ${old_version:-<new extension>}"
             echo "New version: $new_version"
             
-            # Check if version changed or this is a new extension
-            if [ "$old_version" != "$new_version" ] && [ -n "$new_version" ]; then
+            # Check if version changed or this is a new extension, and new version matches x.y.z
+            if [ "$old_version" != "$new_version" ] && echo "$new_version" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
               if [ -z "$old_version" ]; then
                 echo "New extension detected: $ext_name (version: $new_version)"
               else
@@ -98,7 +98,7 @@ jobs:
                 '. + [{name: $name, type: $type, language: $lang, path: $path, version: $version}]')
               has_changes="true"
             else
-              echo "No version change for $ext_name"
+              echo "Skipping $ext_name: old version: ${old_version:-<none>}, new version: $new_version"
             fi
           done
           
