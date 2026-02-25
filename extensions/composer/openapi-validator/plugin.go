@@ -17,6 +17,8 @@ import (
 	"strings"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
+	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/utility"
+
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/getkin/kin-openapi/routers"
@@ -73,10 +75,10 @@ type openAPIValidatorHttpFilter struct { //nolint:revive
 func (o *openAPIValidatorHttpFilter) buildHTTPRequest(body []byte) (*http.Request, error) {
 	headers := o.handle.RequestHeaders()
 
-	method := headers.GetOne(":method")
-	path := headers.GetOne(":path")
-	host := headers.GetOne(":authority")
-	scheme := headers.GetOne(":scheme")
+	method := strings.Clone(headers.GetOne(":method"))
+	path := strings.Clone(headers.GetOne(":path"))
+	host := strings.Clone(headers.GetOne(":authority"))
+	scheme := strings.Clone(headers.GetOne(":scheme"))
 	if scheme == "" {
 		scheme = "http"
 	}
@@ -94,7 +96,7 @@ func (o *openAPIValidatorHttpFilter) buildHTTPRequest(body []byte) (*http.Reques
 	// Copy non-pseudo headers.
 	for _, h := range headers.GetAll() {
 		if !strings.HasPrefix(h[0], ":") {
-			httpReq.Header.Add(h[0], h[1])
+			httpReq.Header.Add(strings.Clone(h[0]), strings.Clone(h[1]))
 		}
 	}
 	httpReq.Host = host
@@ -106,10 +108,10 @@ func (o *openAPIValidatorHttpFilter) buildHTTPRequest(body []byte) (*http.Reques
 }
 
 func (o *openAPIValidatorHttpFilter) OnRequestHeaders(headers shared.HeaderMap, endOfStream bool) shared.HeadersStatus {
-	method := headers.GetOne(":method")
-	path := headers.GetOne(":path")
-	host := headers.GetOne(":authority")
-	scheme := headers.GetOne(":scheme")
+	method := strings.Clone(headers.GetOne(":method"))
+	path := strings.Clone(headers.GetOne(":path"))
+	host := strings.Clone(headers.GetOne(":authority"))
+	scheme := strings.Clone(headers.GetOne(":scheme"))
 	if scheme == "" {
 		scheme = "http"
 	}
@@ -165,13 +167,11 @@ func (o *openAPIValidatorHttpFilter) OnRequestBody(body shared.BodyBuffer, endOf
 			return shared.BodyStatusStopNoBuffer
 		}
 		o.handle.Log(shared.LogLevelInfo, "openapi-validator: dry-run: would reject oversized body")
-		o.handle.ContinueRequest()
 		return shared.BodyStatusContinue
 	}
 
 	if endOfStream {
-		bodyBytes := o.readBufferedBody()
-		if o.validateRequest(bodyBytes) {
+		if o.validateRequest(utility.ReadWholeRequestBody(o.handle)) {
 			return shared.BodyStatusContinue
 		}
 		return shared.BodyStatusStopNoBuffer
@@ -187,32 +187,10 @@ func (o *openAPIValidatorHttpFilter) OnRequestTrailers(_ shared.HeaderMap) share
 
 	// Trailers mean endOfStream was never true in OnRequestBody.
 	// Read the full body and validate now.
-	bodyBytes := o.readBufferedBody()
-	if o.validateRequest(bodyBytes) {
+	if o.validateRequest(utility.ReadWholeRequestBody(o.handle)) {
 		return shared.TrailersStatusContinue
 	}
 	return shared.TrailersStatusStop
-}
-
-// readBufferedBody reads the full buffered request body from the handle.
-func (o *openAPIValidatorHttpFilter) readBufferedBody() []byte {
-	bufferedBody := o.handle.BufferedRequestBody()
-	if bufferedBody == nil {
-		return nil
-	}
-	chunks := bufferedBody.GetChunks()
-	if len(chunks) == 0 {
-		return nil
-	}
-	// If there is a single chunk, return it directly without copying.
-	if len(chunks) == 1 {
-		return chunks[0]
-	}
-	bodyBytes := make([]byte, 0, bufferedBody.GetSize())
-	for _, chunk := range chunks {
-		bodyBytes = append(bodyBytes, chunk...)
-	}
-	return bodyBytes
 }
 
 // validateRequest validates the request against the OpenAPI spec. Returns true if the
