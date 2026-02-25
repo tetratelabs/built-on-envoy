@@ -42,6 +42,11 @@ type Config struct {
 	ACSPath string
 	// IDPMetadataXML is the inline IdP metadata XML string.
 	IDPMetadataXML string
+	// IDPMetadataURL is the URL to fetch IdP metadata from (alternative to IDPMetadataXML).
+	IDPMetadataURL string
+	// IDPMetadataCluster is the Envoy cluster name to use for fetching IdP metadata via HttpCallout.
+	// Required when IDPMetadataURL is set.
+	IDPMetadataCluster string
 
 	// SPCert is the parsed SP certificate.
 	SPCert *x509.Certificate
@@ -84,16 +89,18 @@ type Config struct {
 
 // rawConfig is the JSON-serializable representation of the configuration.
 type rawConfig struct {
-	EntityID       string `json:"entity_id"`
-	ACSPath        string `json:"acs_path"`
-	IDPMetadataXML string `json:"idp_metadata_xml"`
+	EntityID           string `json:"entity_id"`
+	ACSPath            string `json:"acs_path"`
+	IDPMetadataXML     string `json:"idp_metadata_xml"`
+	IDPMetadataXMLFile string `json:"idp_metadata_xml_file"`
+	IDPMetadataURL     string `json:"idp_metadata_url"`
+	IDPMetadataCluster string `json:"idp_metadata_cluster"`
 
 	SPCertPEM string `json:"sp_cert_pem"`
 	SPKeyPEM  string `json:"sp_key_pem"`
 
-	IDPMetadataXMLFile string `json:"idp_metadata_xml_file"`
-	SPCertPEMFile      string `json:"sp_cert_pem_file"`
-	SPKeyPEMFile       string `json:"sp_key_pem_file"`
+	SPCertPEMFile string `json:"sp_cert_pem_file"`
+	SPKeyPEMFile  string `json:"sp_key_pem_file"`
 
 	Session *rawSessionConfig `json:"session,omitempty"`
 
@@ -167,9 +174,23 @@ func parseConfig(data []byte) (*Config, error) {
 	if raw.ACSPath == "" {
 		err = errors.Join(err, errors.New("acs_path is required"))
 	}
-	if raw.IDPMetadataXML == "" {
-		err = errors.Join(err, errors.New("idp_metadata_xml is required"))
+
+	// IdP metadata: exactly one of inline XML or URL must be provided.
+	hasInlineMetadata := raw.IDPMetadataXML != ""
+	hasURLMetadata := raw.IDPMetadataURL != ""
+	if hasInlineMetadata && hasURLMetadata {
+		err = errors.Join(err, errors.New("idp_metadata_xml and idp_metadata_url are mutually exclusive"))
 	}
+	if !hasInlineMetadata && !hasURLMetadata {
+		err = errors.Join(err, errors.New("one of idp_metadata_xml or idp_metadata_url is required"))
+	}
+	if hasURLMetadata && raw.IDPMetadataCluster == "" {
+		err = errors.Join(err, errors.New("idp_metadata_cluster is required when idp_metadata_url is set"))
+	}
+	if !hasURLMetadata && raw.IDPMetadataCluster != "" {
+		err = errors.Join(err, errors.New("idp_metadata_cluster requires idp_metadata_url to be set"))
+	}
+
 	if (raw.SPCertPEM == "") != (raw.SPKeyPEM == "") {
 		err = errors.Join(err, errors.New("sp_cert_pem and sp_key_pem must both be provided, or both omitted"))
 	}
@@ -209,6 +230,8 @@ func parseConfig(data []byte) (*Config, error) {
 		EntityID:            raw.EntityID,
 		ACSPath:             raw.ACSPath,
 		IDPMetadataXML:      raw.IDPMetadataXML,
+		IDPMetadataURL:      raw.IDPMetadataURL,
+		IDPMetadataCluster:  raw.IDPMetadataCluster,
 		SPCert:              cert,
 		SPKey:               key,
 		SPCertPEM:           raw.SPCertPEM,

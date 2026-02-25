@@ -23,6 +23,7 @@ longDescription: |
   * **SP Metadata Endpoint**: Auto-generated metadata XML for easy IdP registration
   * **Signed AuthnRequests**: Optional RSA-SHA256 signing of outbound authentication requests
   * **Auto-Generated SP Certificates**: Ephemeral keypair generated when no certificate is provided
+  * **Lazy IdP Metadata Fetch**: Optionally fetch IdP metadata from a URL on the first request via Envoy HttpCallout
 
   ## How It Works
 
@@ -38,7 +39,18 @@ longDescription: |
   Required fields:
   - `entity_id`: The SP entity ID (usually, audience URI)
   - `acs_path`: Path for the Assertion Consumer Service endpoint
-  - `idp_metadata_xml`: Inline IdP metadata XML (or `idp_metadata_xml_file` with a file path)
+  - One of the following (mutually exclusive):
+    - `idp_metadata_xml`: Inline IdP metadata XML
+    - `idp_metadata_xml_file`: Path to a file containing IdP metadata XML
+    - `idp_metadata_url` + `idp_metadata_cluster`: Fetch IdP metadata from a URL at runtime
+
+  IdP Metadata options:
+  - **Inline/File** (`idp_metadata_xml` or `idp_metadata_xml_file`): Metadata is parsed at
+    config time. Best for static IdP configurations.
+  - **URL** (`idp_metadata_url` + `idp_metadata_cluster`): Metadata is fetched lazily on the
+    first request using Envoy's HttpCallout mechanism. The `idp_metadata_cluster` field must
+    reference an Envoy cluster that can reach the IdP metadata endpoint. The first request
+    will have slightly higher latency; all subsequent requests use the cached metadata.
 
   Optional fields:
   - `sp_cert_pem` / `sp_key_pem`: PEM-encoded SP certificate and private key. If both are
@@ -76,22 +88,21 @@ license: Apache-2.0
 examples:
   - title: Basic SAML SSO
     description: |
-      Minimal setup - only the IdP metadata is needed. An ephemeral SP certificate
-      and key are auto-generated.
+      Minimal setup - only the IdP metadata URL and an Envoy cluster to reach it
+      are needed. The metadata is fetched lazily on the first request. An ephemeral
+      SP certificate and key are auto-generated.
     code: |
       # Start keycloack
       curl -o docker-compose.yaml https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yaml
       docker compose -f docker-compose.yaml up --wait
 
-      # Download the IdP metadata
-      curl http://localhost:8080/realms/saml-demo/protocol/saml/descriptor -o idp-metadata.xml
-
       # Run the plugin
-      boe run --extension saml --config '
+      boe run --extension saml --cluster-insecure=localhost:8080 --config '
         {
           "entity_id": "http://localhost:10000",
           "acs_path": "/saml/acs",
-          "idp_metadata_xml_file": "idp-metadata.xml"
+          "idp_metadata_url": "http://localhost:8080/realms/saml-demo/protocol/saml/descriptor",
+          "idp_metadata_cluster": "localhost:8080"
         }'
 
       # Test the plugin in the browser and login as testuser/testpass
@@ -108,15 +119,13 @@ examples:
       curl -o docker-compose.yaml https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yaml
       docker compose -f docker-compose.yaml up --wait
 
-      # Download the IdP metadata
-      curl http://localhost:8080/realms/saml-demo/protocol/saml/descriptor -o idp-metadata.xml
-
       # Run the plugin
-      boe run --extension saml --config '
+      boe run --extension saml --cluster-insecure=localhost:8080 --config '
         {
           "entity_id": "http://localhost:10000",
           "acs_path": "/saml/acs",
-          "idp_metadata_xml_file": "idp-metadata.xml",
+          "idp_metadata_url": "http://localhost:8080/realms/saml-demo/protocol/saml/descriptor",
+          "idp_metadata_cluster": "localhost:8080",
           "sp_cert_pem_file": "sp-cert.pem",
           "sp_key_pem_file": "sp-key.pem"
         }'
@@ -135,15 +144,13 @@ examples:
       curl -o docker-compose.yaml https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yaml
       docker compose -f docker-compose.yaml up --wait
 
-      # Download the IdP metadata
-      curl http://localhost:8080/realms/saml-demo/protocol/saml/descriptor -o idp-metadata.xml
-
       # Run the plugin
-      boe run --extension saml --config '
+      boe run --extension saml --cluster-insecure=localhost:8080 --config '
         {
           "entity_id": "http://localhost:10000",
           "acs_path": "/saml/acs",
-          "idp_metadata_xml_file": "idp-metadata.xml",
+          "idp_metadata_url": "http://localhost:8080/realms/saml-demo/protocol/saml/descriptor",
+          "idp_metadata_cluster": "localhost:8080",
           "session": {
             "cookie_name": "my_session",
             "duration": "5m",
@@ -168,6 +175,38 @@ examples:
       curl -o docker-compose.yaml https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yaml
       docker compose -f docker-compose.yaml up --wait
 
+      # Run the plugin
+      boe run --extension saml --cluster-insecure=localhost:8080 --config '
+        {
+          "entity_id": "http://localhost:10000",
+          "acs_path": "/saml/acs",
+          "idp_metadata_url": "http://localhost:8080/realms/saml-demo/protocol/saml/descriptor",
+          "idp_metadata_cluster": "localhost:8080",
+          "attribute_headers": {
+            "email": "x-saml-email",
+            "Role": "x-saml-role"
+          },
+          "bypass_paths": ["/health", "/ready", "/status/409"]
+        }'
+
+      # Test the plugin in the browser and login as testuser/testpass and check how the headers are set
+      open http://localhost:10000/headers
+
+      # Clear the session cookies and then open again the browser and check how authentication is bypassed
+      open http://localhost:10000/status/409
+
+      # Cleanup keycloak
+      docker compose -f docker-compose.yaml down -v
+  - title: IdP Metadata from File
+    description: |
+      Provide the IdP metadata as a local file instead of fetching it at runtime.
+      The metadata is parsed at config time. Best for static IdP configurations
+      or environments where the IdP metadata endpoint is not reachable from Envoy.
+    code: |
+      # Start keycloack
+      curl -o docker-compose.yaml https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yaml
+      docker compose -f docker-compose.yaml up --wait
+
       # Download the IdP metadata
       curl http://localhost:8080/realms/saml-demo/protocol/saml/descriptor -o idp-metadata.xml
 
@@ -176,19 +215,11 @@ examples:
         {
           "entity_id": "http://localhost:10000",
           "acs_path": "/saml/acs",
-          "idp_metadata_xml_file": "idp-metadata.xml",
-          "attribute_headers": {
-            "email": "x-saml-email",
-            "Role": "x-saml-role"
-          },
-          "bypass_paths": ["/health", "/ready", "/status/409"],
+          "idp_metadata_xml_file": "idp-metadata.xml"
         }'
 
-      # Test the plugin in the browser and login as testuser/testpass and check how the headers are set
-      open http://localhost:10000/headers
-
-      # Clear the session cookies and then open again the browser and check how authentication is bypassed
-      open http://localhost:10000/status/409
+      # Test the plugin in the browser and login as testuser/testpass
+      open http://localhost:10000
 
       # Cleanup keycloak
       docker compose -f docker-compose.yaml down -v
