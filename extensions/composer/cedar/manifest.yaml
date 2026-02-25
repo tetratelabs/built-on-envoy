@@ -259,6 +259,16 @@ examples:
         "deny_body": "Authentication Required",
         "deny_headers": {"www-authenticate": "Bearer"}
       }'
+  - title: Inline Policy Configuration
+    description: |
+      Instead of loading a policy from a file, you can specify the Cedar policy
+      directly in the extension configuration using the `inline_policy` field.
+    code: |
+      boe run --extension cedar-auth --config '{
+        "inline_policy": "permit(principal, action, resource);",
+        "principal_type": "User",
+        "principal_id_header": "x-user-id"
+      }'
   - title: Dry-Run Mode
     description: |
       Enable dry-run mode to log authorization decisions without enforcing them.

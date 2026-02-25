@@ -119,7 +119,7 @@ examples:
 
       # Run the extension
       boe run --extension opa --config '{
-        "policy_file": "/tmp/policy.rego"
+        "policy_files": ["/tmp/policy.rego"]
       }'
 
       # Test allowed request
@@ -146,7 +146,7 @@ examples:
       EOF
 
       boe run --extension opa --config '{
-        "policy_file": "/tmp/policy.rego"
+        "policy_files": ["/tmp/policy.rego"]
       }'
 
       # Test with a valid JWT
@@ -180,7 +180,7 @@ examples:
       EOF
 
       boe run --extension opa --config '{
-        "policy_file": "/tmp/policy.rego"
+        "policy_files": ["/tmp/policy.rego"]
       }'
 
       # Test with a valid JWT
@@ -209,7 +209,18 @@ examples:
       EOF
 
       boe run --extension opa --config '{
-        "policy_file": "/tmp/policy.rego"
+        "policy_files": ["/tmp/policy.rego"]
+      }'
+  - title: Inline Policy Configuration
+    description: |
+      Instead of loading policies from files, you can also specify inline Rego
+      policies directly in the configuration. This is useful for simple policies
+      or when you want to manage policies outside of the filesystem.
+    code: |
+      boe run --extension opa --config '{
+        "inline_policies": [
+          "package envoy.authz\ndefault allow := false\nallow if {\ninput.parsed_path[0] == \"public\"\n }"
+        ]
       }'
   - title: Dry-Run Mode
     description: |
@@ -217,7 +228,7 @@ examples:
       Useful for testing new policies in production without blocking traffic.
     code: |
       boe run --extension opa --config '{
-        "policy_file": "/tmp/policy.rego",
+        "policy_files": ["/tmp/policy.rego"],
         "dry_run": true
       }'
   - title: Fail-Open Mode
@@ -228,6 +239,6 @@ examples:
       over enforcement.
     code: |
       boe run --extension opa --config '{
-        "policy_file": "/tmp/policy.rego",
+        "policy_files": ["/tmp/policy.rego"],
         "fail_open": true
       }'

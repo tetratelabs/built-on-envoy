@@ -34,12 +34,25 @@ func createTestPolicyFile(t *testing.T, policy string) string {
 // Tests for OPAHttpFilterConfigFactory.Create
 
 func TestConfigFactory_Create_ValidConfig(t *testing.T) {
-	policy := `package envoy.authz
+	var (
+		p1 = createTestPolicyFile(t, `package envoy.authz
 default allow := false
+`)
+		p2 = createTestPolicyFile(t, `package custom.policy
+default verdict := false
+`)
+		p3 = `package another.policy
+default decision := false
 `
-	policyFile := createTestPolicyFile(t, policy)
+		p4 = `package envoy.authz
+default allowed := true
+`
+	)
 
-	configJSON, err := json.Marshal(opaConfig{PolicyFile: policyFile})
+	configJSON, err := json.Marshal(opaConfig{
+		PolicyFiles:    []string{p1, p2},
+		InlinePolicies: []string{p3, p4},
+	})
 	require.NoError(t, err)
 
 	factory := &OPAHttpFilterConfigFactory{}
@@ -96,11 +109,11 @@ func TestConfigFactory_Create_MissingPolicyFile(t *testing.T) {
 	filterFactory, err := factory.Create(mockHandle, configJSON)
 	require.Error(t, err)
 	require.Nil(t, filterFactory)
-	require.Contains(t, err.Error(), "policy_file is required")
+	require.Contains(t, err.Error(), "either policy_files or inline_policies must be provided")
 }
 
 func TestConfigFactory_Create_PolicyFileNotFound(t *testing.T) {
-	configJSON, err := json.Marshal(opaConfig{PolicyFile: "/nonexistent/policy.rego"})
+	configJSON, err := json.Marshal(opaConfig{PolicyFiles: []string{"/nonexistent/policy.rego"}})
 	require.NoError(t, err)
 
 	factory := &OPAHttpFilterConfigFactory{}
@@ -119,7 +132,7 @@ func TestConfigFactory_Create_PolicyFileNotFound(t *testing.T) {
 func TestConfigFactory_Create_InvalidRego(t *testing.T) {
 	policyFile := createTestPolicyFile(t, "this is not valid rego {{{")
 
-	configJSON, err := json.Marshal(opaConfig{PolicyFile: policyFile})
+	configJSON, err := json.Marshal(opaConfig{PolicyFiles: []string{policyFile}})
 	require.NoError(t, err)
 
 	factory := &OPAHttpFilterConfigFactory{}
@@ -141,7 +154,7 @@ default allow := false
 `
 	policyFile := createTestPolicyFile(t, policy)
 
-	cfg := opaConfig{PolicyFile: policyFile}
+	cfg := opaConfig{PolicyFiles: []string{policyFile}}
 	configJSON, err := json.Marshal(cfg)
 	require.NoError(t, err)
 
@@ -168,7 +181,7 @@ default verdict := false
 `
 	policyFile := createTestPolicyFile(t, policy)
 
-	cfg := opaConfig{PolicyFile: policyFile, DecisionPath: "custom.policy.verdict"}
+	cfg := opaConfig{PolicyFiles: []string{policyFile}, DecisionPath: "custom.policy.verdict"}
 	configJSON, err := json.Marshal(cfg)
 	require.NoError(t, err)
 
@@ -190,12 +203,8 @@ default verdict := false
 }
 
 // Helper to create a filter for testing.
-func createTestFilter(t *testing.T, policy string, cfg opaConfig) (*opaHttpFilter, *mocks.MockHttpFilterHandle) {
+func createTestFilter(t *testing.T, cfg opaConfig) (*opaHttpFilter, *mocks.MockHttpFilterHandle) {
 	t.Helper()
-
-	if cfg.PolicyFile == "" {
-		cfg.PolicyFile = createTestPolicyFile(t, policy)
-	}
 
 	configJSON, err := json.Marshal(cfg)
 	require.NoError(t, err)
@@ -231,13 +240,15 @@ func createTestFilter(t *testing.T, policy string, cfg opaConfig) (*opaHttpFilte
 
 // Tests for OnRequestHeaders
 
-func TestOnRequestHeaders_AllowBoolean(t *testing.T) {
-	policy := `package envoy.authz
+func TestOnRequestHeaders_AllowBooleanMultiplePolicies(t *testing.T) {
+	defaultPolicy := `package envoy.authz
 default allow := false
+`
+	rulePolicy := `package envoy.authz
 allow if { input.parsed_path[0] == "public" }
 `
-	filter, _ := createTestFilter(t, policy, opaConfig{})
 
+	filter, _ := createTestFilter(t, opaConfig{InlinePolicies: []string{defaultPolicy, rulePolicy}})
 	headers := fake.NewFakeHeaderMap(map[string][]string{
 		":method":    {"GET"},
 		":path":      {"/public/resource"},
@@ -254,7 +265,7 @@ func TestOnRequestHeaders_DenyBoolean(t *testing.T) {
 default allow := false
 allow if { input.parsed_path[0] == "public" }
 `
-	filter, mockHandle := createTestFilter(t, policy, opaConfig{})
+	filter, mockHandle := createTestFilter(t, opaConfig{PolicyFiles: []string{createTestPolicyFile(t, policy)}})
 	mockHandle.EXPECT().SendLocalResponse(
 		uint32(403),
 		gomock.Any(),
@@ -277,7 +288,7 @@ func TestOnRequestHeaders_AllowObjectWithHeaders(t *testing.T) {
 	policy := `package envoy.authz
 allow := {"allowed": true, "headers": {"x-user": "admin"}}
 `
-	filter, mockHandle := createTestFilter(t, policy, opaConfig{})
+	filter, mockHandle := createTestFilter(t, opaConfig{InlinePolicies: []string{policy}})
 
 	requestHeaders := fake.NewFakeHeaderMap(map[string][]string{})
 	mockHandle.EXPECT().RequestHeaders().Return(requestHeaders).AnyTimes()
@@ -298,7 +309,7 @@ func TestOnRequestHeaders_DenyObjectWithCustomStatus(t *testing.T) {
 	policy := `package envoy.authz
 default allow := {"allowed": false, "http_status": 401, "body": "Unauthorized", "headers": {"www-authenticate": "Bearer"}}
 `
-	filter, mockHandle := createTestFilter(t, policy, opaConfig{})
+	filter, mockHandle := createTestFilter(t, opaConfig{PolicyFiles: []string{createTestPolicyFile(t, policy)}})
 
 	var capturedStatus uint32
 	var capturedBody []byte
@@ -331,7 +342,7 @@ func TestOnRequestHeaders_DryRunAllow(t *testing.T) {
 	policy := `package envoy.authz
 default allow := true
 `
-	filter, _ := createTestFilter(t, policy, opaConfig{DryRun: true})
+	filter, _ := createTestFilter(t, opaConfig{DryRun: true, PolicyFiles: []string{createTestPolicyFile(t, policy)}})
 
 	headers := fake.NewFakeHeaderMap(map[string][]string{
 		":method":    {"GET"},
@@ -349,7 +360,7 @@ func TestOnRequestHeaders_DryRunDeny(t *testing.T) {
 default allow := false
 `
 	// In dry-run mode, even denied requests should continue.
-	filter, _ := createTestFilter(t, policy, opaConfig{DryRun: true})
+	filter, _ := createTestFilter(t, opaConfig{DryRun: true, PolicyFiles: []string{createTestPolicyFile(t, policy)}})
 
 	headers := fake.NewFakeHeaderMap(map[string][]string{
 		":method":    {"GET"},
@@ -365,12 +376,8 @@ default allow := false
 // Tests for metrics
 
 // createTestFilterWithMetricExpectation creates a filter that expects a specific metric decision tag.
-func createTestFilterWithMetricExpectation(t *testing.T, policy string, cfg opaConfig, expectedDecision string) (*opaHttpFilter, *mocks.MockHttpFilterHandle) {
+func createTestFilterWithMetricExpectation(t *testing.T, cfg opaConfig, expectedDecision string) (*opaHttpFilter, *mocks.MockHttpFilterHandle) {
 	t.Helper()
-
-	if cfg.PolicyFile == "" {
-		cfg.PolicyFile = createTestPolicyFile(t, policy)
-	}
 
 	configJSON, err := json.Marshal(cfg)
 	require.NoError(t, err)
@@ -408,7 +415,7 @@ func TestOnRequestHeaders_Metrics_Allowed(t *testing.T) {
 	policy := `package envoy.authz
 default allow := true
 `
-	filter, _ := createTestFilterWithMetricExpectation(t, policy, opaConfig{}, decisionAllowed)
+	filter, _ := createTestFilterWithMetricExpectation(t, opaConfig{InlinePolicies: []string{policy}}, decisionAllowed)
 
 	headers := fake.NewFakeHeaderMap(map[string][]string{
 		":method":    {"GET"},
@@ -425,7 +432,7 @@ func TestOnRequestHeaders_Metrics_Denied(t *testing.T) {
 	policy := `package envoy.authz
 default allow := false
 `
-	filter, mockHandle := createTestFilterWithMetricExpectation(t, policy, opaConfig{}, decisionDenied)
+	filter, mockHandle := createTestFilterWithMetricExpectation(t, opaConfig{InlinePolicies: []string{policy}}, decisionDenied)
 	mockHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "opa_denied")
 
 	headers := fake.NewFakeHeaderMap(map[string][]string{
@@ -458,7 +465,7 @@ func TestOnRequestHeaders_Metrics_DryRunAllow(t *testing.T) {
 	policy := `package envoy.authz
 default allow := false
 `
-	filter, _ := createTestFilterWithMetricExpectation(t, policy, opaConfig{DryRun: true}, decisionDryAllow)
+	filter, _ := createTestFilterWithMetricExpectation(t, opaConfig{InlinePolicies: []string{policy}, DryRun: true}, decisionDryAllow)
 
 	headers := fake.NewFakeHeaderMap(map[string][]string{
 		":method":    {"GET"},
@@ -505,7 +512,7 @@ func TestInterpretResult_BooleanTrue(t *testing.T) {
 allow := true
 `
 	policyFile := createTestPolicyFile(t, policy)
-	cfg := opaConfig{PolicyFile: policyFile, DecisionPath: "test.allow"}
+	cfg := opaConfig{PolicyFiles: []string{policyFile}, DecisionPath: "test.allow"}
 	configJSON, err := json.Marshal(cfg)
 	require.NoError(t, err)
 
@@ -540,7 +547,7 @@ func TestInterpretResult_BooleanFalse(t *testing.T) {
 allow := false
 `
 	policyFile := createTestPolicyFile(t, policy)
-	cfg := opaConfig{PolicyFile: policyFile, DecisionPath: "test.allow"}
+	cfg := opaConfig{PolicyFiles: []string{policyFile}, DecisionPath: "test.allow"}
 	configJSON, err := json.Marshal(cfg)
 	require.NoError(t, err)
 
@@ -577,7 +584,7 @@ func TestBuildInput_BasicRequest(t *testing.T) {
 	policy := `package envoy.authz
 default allow := true
 `
-	filter, _ := createTestFilter(t, policy, opaConfig{})
+	filter, _ := createTestFilter(t, opaConfig{InlinePolicies: []string{policy}})
 
 	headers := fake.NewFakeHeaderMap(map[string][]string{
 		":method":       {"POST"},
@@ -653,7 +660,7 @@ func TestBuildInput_MTLSAttributes(t *testing.T) {
 default allow := true
 `
 	policyFile := createTestPolicyFile(t, policy)
-	cfg := opaConfig{PolicyFile: policyFile}
+	cfg := opaConfig{PolicyFiles: []string{policyFile}}
 	configJSON, err := json.Marshal(cfg)
 	require.NoError(t, err)
 
@@ -719,7 +726,7 @@ allow if {
 }
 `
 	policyFile := createTestPolicyFile(t, policy)
-	cfg := opaConfig{PolicyFile: policyFile}
+	cfg := opaConfig{PolicyFiles: []string{policyFile}}
 	configJSON, err := json.Marshal(cfg)
 	require.NoError(t, err)
 
@@ -768,7 +775,7 @@ allow if {
 }
 `
 	policyFile := createTestPolicyFile(t, policy)
-	cfg := opaConfig{PolicyFile: policyFile}
+	cfg := opaConfig{PolicyFiles: []string{policyFile}}
 	configJSON, err := json.Marshal(cfg)
 	require.NoError(t, err)
 
@@ -831,7 +838,7 @@ func TestFilterFactory_Create(t *testing.T) {
 default allow := false
 `
 	policyFile := createTestPolicyFile(t, policy)
-	cfg := opaConfig{PolicyFile: policyFile}
+	cfg := opaConfig{PolicyFiles: []string{policyFile}}
 	configJSON, err := json.Marshal(cfg)
 	require.NoError(t, err)
 
@@ -864,7 +871,7 @@ allow if {
   token == "Bearer valid-token"
 }
 `
-	filter, _ := createTestFilter(t, policy, opaConfig{})
+	filter, _ := createTestFilter(t, opaConfig{InlinePolicies: []string{policy}})
 
 	// With valid token - should allow.
 	headers := fake.NewFakeHeaderMap(map[string][]string{
@@ -887,7 +894,7 @@ allow if {
   token == "Bearer valid-token"
 }
 `
-	filter, mockHandle := createTestFilter(t, policy, opaConfig{})
+	filter, mockHandle := createTestFilter(t, opaConfig{InlinePolicies: []string{policy}})
 	mockHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "opa_denied")
 
 	// With invalid token - should deny.
@@ -909,7 +916,7 @@ func TestOnRequestHeaders_PolicyUsesMethod(t *testing.T) {
 default allow := false
 allow if { input.attributes.request.http.method == "GET" }
 `
-	filter, mockHandle := createTestFilter(t, policy, opaConfig{})
+	filter, mockHandle := createTestFilter(t, opaConfig{InlinePolicies: []string{policy}})
 	mockHandle.EXPECT().SendLocalResponse(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	// GET should be allowed.
@@ -921,7 +928,7 @@ allow if { input.attributes.request.http.method == "GET" }
 	require.Equal(t, shared.HeadersStatusContinue, filter.OnRequestHeaders(getHeaders, true))
 
 	// POST should be denied (new filter instance needed since the mock may have been called).
-	filter2, mockHandle2 := createTestFilter(t, policy, opaConfig{})
+	filter2, mockHandle2 := createTestFilter(t, opaConfig{InlinePolicies: []string{policy}})
 	mockHandle2.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "opa_denied")
 
 	postHeaders := fake.NewFakeHeaderMap(map[string][]string{
@@ -967,7 +974,7 @@ allow := {"allowed": true, "headers": {"x-jwt-role": payload.role}} if {
 	wrongSecretToken := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyNzg5Iiwicm9sZSI6ImFkbWluIiwiaXNzIjoidGVzdC1pc3N1ZXIiLCJleHAiOjk5OTk5OTk5OTl9.jqjuxP5_6wpMg-HrVnLMoIIXLFgWyGTO9BWhGxZOa_M"
 
 	t.Run("valid JWT is allowed and role header is set", func(t *testing.T) {
-		filter, mockHandle := createTestFilter(t, policy, opaConfig{})
+		filter, mockHandle := createTestFilter(t, opaConfig{PolicyFiles: []string{createTestPolicyFile(t, policy)}})
 		requestHeaders := fake.NewFakeHeaderMap(map[string][]string{})
 		mockHandle.EXPECT().RequestHeaders().Return(requestHeaders).AnyTimes()
 
@@ -985,7 +992,7 @@ allow := {"allowed": true, "headers": {"x-jwt-role": payload.role}} if {
 	})
 
 	t.Run("expired JWT is denied", func(t *testing.T) {
-		filter, mockHandle := createTestFilter(t, policy, opaConfig{})
+		filter, mockHandle := createTestFilter(t, opaConfig{PolicyFiles: []string{createTestPolicyFile(t, policy)}})
 
 		var capturedStatus uint32
 		var capturedBody []byte
@@ -1011,7 +1018,7 @@ allow := {"allowed": true, "headers": {"x-jwt-role": payload.role}} if {
 	})
 
 	t.Run("wrong secret JWT is denied", func(t *testing.T) {
-		filter, mockHandle := createTestFilter(t, policy, opaConfig{})
+		filter, mockHandle := createTestFilter(t, opaConfig{PolicyFiles: []string{createTestPolicyFile(t, policy)}})
 
 		var capturedStatus uint32
 		mockHandle.EXPECT().SendLocalResponse(
@@ -1034,7 +1041,7 @@ allow := {"allowed": true, "headers": {"x-jwt-role": payload.role}} if {
 	})
 
 	t.Run("missing authorization header is denied", func(t *testing.T) {
-		filter, mockHandle := createTestFilter(t, policy, opaConfig{})
+		filter, mockHandle := createTestFilter(t, opaConfig{PolicyFiles: []string{createTestPolicyFile(t, policy)}})
 
 		mockHandle.EXPECT().SendLocalResponse(
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Eq("opa_denied"),
@@ -1076,7 +1083,7 @@ result := 1 / 0
 
 	parsed := &opaParsedConfig{
 		opaConfig: opaConfig{
-			PolicyFile:   policyFile,
+			PolicyFiles:  []string{policyFile},
 			DecisionPath: "envoy.authz.result",
 			FailOpen:     failOpen,
 		},
@@ -1144,7 +1151,7 @@ func TestOnRequestHeaders_FailClosed_DeniesOnError(t *testing.T) {
 // Test with an absolute path to a non-existent rego file to trigger read error in ConfigFactory.
 func TestConfigFactory_Create_PolicyFileReadError(t *testing.T) {
 	nonExistent := filepath.Join(t.TempDir(), "does-not-exist.rego")
-	cfg := opaConfig{PolicyFile: nonExistent}
+	cfg := opaConfig{PolicyFiles: []string{nonExistent}}
 	configJSON, err := json.Marshal(cfg)
 	require.NoError(t, err)
 

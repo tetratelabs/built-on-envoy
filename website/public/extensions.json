@@ -50,6 +50,11 @@
         "code": "boe run --extension cedar-auth --config '{\n  \"policy_file\": \"/tmp/policy.cedar\",\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\",\n  \"deny_status\": 401,\n  \"deny_body\": \"Authentication Required\",\n  \"deny_headers\": {\"www-authenticate\": \"Bearer\"}\n}'\n"
       },
       {
+        "title": "Inline Policy Configuration",
+        "description": "Instead of loading a policy from a file, you can specify the Cedar policy\ndirectly in the extension configuration using the `inline_policy` field.\n",
+        "code": "boe run --extension cedar-auth --config '{\n  \"inline_policy\": \"permit(principal, action, resource);\",\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\"\n}'\n"
+      },
+      {
         "title": "Dry-Run Mode",
         "description": "Enable dry-run mode to log authorization decisions without enforcing them.\nUseful for testing new policies in production without blocking traffic.\n",
         "code": "boe run --extension cedar-auth --config '{\n  \"policy_file\": \"/tmp/policy.cedar\",\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\",\n  \"dry_run\": true\n}'\n"
@@ -282,32 +287,37 @@
       {
         "title": "Basic Authorization",
         "description": "Run the OPA extension with a simple Rego policy that allows or denies\nrequests based on the request path. Create a policy file and reference\nit in the configuration.\n",
-        "code": "# Create a simple policy file\ncat \u003e /tmp/policy.rego \u003c\u003c 'EOF'\npackage envoy.authz\n\ndefault allow := false\n\nallow if {\n  input.parsed_path[0] == \"public\"\n}\nEOF\n\n# Run the extension\nboe run --extension opa --config '{\n  \"policy_file\": \"/tmp/policy.rego\"\n}'\n\n# Test allowed request\ncurl http://localhost:10000/public/resource\n# =\u003e 200 OK (proxied to upstream)\n\n# Test denied request\ncurl http://localhost:10000/private/resource\n# =\u003e 403 Forbidden\n"
+        "code": "# Create a simple policy file\ncat \u003e /tmp/policy.rego \u003c\u003c 'EOF'\npackage envoy.authz\n\ndefault allow := false\n\nallow if {\n  input.parsed_path[0] == \"public\"\n}\nEOF\n\n# Run the extension\nboe run --extension opa --config '{\n  \"policy_files\": [\"/tmp/policy.rego\"]\n}'\n\n# Test allowed request\ncurl http://localhost:10000/public/resource\n# =\u003e 200 OK (proxied to upstream)\n\n# Test denied request\ncurl http://localhost:10000/private/resource\n# =\u003e 403 Forbidden\n"
       },
       {
         "title": "Custom Deny Response",
         "description": "Use a policy that returns a structured object with custom HTTP status,\nheaders, and body when denying a request.\n",
-        "code": "cat \u003e /tmp/policy.rego \u003c\u003c 'EOF'\npackage envoy.authz\n\ndefault allow := {\"allowed\": false, \"http_status\": 401, \"body\": \"Unauthorized\"}\n\nallow := {\"allowed\": true} if {\n  token := input.attributes.request.http.headers.authorization\n  startswith(token, \"Bearer \")\n}\nEOF\n\nboe run --extension opa --config '{\n  \"policy_file\": \"/tmp/policy.rego\"\n}'\n\n# Test with a valid JWT\ncurl -H \"Authorization: Bearer \u003ctoken\u003e\" http://localhost:10000/api/resource\n# =\u003e 200 OK\n\n# Test without a token\ncurl http://localhost:10000/api/resource\n# =\u003e 401 Unauthorized\n"
+        "code": "cat \u003e /tmp/policy.rego \u003c\u003c 'EOF'\npackage envoy.authz\n\ndefault allow := {\"allowed\": false, \"http_status\": 401, \"body\": \"Unauthorized\"}\n\nallow := {\"allowed\": true} if {\n  token := input.attributes.request.http.headers.authorization\n  startswith(token, \"Bearer \")\n}\nEOF\n\nboe run --extension opa --config '{\n  \"policy_files\": [\"/tmp/policy.rego\"]\n}'\n\n# Test with a valid JWT\ncurl -H \"Authorization: Bearer \u003ctoken\u003e\" http://localhost:10000/api/resource\n# =\u003e 200 OK\n\n# Test without a token\ncurl http://localhost:10000/api/resource\n# =\u003e 401 Unauthorized\n"
       },
       {
         "title": "JWT Token Verification",
         "description": "Use a policy that decodes JWT tokens using OPA's built-in\n`io.jwt.decode` function. This example decodes a JWT token,\nchecks the subject claim, and forwards the user's role as a\nrequest header to the upstream service.\n",
-        "code": "cat \u003e /tmp/policy.rego \u003c\u003c 'EOF'\npackage envoy.authz\n\nimport rego.v1\n\ndefault allow := {\"allowed\": false, \"http_status\": 401, \"body\": \"Unauthorized\"}\n\nallow := {\"allowed\": true, \"headers\": {\"x-jwt-role\": payload.role}} if {\n  auth_header := input.attributes.request.http.headers.authorization\n  startswith(auth_header, \"Bearer \")\n  token := substring(auth_header, 7, -1)\n  [_, payload, _] := io.jwt.decode(token)\n  payload.sub == \"my-subject\"\n}\nEOF\n\nboe run --extension opa --config '{\n  \"policy_file\": \"/tmp/policy.rego\"\n}'\n\n# Test with a valid JWT\ncurl -H \"Authorization: Bearer \u003ctoken\u003e\" http://localhost:10000/api/resource\n# =\u003e 200 OK (upstream receives x-jwt-role header)\n\n# Test without a token\ncurl http://localhost:10000/api/resource\n# =\u003e 401 Unauthorized\n"
+        "code": "cat \u003e /tmp/policy.rego \u003c\u003c 'EOF'\npackage envoy.authz\n\nimport rego.v1\n\ndefault allow := {\"allowed\": false, \"http_status\": 401, \"body\": \"Unauthorized\"}\n\nallow := {\"allowed\": true, \"headers\": {\"x-jwt-role\": payload.role}} if {\n  auth_header := input.attributes.request.http.headers.authorization\n  startswith(auth_header, \"Bearer \")\n  token := substring(auth_header, 7, -1)\n  [_, payload, _] := io.jwt.decode(token)\n  payload.sub == \"my-subject\"\n}\nEOF\n\nboe run --extension opa --config '{\n  \"policy_files\": [\"/tmp/policy.rego\"]\n}'\n\n# Test with a valid JWT\ncurl -H \"Authorization: Bearer \u003ctoken\u003e\" http://localhost:10000/api/resource\n# =\u003e 200 OK (upstream receives x-jwt-role header)\n\n# Test without a token\ncurl http://localhost:10000/api/resource\n# =\u003e 401 Unauthorized\n"
       },
       {
         "title": "SPIFFE Identity Authorization",
         "description": "Use a policy that authorizes requests based on the client's SPIFFE identity\nfrom an mTLS connection. The SPIFFE ID is available at\n`input.attributes.source.certificate.uri_san`.\n",
-        "code": "cat \u003e /tmp/policy.rego \u003c\u003c 'EOF'\npackage envoy.authz\n\ndefault allow := false\n\n# Allow requests from trusted workloads\nallow if {\n  spiffe_id := input.attributes.source.certificate.uri_san\n  startswith(spiffe_id, \"spiffe://cluster.local/ns/production/\")\n}\nEOF\n\nboe run --extension opa --config '{\n  \"policy_file\": \"/tmp/policy.rego\"\n}'\n"
+        "code": "cat \u003e /tmp/policy.rego \u003c\u003c 'EOF'\npackage envoy.authz\n\ndefault allow := false\n\n# Allow requests from trusted workloads\nallow if {\n  spiffe_id := input.attributes.source.certificate.uri_san\n  startswith(spiffe_id, \"spiffe://cluster.local/ns/production/\")\n}\nEOF\n\nboe run --extension opa --config '{\n  \"policy_files\": [\"/tmp/policy.rego\"]\n}'\n"
+      },
+      {
+        "title": "Inline Policy Configuration",
+        "description": "Instead of loading policies from files, you can also specify inline Rego\npolicies directly in the configuration. This is useful for simple policies\nor when you want to manage policies outside of the filesystem.\n",
+        "code": "boe run --extension opa --config '{\n  \"inline_policies\": [\n    \"package envoy.authz\\ndefault allow := false\\nallow if {\\ninput.parsed_path[0] == \\\"public\\\"\\n }\"\n  ]\n}'\n"
       },
       {
         "title": "Dry-Run Mode",
         "description": "Enable dry-run mode to log authorization decisions without enforcing them.\nUseful for testing new policies in production without blocking traffic.\n",
-        "code": "boe run --extension opa --config '{\n  \"policy_file\": \"/tmp/policy.rego\",\n  \"dry_run\": true\n}'\n"
+        "code": "boe run --extension opa --config '{\n  \"policy_files\": [\"/tmp/policy.rego\"],\n  \"dry_run\": true\n}'\n"
       },
       {
         "title": "Fail-Open Mode",
         "description": "Enable fail-open mode to allow requests through when policy evaluation\nencounters an error, instead of returning a 500 response. Useful for\nnon-critical authorization checks where availability is prioritized\nover enforcement.\n",
-        "code": "boe run --extension opa --config '{\n  \"policy_file\": \"/tmp/policy.rego\",\n  \"fail_open\": true\n}'\n"
+        "code": "boe run --extension opa --config '{\n  \"policy_files\": [\"/tmp/policy.rego\"],\n  \"fail_open\": true\n}'\n"
       }
     ],
     "minEnvoyVersion": "1.37.0",
