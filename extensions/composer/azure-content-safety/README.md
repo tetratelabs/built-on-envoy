@@ -38,7 +38,7 @@ boe run \
   --extension azure-content-safety \
   --config '{
     "endpoint": "https://my-resource.cognitiveservices.azure.com",
-    "api_key": "your-api-key-here"
+    "api_key": {"inline": "your-api-key-here"}
   }'
 ```
 
@@ -51,7 +51,7 @@ boe run \
   --extension azure-content-safety \
   --config '{
     "endpoint": "https://my-resource.cognitiveservices.azure.com",
-    "api_key": "your-api-key-here",
+    "api_key": {"inline": "your-api-key-here"},
     "mode": "monitor"
   }'
 ```
@@ -65,7 +65,7 @@ boe run \
   --extension azure-content-safety \
   --config '{
     "endpoint": "https://my-resource.cognitiveservices.azure.com",
-    "api_key": "your-api-key-here",
+    "api_key": {"inline": "your-api-key-here"},
     "hate_threshold": 4,
     "violence_threshold": 4
   }'
@@ -80,7 +80,7 @@ boe run \
   --extension azure-content-safety \
   --config '{
     "endpoint": "https://my-resource.cognitiveservices.azure.com",
-    "api_key": "your-api-key-here",
+    "api_key": {"inline": "your-api-key-here"},
     "enable_protected_material": true
   }'
 ```
@@ -94,7 +94,7 @@ boe run \
   --extension azure-content-safety \
   --config '{
     "endpoint": "https://my-resource.cognitiveservices.azure.com",
-    "api_key": "your-api-key-here",
+    "api_key": {"inline": "your-api-key-here"},
     "enable_task_adherence": true
   }'
 ```
@@ -109,7 +109,7 @@ boe run \
   --log-level all:debug \
   --config '{
     "endpoint": "https://my-resource.cognitiveservices.azure.com",
-    "api_key": "your-api-key-here"
+    "api_key": {"inline": "your-api-key-here"}
   }'
 ```
 
@@ -122,7 +122,7 @@ boe run \
   --extension azure-content-safety \
   --config '{
     "endpoint": "https://my-resource.cognitiveservices.azure.com",
-    "api_key": "your-api-key-here",
+    "api_key": {"inline": "your-api-key-here"},
     "fail_open": true
   }'
 ```
@@ -132,8 +132,7 @@ boe run \
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `endpoint` | string | yes | | Azure Content Safety resource URL |
-| `api_key` | string | yes (or `api_key_file`) | | Azure API subscription key (inline) |
-| `api_key_file` | string | yes (or `api_key`) | | Path to a file containing the Azure API key |
+| `api_key` | object | yes | | Azure API subscription key as a [DataSource](#datasource) (`inline` or `file`) |
 | `mode` | string | no | `"block"` | `"block"` to reject, `"monitor"` to log only |
 | `fail_open` | bool | no | `false` | If `true`, allow traffic through when Azure API errors occur; if `false` (default), return 500 |
 | `api_version` | string | no | `"2024-09-01"` | Azure API version |

@@ -9,30 +9,11 @@ package impl
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/utility"
 )
-
-// resolveFileOrInline returns the value for a config field that supports both
-// inline and file-based variants. If both are set, it returns an error.
-// If filePath is set, the file contents are read and returned.
-// Otherwise, inline is returned as-is.
-func resolveFileOrInline(inline, filePath, fieldName string) (string, error) {
-	if inline != "" && filePath != "" {
-		return "", fmt.Errorf("cannot specify both %s and %s_file", fieldName, fieldName)
-	}
-	if filePath != "" {
-		data, err := os.ReadFile(filePath) //nolint:gosec // filePath is from trusted config, not user input
-		if err != nil {
-			return "", fmt.Errorf("failed to read %s_file %q: %w", fieldName, filePath, err)
-		}
-		return strings.TrimSpace(string(data)), nil
-	}
-	return inline, nil
-}
 
 const (
 	decisionAllowed   = "allowed"
@@ -78,16 +59,16 @@ func (f *contentSafetyConfigFactory) Create(
 		handle.Log(shared.LogLevelError, "azure-content-safety: endpoint is required")
 		return nil, fmt.Errorf("endpoint is required")
 	}
-	apiKey, err := resolveFileOrInline(cfg.APIKey, cfg.APIKeyFile, "api_key")
+	if err := cfg.APIKey.Validate(); err != nil {
+		handle.Log(shared.LogLevelError, "azure-content-safety: invalid 'api_key' configuration: %s", err.Error())
+		return nil, fmt.Errorf("invalid 'api_key' configuration: %w", err)
+	}
+	apiKeyBytes, err := cfg.APIKey.Content()
 	if err != nil {
-		handle.Log(shared.LogLevelError, "azure-content-safety: %s", err.Error())
-		return nil, err
+		handle.Log(shared.LogLevelError, "azure-content-safety: failed to get api key content: %s", err.Error())
+		return nil, fmt.Errorf("failed to get api key content: %w", err)
 	}
-	if apiKey == "" {
-		handle.Log(shared.LogLevelError, "azure-content-safety: api_key or api_key_file is required")
-		return nil, fmt.Errorf("api_key or api_key_file is required")
-	}
-	cfg.APIKey = apiKey
+	apiKey := strings.TrimSpace(string(apiKeyBytes))
 	if cfg.Mode != "" && cfg.Mode != "block" && cfg.Mode != "monitor" {
 		handle.Log(shared.LogLevelError, "azure-content-safety: invalid mode %q, must be \"block\" or \"monitor\"", cfg.Mode)
 		return nil, fmt.Errorf("invalid mode %q", cfg.Mode)
@@ -96,7 +77,7 @@ func (f *contentSafetyConfigFactory) Create(
 	logFunc := func(format string, args ...any) {
 		handle.Log(shared.LogLevelDebug, format, args...)
 	}
-	client := newAzureContentSafetyClient(cfg.Endpoint, cfg.APIKey, cfg.apiVersion(), logFunc)
+	client := newAzureContentSafetyClient(cfg.Endpoint, apiKey, cfg.apiVersion(), logFunc)
 
 	var metrics contentSafetyMetrics
 	metricID, metricStatus := handle.DefineCounter("azure_content_safety_requests_total", "decision")

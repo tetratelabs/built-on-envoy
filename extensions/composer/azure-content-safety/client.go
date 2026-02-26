@@ -14,6 +14,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 const (
@@ -24,20 +26,19 @@ const (
 
 // azureContentSafetyConfig holds the configuration for the Azure Content Safety client.
 type azureContentSafetyConfig struct {
-	Endpoint                string   `json:"endpoint"`
-	APIKey                  string   `json:"api_key"`
-	APIKeyFile              string   `json:"api_key_file"`
-	Mode                    string   `json:"mode"`
-	FailOpen                bool     `json:"fail_open"`
-	APIVersion              string   `json:"api_version"`
-	HateThreshold           *int     `json:"hate_threshold"`
-	SelfHarmThreshold       *int     `json:"self_harm_threshold"`
-	SexualThreshold         *int     `json:"sexual_threshold"`
-	ViolenceThreshold       *int     `json:"violence_threshold"`
-	Categories              []string `json:"categories"`
-	EnableProtectedMaterial bool     `json:"enable_protected_material"`
-	EnableTaskAdherence     bool     `json:"enable_task_adherence"`
-	TaskAdherenceAPIVersion string   `json:"task_adherence_api_version"`
+	Endpoint                string         `json:"endpoint"`
+	APIKey                  pkg.DataSource `json:"api_key"`
+	Mode                    string         `json:"mode"`
+	FailOpen                bool           `json:"fail_open"`
+	APIVersion              string         `json:"api_version"`
+	HateThreshold           *int           `json:"hate_threshold"`
+	SelfHarmThreshold       *int           `json:"self_harm_threshold"`
+	SexualThreshold         *int           `json:"sexual_threshold"`
+	ViolenceThreshold       *int           `json:"violence_threshold"`
+	Categories              []string       `json:"categories"`
+	EnableProtectedMaterial bool           `json:"enable_protected_material"`
+	EnableTaskAdherence     bool           `json:"enable_task_adherence"`
+	TaskAdherenceAPIVersion string         `json:"task_adherence_api_version"`
 }
 
 func (c *azureContentSafetyConfig) apiVersion() string {
