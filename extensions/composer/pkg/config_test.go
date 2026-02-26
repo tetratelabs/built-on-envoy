@@ -13,6 +13,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestMetadataKey_Validate(t *testing.T) {
+	tests := []struct {
+		name    string
+		key     MetadataKey
+		wantErr error
+	}{
+		{"valid", MetadataKey{Namespace: "ns", Key: "k"}, nil},
+		{"missing namespace", MetadataKey{Key: "k"}, ErrMetadataKeyInvalid},
+		{"missing key", MetadataKey{Namespace: "ns"}, ErrMetadataKeyInvalid},
+		{"both missing", MetadataKey{}, ErrMetadataKeyInvalid},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.ErrorIs(t, tt.key.Validate(), tt.wantErr)
+		})
+	}
+}
+
 func TestDataSource_Validate(t *testing.T) {
 	tests := []struct {
 		name    string

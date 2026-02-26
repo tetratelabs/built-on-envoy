@@ -10,14 +10,37 @@ codecov:
   # jobs to complete for us to see the coverage results
   require_ci_to_pass: false
 
+flags:
+  cli:
+    paths:
+      - cli
+  extensions:
+    paths:
+      - extensions
+
 coverage:
   status:
     project:
-      default:
+      cli:
+        flags:
+          - cli
+        target: auto
+        threshold: 5%
+      extensions:
+        flags:
+          - extensions
         target: auto
         threshold: 5%
     patch:
-      default:
+      cli:
+        flags:
+          - cli
+        target: auto
+        only_pulls: true
+        threshold: 5%
+      extensions:
+        flags:
+          - extensions
         target: auto
         only_pulls: true
         threshold: 5%
@@ -36,5 +59,4 @@ ignore:
   - cli/internal/envoy/runner.go
   # These are test-only libraries.
   - cli/internal/testing/
-  # Do not aim for coverage on extensions, which are not part of the core codebase and may have different maintainers.
-  - extensions/
+  - extensions/**/standalone/main.go"

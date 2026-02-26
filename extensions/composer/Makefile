@@ -29,6 +29,16 @@ test:
 	@echo "Running tests..."
 	@go test $(GO_TEST_ARGS) ./...
 
+.PHONY: test-coverage
+test-coverage:
+	@mkdir -p ./out
+	@$(MAKE) test GO_TEST_ARGS="-coverprofile=./out/go-test-coverage.out \
+		-covermode=atomic \
+		-coverpkg=github.com/tetratelabs/built-on-envoy/extensions/composer/... \
+		-count=1 \
+		$(GO_TEST_ARGS)"
+	@$(GO_TOOL) go-test-coverage --config=.testcoverage.yml
+
 # This IMAGE_NONCE will be appended to the final image tag if set.
 # It is intended to be used in CI environments to ensure that each image
 # built gets a unique tag.

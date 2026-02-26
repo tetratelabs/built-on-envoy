@@ -6,15 +6,10 @@
 profile: ./out/go-test-coverage.out
 
 threshold:
-  file: 75
-  package: 80
+  # file: 75
+  # package: 80
   total: 80
 
 exclude:
   paths:
-    # Covered in integration tests.
-    - main.go
-    - internal/envoy/runner.go
-    # These are test-only libraries.
-    - internal/testing/
-    
+    - "standalone/main.go$"

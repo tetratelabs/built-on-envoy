@@ -3,7 +3,8 @@
 ---
 
 [![CLI](https://github.com/tetratelabs/built-on-envoy/actions/workflows/cli.yaml/badge.svg)](https://github.com/tetratelabs/built-on-envoy/actions/workflows/cli.yaml)
-[![codecov](https://codecov.io/gh/tetratelabs/built-on-envoy/graph/badge.svg?token=v4u6VpZSqZ)](https://codecov.io/gh/tetratelabs/built-on-envoy)
+[![cli](https://codecov.io/gh/tetratelabs/built-on-envoy/graph/badge.svg?flag=cli&token=v4u6VpZSqZ)](https://codecov.io/gh/tetratelabs/built-on-envoy)
+[![extensions](https://codecov.io/gh/tetratelabs/built-on-envoy/graph/badge.svg?flag=extensions&token=v4u6VpZSqZ)](https://codecov.io/gh/tetratelabs/built-on-envoy)
 [![License](https://img.shields.io/badge/License-Apache%202.0-red)](LICENSE)
 [![Slack](https://img.shields.io/badge/Slack-Tetrate%20Community-purple)](https://tetrate-community.slack.com/archives/C0AG8GLT41E)
 

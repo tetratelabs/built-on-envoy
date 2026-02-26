@@ -5,6 +5,7 @@ npm-debug.log*
 # Build outputs
 dist/
 .output/
+out/
 
 ## AI
 .claude/
