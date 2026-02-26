@@ -21,6 +21,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/getkin/kin-openapi/routers"
 	"github.com/getkin/kin-openapi/routers/gorillamux"
+
 	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 

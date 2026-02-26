@@ -84,6 +84,7 @@ type LocalResponse struct {
 	Headers map[string]string `json:"headers,omitempty"`
 }
 
+// Validate checks that the LocalResponse has a valid HTTP status code if one is set.
 func (r *LocalResponse) Validate() error {
 	if r.Status < 100 || r.Status > 599 {
 		return ErrInvalidHTTPStatus
