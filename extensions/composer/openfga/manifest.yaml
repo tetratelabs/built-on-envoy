@@ -95,6 +95,7 @@ longDescription: |
   | `timeout_ms` | int | no | `5000` | HTTP callout timeout in milliseconds |
   | `deny_status` | int | no | `403` | HTTP status code for denied requests |
   | `deny_body` | string | no | `"Forbidden"` | Response body for denied requests |
+  | `metadata` | object | no | | Optional. When set, writes the authorization decision to dynamic metadata for downstream filters. Requires `namespace` and `key`. |
 
   ### valueSource Reference
 
@@ -109,8 +110,10 @@ longDescription: |
 
   ## Metrics
 
-  The extension exposes the `openfga_requests_total` counter metric with a `decision` tag
-  that tracks authorization outcomes:
+  The extension exposes:
+
+  - **`openfga_requests_total`** (counter, tag: `decision`): Authorization outcomes
+  - **`openfga_check_duration_ms`** (histogram): Latency of OpenFGA Check API calls in milliseconds
 
   | Decision | Description |
   |----------|-------------|

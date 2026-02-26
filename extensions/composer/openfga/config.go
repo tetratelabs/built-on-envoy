@@ -12,6 +12,8 @@ import (
 	"fmt"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 const defaultTimeoutMs uint64 = 5000
@@ -29,8 +31,9 @@ type openfgaConfig struct {
 	FailOpen             bool        `json:"fail_open"`
 	DryRun               bool        `json:"dry_run"`
 	TimeoutMs            uint64      `json:"timeout_ms"`
-	DenyStatus           int         `json:"deny_status"`
-	DenyBody             string      `json:"deny_body"`
+	DenyStatus           int              `json:"deny_status"`
+	DenyBody             string           `json:"deny_body"`
+	Metadata             *pkg.MetadataKey `json:"metadata,omitempty"`
 }
 
 // valueSource defines how to extract a value from the request.
@@ -102,11 +105,12 @@ type parsedConfig struct {
 	failOpen             bool
 	dryRun               bool
 	timeoutMs            uint64
-	denyStatus           int
-	denyBody             string
+	deny                 pkg.LocalResponse
+	denyHeaders          [][2]string
 	checkPath            string
 	calloutHeaders       [][2]string
 	rules                []parsedRule
+	metadata             *pkg.MetadataKey
 }
 
 func parseConfig(data []byte) (*parsedConfig, error) {
@@ -136,11 +140,28 @@ func parseConfig(data []byte) (*parsedConfig, error) {
 	if cfg.TimeoutMs == 0 {
 		cfg.TimeoutMs = defaultTimeoutMs
 	}
-	if cfg.DenyStatus == 0 {
-		cfg.DenyStatus = 403
+
+	denyStatus := cfg.DenyStatus
+	if denyStatus == 0 {
+		denyStatus = 403
 	}
-	if cfg.DenyBody == "" {
-		cfg.DenyBody = "Forbidden"
+	if denyStatus < 100 || denyStatus > 599 {
+		return nil, fmt.Errorf("openfga: deny_status must be between 100 and 599, got %d", denyStatus)
+	}
+	denyBody := cfg.DenyBody
+	if denyBody == "" {
+		denyBody = "Forbidden"
+	}
+	deny := pkg.LocalResponse{Status: denyStatus, Body: denyBody}
+	if err := deny.Validate(); err != nil {
+		return nil, fmt.Errorf("openfga: %w", err)
+	}
+	denyHeaders := buildDenyHeaders(deny)
+
+	if cfg.Metadata != nil {
+		if err := cfg.Metadata.Validate(); err != nil {
+			return nil, fmt.Errorf("openfga: invalid metadata config: %w", err)
+		}
 	}
 
 	rules, err := buildRules(cfg)
@@ -156,9 +177,10 @@ func parseConfig(data []byte) (*parsedConfig, error) {
 		failOpen:             cfg.FailOpen,
 		dryRun:               cfg.DryRun,
 		timeoutMs:            cfg.TimeoutMs,
-		denyStatus:           cfg.DenyStatus,
-		denyBody:             cfg.DenyBody,
+		deny:                 deny,
+		denyHeaders:          denyHeaders,
 		checkPath:            checkPath,
+		metadata:             cfg.Metadata,
 		calloutHeaders: [][2]string{
 			{":method", "POST"},
 			{":path", checkPath},
@@ -264,6 +286,34 @@ func validateValueSource(name string, vs *valueSource) error {
 		return fmt.Errorf("%s: only one of 'value' or 'header' may be set", name)
 	}
 	return nil
+}
+
+// buildDenyHeaders precomputes the [][2]string headers for deny responses.
+func buildDenyHeaders(deny pkg.LocalResponse) [][2]string {
+	headers := make([][2]string, 0, len(deny.Headers)+1)
+	hasContentType := false
+	for k, v := range deny.Headers {
+		if k == "content-type" {
+			hasContentType = true
+		}
+		headers = append(headers, [2]string{k, v})
+	}
+	if !hasContentType {
+		headers = append([][2]string{{"content-type", "text/plain"}}, headers...)
+	}
+	return headers
+}
+
+// sendDeny sends a local response using the configured deny status, body, and headers.
+func (c *parsedConfig) sendDeny(handle shared.HttpFilterHandle, grpcStatus string) {
+	handle.SendLocalResponse(uint32(c.deny.Status), c.denyHeaders, []byte(c.deny.Body), grpcStatus) //nolint:gosec
+}
+
+// writeMetadata writes the authorization decision to dynamic metadata if configured.
+func (c *parsedConfig) writeMetadata(handle shared.HttpFilterHandle, decision string) {
+	if c.metadata != nil {
+		handle.SetMetadata(c.metadata.Namespace, c.metadata.Key, decision)
+	}
 }
 
 // buildCheckBody constructs the JSON body for the OpenFGA Check API call.

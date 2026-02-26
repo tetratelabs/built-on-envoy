@@ -33,8 +33,8 @@ func TestParseConfig_Legacy(t *testing.T) {
 	require.Equal(t, "can_use", parsed.rules[0].relation.Value)
 	require.Equal(t, "x-ai-model", parsed.rules[0].object.Header)
 	require.Equal(t, uint64(5000), parsed.timeoutMs)
-	require.Equal(t, 403, parsed.denyStatus)
-	require.Equal(t, "Forbidden", parsed.denyBody)
+	require.Equal(t, 403, parsed.deny.Status)
+	require.Equal(t, "Forbidden", parsed.deny.Body)
 }
 
 func TestParseConfig_LegacyDefaults(t *testing.T) {
@@ -55,8 +55,8 @@ func TestParseConfig_LegacyDefaults(t *testing.T) {
 	parsed, err := parseConfig(data)
 	require.NoError(t, err)
 	require.Equal(t, uint64(10000), parsed.timeoutMs)
-	require.Equal(t, 401, parsed.denyStatus)
-	require.Equal(t, "Unauthorized", parsed.denyBody)
+	require.Equal(t, 401, parsed.deny.Status)
+	require.Equal(t, "Unauthorized", parsed.deny.Body)
 }
 
 func TestParseConfig_MultiRule(t *testing.T) {
@@ -230,6 +230,30 @@ func TestParseConfig_MultiRule_InvalidRuleRelation(t *testing.T) {
 	require.Contains(t, err.Error(), "rule[0].relation")
 }
 
+func TestParseConfig_DenyStatusInvalid(t *testing.T) {
+	cfg := openfgaConfig{
+		Cluster:     "openfga",
+		OpenFGAHost: "openfga:8080",
+		StoreID:     "store1",
+		User:        valueSource{Header: "x-user-id"},
+		Relation:    valueSource{Value: "reader"},
+		Object:      valueSource{Header: "x-resource"},
+		DenyStatus:  99,
+	}
+	data, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	_, err = parseConfig(data)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "deny_status must be between 100 and 599")
+
+	cfg.DenyStatus = 600
+	data, _ = json.Marshal(cfg)
+	_, err = parseConfig(data)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "deny_status must be between 100 and 599")
+}
+
 func TestParseConfig_CheckPath(t *testing.T) {
 	cfg := openfgaConfig{
 		Cluster:     "openfga",
@@ -337,4 +361,10 @@ func TestBuildCheckBody_WithModelID(t *testing.T) {
 	var parsed map[string]any
 	require.NoError(t, json.Unmarshal(body, &parsed))
 	require.Equal(t, "model-123", parsed["authorization_model_id"])
+}
+
+func BenchmarkBuildCheckBody(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		buildCheckBody("user:alice", "can_use", "model:gpt-4", "model-123")
+	}
 }

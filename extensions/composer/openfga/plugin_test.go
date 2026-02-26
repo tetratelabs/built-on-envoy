@@ -507,6 +507,54 @@ func TestCallback(t *testing.T) {
 	})
 }
 
+func TestConfigFactory_Create(t *testing.T) {
+	configJSON, err := json.Marshal(openfgaConfig{
+		Cluster:     "openfga",
+		OpenFGAHost: "openfga:8080",
+		StoreID:     "store1",
+		User:        valueSource{Header: "x-user-id", Prefix: "user:"},
+		Relation:    valueSource{Value: "can_access"},
+		Object:      valueSource{Header: "x-resource", Prefix: "document:"},
+	})
+	require.NoError(t, err)
+
+	factory := &OpenFGAHttpFilterConfigFactory{}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().DefineCounter("openfga_requests_total", "decision").Return(shared.MetricID(1), shared.MetricsSuccess)
+	mockHandle.EXPECT().DefineHistogram("openfga_check_duration_ms").Return(shared.MetricID(2), shared.MetricsSuccess)
+
+	filterFactory, err := factory.Create(mockHandle, configJSON)
+	require.NoError(t, err)
+	require.NotNil(t, filterFactory)
+}
+
+func TestConfigFactory_Create_InvalidConfig(t *testing.T) {
+	factory := &OpenFGAHttpFilterConfigFactory{}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	_, err := factory.Create(mockHandle, []byte{})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "configuration is required")
+
+	_, err = factory.Create(mockHandle, []byte("{invalid"))
+	require.Error(t, err)
+}
+
+func TestMetricsDisabled(t *testing.T) {
+	metrics := &openfgaMetrics{enabled: false, hasCheckDur: false}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := newMockFilterHandle(ctrl)
+	metrics.inc(mockHandle, decisionAllowed)
+	metrics.recordDuration(mockHandle, 100)
+}
+
 func TestFullFlow(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -534,4 +582,47 @@ func TestFullFlow(t *testing.T) {
 
 	status := f.OnRequestHeaders(headers, false)
 	require.Equal(t, shared.HeadersStatusStopAllAndBuffer, status)
+}
+
+func TestFullFlow_Denied(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := newMockFilterHandle(ctrl)
+
+	cfg := testConfig(t)
+	f := &openfgaFilter{handle: mockHandle, config: cfg, metrics: testMetrics()}
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		"x-user-id":  {"alice"},
+		"x-resource": {"planning"},
+	})
+
+	mockHandle.EXPECT().HttpCallout(
+		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+	).Do(func(_ string, _ [][2]string, _ []byte, _ uint64, cb shared.HttpCalloutCallback) {
+		cb.OnHttpCalloutDone(0, shared.HttpCalloutSuccess,
+			[][2]string{{":status", "200"}},
+			[][]byte{[]byte(`{"allowed":false}`)},
+		)
+	}).Return(shared.HttpCalloutInitSuccess, uint64(1))
+
+	mockHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), gomock.Any(), gomock.Any())
+	mockHandle.EXPECT().IncrementCounterValue(f.metrics.requestsTotal, uint64(1), decisionDenied).Return(shared.MetricsSuccess)
+
+	status := f.OnRequestHeaders(headers, false)
+	require.Equal(t, shared.HeadersStatusStopAllAndBuffer, status)
+}
+
+func TestCallback_EmptyBody(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := newMockFilterHandle(ctrl)
+	mockHandle.EXPECT().SendLocalResponse(uint32(http.StatusBadGateway), gomock.Any(), gomock.Any(), gomock.Any())
+	mockHandle.EXPECT().IncrementCounterValue(gomock.Any(), uint64(1), decisionError).Return(shared.MetricsSuccess)
+
+	cb := &openfgaCallback{handle: mockHandle, config: testConfig(t), metrics: testMetrics()}
+	cb.OnHttpCalloutDone(0, shared.HttpCalloutSuccess,
+		[][2]string{{":status", "200"}},
+		[][]byte{},
+	)
 }
