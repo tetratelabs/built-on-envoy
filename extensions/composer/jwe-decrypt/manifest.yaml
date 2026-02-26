@@ -47,7 +47,7 @@ examples:
     code: |
       # Run the extension reading the token from the `Authorization` header
       boe run --extension jwe-decrypt --config '{
-        "key_file": "/path/to/private-key.pem",
+        "private_key": { "file": "/path/to/private-key.pem" },
         "input_header": "Authorization",
         "prefix": "Bearer ",
         "output_header": "Authorization"
@@ -73,44 +73,50 @@ examples:
       header with the `Bearer` prefix restored.
     code: |
       boe run --extension jwe-decrypt --config '{
-        "key_file": "/path/to/private-key.pem",
+        "private_key": { "file": "/path/to/private-key.pem" },
         "input_header": "Authorization",
         "prefix": "Bearer ",
         "output_header": "Authorization"
       }'
   - title: Using inline key
     description: |
-      To enable the JWE decryption extension to decrypt JWE tokens you will need to provide the private key
-      that will be used to decrypt the JWE tokens. You can provide the key inline with the config by base64 encoding
-      the PEM PKCS8 private key.
+      You can provide the PEM PKCS8 private key directly in the config using the `inline` field.
+      The value must be the base64-encoded PEM content.
       You will also need to specify the header that contains the JWE token, and the header or metadata key where
       the decrypted payload should be stored.
     code: |
       boe run --extension jwe-decrypt --config '{
-        "inline_key": "LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQo...base64-encoded-key..."
+        "private_key": { "inline": "LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0t...base64-encoded-PEM..." },
         "input_header": "X-JWE-Token",
-        "output_header": "X-Decrypted-JWE-Token",
+        "output_header": "X-Decrypted-JWE-Token"
       }'
   - title: Using key file
     description: |
-      You can provide the key file path in the config. The extension will read the file and use the key to decrypt
-      the JWE tokens. The key file should contain the PEM PKCS8 private key.
+      You can provide the path to a file containing the PEM PKCS8 private key using the `file` field.
       You will also need to specify the header that contains the JWE token, and the header or metadata key where
       the decrypted payload should be stored.
     code: |
       boe run --extension jwe-decrypt --config '{
-        "key_file": "/path/to/private-key.pem",
+        "private_key": { "file": "/path/to/private-key.pem" },
         "input_header": "X-JWE-Token",
-        "output_header": "X-Decrypted-JWE-Token",
+        "output_header": "X-Decrypted-JWE-Token"
       }'
   - title: Add decrypted payload to metadata
     description: |
-      Specify the output_metadata field in the config to add the decrypted payload to Envoy metadata instead of a
-      header. The value of output_metadata should be the key where the decrypted payload will be stored in the
-      metadata under the `jwe-decrypt` namespace.
+      Set `output_metadata` in the config to store the decrypted payload in Envoy's dynamic metadata instead of a
+      header. Specify the `key` to store the value under. The `namespace` defaults to `jwe-decrypt` if omitted.
+      Downstream filters such as JWT authn, OPA, or ext_authz can then read the value from this metadata.
     code: |
+      # Store the decrypted payload in the default "jwe-decrypt" namespace
       boe run --extension jwe-decrypt --config '{
-        "inline_key": "LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQo...base64-encoded-key..."
+        "private_key": { "file": "/path/to/private-key.pem" },
         "input_header": "X-JWE-Token",
-        "output_metadata": "jwe_decrypted_payload",
+        "output_metadata": { "key": "jwe_decrypted_payload" }
+      }'
+
+      # Store the decrypted payload in a custom namespace
+      boe run --extension jwe-decrypt --config '{
+        "private_key": { "file": "/path/to/private-key.pem" },
+        "input_header": "X-JWE-Token",
+        "output_metadata": { "namespace": "my-namespace", "key": "jwe_decrypted_payload" }
       }'
