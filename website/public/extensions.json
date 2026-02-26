@@ -27,37 +27,42 @@
       {
         "title": "Basic Path Authorization",
         "description": "Run the Cedar extension with a policy that allows GET requests\nto any resource and denies everything else.\n",
-        "code": "# Create a simple policy file\ncat \u003e /tmp/policy.cedar \u003c\u003c 'EOF'\npermit(\n  principal,\n  action == Action::\"GET\",\n  resource\n);\nEOF\n\n# Run the extension\nboe run --extension cedar-auth --config '{\n  \"policy_file\": \"/tmp/policy.cedar\",\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\"\n}'\n\n# Test allowed request\ncurl -H \"x-user-id: alice\" http://localhost:10000/public/resource\n# =\u003e 200 OK (proxied to upstream)\n\n# Test denied request (POST)\ncurl -X POST -H \"x-user-id: alice\" http://localhost:10000/api/resource\n# =\u003e 403 Forbidden\n"
+        "code": "# Create a simple policy file\ncat \u003e /tmp/policy.cedar \u003c\u003c 'EOF'\npermit(\n  principal,\n  action == Action::\"GET\",\n  resource\n);\nEOF\n\n# Run the extension\nboe run --extension cedar-auth --config '{\n  \"policy\": {\"file\": \"/tmp/policy.cedar\"},\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\"\n}'\n\n# Test allowed request\ncurl -H \"x-user-id: alice\" http://localhost:10000/public/resource\n# =\u003e 200 OK (proxied to upstream)\n\n# Test denied request (POST)\ncurl -X POST -H \"x-user-id: alice\" http://localhost:10000/api/resource\n# =\u003e 403 Forbidden\n"
       },
       {
         "title": "Conditional Authorization with When Clauses",
         "description": "Use `when` and `unless` clauses to add fine-grained conditions based on\nrequest context. The context record contains the full request attributes\nincluding method, path, headers, source, destination, and connection info.\n\nThis example allows read-only access to anyone, but restricts write\noperations to requests that carry a valid admin token header and are\nmade over HTTPS.\n",
-        "code": "cat \u003e /tmp/policy.cedar \u003c\u003c 'EOF'\n// Anyone can read\npermit(\n  principal,\n  action == Action::\"GET\",\n  resource\n);\n\n// Only allow writes over HTTPS with a valid admin token\npermit(\n  principal,\n  action,\n  resource\n) when {\n  context.request.scheme == \"https\" \u0026\u0026\n  context.request.headers has \"x-admin-token\" \u0026\u0026\n  context.request.headers[\"x-admin-token\"] == \"my-secret\"\n};\n\n// Never allow DELETE regardless of other rules\nforbid(\n  principal,\n  action == Action::\"DELETE\",\n  resource\n);\nEOF\n\nboe run --extension cedar-auth --config '{\n  \"policy_file\": \"/tmp/policy.cedar\",\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\"\n}'\n\n# Test read (allowed for all users)\ncurl -H \"x-user-id: alice\" http://localhost:10000/api/resource\n# =\u003e 200 OK\n\n# Test write with admin token over HTTPS (allowed)\ncurl -X POST -H \"x-user-id: alice\" -H \"x-admin-token: my-secret\" \\\n  https://localhost:10000/api/resource\n# =\u003e 200 OK\n\n# Test write without admin token (denied)\ncurl -X POST -H \"x-user-id: alice\" http://localhost:10000/api/resource\n# =\u003e 403 Forbidden\n\n# Test DELETE (always denied by forbid rule)\ncurl -X DELETE -H \"x-user-id: alice\" -H \"x-admin-token: my-secret\" \\\n  https://localhost:10000/api/resource\n# =\u003e 403 Forbidden\n"
+        "code": "cat \u003e /tmp/policy.cedar \u003c\u003c 'EOF'\n// Anyone can read\npermit(\n  principal,\n  action == Action::\"GET\",\n  resource\n);\n\n// Only allow writes over HTTPS with a valid admin token\npermit(\n  principal,\n  action,\n  resource\n) when {\n  context.request.scheme == \"https\" \u0026\u0026\n  context.request.headers has \"x-admin-token\" \u0026\u0026\n  context.request.headers[\"x-admin-token\"] == \"my-secret\"\n};\n\n// Never allow DELETE regardless of other rules\nforbid(\n  principal,\n  action == Action::\"DELETE\",\n  resource\n);\nEOF\n\nboe run --extension cedar-auth --config '{\n  \"policy\": {\"file\": \"/tmp/policy.cedar\"},\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\"\n}'\n\n# Test read (allowed for all users)\ncurl -H \"x-user-id: alice\" http://localhost:10000/api/resource\n# =\u003e 200 OK\n\n# Test write with admin token over HTTPS (allowed)\ncurl -X POST -H \"x-user-id: alice\" -H \"x-admin-token: my-secret\" \\\n  https://localhost:10000/api/resource\n# =\u003e 200 OK\n\n# Test write without admin token (denied)\ncurl -X POST -H \"x-user-id: alice\" http://localhost:10000/api/resource\n# =\u003e 403 Forbidden\n\n# Test DELETE (always denied by forbid rule)\ncurl -X DELETE -H \"x-user-id: alice\" -H \"x-admin-token: my-secret\" \\\n  https://localhost:10000/api/resource\n# =\u003e 403 Forbidden\n"
       },
       {
         "title": "User-Based Authorization",
         "description": "Use a policy that restricts access based on the user identity\nderived from the x-user-id header.\n",
-        "code": "cat \u003e /tmp/policy.cedar \u003c\u003c 'EOF'\npermit(\n  principal == User::\"admin\",\n  action,\n  resource\n);\nEOF\n\nboe run --extension cedar-auth --config '{\n  \"policy_file\": \"/tmp/policy.cedar\",\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\"\n}'\n"
+        "code": "cat \u003e /tmp/policy.cedar \u003c\u003c 'EOF'\npermit(\n  principal == User::\"admin\",\n  action,\n  resource\n);\nEOF\n\nboe run --extension cedar-auth --config '{\n  \"policy\": {\"file\": \"/tmp/policy.cedar\"},\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\"\n}'\n"
       },
       {
         "title": "Group-Based Authorization with Entities",
         "description": "Use Cedar entity hierarchies to authorize based on group membership.\nUsers that are members of the \"admins\" group are permitted access.\n",
-        "code": "cat \u003e /tmp/policy.cedar \u003c\u003c 'EOF'\npermit(\n  principal in Group::\"admins\",\n  action,\n  resource\n);\nEOF\n\ncat \u003e /tmp/entities.json \u003c\u003c 'EOF'\n[\n  {\n    \"uid\": {\"type\": \"User\", \"id\": \"alice\"},\n    \"parents\": [{\"type\": \"Group\", \"id\": \"admins\"}],\n    \"attrs\": {}\n  },\n  {\n    \"uid\": {\"type\": \"Group\", \"id\": \"admins\"},\n    \"parents\": [],\n    \"attrs\": {}\n  }\n]\nEOF\n\nboe run --extension cedar-auth --config '{\n  \"policy_file\": \"/tmp/policy.cedar\",\n  \"entities_file\": \"/tmp/entities.json\",\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\"\n}'\n"
+        "code": "cat \u003e /tmp/policy.cedar \u003c\u003c 'EOF'\npermit(\n  principal in Group::\"admins\",\n  action,\n  resource\n);\nEOF\n\ncat \u003e /tmp/entities.json \u003c\u003c 'EOF'\n[\n  {\n    \"uid\": {\"type\": \"User\", \"id\": \"alice\"},\n    \"parents\": [{\"type\": \"Group\", \"id\": \"admins\"}],\n    \"attrs\": {}\n  },\n  {\n    \"uid\": {\"type\": \"Group\", \"id\": \"admins\"},\n    \"parents\": [],\n    \"attrs\": {}\n  }\n]\nEOF\n\nboe run --extension cedar-auth --config '{\n  \"policy\": {\"file\": \"/tmp/policy.cedar\"},\n  \"entities_file\": \"/tmp/entities.json\",\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\"\n}'\n"
       },
       {
         "title": "Custom Deny Response",
         "description": "Customize the HTTP response returned when a request is denied.\n",
-        "code": "boe run --extension cedar-auth --config '{\n  \"policy_file\": \"/tmp/policy.cedar\",\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\",\n  \"deny_status\": 401,\n  \"deny_body\": \"Authentication Required\",\n  \"deny_headers\": {\"www-authenticate\": \"Bearer\"}\n}'\n"
+        "code": "boe run --extension cedar-auth --config '{\n  \"policy\": {\"file\": \"/tmp/policy.cedar\"},\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\",\n  \"deny_status\": 401,\n  \"deny_body\": \"Authentication Required\",\n  \"deny_headers\": {\"www-authenticate\": \"Bearer\"}\n}'\n"
+      },
+      {
+        "title": "Inline Policy Configuration",
+        "description": "Instead of loading a policy from a file, you can specify the Cedar policy\ndirectly in the extension configuration using the `inline` field.\n",
+        "code": "boe run --extension cedar-auth --config '{\n  \"policy\": {\"inline\": \"permit(principal, action, resource);\"},\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\"\n}'\n"
       },
       {
         "title": "Dry-Run Mode",
         "description": "Enable dry-run mode to log authorization decisions without enforcing them.\nUseful for testing new policies in production without blocking traffic.\n",
-        "code": "boe run --extension cedar-auth --config '{\n  \"policy_file\": \"/tmp/policy.cedar\",\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\",\n  \"dry_run\": true\n}'\n"
+        "code": "boe run --extension cedar-auth --config '{\n  \"policy\": {\"file\": \"/tmp/policy.cedar\"},\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\",\n  \"dry_run\": true\n}'\n"
       },
       {
         "title": "Fail-Open Mode",
         "description": "Enable fail-open mode to allow requests through when policy evaluation\nencounters an error, instead of returning a 500 response. Useful for\nnon-critical authorization checks where availability is prioritized\nover enforcement.\n",
-        "code": "boe run --extension cedar-auth --config '{\n  \"policy_file\": \"/tmp/policy.cedar\",\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\",\n  \"fail_open\": true\n}'\n"
+        "code": "boe run --extension cedar-auth --config '{\n  \"policy\": {\"file\": \"/tmp/policy.cedar\"},\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\",\n  \"fail_open\": true\n}'\n"
       }
     ],
     "minEnvoyVersion": "1.37.0",
@@ -282,32 +287,37 @@
       {
         "title": "Basic Authorization",
         "description": "Run the OPA extension with a simple Rego policy that allows or denies\nrequests based on the request path. Create a policy file and reference\nit in the configuration.\n",
-        "code": "# Create a simple policy file\ncat \u003e /tmp/policy.rego \u003c\u003c 'EOF'\npackage envoy.authz\n\ndefault allow := false\n\nallow if {\n  input.parsed_path[0] == \"public\"\n}\nEOF\n\n# Run the extension\nboe run --extension opa --config '{\n  \"policy_file\": \"/tmp/policy.rego\"\n}'\n\n# Test allowed request\ncurl http://localhost:10000/public/resource\n# =\u003e 200 OK (proxied to upstream)\n\n# Test denied request\ncurl http://localhost:10000/private/resource\n# =\u003e 403 Forbidden\n"
+        "code": "# Create a simple policy file\ncat \u003e /tmp/policy.rego \u003c\u003c 'EOF'\npackage envoy.authz\n\ndefault allow := false\n\nallow if {\n  input.parsed_path[0] == \"public\"\n}\nEOF\n\n# Run the extension\nboe run --extension opa --config '{\n  \"policies\": [{\"file\": \"/tmp/policy.rego\"}]\n}'\n\n# Test allowed request\ncurl http://localhost:10000/public/resource\n# =\u003e 200 OK (proxied to upstream)\n\n# Test denied request\ncurl http://localhost:10000/private/resource\n# =\u003e 403 Forbidden\n"
       },
       {
         "title": "Custom Deny Response",
         "description": "Use a policy that returns a structured object with custom HTTP status,\nheaders, and body when denying a request.\n",
-        "code": "cat \u003e /tmp/policy.rego \u003c\u003c 'EOF'\npackage envoy.authz\n\ndefault allow := {\"allowed\": false, \"http_status\": 401, \"body\": \"Unauthorized\"}\n\nallow := {\"allowed\": true} if {\n  token := input.attributes.request.http.headers.authorization\n  startswith(token, \"Bearer \")\n}\nEOF\n\nboe run --extension opa --config '{\n  \"policy_file\": \"/tmp/policy.rego\"\n}'\n\n# Test with a valid JWT\ncurl -H \"Authorization: Bearer \u003ctoken\u003e\" http://localhost:10000/api/resource\n# =\u003e 200 OK\n\n# Test without a token\ncurl http://localhost:10000/api/resource\n# =\u003e 401 Unauthorized\n"
+        "code": "cat \u003e /tmp/policy.rego \u003c\u003c 'EOF'\npackage envoy.authz\n\ndefault allow := {\"allowed\": false, \"http_status\": 401, \"body\": \"Unauthorized\"}\n\nallow := {\"allowed\": true} if {\n  token := input.attributes.request.http.headers.authorization\n  startswith(token, \"Bearer \")\n}\nEOF\n\nboe run --extension opa --config '{\n  \"policies\": [{\"file\": \"/tmp/policy.rego\"}]\n}'\n\n# Test with a valid JWT\ncurl -H \"Authorization: Bearer \u003ctoken\u003e\" http://localhost:10000/api/resource\n# =\u003e 200 OK\n\n# Test without a token\ncurl http://localhost:10000/api/resource\n# =\u003e 401 Unauthorized\n"
       },
       {
         "title": "JWT Token Verification",
         "description": "Use a policy that decodes JWT tokens using OPA's built-in\n`io.jwt.decode` function. This example decodes a JWT token,\nchecks the subject claim, and forwards the user's role as a\nrequest header to the upstream service.\n",
-        "code": "cat \u003e /tmp/policy.rego \u003c\u003c 'EOF'\npackage envoy.authz\n\nimport rego.v1\n\ndefault allow := {\"allowed\": false, \"http_status\": 401, \"body\": \"Unauthorized\"}\n\nallow := {\"allowed\": true, \"headers\": {\"x-jwt-role\": payload.role}} if {\n  auth_header := input.attributes.request.http.headers.authorization\n  startswith(auth_header, \"Bearer \")\n  token := substring(auth_header, 7, -1)\n  [_, payload, _] := io.jwt.decode(token)\n  payload.sub == \"my-subject\"\n}\nEOF\n\nboe run --extension opa --config '{\n  \"policy_file\": \"/tmp/policy.rego\"\n}'\n\n# Test with a valid JWT\ncurl -H \"Authorization: Bearer \u003ctoken\u003e\" http://localhost:10000/api/resource\n# =\u003e 200 OK (upstream receives x-jwt-role header)\n\n# Test without a token\ncurl http://localhost:10000/api/resource\n# =\u003e 401 Unauthorized\n"
+        "code": "cat \u003e /tmp/policy.rego \u003c\u003c 'EOF'\npackage envoy.authz\n\nimport rego.v1\n\ndefault allow := {\"allowed\": false, \"http_status\": 401, \"body\": \"Unauthorized\"}\n\nallow := {\"allowed\": true, \"headers\": {\"x-jwt-role\": payload.role}} if {\n  auth_header := input.attributes.request.http.headers.authorization\n  startswith(auth_header, \"Bearer \")\n  token := substring(auth_header, 7, -1)\n  [_, payload, _] := io.jwt.decode(token)\n  payload.sub == \"my-subject\"\n}\nEOF\n\nboe run --extension opa --config '{\n  \"policies\": [{\"file\": \"/tmp/policy.rego\"}]\n}'\n\n# Test with a valid JWT\ncurl -H \"Authorization: Bearer \u003ctoken\u003e\" http://localhost:10000/api/resource\n# =\u003e 200 OK (upstream receives x-jwt-role header)\n\n# Test without a token\ncurl http://localhost:10000/api/resource\n# =\u003e 401 Unauthorized\n"
       },
       {
         "title": "SPIFFE Identity Authorization",
         "description": "Use a policy that authorizes requests based on the client's SPIFFE identity\nfrom an mTLS connection. The SPIFFE ID is available at\n`input.attributes.source.certificate.uri_san`.\n",
-        "code": "cat \u003e /tmp/policy.rego \u003c\u003c 'EOF'\npackage envoy.authz\n\ndefault allow := false\n\n# Allow requests from trusted workloads\nallow if {\n  spiffe_id := input.attributes.source.certificate.uri_san\n  startswith(spiffe_id, \"spiffe://cluster.local/ns/production/\")\n}\nEOF\n\nboe run --extension opa --config '{\n  \"policy_file\": \"/tmp/policy.rego\"\n}'\n"
+        "code": "cat \u003e /tmp/policy.rego \u003c\u003c 'EOF'\npackage envoy.authz\n\ndefault allow := false\n\n# Allow requests from trusted workloads\nallow if {\n  spiffe_id := input.attributes.source.certificate.uri_san\n  startswith(spiffe_id, \"spiffe://cluster.local/ns/production/\")\n}\nEOF\n\nboe run --extension opa --config '{\n  \"policies\": [{\"file\": \"/tmp/policy.rego\"}]\n}'\n"
+      },
+      {
+        "title": "Inline Policy Configuration",
+        "description": "Instead of loading policies from files, you can also specify inline Rego\npolicies directly in the configuration. This is useful for simple policies\nor when you want to manage policies outside of the filesystem.\n",
+        "code": "boe run --extension opa --config '{\n  \"policies\": [\n    {\"inline\": \"package envoy.authz\\ndefault allow := false\\nallow if {\\ninput.parsed_path[0] == \\\"public\\\"\\n }\"},\n    {\"file\": \"/tmp/other_policy.rego\"}\n  ]\n}'\n"
       },
       {
         "title": "Dry-Run Mode",
         "description": "Enable dry-run mode to log authorization decisions without enforcing them.\nUseful for testing new policies in production without blocking traffic.\n",
-        "code": "boe run --extension opa --config '{\n  \"policy_file\": \"/tmp/policy.rego\",\n  \"dry_run\": true\n}'\n"
+        "code": "boe run --extension opa --config '{\n  \"policies\": [{\"file\": \"/tmp/policy.rego\"}],\n  \"dry_run\": true\n}'\n"
       },
       {
         "title": "Fail-Open Mode",
         "description": "Enable fail-open mode to allow requests through when policy evaluation\nencounters an error, instead of returning a 500 response. Useful for\nnon-critical authorization checks where availability is prioritized\nover enforcement.\n",
-        "code": "boe run --extension opa --config '{\n  \"policy_file\": \"/tmp/policy.rego\",\n  \"fail_open\": true\n}'\n"
+        "code": "boe run --extension opa --config '{\n  \"policies\": [{\"file\": \"/tmp/policy.rego\"}],\n  \"fail_open\": true\n}'\n"
       }
     ],
     "minEnvoyVersion": "1.37.0",
