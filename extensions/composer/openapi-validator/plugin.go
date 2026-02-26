@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
@@ -22,12 +21,13 @@ import (
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/getkin/kin-openapi/routers"
 	"github.com/getkin/kin-openapi/routers/gorillamux"
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 // openAPIValidatorConfig represents the JSON configuration for this filter.
 type openAPIValidatorConfig struct {
-	// SpecFile is the path to the OpenAPI specification file (YAML or JSON).
-	SpecFile string `json:"spec_file"`
+	// Spec is the OpenAPI specification, either inline or from a file.
+	Spec pkg.DataSource `json:"spec"`
 	// MaxBodyBytes is the maximum request body size in bytes to buffer for validation.
 	// 0 means no limit. If the body exceeds this limit, the request is rejected with 413.
 	MaxBodyBytes uint64 `json:"max_body_bytes"`
@@ -35,13 +35,9 @@ type openAPIValidatorConfig struct {
 	AllowUnmatchedPaths bool `json:"allow_unmatched_paths"`
 	// DryRun when true logs validation failures but always allows the request.
 	DryRun bool `json:"dry_run"`
-	// DenyStatus is the HTTP status code to return on validation failure (default: 400).
-	DenyStatus int `json:"deny_status"`
-	// DenyBody is the response body to return on validation failure.
-	// If empty, the validation error message is used.
-	DenyBody string `json:"deny_body"`
-	// DenyHeaders are additional headers to include in the deny response.
-	DenyHeaders map[string]string `json:"deny_headers"`
+	// DenyResponse is the local response to return on validation failure.
+	// Optional. Default status is 400; default body is the validation error message.
+	DenyResponse *pkg.LocalResponse `json:"deny_response,omitempty"`
 }
 
 // openAPIValidatorParsedConfig holds the parsed configuration and the compiled router.
@@ -242,16 +238,12 @@ func (o *openAPIValidatorHttpFilter) denyRequest(err error) shared.HeadersStatus
 
 // sendDenyResponse sends a local response rejecting the request.
 func (o *openAPIValidatorHttpFilter) sendDenyResponse(validationErr error) {
-	status := o.config.DenyStatus
-	if status == 0 {
-		status = 400
-	}
-	body := o.config.DenyBody
+	body := o.config.DenyResponse.Body
 	if body == "" {
 		body = validationErr.Error()
 	}
 	o.handle.SendLocalResponse(
-		uint32(status), //nolint:gosec
+		uint32(o.config.DenyResponse.Status), //nolint:gosec
 		o.config.denyResponseHeaders,
 		[]byte(body),
 		"openapi_validation_failed",
@@ -286,18 +278,18 @@ func (o *OpenAPIValidatorHttpFilterConfigFactory) Create(handle shared.HttpFilte
 		return nil, err
 	}
 
-	if cfg.SpecFile == "" {
-		handle.Log(shared.LogLevelError, "openapi-validator: spec_file is required")
-		return nil, fmt.Errorf("spec_file is required")
+	if err := cfg.Spec.Validate(); err != nil {
+		handle.Log(shared.LogLevelError, "openapi-validator: invalid spec config: %s", err.Error())
+		return nil, fmt.Errorf("invalid spec config: %w", err)
 	}
 
-	handle.Log(shared.LogLevelDebug, "openapi-validator: loading spec from %s (max_body_bytes=%d, dry_run=%v)",
-		cfg.SpecFile, cfg.MaxBodyBytes, cfg.DryRun)
+	handle.Log(shared.LogLevelDebug, "openapi-validator: loading spec (max_body_bytes=%d, dry_run=%v)",
+		cfg.MaxBodyBytes, cfg.DryRun)
 
-	specData, err := os.ReadFile(cfg.SpecFile)
+	specData, err := cfg.Spec.Content()
 	if err != nil {
-		handle.Log(shared.LogLevelError, "openapi-validator: failed to read spec file: %s", err.Error())
-		return nil, fmt.Errorf("failed to read spec file: %w", err)
+		handle.Log(shared.LogLevelError, "openapi-validator: failed to read spec: %s", err.Error())
+		return nil, fmt.Errorf("failed to read spec: %w", err)
 	}
 
 	loader := openapi3.NewLoader()
@@ -320,9 +312,20 @@ func (o *OpenAPIValidatorHttpFilterConfigFactory) Create(handle shared.HttpFilte
 
 	handle.Log(shared.LogLevelDebug, "openapi-validator: spec loaded and router created successfully")
 
+	if cfg.DenyResponse == nil {
+		cfg.DenyResponse = &pkg.LocalResponse{
+			Status: 400,
+		}
+	} else {
+		if err := cfg.DenyResponse.Validate(); err != nil {
+			handle.Log(shared.LogLevelError, "openapi-validator: invalid deny_response config: %s", err.Error())
+			return nil, fmt.Errorf("invalid deny_response config: %w", err)
+		}
+	}
+
 	// Pre-compute deny response headers to avoid allocating per-request.
 	var denyResponseHeaders [][2]string
-	for k, v := range cfg.DenyHeaders {
+	for k, v := range cfg.DenyResponse.Headers {
 		denyResponseHeaders = append(denyResponseHeaders, [2]string{k, v})
 	}
 
