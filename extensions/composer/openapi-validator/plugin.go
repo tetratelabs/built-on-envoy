@@ -318,6 +318,9 @@ func (o *OpenAPIValidatorHttpFilterConfigFactory) Create(handle shared.HttpFilte
 			Status: 400,
 		}
 	} else {
+		if cfg.DenyResponse.Status == 0 {
+			cfg.DenyResponse.Status = 400
+		}
 		if err := cfg.DenyResponse.Validate(); err != nil {
 			handle.Log(shared.LogLevelError, "openapi-validator: invalid deny_response config: %s", err.Error())
 			return nil, fmt.Errorf("invalid deny_response config: %w", err)
