@@ -154,8 +154,7 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for Filter {
         }
 
         // Strip IPv6 brackets if present (e.g. "[::1]" → "::1").
-        let ip_str = if downstream_addr_str.starts_with('[') && downstream_addr_str.ends_with(']')
-        {
+        let ip_str = if downstream_addr_str.starts_with('[') && downstream_addr_str.ends_with(']') {
             &downstream_addr_str[1..downstream_addr_str.len() - 1]
         } else {
             downstream_addr_str.as_str()
