@@ -38,6 +38,16 @@ func TestExtensionPositionsSort(t *testing.T) {
 			},
 		},
 		{
+			name: "single remote extension with version",
+			args: []string{"boe", "gen-config", "--extension", "ext1:0.1.0"},
+			manifests: []*extensions.Manifest{
+				{Name: "ext1", Version: "0.1.0", Remote: true},
+			},
+			want: []*extensions.Manifest{
+				{Name: "ext1", Version: "0.1.0", Remote: true},
+			},
+		},
+		{
 			name: "single local extension",
 			args: []string{"boe", "gen-config", "--local", localDir1},
 			manifests: []*extensions.Manifest{
@@ -74,23 +84,28 @@ func TestExtensionPositionsSort(t *testing.T) {
 		{
 			name: "interleaved and duplicate remote and local",
 			args: []string{
-				"boe", "gen-config", "--extension", "ext1",
-				"--local", localDir1, "--extension", "ext2", "--local", localDir2, "--extension", "ext1", "--local", localDir1,
+				"boe", "gen-config",
+				"--extension", "ext1",
+				"--local", localDir1,
+				"--extension", "ext2",
+				"--local", localDir2,
+				"--extension", "ext1:1.0.0",
+				"--local", localDir1,
 			},
 			manifests: []*extensions.Manifest{
-				{Name: "ext1", Remote: true},
+				{Name: "ext1", Version: "1.0.0", Remote: true},
 				{Name: "ext2", Remote: true},
-				{Name: "ext1", Remote: true},
+				{Name: "ext1", Version: "1.0.0", Remote: true},
 				{Name: "local1", Path: localDir1 + "/manifest.yaml"},
 				{Name: "local2", Path: localDir2 + "/manifest.yaml"},
 				{Name: "local1", Path: localDir1 + "/manifest.yaml"},
 			},
 			want: []*extensions.Manifest{
-				{Name: "ext1", Remote: true},
+				{Name: "ext1", Version: "1.0.0", Remote: true},
 				{Name: "local1", Path: localDir1 + "/manifest.yaml"},
 				{Name: "ext2", Remote: true},
 				{Name: "local2", Path: localDir2 + "/manifest.yaml"},
-				{Name: "ext1", Remote: true},
+				{Name: "ext1", Version: "1.0.0", Remote: true},
 				{Name: "local1", Path: localDir1 + "/manifest.yaml"},
 			},
 		},
