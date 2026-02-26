@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v3"
 )
 
 // TestFetchPluginFromRealImage fetches a real plugin image from a registry
@@ -46,21 +45,13 @@ func TestFetchPluginFromRealImage(t *testing.T) {
 	}
 	insecure := os.Getenv("TEST_BOE_REGISTRY_INSECURE") == "true"
 
-	// Read the version from the composer manifest.yaml.
-	composerDir, err := filepath.Abs(filepath.Join("..", ".."))
-	require.NoError(t, err)
-	manifestData, err := os.ReadFile(filepath.Join(composerDir, "manifest.yaml"))
-	require.NoError(t, err, "failed to read manifest.yaml")
-	var manifest struct {
-		Version string `yaml:"version"`
-	}
-	require.NoError(t, yaml.Unmarshal(manifestData, &manifest))
-	require.NotEmpty(t, manifest.Version)
-
 	ctx, cancel := context.WithTimeout(t.Context(), 1*time.Minute)
 	t.Cleanup(cancel)
 
-	ref := fmt.Sprintf("%s/extension-example-go:%s", registry, manifest.Version)
+	// Use a known image reference that should exist in the registry.
+	// We cannot use the version from the manifest.yaml since it may not be pushed yet,
+	// so we hardcode the version here.
+	ref := fmt.Sprintf("%s/extension-example-go:%s", registry, "0.2.2")
 	cacheDir := t.TempDir()
 	opt := Option{
 		CacheDir: cacheDir,
