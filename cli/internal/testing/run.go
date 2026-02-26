@@ -6,6 +6,7 @@
 package internaltesting
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"net"
@@ -24,7 +25,15 @@ var (
 	defaultListenPort = 10000
 	// defaultLogLevel is the default log level for the proxy.
 	defaultLogLevel = "all:debug"
+	// defaultRunEnvoyTimeout is the default timeout for waiting for Envoy to start.
+	defaultRunEnvoyTimeout = 90 * time.Second
 )
+
+// runEnvoyTimeout returns the timeout duration for waiting for Envoy to start.
+func runEnvoyTimeout() time.Duration {
+	timeout, _ := time.ParseDuration(os.Getenv("TEST_BOE_RUN_ENVOY_TIMEOUT"))
+	return cmp.Or(timeout, defaultRunEnvoyTimeout)
+}
 
 // RunEnvoy executes the "run" command of the CLI binary to start Envoy with given args.
 // It waits until Envoy is ready to serve traffic and returns the listen port and admin port.
@@ -91,7 +100,7 @@ func RunEnvoy(t *testing.T, cliBin string, args ...string) (listenPort int, admi
 	// as we know there won't be other interfering child processes at that point.
 	require.Eventually(t, func() bool {
 		return IsPortInUse(t.Context(), proxyPort)
-	}, 90*time.Second, 100*time.Millisecond, "Envoy did not start listening on port %d", proxyPort)
+	}, runEnvoyTimeout(), 100*time.Millisecond, "Envoy did not start listening on port %d", proxyPort)
 
 	adminClient, err := admin.NewAdminClient(t.Context(), process.Pid)
 	require.NoError(t, err)
