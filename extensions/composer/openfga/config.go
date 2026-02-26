@@ -7,9 +7,11 @@
 package openfga
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 
@@ -39,17 +41,28 @@ type openfgaConfig struct {
 // valueSource defines how to extract a value from the request.
 // Exactly one of Value or Header must be set. Prefix is optional and prepended to the result.
 type valueSource struct {
-	Value  string `json:"value"`
-	Header string `json:"header"`
-	Prefix string `json:"prefix"`
+	Value    string `json:"value"`
+	Header   string `json:"header"`
+	Prefix   string `json:"prefix"`
+	resolved string // set at config time when Value is static; used by resolve to avoid per-request work
 }
 
 func (v *valueSource) isEmpty() bool {
 	return v.Value == "" && v.Header == ""
 }
 
+// precompute sets resolved when Value is static, so resolve can return it without per-request work.
+func (v *valueSource) precompute() {
+	if v.Value != "" {
+		v.resolved = v.Prefix + v.Value
+	}
+}
+
 // resolve extracts the value from the given request headers using the configured source.
 func (v *valueSource) resolve(headers shared.HeaderMap) string {
+	if v.resolved != "" {
+		return v.resolved
+	}
 	var raw string
 	if v.Value != "" {
 		raw = v.Value
@@ -107,6 +120,7 @@ type parsedConfig struct {
 	timeoutMs            uint64
 	deny                 pkg.LocalResponse
 	denyHeaders          [][2]string
+	denyBodyBytes        []byte
 	checkPath            string
 	calloutHeaders       [][2]string
 	rules                []parsedRule
@@ -179,6 +193,7 @@ func parseConfig(data []byte) (*parsedConfig, error) {
 		timeoutMs:            cfg.TimeoutMs,
 		deny:                 deny,
 		denyHeaders:          denyHeaders,
+		denyBodyBytes:        []byte(denyBody),
 		checkPath:            checkPath,
 		metadata:             cfg.Metadata,
 		calloutHeaders: [][2]string{
@@ -242,6 +257,9 @@ func buildRules(cfg *openfgaConfig) ([]parsedRule, error) {
 			match = cr.Match
 		}
 
+		user.precompute()
+		cr.Relation.precompute()
+		cr.Object.precompute()
 		rules = append(rules, parsedRule{
 			match:    match,
 			user:     user,
@@ -271,6 +289,9 @@ func buildLegacyRule(cfg *openfgaConfig) ([]parsedRule, error) {
 	if len(errs) > 0 {
 		return nil, fmt.Errorf("openfga: %w", errors.Join(errs...))
 	}
+	cfg.User.precompute()
+	cfg.Relation.precompute()
+	cfg.Object.precompute()
 	return []parsedRule{{
 		user:     cfg.User,
 		relation: cfg.Relation,
@@ -306,7 +327,7 @@ func buildDenyHeaders(deny pkg.LocalResponse) [][2]string {
 
 // sendDeny sends a local response using the configured deny status, body, and headers.
 func (c *parsedConfig) sendDeny(handle shared.HttpFilterHandle, grpcStatus string) {
-	handle.SendLocalResponse(uint32(c.deny.Status), c.denyHeaders, []byte(c.deny.Body), grpcStatus) //nolint:gosec
+	handle.SendLocalResponse(uint32(c.deny.Status), c.denyHeaders, c.denyBodyBytes, grpcStatus)
 }
 
 // writeMetadata writes the authorization decision to dynamic metadata if configured.
@@ -316,24 +337,29 @@ func (c *parsedConfig) writeMetadata(handle shared.HttpFilterHandle, decision st
 	}
 }
 
+var bufPool = sync.Pool{New: func() any { return new(bytes.Buffer) }}
+
 // buildCheckBody constructs the JSON body for the OpenFGA Check API call.
+// Values come from trusted sources (static config or Envoy request headers) and
+// are assumed not to contain characters requiring JSON escaping (", \, control chars).
 func buildCheckBody(user, relation, object, authorizationModelID string) []byte {
-	type tupleKey struct {
-		User     string `json:"user"`
-		Relation string `json:"relation"`
-		Object   string `json:"object"`
+	buf := bufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	buf.WriteString(`{"tuple_key":{"user":"`)
+	buf.WriteString(user)
+	buf.WriteString(`","relation":"`)
+	buf.WriteString(relation)
+	buf.WriteString(`","object":"`)
+	buf.WriteString(object)
+	buf.WriteString(`"}`)
+	if authorizationModelID != "" {
+		buf.WriteString(`,"authorization_model_id":"`)
+		buf.WriteString(authorizationModelID)
+		buf.WriteString(`"`)
 	}
-	type checkRequest struct {
-		TupleKey             tupleKey `json:"tuple_key"`
-		AuthorizationModelID string   `json:"authorization_model_id,omitempty"`
-	}
-	body, _ := json.Marshal(checkRequest{
-		TupleKey: tupleKey{
-			User:     user,
-			Relation: relation,
-			Object:   object,
-		},
-		AuthorizationModelID: authorizationModelID,
-	})
-	return body
+	buf.WriteByte('}')
+	out := make([]byte, buf.Len())
+	copy(out, buf.Bytes())
+	bufPool.Put(buf)
+	return out
 }

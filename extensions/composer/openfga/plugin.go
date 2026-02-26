@@ -25,6 +25,12 @@ const (
 	httpStatusOKStr = "200"
 )
 
+var (
+	errorResponseHeaders = [][2]string{{"content-type", "text/plain"}}
+	errorBodyCallout     = []byte("Authorization service unavailable")
+	errorBodyAPI         = []byte("Authorization service error")
+)
+
 // openfgaMetrics holds metric IDs defined at config time.
 type openfgaMetrics struct {
 	requestsTotal shared.MetricID
@@ -100,10 +106,11 @@ type openfgaFilter struct {
 }
 
 func (f *openfgaFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) shared.HeadersStatus {
+	method := headers.GetOne(":method")
+	path := headers.GetOne(":path")
+
 	rule := f.matchRule(headers)
 	if rule == nil {
-		method := headers.GetOne(":method")
-		path := headers.GetOne(":path")
 		return f.handleDeny(shared.LogLevelWarn, "openfga: no matching rule for %s %s", "openfga_no_rule", decisionDenied, method, path)
 	}
 
@@ -112,8 +119,6 @@ func (f *openfgaFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) share
 	object := rule.object.resolve(headers)
 
 	if user == "" || relation == "" || object == "" {
-		method := headers.GetOne(":method")
-		path := headers.GetOne(":path")
 		f.handle.Log(shared.LogLevelWarn, "openfga: missing check parameters for %s %s user=%q relation=%q object=%q", method, path, user, relation, object)
 		if f.config.failOpen {
 			f.handle.Log(shared.LogLevelWarn, "openfga: fail_open enabled, allowing request with missing parameters")
@@ -128,8 +133,6 @@ func (f *openfgaFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) share
 	}
 
 	body := buildCheckBody(user, relation, object, f.config.authorizationModelID)
-	method := headers.GetOne(":method")
-	path := headers.GetOne(":path")
 	f.handle.Log(shared.LogLevelDebug, "openfga: checking %s %s user=%s relation=%s object=%s", method, path, user, relation, object)
 
 	result, _ := f.handle.HttpCallout(
@@ -174,9 +177,7 @@ func (f *openfgaFilter) handleCalloutError(logMsg string, args ...any) shared.He
 		return shared.HeadersStatusContinue
 	}
 	f.config.writeMetadata(f.handle, decisionError)
-	f.handle.SendLocalResponse(http.StatusBadGateway,
-		[][2]string{{"content-type", "text/plain"}},
-		[]byte("Authorization service unavailable"), "openfga_callout_failed")
+	f.handle.SendLocalResponse(http.StatusBadGateway, errorResponseHeaders, errorBodyCallout, "openfga_callout_failed")
 	f.metrics.inc(f.handle, decisionError)
 	return shared.HeadersStatusStop
 }
@@ -200,7 +201,7 @@ type openfgaCallback struct {
 }
 
 // handleCallbackError handles callout/API/parse errors: log, then fail-open or send 502.
-func (c *openfgaCallback) handleCallbackError(logFormat, grpcStatus, responseBody string, logArgs ...any) {
+func (c *openfgaCallback) handleCallbackError(logFormat, grpcStatus string, responseBody []byte, logArgs ...any) {
 	c.handle.Log(shared.LogLevelError, logFormat, logArgs...)
 	if c.config.failOpen {
 		c.handle.Log(shared.LogLevelWarn, "openfga: fail_open enabled, allowing request after error")
@@ -211,9 +212,7 @@ func (c *openfgaCallback) handleCallbackError(logFormat, grpcStatus, responseBod
 	}
 	c.config.writeMetadata(c.handle, decisionError)
 	c.metrics.inc(c.handle, decisionError)
-	c.handle.SendLocalResponse(http.StatusBadGateway,
-		[][2]string{{"content-type", "text/plain"}},
-		[]byte(responseBody), grpcStatus)
+	c.handle.SendLocalResponse(http.StatusBadGateway, errorResponseHeaders, responseBody, grpcStatus)
 }
 
 // OnHttpCalloutDone processes the Check API response and continues or denies the request.
@@ -224,18 +223,18 @@ func (c *openfgaCallback) OnHttpCalloutDone(_ uint64, result shared.HttpCalloutR
 	fullBody := joinBody(body)
 
 	if result != shared.HttpCalloutSuccess {
-		c.handleCallbackError("openfga: callout failed, result=%v", "openfga_callout_error", "Authorization service error", result)
+		c.handleCallbackError("openfga: callout failed, result=%v", "openfga_callout_error", errorBodyAPI, result)
 		return
 	}
 
 	statusCode := headerValue(headers, ":status")
 	if statusCode != httpStatusOKStr {
-		c.handleCallbackError("openfga: Check API returned status %s, body=%s", "openfga_api_error", "Authorization service error", statusCode, fullBody)
+		c.handleCallbackError("openfga: Check API returned status %s, body=%s", "openfga_api_error", errorBodyAPI, statusCode, fullBody)
 		return
 	}
 
 	if len(fullBody) == 0 {
-		c.handleCallbackError("openfga: Check API returned empty body", "openfga_empty_body", "Authorization service error")
+		c.handleCallbackError("openfga: Check API returned empty body", "openfga_empty_body", errorBodyAPI)
 		return
 	}
 
@@ -243,7 +242,7 @@ func (c *openfgaCallback) OnHttpCalloutDone(_ uint64, result shared.HttpCalloutR
 		Allowed bool `json:"allowed"`
 	}
 	if err := json.Unmarshal(fullBody, &checkResp); err != nil {
-		c.handleCallbackError("openfga: failed to parse Check response: %s, body=%s", "openfga_parse_error", "Authorization service error", err.Error(), fullBody)
+		c.handleCallbackError("openfga: failed to parse Check response: %s, body=%s", "openfga_parse_error", errorBodyAPI, err.Error(), fullBody)
 		return
 	}
 
