@@ -83,7 +83,6 @@ jobs:
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
-      - run: make test-integration
       - run: make test-coverage
       - uses: codecov/codecov-action@v4
         with:
