@@ -89,8 +89,8 @@ type rawConfig struct {
 	ACSPath        string         `json:"acs_path"`
 	IDPMetadataXML pkg.DataSource `json:"idp_metadata_xml"`
 
-	SPCertPEM pkg.DataSource `json:"sp_cert_pem"`
-	SPKeyPEM  pkg.DataSource `json:"sp_key_pem"`
+	SPCertPEM *pkg.DataSource `json:"sp_cert_pem"`
+	SPKeyPEM  *pkg.DataSource `json:"sp_key_pem"`
 
 	Session *rawSessionConfig `json:"session,omitempty"`
 
@@ -142,25 +142,27 @@ func parseConfig(data []byte) (*Config, error) {
 	}
 	idpMetaXML := string(content)
 
-	// Resolve SPCertPEM and SPKeyPEM (optional pair; absent means auto-generate).
+	// Resolve SPCertPEM and SPKeyPEM (optional pair; nil means absent, auto-generate).
 	var spCertPEM, spKeyPEM string
-	if spCertPEMErr := raw.SPCertPEM.Validate(); spCertPEMErr == nil {
+	if raw.SPCertPEM != nil {
+		if err := raw.SPCertPEM.Validate(); err != nil {
+			return nil, fmt.Errorf("sp_cert_pem: %w", err)
+		}
 		content, e := raw.SPCertPEM.Content()
 		if e != nil {
 			return nil, fmt.Errorf("sp_cert_pem: %w", e)
 		}
 		spCertPEM = string(content)
-	} else if !errors.Is(spCertPEMErr, pkg.ErrDataSourceNeitherSet) {
-		return nil, fmt.Errorf("sp_cert_pem: %w", spCertPEMErr)
 	}
-	if spKeyPEMErr := raw.SPKeyPEM.Validate(); spKeyPEMErr == nil {
+	if raw.SPKeyPEM != nil {
+		if err := raw.SPKeyPEM.Validate(); err != nil {
+			return nil, fmt.Errorf("sp_key_pem: %w", err)
+		}
 		content, e := raw.SPKeyPEM.Content()
 		if e != nil {
 			return nil, fmt.Errorf("sp_key_pem: %w", e)
 		}
 		spKeyPEM = string(content)
-	} else if !errors.Is(spKeyPEMErr, pkg.ErrDataSourceNeitherSet) {
-		return nil, fmt.Errorf("sp_key_pem: %w", spKeyPEMErr)
 	}
 	if (spCertPEM == "") != (spKeyPEM == "") {
 		return nil, errors.New("sp_cert_pem and sp_key_pem must both be provided, or both omitted")
