@@ -89,8 +89,8 @@ type rawConfig struct {
 	ACSPath        string         `json:"acs_path"`
 	IDPMetadataXML pkg.DataSource `json:"idp_metadata_xml"`
 
-	SPCertPEM *pkg.DataSource `json:"sp_cert_pem"`
-	SPKeyPEM  *pkg.DataSource `json:"sp_key_pem"`
+	SPCertPEM *pkg.DataSource `json:"sp_cert_pem,omitempty"`
+	SPKeyPEM  *pkg.DataSource `json:"sp_key_pem,omitempty"`
 
 	Session *rawSessionConfig `json:"session,omitempty"`
 
