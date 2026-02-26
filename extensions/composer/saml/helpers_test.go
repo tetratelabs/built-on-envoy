@@ -85,9 +85,9 @@ func testRawConfigJSON(spKP *testKeyPair, idpMetadataXML string) string {
 	return fmt.Sprintf(`{
 		"entity_id": "https://sp.example.com",
 		"acs_path": "/saml/acs",
-		"idp_metadata_xml": %q,
-		"sp_cert_pem": %q,
-		"sp_key_pem": %q
+		"idp_metadata_xml": {"inline": %q},
+		"sp_cert_pem": {"inline": %q},
+		"sp_key_pem": {"inline": %q}
 	}`, idpMetadataXML, spKP.CertPEM, spKP.KeyPEM)
 }
 

@@ -38,20 +38,16 @@ longDescription: |
   Required fields:
   - `entity_id`: The SP entity ID (usually, audience URI)
   - `acs_path`: Path for the Assertion Consumer Service endpoint
-  - `idp_metadata_xml`: Inline IdP metadata XML (or `idp_metadata_xml_file` with a file path)
+  - `idp_metadata_xml`: IdP metadata XML, as `{"inline": "<xml>..."}` or `{"file": "/path/to/metadata.xml"}`
 
   Optional fields:
-  - `sp_cert_pem` / `sp_key_pem`: PEM-encoded SP certificate and private key. If both are
-    omitted, an ephemeral self-signed keypair is auto-generated — convenient for development
-    or when the IdP does not require a pre-registered SP certificate. If provided, both must
-    be set together (or use `sp_cert_pem_file` / `sp_key_pem_file` to read from disk).
+  - `sp_cert_pem` / `sp_key_pem`: PEM-encoded SP certificate and private key, each as
+    `{"inline": "..."}` or `{"file": "/path/to/file.pem"}`. If both are omitted, an ephemeral
+    self-signed keypair is auto-generated — convenient for development or when the IdP does
+    not require a pre-registered SP certificate. If provided, both must be set together.
   - Session settings: `session.duration`, `session.cookie_name`, `session.cookie_secure`,
     `session.cookie_domain`, `session.cookie_signing_key`
   - `bypass_paths`, `attribute_headers`, `sign_authn_requests`, `default_redirect_path`
-
-  The `_file` variants read the value from disk at config parse time, which is
-  convenient for large PEM blocks and XML documents. You cannot specify both the
-  inline value and the `_file` variant for the same field.
 
   ## Metrics
 
@@ -91,7 +87,7 @@ examples:
         {
           "entity_id": "http://localhost:10000",
           "acs_path": "/saml/acs",
-          "idp_metadata_xml_file": "idp-metadata.xml"
+          "idp_metadata_xml": {"file": "idp-metadata.xml"}
         }'
 
       # Test the plugin in the browser and login as testuser/testpass
@@ -116,9 +112,9 @@ examples:
         {
           "entity_id": "http://localhost:10000",
           "acs_path": "/saml/acs",
-          "idp_metadata_xml_file": "idp-metadata.xml",
-          "sp_cert_pem_file": "sp-cert.pem",
-          "sp_key_pem_file": "sp-key.pem"
+          "idp_metadata_xml": {"file": "idp-metadata.xml"},
+          "sp_cert_pem": {"file": "sp-cert.pem"},
+          "sp_key_pem": {"file": "sp-key.pem"}
         }'
 
       # Test the plugin in the browser and login as testuser/testpass
@@ -143,7 +139,7 @@ examples:
         {
           "entity_id": "http://localhost:10000",
           "acs_path": "/saml/acs",
-          "idp_metadata_xml_file": "idp-metadata.xml",
+          "idp_metadata_xml": {"file": "idp-metadata.xml"},
           "session": {
             "cookie_name": "my_session",
             "duration": "5m",
@@ -176,7 +172,7 @@ examples:
         {
           "entity_id": "http://localhost:10000",
           "acs_path": "/saml/acs",
-          "idp_metadata_xml_file": "idp-metadata.xml",
+          "idp_metadata_xml": {"file": "idp-metadata.xml"},
           "attribute_headers": {
             "email": "x-saml-email",
             "Role": "x-saml-role"

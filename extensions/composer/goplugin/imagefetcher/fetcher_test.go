@@ -373,7 +373,7 @@ func TestOptionFromEnv(t *testing.T) {
 			name: "GOPLUGIN_CACHE_DIR takes precedence over BOE_DATA_HOME",
 			envs: map[string]string{
 				"GOPLUGIN_CACHE_DIR": "/custom/cache",
-				"BOE_DATA_HOME":     "/boe/data",
+				"BOE_DATA_HOME":      "/boe/data",
 			},
 			wantOpt: Option{
 				CacheDir: "/custom/cache",
@@ -398,7 +398,7 @@ func TestOptionFromEnv(t *testing.T) {
 		{
 			name: "GOPLUGIN_INSECURE takes precedence over BOE_REGISTRY_INSECURE",
 			envs: map[string]string{
-				"GOPLUGIN_INSECURE":    "false",
+				"GOPLUGIN_INSECURE":     "false",
 				"BOE_REGISTRY_INSECURE": "true",
 			},
 			wantOpt: Option{

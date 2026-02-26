@@ -28,8 +28,8 @@ keycloak-down: ## Stop the Keycloak container
 
 .PHONY: run ## Run the plugin with the SAML IdP metadata and SP certificates
 run: ${BOE_BIN} ${IDP_METADATA_FILE}
-	#${BOE_BIN} run --local .. --log-level dynamic_modules:trace --config '{"entity_id": "saml-sp","acs_path": "/acs", "idp_metadata_xml_file": "$(IDP_METADATA_FILE)"}'
-	${BOE_BIN} run --local .. --log-level dynamic_modules:trace --config '{"entity_id": "http://localhost:10000","acs_path": "/acs", "idp_metadata_xml_file": "$(IDP_METADATA_FILE)"}'
+	#${BOE_BIN} run --local .. --log-level dynamic_modules:trace --config '{"entity_id": "saml-sp","acs_path": "/acs", "idp_metadata_xml": {"file": "$(IDP_METADATA_FILE)"}}'
+	${BOE_BIN} run --local .. --log-level dynamic_modules:trace --config '{"entity_id": "http://localhost:10000","acs_path": "/acs", "idp_metadata_xml": {"file": "$(IDP_METADATA_FILE)"}}'
 
 .PHONY: clean
 clean: keycloak-down
