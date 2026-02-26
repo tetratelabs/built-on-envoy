@@ -134,23 +134,29 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 	if err != nil {
 		return err
 	}
-	extensions, err := r.extensionPositions.sort(append(downloaded, local...))
+	extensionsToRun, err := r.extensionPositions.sort(append(downloaded, local...))
 	if err != nil {
 		return err
 	}
 
-	// TODO(nacx): Find a way to eagerly get from func-e the Envoy version that will
-	// be used when r.EnvoyVersion is empty, without starting the download or run.
-	if r.EnvoyVersion != "" {
+	// If no Envoy version is specified, check if the extensions have Envoy version constraints defined
+	// and if so, use them to determine a compatible Envoy version to run.
+	if r.EnvoyVersion == "" {
+		r.EnvoyVersion, err = extensions.ResolveMinimumCompatibleEnvoyVersion(extensionsToRun)
+		if err != nil {
+			return err
+		}
+		logger.Debug("resolved Envoy version from manifests", "envoy_version", r.EnvoyVersion)
+	} else {
 		logger.Debug("validating Envoy version compatibility for extensions", "envoy_version", r.EnvoyVersion)
-		if err = validateEnvoyCompat(r.EnvoyVersion, extensions); err != nil {
+		if err = validateEnvoyCompat(r.EnvoyVersion, extensionsToRun); err != nil {
 			return err
 		}
 	}
 
 	// Make sure all composer extensions use the same version of composer
 	logger.Debug("validating composer version compatibility for extensions")
-	if err = validateComposerCompat(extensions); err != nil {
+	if err = validateComposerCompat(extensionsToRun); err != nil {
 		return err
 	}
 
@@ -163,7 +169,7 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 		RunID:             r.RunID,
 		ListenPort:        r.ListenPort,
 		AdminPort:         r.AdminPort,
-		Extensions:        extensions,
+		Extensions:        extensionsToRun,
 		Configs:           r.Configs,
 		Clusters:          r.Clusters.Secure,
 		ClustersInsecure:  r.Clusters.Insecure,
@@ -178,7 +184,7 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 	downloaded := make([]*extensions.Manifest, 0, len(refs))
 	for _, ext := range refs {
 		name, tag := splitRef(ext)
-		fmt.Printf("→ %sFetching %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)
+		_, _ = fmt.Fprintf(os.Stderr, "→ %sFetching %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)
 		artifact, err := downloader.DownloadExtension(ctx, name, tag)
 		if err != nil {
 			return nil, err

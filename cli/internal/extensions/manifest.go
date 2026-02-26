@@ -308,3 +308,49 @@ func ValidateManifest(manifest *Manifest) error {
 
 	return manifestSchema.Validate(v)
 }
+
+// HighestMinEnvoyVersion returns the highest minimum Envoy version among the given manifests.
+func HighestMinEnvoyVersion(manifests []*Manifest) string {
+	highest := "0.0.0"
+	for _, m := range manifests {
+		if m.MinEnvoyVersion != "" && semver.Compare("v"+m.MinEnvoyVersion, "v"+highest) > 0 {
+			highest = m.MinEnvoyVersion
+		}
+	}
+	if highest == "0.0.0" {
+		return ""
+	}
+	return highest
+}
+
+// LowestMaxEnvoyVersion returns the lowest maximum Envoy version among the given manifests.
+func LowestMaxEnvoyVersion(manifests []*Manifest) string {
+	lowest := "9999.9999.9999"
+	for _, m := range manifests {
+		if m.MaxEnvoyVersion != "" && semver.Compare("v"+m.MaxEnvoyVersion, "v"+lowest) < 0 {
+			lowest = m.MaxEnvoyVersion
+		}
+	}
+	if lowest == "9999.9999.9999" {
+		return ""
+	}
+	return lowest
+}
+
+// ResolveMinimumCompatibleEnvoyVersion returns the minimum Envoy version that is compatible with all given manifests.
+func ResolveMinimumCompatibleEnvoyVersion(manifests []*Manifest) (string, error) {
+	highestMin := HighestMinEnvoyVersion(manifests)
+	lowestMax := LowestMaxEnvoyVersion(manifests)
+
+	if highestMin != "" && lowestMax != "" && semver.Compare("v"+highestMin, "v"+lowestMax) > 0 {
+		return "", fmt.Errorf("no compatible Envoy version found: highest minimum %s, lowest maximum %s", highestMin, lowestMax)
+	}
+
+	if highestMin != "" {
+		return highestMin, nil
+	}
+	if lowestMax != "" {
+		return lowestMax, nil
+	}
+	return "", nil
+}
