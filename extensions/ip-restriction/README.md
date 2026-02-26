@@ -8,9 +8,10 @@ This extension demonstrates how to build Envoy extensions in Rust using the dyna
 
 ## Features
 
-- **IP Allowlisting**: Only permit requests from specific IP addresses
-- **IP Denylisting**: Block requests from specific IP addresses  
-- **IPv4 and IPv6 Support**: Handles both IPv4 and IPv6 addresses
+- **IP Allowlisting**: Only permit requests from specific IP addresses or CIDR ranges
+- **IP Denylisting**: Block requests from specific IP addresses or CIDR ranges
+- **CIDR Range Support**: Match entire subnets (e.g. `192.168.1.0/24`, `10.0.0.0/8`, `2001:db8::/32`)
+- **IPv4 and IPv6 Support**: Handles both IPv4 and IPv6 addresses and CIDR ranges
 - **High Performance**: Compiled as native code loaded dynamically by Envoy
 
 ## Configuration
@@ -24,12 +25,14 @@ The filter accepts a JSON configuration with exactly one of the following fields
   "allow_addresses": [
     "127.0.0.1",
     "::1",
-    "192.168.1.100"
+    "192.168.1.100",
+    "10.0.0.0/8",
+    "2001:db8::/32"
   ]
 }
 ```
 
-In this mode, only requests from the specified IP addresses are allowed. All other requests receive a 403 Forbidden response.
+In this mode, only requests from the specified IP addresses or CIDR ranges are allowed. All other requests receive a 403 Forbidden response.
 
 ### Deny List Mode
 
@@ -37,12 +40,19 @@ In this mode, only requests from the specified IP addresses are allowed. All oth
 {
   "deny_addresses": [
     "192.168.1.50",
-    "10.0.0.100"
+    "10.0.0.100",
+    "172.16.0.0/12"
   ]
 }
 ```
 
-In this mode, requests from the specified IP addresses are blocked with a 403 Forbidden response. All other requests are allowed.
+In this mode, requests from the specified IP addresses or CIDR ranges are blocked with a 403 Forbidden response. All other requests are allowed.
+
+Each entry in `allow_addresses` or `deny_addresses` can be:
+- An exact IPv4 address: `"192.168.1.1"`
+- An exact IPv6 address: `"::1"`
+- An IPv4 CIDR range: `"192.168.0.0/24"`
+- An IPv6 CIDR range: `"2001:db8::/32"`
 
 ## Envoy Configuration
 
@@ -103,7 +113,6 @@ This is a **standalone Cargo project** - no workspace required!
 
 ## Future Enhancements
 
-- IP range/CIDR support (e.g., `192.168.1.0/24`)
 - Rate limiting per IP
 - Geographic IP filtering
 - Dynamic IP list updates

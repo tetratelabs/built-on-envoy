@@ -12,12 +12,10 @@ on:
         description: |
           JSON array of extensions to release. Each element must have the following fields:
             - name:     extension name as defined in manifest.yaml (e.g. "composer")
-            - type:     extension type as defined in manifest.yaml (e.g. "envoy.filters.http")
-            - language: detected language of the extension, one of "rust", "go", or "lua"
+            - type:     extension type as defined in manifest.yaml (e.g. "rust", "lua", "go")
             - path:     top-level directory name under extensions/ (e.g. "composer")
-            - version:  version string to release (e.g. "1.2.3" or "1.2.3-dev")
           Example:
-            [{"name":"composer","type":"go","language":"go","path":"composer","version":"1.0.0"}]
+            [{"name":"composer","type":"go","path":"composer"}]
         required: true
         type: string
 
@@ -47,25 +45,25 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Release Rust Extension
-        if: matrix.extension.language == 'rust'
+        if: matrix.extension.type == 'rust'
         env:
           EXTENSION_PATH: ${{ matrix.extension.path }}
         run: |
-          echo "Releasing Rust extension: ${{ matrix.extension.name }} (version: ${{ matrix.extension.version }})"
+          echo "Releasing Rust extension: ${{ matrix.extension.name }}"
           make -C extensions push_rust
 
       - name: Release Lua Extension
-        if: matrix.extension.language == 'lua'
+        if: matrix.extension.type == 'lua'
         env:
           EXTENSION_PATH: ${{ matrix.extension.path }}
         run: |
-          echo "Releasing Lua extension: ${{ matrix.extension.name }} (version: ${{ matrix.extension.version }})"
+          echo "Releasing Lua extension: ${{ matrix.extension.name }}"
           make -C extensions push_lua
 
       - name: Release Composer
         if: matrix.extension.name == 'composer'
         run: |
-          echo "Releasing Composer extension (version: ${{ matrix.extension.version }})"
+          echo "Releasing Composer extension"
           make -C extensions/composer push_image
 
       - name: Release Composer Lite
