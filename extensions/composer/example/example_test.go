@@ -369,7 +369,7 @@ func TestOnRequestBody(t *testing.T) {
 
 		assert.Equal(t, shared.BodyStatusContinue, status)
 		assert.Equal(t, "plain/text", requestHeaders.GetOne("content-type"))
-		assert.Equal(t, "", requestHeaders.GetOne("content-length"))
+		assert.Empty(t, requestHeaders.GetOne("content-length"))
 		// Verify the body was rewritten
 		assert.Equal(t, "Modified by ExamplePlugin", string(bufferedBody.Body))
 	})
@@ -411,7 +411,7 @@ func TestOnRequestTrailers(t *testing.T) {
 
 	assert.Equal(t, shared.TrailersStatusContinue, status)
 	assert.Equal(t, "plain/text", requestHeaders.GetOne("content-type"))
-	assert.Equal(t, "", requestHeaders.GetOne("content-length"))
+	assert.Empty(t, requestHeaders.GetOne("content-length"))
 }
 
 func TestOnResponseHeaders(t *testing.T) {
@@ -469,7 +469,7 @@ func TestOnResponseBody(t *testing.T) {
 		status := plugin.OnResponseBody(body, true)
 
 		assert.Equal(t, shared.BodyStatusContinue, status)
-		assert.Equal(t, "", responseHeaders.GetOne("content-length"))
+		assert.Empty(t, responseHeaders.GetOne("content-length"))
 		// With empty original body, the result should be JSON-wrapped
 		assert.Contains(t, string(bufferedBody.Body), `"modified_by":"ExamplePlugin"`)
 	})
@@ -493,7 +493,7 @@ func TestOnResponseBody(t *testing.T) {
 		status := plugin.OnResponseBody(body, true)
 
 		assert.Equal(t, shared.BodyStatusContinue, status)
-		assert.Equal(t, "", responseHeaders.GetOne("content-length"))
+		assert.Empty(t, responseHeaders.GetOne("content-length"))
 		// With empty original body, the result should be text-wrapped
 		assert.Contains(t, string(bufferedBody.Body), "Modified by ExamplePlugin")
 		assert.Contains(t, string(bufferedBody.Body), "Original Body:")
@@ -535,5 +535,5 @@ func TestOnResponseTrailers(t *testing.T) {
 	status := plugin.OnResponseTrailers(trailers)
 
 	assert.Equal(t, shared.TrailersStatusContinue, status)
-	assert.Equal(t, "", responseHeaders.GetOne("content-length"))
+	assert.Empty(t, responseHeaders.GetOne("content-length"))
 }
