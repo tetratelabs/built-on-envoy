@@ -145,8 +145,8 @@ func parseConfig(data []byte) (*Config, error) {
 	// Resolve SPCertPEM and SPKeyPEM (optional pair; nil means absent, auto-generate).
 	var spCertPEM, spKeyPEM string
 	if raw.SPCertPEM != nil {
-		if err := raw.SPCertPEM.Validate(); err != nil {
-			return nil, fmt.Errorf("sp_cert_pem: %w", err)
+		if validateErr := raw.SPCertPEM.Validate(); validateErr != nil {
+			return nil, fmt.Errorf("sp_cert_pem: %w", validateErr)
 		}
 		content, e := raw.SPCertPEM.Content()
 		if e != nil {
@@ -155,8 +155,8 @@ func parseConfig(data []byte) (*Config, error) {
 		spCertPEM = string(content)
 	}
 	if raw.SPKeyPEM != nil {
-		if err := raw.SPKeyPEM.Validate(); err != nil {
-			return nil, fmt.Errorf("sp_key_pem: %w", err)
+		if validateErr := raw.SPKeyPEM.Validate(); validateErr != nil {
+			return nil, fmt.Errorf("sp_key_pem: %w", validateErr)
 		}
 		content, e := raw.SPKeyPEM.Content()
 		if e != nil {
