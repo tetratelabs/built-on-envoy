@@ -14,38 +14,40 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 
 	boeJwe "github.com/tetratelabs/built-on-envoy/extensions/composer/jwe-decrypt/jwe"
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 // Config represents the JSON configuration for this filter.
 type jweDecryptConfig struct {
-	// KeyFile is the path to the file containing the PKCS8 private key, in PEM format.
-	KeyFile string `json:"key_file"`
-	// InlineKey is the PKCS8 private key provided directly in the configuration, in PEM format, base64 encoded.
-	InlineKey string `json:"inline_key"`
+	// PrivateKey is the PKCS8 private key used for decryption, provided either via a file path or inline.
+	// When using inline, the value must be the base64-encoded PEM content.
+	PrivateKey pkg.DataSource `json:"private_key"`
 	// InputHeader is the name of the header that contains the JWE string to be decrypted. Defaults to Authorization if not specified.
 	InputHeader string `json:"input_header"`
 	// Prefix is an optional prefix to remove from the input header value before decryption (e.g., "Bearer ").
 	Prefix string `json:"prefix"`
 	// OutputHeader is the name of the header where the decrypted payload will be stored.
 	OutputHeader string `json:"output_header"`
-	// OutputMetadataKey is the key under which the decrypted payload will be stored in the request metadata for later use.
-	OutputMetadataKey string `json:"output_metadata_key"`
+	// OutputMetadata specifies the metadata namespace and key under which the decrypted payload will be stored.
+	// The namespace defaults to "jwe-decrypt" if not specified.
+	OutputMetadata *pkg.MetadataKey `json:"output_metadata"`
 
 	privateKey *boeJwe.Keys
 }
 
 func (f *jweDecryptConfig) getKey() (*boeJwe.Keys, error) {
-	if f.KeyFile != "" {
-		return boeJwe.ParsePrivateKeyFromFile(f.KeyFile)
-	} else if f.InlineKey != "" {
-		// base64 decode the inline key before parsing
-		decodedKey, err := base64.StdEncoding.DecodeString(f.InlineKey)
-		if err != nil {
-			return nil, fmt.Errorf("failed to base64 decode inline key: %w", err)
-		}
-		return boeJwe.ParsePrivateKey(string(decodedKey))
+	content, err := f.PrivateKey.Content()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read private key: %w", err)
 	}
-	return nil, fmt.Errorf("no decryption key provided in config")
+	if f.PrivateKey.Inline != "" {
+		// Inline keys are base64-encoded PEM; decode before parsing.
+		content, err = base64.StdEncoding.DecodeString(string(content))
+		if err != nil {
+			return nil, fmt.Errorf("failed to base64 decode inline private key: %w", err)
+		}
+	}
+	return boeJwe.ParsePrivateKey(string(content))
 }
 
 // This is the implementation of the HTTP filter.
@@ -85,8 +87,8 @@ func (f *jweDecryptHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool
 		if f.config.OutputHeader != "" {
 			f.handle.RequestHeaders().Set(f.config.OutputHeader, string(payload))
 		}
-		if f.config.OutputMetadataKey != "" {
-			f.handle.SetMetadata("jwe-decrypt", f.config.OutputMetadataKey, payload)
+		if f.config.OutputMetadata != nil {
+			f.handle.SetMetadata(f.config.OutputMetadata.Namespace, f.config.OutputMetadata.Key, payload)
 		}
 	}
 
@@ -121,6 +123,11 @@ func (f *JWEDecryptHttpFilterConfigFactory) Create(handle shared.HttpFilterConfi
 		return nil, err
 	}
 
+	if err := cfg.PrivateKey.Validate(); err != nil {
+		handle.Log(shared.LogLevelError, "jwe-decrypt: invalid key config: "+err.Error())
+		return nil, err
+	}
+
 	// Parse private key from config (either from file or inline)
 	k, err := cfg.getKey()
 	if err != nil {
@@ -132,6 +139,16 @@ func (f *JWEDecryptHttpFilterConfigFactory) Create(handle shared.HttpFilterConfi
 	// Default input header to "Authorization" if not specified
 	if cfg.InputHeader == "" {
 		cfg.InputHeader = "Authorization"
+	}
+	// Default metadata namespace to "jwe-decrypt" if not specified
+	if cfg.OutputMetadata != nil {
+		if cfg.OutputMetadata.Namespace == "" {
+			cfg.OutputMetadata.Namespace = "jwe-decrypt"
+		}
+		if err := cfg.OutputMetadata.Validate(); err != nil {
+			handle.Log(shared.LogLevelError, "jwe-decrypt: invalid output metadata config: "+err.Error())
+			return nil, err
+		}
 	}
 
 	return &jweDecryptHttpFilterFactory{config: &cfg}, nil

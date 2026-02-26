@@ -44,7 +44,7 @@ Version of Built On Envoy Composer. Required if type is `composer` unless the `p
 |---|---|
 | **Type** | `string` |
 | **Required** | No |
-| **Pattern** | `^\d+\.\d+\.\d+$` |
+| **Pattern** | `^\d+\.\d+\.\d+(-dev)?$` |
 | **Forbidden when** | `parent` is set |
 | **Required when** | `type` is `go` and `parent` is not set |
 
@@ -278,7 +278,7 @@ Semantic version of the extension. Required unless the `parent` field is set.
 |---|---|
 | **Type** | `string` |
 | **Required** | No |
-| **Pattern** | `^\d+\.\d+\.\d+$` |
+| **Pattern** | `^\d+\.\d+\.\d+(-dev)?$` |
 | **Forbidden when** | `parent` is set |
 | **Required when** | `parent` is not set |
 
