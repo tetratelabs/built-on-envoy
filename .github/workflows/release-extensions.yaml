@@ -65,18 +65,7 @@ jobs:
             old_version=$(git show HEAD~1:"$manifest" 2>/dev/null | grep '^version:' | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"' || echo "")
             new_version=$(grep '^version:' "$manifest" | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"' || echo "")
             
-            # Detect language
-            lang=""
-            ext_dir="extensions/$ext_path"
-            if [ -f "$ext_dir/Cargo.toml" ]; then
-              lang="rust"
-            elif [ -f "$ext_dir/go.mod" ]; then
-              lang="go"
-            elif grep -q "^lua:" "$manifest"; then
-              lang="lua"
-            fi
-            
-            echo "Extension: $ext_name (type=$type, lang=$lang, path=$ext_path)"
+            echo "Extension: $ext_name (type=$type, path=$ext_path)"
             echo "Old version: ${old_version:-<new extension>}"
             echo "New version: $new_version"
             
@@ -92,10 +81,8 @@ jobs:
               changed_extensions=$(echo "$changed_extensions" | jq -c \
                 --arg name "$ext_name" \
                 --arg type "$type" \
-                --arg lang "$lang" \
                 --arg path "$ext_path" \
-                --arg version "$new_version" \
-                '. + [{name: $name, type: $type, language: $lang, path: $path, version: $version}]')
+                '. + [{name: $name, type: $type, path: $path}]')
               has_changes="true"
             else
               echo "Skipping $ext_name: old version: ${old_version:-<none>}, new version: $new_version"
