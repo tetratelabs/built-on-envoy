@@ -17,6 +17,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	boeJwe "github.com/tetratelabs/built-on-envoy/extensions/composer/jwe-decrypt/jwe"
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 // Helper functions
@@ -88,9 +89,12 @@ func TestOnRequestHeaders_WithMetadataOutput(t *testing.T) {
 	jweToken := createTestJWE(t, payload)
 
 	config := &jweDecryptConfig{
-		KeyFile:           getTestKeyPath(),
-		InputHeader:       "x-jwe-token",
-		OutputMetadataKey: "decrypted-payload",
+		KeyFile:     getTestKeyPath(),
+		InputHeader: "x-jwe-token",
+		OutputMetadata: &pkg.MetadataKey{
+			Namespace: "jwe-decrypt",
+			Key:       "decrypted-payload",
+		},
 	}
 
 	// Populate the privateJwks field
@@ -129,10 +133,13 @@ func TestOnRequestHeaders_WithBothHeaderAndMetadata(t *testing.T) {
 	jweToken := createTestJWE(t, payload)
 
 	config := &jweDecryptConfig{
-		KeyFile:           getTestKeyPath(),
-		InputHeader:       "x-jwe-token",
-		OutputHeader:      "x-decrypted",
-		OutputMetadataKey: "decrypted-payload",
+		KeyFile:      getTestKeyPath(),
+		InputHeader:  "x-jwe-token",
+		OutputHeader: "x-decrypted",
+		OutputMetadata: &pkg.MetadataKey{
+			Namespace: "jwe-decrypt",
+			Key:       "decrypted-payload",
+		},
 	}
 
 	// Populate the privateJwks field
@@ -168,6 +175,49 @@ func TestOnRequestHeaders_WithBothHeaderAndMetadata(t *testing.T) {
 	decryptedValues := requestHeaders.Get("x-decrypted")
 	require.Len(t, decryptedValues, 1)
 	require.Equal(t, payload, decryptedValues[0])
+	require.Equal(t, []byte(payload), capturedMetadata)
+}
+
+func TestOnRequestHeaders_WithCustomMetadataNamespace(t *testing.T) {
+	payload := "test-payload-custom-ns"
+	jweToken := createTestJWE(t, payload)
+
+	config := &jweDecryptConfig{
+		KeyFile:     getTestKeyPath(),
+		InputHeader: "x-jwe-token",
+		OutputMetadata: &pkg.MetadataKey{
+			Namespace: "my-custom-namespace",
+			Key:       "decrypted-payload",
+		},
+	}
+
+	keySet, err := config.getKey()
+	require.NoError(t, err)
+	config.privateKey = keySet
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().RequestHeaders().Return(fake.NewFakeHeaderMap(map[string][]string{})).AnyTimes()
+
+	var capturedMetadata []byte
+	mockHandle.EXPECT().SetMetadata("my-custom-namespace", "decrypted-payload", gomock.Any()).Do(func(_, _ string, value []byte) {
+		capturedMetadata = value
+	})
+
+	filter := &jweDecryptHttpFilter{
+		config: config,
+		handle: mockHandle,
+	}
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		"x-jwe-token": {jweToken},
+	})
+
+	status := filter.OnRequestHeaders(headers, false)
+
+	require.Equal(t, shared.HeadersStatusContinue, status)
 	require.Equal(t, []byte(payload), capturedMetadata)
 }
 
@@ -407,10 +457,13 @@ func TestOnRequestHeaders_WithPrefixAndMetadata(t *testing.T) {
 	jweToken := createTestJWE(t, payload)
 
 	config := &jweDecryptConfig{
-		KeyFile:           getTestKeyPath(),
-		InputHeader:       "Authorization",
-		OutputMetadataKey: "decrypted-payload",
-		Prefix:            "Bearer ",
+		KeyFile:     getTestKeyPath(),
+		InputHeader: "Authorization",
+		OutputMetadata: &pkg.MetadataKey{
+			Namespace: "jwe-decrypt",
+			Key:       "decrypted-payload",
+		},
+		Prefix: "Bearer ",
 	}
 
 	// Populate the privateJwks field
@@ -585,6 +638,58 @@ func TestJWEDecryptHttpFilterConfigFactory_Create_ValidConfig(t *testing.T) {
 	require.Equal(t, config.KeyFile, jweFilterFactory.config.KeyFile)
 	require.Equal(t, config.InputHeader, jweFilterFactory.config.InputHeader)
 	require.Equal(t, config.OutputHeader, jweFilterFactory.config.OutputHeader)
+}
+
+func TestJWEDecryptHttpFilterConfigFactory_Create_DefaultMetadataNamespace(t *testing.T) {
+	// When output_metadata is set without a namespace, it should default to "jwe-decrypt".
+	config := jweDecryptConfig{
+		KeyFile:        getTestKeyPath(),
+		InputHeader:    "x-jwe-token",
+		OutputMetadata: &pkg.MetadataKey{Key: "decrypted-payload"},
+	}
+
+	configJSON, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	factory := &JWEDecryptHttpFilterConfigFactory{}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+
+	filterFactory, err := factory.Create(mockHandle, configJSON)
+
+	require.NoError(t, err)
+	jweFilterFactory, ok := filterFactory.(*jweDecryptHttpFilterFactory)
+	require.True(t, ok)
+	require.Equal(t, "jwe-decrypt", jweFilterFactory.config.OutputMetadata.Namespace)
+}
+
+func TestJWEDecryptHttpFilterConfigFactory_Create_CustomMetadataNamespace(t *testing.T) {
+	config := jweDecryptConfig{
+		KeyFile:     getTestKeyPath(),
+		InputHeader: "x-jwe-token",
+		OutputMetadata: &pkg.MetadataKey{
+			Namespace: "my-namespace",
+			Key:       "decrypted-payload",
+		},
+	}
+
+	configJSON, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	factory := &JWEDecryptHttpFilterConfigFactory{}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+
+	filterFactory, err := factory.Create(mockHandle, configJSON)
+
+	require.NoError(t, err)
+	jweFilterFactory, ok := filterFactory.(*jweDecryptHttpFilterFactory)
+	require.True(t, ok)
+	require.Equal(t, "my-namespace", jweFilterFactory.config.OutputMetadata.Namespace)
 }
 
 func TestJWEDecryptHttpFilterConfigFactory_Create_EmptyConfig(t *testing.T) {

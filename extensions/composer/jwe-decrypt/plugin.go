@@ -14,6 +14,7 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 
 	boeJwe "github.com/tetratelabs/built-on-envoy/extensions/composer/jwe-decrypt/jwe"
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 // Config represents the JSON configuration for this filter.
@@ -28,8 +29,9 @@ type jweDecryptConfig struct {
 	Prefix string `json:"prefix"`
 	// OutputHeader is the name of the header where the decrypted payload will be stored.
 	OutputHeader string `json:"output_header"`
-	// OutputMetadataKey is the key under which the decrypted payload will be stored in the request metadata for later use.
-	OutputMetadataKey string `json:"output_metadata_key"`
+	// OutputMetadata specifies the metadata namespace and key under which the decrypted payload will be stored.
+	// The namespace defaults to "jwe-decrypt" if not specified.
+	OutputMetadata *pkg.MetadataKey `json:"output_metadata"`
 
 	privateKey *boeJwe.Keys
 }
@@ -85,8 +87,8 @@ func (f *jweDecryptHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool
 		if f.config.OutputHeader != "" {
 			f.handle.RequestHeaders().Set(f.config.OutputHeader, string(payload))
 		}
-		if f.config.OutputMetadataKey != "" {
-			f.handle.SetMetadata("jwe-decrypt", f.config.OutputMetadataKey, payload)
+		if f.config.OutputMetadata != nil {
+			f.handle.SetMetadata(f.config.OutputMetadata.Namespace, f.config.OutputMetadata.Key, payload)
 		}
 	}
 
@@ -132,6 +134,16 @@ func (f *JWEDecryptHttpFilterConfigFactory) Create(handle shared.HttpFilterConfi
 	// Default input header to "Authorization" if not specified
 	if cfg.InputHeader == "" {
 		cfg.InputHeader = "Authorization"
+	}
+	// Default metadata namespace to "jwe-decrypt" if not specified
+	if cfg.OutputMetadata != nil {
+		if cfg.OutputMetadata.Namespace == "" {
+			cfg.OutputMetadata.Namespace = "jwe-decrypt"
+		}
+		if cfg.OutputMetadata.Key == "" {
+			handle.Log(shared.LogLevelError, "jwe-decrypt: output_metadata must specify a key")
+			return nil, fmt.Errorf("output_metadata must specify a key")
+		}
 	}
 
 	return &jweDecryptHttpFilterFactory{config: &cfg}, nil

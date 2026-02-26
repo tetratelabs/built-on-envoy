@@ -19,6 +19,16 @@ var (
 	ErrDataSourceNeitherSet = errors.New("either 'inline' or 'file' must be set")
 )
 
+// MetadataKey identifies a location in Envoy's dynamic metadata by combining a
+// namespace with a key. Use this in extension configs to write metadata entries
+// that downstream filters (e.g. JWT authn, OPA, ext_authz) can read.
+type MetadataKey struct {
+	// Namespace is the filter-state namespace for the metadata entry.
+	Namespace string `json:"namespace"`
+	// Key is the key under which the value is stored within the namespace.
+	Key string `json:"key"`
+}
+
 // DataSource represents a data source that can be either inline or from a file.
 type DataSource struct {
 	// Inline contains the data directly as a string.
