@@ -176,7 +176,7 @@
     "author": "Tetrate",
     "featured": true,
     "description": "IP-based access control using allowlists or denylists",
-    "longDescription": "This extension provides IP-based access control for your Envoy proxy using Rust and Envoy's\ndynamic module framework. It allows you to define allowlists or denylists of IP addresses,\nrestricting access based on the client's source IP.\n\n## Features\n\n* **IP Allowlisting**: Only permit requests from specific IP addresses\n* **IP Denylisting**: Block requests from specific IP addresses\n* **IPv4 and IPv6 Support**: Handles both IPv4 and IPv6 addresses\n\n## How It Works\n\nThe filter examines the source IP address of incoming requests and compares it against\nthe configured allow or deny list. Requests that don't match the policy receive a 403\nForbidden response.\n\n## Configuration\n\nYou must specify exactly one of:\n- `allow_addresses`: Array of IP addresses to allow (all others blocked)\n- `deny_addresses`: Array of IP addresses to deny (all others allowed)\n\n## Building\n\nThis is a Rust dynamic module that must be compiled to a shared library (`.so` on Linux,\n`.dylib` on macOS). The compiled module is loaded by Envoy at runtime.\n\n```bash\ncargo build --release -p ip-restriction\n```\n\nThe compiled library will be at `target/release/libip_restriction.{so,dylib}`\n\n## Note on Dynamic Modules\n\nThis extension requires Envoy to be built with dynamic module support. This feature\nis experimental and may not be available in all Envoy distributions.\n",
+    "longDescription": "This extension provides IP-based access control for your Envoy proxy using Rust and Envoy's\ndynamic module framework. It allows you to define allowlists or denylists of IP addresses,\nrestricting access based on the client's source IP.\n\n## Features\n\n* **IP Allowlisting**: Only permit requests from specific IP addresses or CIDR ranges\n* **IP Denylisting**: Block requests from specific IP addresses or CIDR ranges\n* **CIDR Range Support**: Match entire subnets (e.g. `192.168.1.0/24`, `10.0.0.0/8`, `2001:db8::/32`)\n* **IPv4 and IPv6 Support**: Handles both IPv4 and IPv6 addresses and CIDR ranges\n\n## How It Works\n\nThe filter examines the source IP address of incoming requests and compares it against\nthe configured allow or deny list. Requests that don't match the policy receive a 403\nForbidden response.\n\n## Configuration\n\nYou must specify exactly one of:\n- `allow_addresses`: Array of IP addresses or CIDR ranges to allow (all others blocked)\n- `deny_addresses`: Array of IP addresses or CIDR ranges to deny (all others allowed)\n\nEach entry can be an exact IPv4/IPv6 address or a CIDR range (e.g. `192.168.1.0/24`, `10.0.0.0/8`).\n\n## Building\n\nThis is a Rust dynamic module that must be compiled to a shared library (`.so` on Linux,\n`.dylib` on macOS). The compiled module is loaded by Envoy at runtime.\n\n```bash\ncargo build --release -p ip-restriction\n```\n\nThe compiled library will be at `target/release/libip_restriction.{so,dylib}`\n\n## Note on Dynamic Modules\n\nThis extension requires Envoy to be built with dynamic module support. This feature\nis experimental and may not be available in all Envoy distributions.\n",
     "type": "rust",
     "tags": [
       "security",
@@ -192,6 +192,11 @@
         "title": "Allow Specific IPs",
         "description": "Only allow requests from localhost and a specific IP",
         "code": "boe run --extension ip-restriction --config '\n  {\n    \"allow_addresses\": [\n      \"127.0.0.1\",\n      \"::1\",\n      \"192.168.1.100\"\n    ]\n  }'\n"
+      },
+      {
+        "title": "Allow a CIDR Range",
+        "description": "Only allow requests from a private subnet",
+        "code": "boe run --extension ip-restriction --config '\n  {\n    \"allow_addresses\": [\n      \"127.0.0.1\",\n      \"10.0.0.0/8\",\n      \"192.168.0.0/16\"\n    ]\n  }'\n"
       },
       {
         "title": "Deny Specific IPs",

@@ -18,9 +18,10 @@ longDescription: |
 
   ## Features
 
-  * **IP Allowlisting**: Only permit requests from specific IP addresses
-  * **IP Denylisting**: Block requests from specific IP addresses
-  * **IPv4 and IPv6 Support**: Handles both IPv4 and IPv6 addresses
+  * **IP Allowlisting**: Only permit requests from specific IP addresses or CIDR ranges
+  * **IP Denylisting**: Block requests from specific IP addresses or CIDR ranges
+  * **CIDR Range Support**: Match entire subnets (e.g. `192.168.1.0/24`, `10.0.0.0/8`, `2001:db8::/32`)
+  * **IPv4 and IPv6 Support**: Handles both IPv4 and IPv6 addresses and CIDR ranges
 
   ## How It Works
 
@@ -31,8 +32,10 @@ longDescription: |
   ## Configuration
 
   You must specify exactly one of:
-  - `allow_addresses`: Array of IP addresses to allow (all others blocked)
-  - `deny_addresses`: Array of IP addresses to deny (all others allowed)
+  - `allow_addresses`: Array of IP addresses or CIDR ranges to allow (all others blocked)
+  - `deny_addresses`: Array of IP addresses or CIDR ranges to deny (all others allowed)
+
+  Each entry can be an exact IPv4/IPv6 address or a CIDR range (e.g. `192.168.1.0/24`, `10.0.0.0/8`).
 
   ## Building
 
@@ -68,6 +71,17 @@ examples:
             "127.0.0.1",
             "::1",
             "192.168.1.100"
+          ]
+        }'
+  - title: Allow a CIDR Range
+    description: Only allow requests from a private subnet
+    code: |
+      boe run --extension ip-restriction --config '
+        {
+          "allow_addresses": [
+            "127.0.0.1",
+            "10.0.0.0/8",
+            "192.168.0.0/16"
           ]
         }'
   - title: Deny Specific IPs

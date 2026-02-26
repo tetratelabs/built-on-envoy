@@ -4,16 +4,15 @@
 // the root of the repo.
 
 use envoy_proxy_dynamic_modules_rust_sdk::*;
+use ipnet::IpNet;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use std::net::Ipv4Addr;
-use std::net::Ipv6Addr;
+use std::net::IpAddr;
 use std::str::FromStr;
 use std::sync::Arc;
 
 // The raw filter config that will be deserialized from the JSON configuration.
 // TODO: To support protobuf based API declaration in the future.
-// TODO: to support ip range in the future.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RawFilterConfig {
     #[serde(default)]
@@ -24,8 +23,12 @@ pub struct RawFilterConfig {
 
 #[derive(Debug)]
 pub struct FilterConfigImpl {
-    deny_addresses_exact: HashSet<String>,
-    allow_addresses_exact: HashSet<String>,
+    // Exact IP addresses stored in a HashSet for O(1) lookup.
+    deny_addresses_exact: HashSet<IpAddr>,
+    allow_addresses_exact: HashSet<IpAddr>,
+    // CIDR ranges stored in a Vec for sequential containment checks.
+    deny_addresses_cidr: Vec<IpNet>,
+    allow_addresses_cidr: Vec<IpNet>,
 }
 
 #[derive(Debug, Clone)]
@@ -54,30 +57,44 @@ impl FilterConfig {
 
         let mut deny_addresses_exact = HashSet::new();
         let mut allow_addresses_exact = HashSet::new();
+        let mut deny_addresses_cidr = Vec::new();
+        let mut allow_addresses_cidr = Vec::new();
 
-        // Validate every ip in the set is a valid IPv4 address or IPv6 address.
-        for ip in &filter_config.allow_addresses {
-            if Ipv4Addr::from_str(ip).is_err() && Ipv6Addr::from_str(ip).is_err() {
-                eprintln!("Error parsing ip in allow_addresses: {ip}");
+        for entry in &filter_config.allow_addresses {
+            if let Ok(ip) = IpAddr::from_str(entry) {
+                allow_addresses_exact.insert(ip);
+            } else if let Ok(net) = IpNet::from_str(entry) {
+                allow_addresses_cidr.push(net);
+            } else {
+                eprintln!("Error parsing IP or CIDR in allow_addresses: {entry}");
                 return None;
             }
-            allow_addresses_exact.insert(ip.clone());
         }
-        for ip in &filter_config.deny_addresses {
-            if Ipv4Addr::from_str(ip).is_err() && Ipv6Addr::from_str(ip).is_err() {
-                eprintln!("Error parsing ip in deny_addresses: {ip}");
+        for entry in &filter_config.deny_addresses {
+            if let Ok(ip) = IpAddr::from_str(entry) {
+                deny_addresses_exact.insert(ip);
+            } else if let Ok(net) = IpNet::from_str(entry) {
+                deny_addresses_cidr.push(net);
+            } else {
+                eprintln!("Error parsing IP or CIDR in deny_addresses: {entry}");
                 return None;
             }
-            deny_addresses_exact.insert(ip.clone());
         }
 
         Some(FilterConfig {
             config: Arc::new(FilterConfigImpl {
                 deny_addresses_exact,
                 allow_addresses_exact,
+                deny_addresses_cidr,
+                allow_addresses_cidr,
             }),
         })
     }
+}
+
+/// Returns true if `ip` matches any exact address or CIDR range in the given sets.
+fn matches(ip: &IpAddr, exact: &HashSet<IpAddr>, cidrs: &[IpNet]) -> bool {
+    exact.contains(ip) || cidrs.iter().any(|net| net.contains(ip))
 }
 
 impl<EHF: EnvoyHttpFilter> HttpFilterConfig<EHF> for FilterConfig {
@@ -136,26 +153,47 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for Filter {
             }
         }
 
+        // Strip IPv6 brackets if present (e.g. "[::1]" → "::1").
+        let ip_str = if downstream_addr_str.starts_with('[') && downstream_addr_str.ends_with(']') {
+            &downstream_addr_str[1..downstream_addr_str.len() - 1]
+        } else {
+            downstream_addr_str.as_str()
+        };
+
+        // Parse the downstream IP for CIDR matching.
+        let downstream_ip = match IpAddr::from_str(ip_str) {
+            Ok(ip) => ip,
+            Err(_) => {
+                envoy_filter.send_response(
+                    403,
+                    vec![],
+                    Some(b"No remote address and request is forbidden."),
+                    None,
+                );
+                return abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::StopIteration;
+            }
+        };
+
+        let cfg = &self.filter_config.config;
+
         // Check if the downstream addr is in the allowed list.
-        if !self.filter_config.config.allow_addresses_exact.is_empty()
-            && !self
-                .filter_config
-                .config
-                .allow_addresses_exact
-                .contains(&downstream_addr_str)
+        if (!cfg.allow_addresses_exact.is_empty() || !cfg.allow_addresses_cidr.is_empty())
+            && !matches(
+                &downstream_ip,
+                &cfg.allow_addresses_exact,
+                &cfg.allow_addresses_cidr,
+            )
         {
             envoy_filter.send_response(403, vec![], Some(b"Request is forbidden."), None);
             return abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::StopIteration;
         }
 
         // Check if the downstream addr is in the denied list.
-        if !self.filter_config.config.deny_addresses_exact.is_empty()
-            && self
-                .filter_config
-                .config
-                .deny_addresses_exact
-                .contains(&downstream_addr_str)
-        {
+        if matches(
+            &downstream_ip,
+            &cfg.deny_addresses_exact,
+            &cfg.deny_addresses_cidr,
+        ) {
             envoy_filter.send_response(403, vec![], Some(b"Request is forbidden."), None);
             return abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::StopIteration;
         }
@@ -236,6 +274,33 @@ mod tests {
         "allow_addresses": [
           "127.0.0.1",
           "invalid_ip"
+        ]
+      }"#,
+        );
+        assert!(filter_config.is_none());
+    }
+
+    #[test]
+    fn test_new_filter_config_with_cidr() {
+        let filter_config = FilterConfig::new(
+            r#"{
+        "allow_addresses": [
+          "127.0.0.1",
+          "192.168.0.0/24",
+          "2001:db8::/32"
+        ]
+      }"#,
+        );
+        assert!(filter_config.is_some());
+    }
+
+    #[test]
+    fn test_new_filter_config_invalid_cidr() {
+        let filter_config = FilterConfig::new(
+            r#"{
+        "allow_addresses": [
+          "127.0.0.1",
+          "192.168.0.0/99"
         ]
       }"#,
         );
@@ -379,6 +444,221 @@ mod tests {
         assert_eq!(
             filter.on_request_headers(&mut mock_envoy_filter, true),
             abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::Continue
+        );
+    }
+
+    #[test]
+    fn test_filter_with_allowed_cidr() {
+        let filter_config = FilterConfig::new(
+            r#"{
+        "allow_addresses": [
+          "192.168.1.0/24"
+        ]
+      }"#,
+        );
+        assert!(filter_config.is_some());
+
+        let mut filter = Filter {
+            filter_config: filter_config.unwrap(),
+        };
+
+        // IP within the CIDR range should be allowed.
+        let mut mock_envoy_filter =
+            envoy_proxy_dynamic_modules_rust_sdk::MockEnvoyHttpFilter::new();
+        mock_envoy_filter
+            .expect_get_attribute_string()
+            .times(1)
+            .returning(|_| Some(EnvoyBuffer::new("192.168.1.100:8080")));
+        mock_envoy_filter
+            .expect_get_attribute_int()
+            .times(1)
+            .returning(|_| Some(8080));
+        assert_eq!(
+            filter.on_request_headers(&mut mock_envoy_filter, true),
+            abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::Continue
+        );
+
+        // IP outside the CIDR range should be blocked.
+        mock_envoy_filter
+            .expect_get_attribute_string()
+            .times(1)
+            .returning(|_| Some(EnvoyBuffer::new("192.168.2.1:8080")));
+        mock_envoy_filter
+            .expect_get_attribute_int()
+            .times(1)
+            .returning(|_| Some(8080));
+        mock_envoy_filter
+            .expect_send_response()
+            .times(1)
+            .returning(|code, _, _, _| assert!(code == 403));
+        assert_eq!(
+            filter.on_request_headers(&mut mock_envoy_filter, true),
+            abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::StopIteration
+        );
+    }
+
+    #[test]
+    fn test_filter_with_denied_cidr() {
+        let filter_config = FilterConfig::new(
+            r#"{
+        "deny_addresses": [
+          "10.0.0.0/8"
+        ]
+      }"#,
+        );
+        assert!(filter_config.is_some());
+
+        let mut filter = Filter {
+            filter_config: filter_config.unwrap(),
+        };
+
+        // IP within the denied CIDR range should be blocked.
+        let mut mock_envoy_filter =
+            envoy_proxy_dynamic_modules_rust_sdk::MockEnvoyHttpFilter::new();
+        mock_envoy_filter
+            .expect_get_attribute_string()
+            .times(1)
+            .returning(|_| Some(EnvoyBuffer::new("10.42.1.5:12345")));
+        mock_envoy_filter
+            .expect_get_attribute_int()
+            .times(1)
+            .returning(|_| Some(12345));
+        mock_envoy_filter
+            .expect_send_response()
+            .times(1)
+            .returning(|code, _, _, _| assert!(code == 403));
+        assert_eq!(
+            filter.on_request_headers(&mut mock_envoy_filter, true),
+            abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::StopIteration
+        );
+
+        // IP outside the denied CIDR range should be allowed.
+        mock_envoy_filter
+            .expect_get_attribute_string()
+            .times(1)
+            .returning(|_| Some(EnvoyBuffer::new("192.168.1.1:12345")));
+        mock_envoy_filter
+            .expect_get_attribute_int()
+            .times(1)
+            .returning(|_| Some(12345));
+        assert_eq!(
+            filter.on_request_headers(&mut mock_envoy_filter, true),
+            abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::Continue
+        );
+    }
+
+    #[test]
+    fn test_filter_with_mixed_exact_and_cidr() {
+        let filter_config = FilterConfig::new(
+            r#"{
+        "allow_addresses": [
+          "127.0.0.1",
+          "10.0.0.0/8"
+        ]
+      }"#,
+        );
+        assert!(filter_config.is_some());
+
+        let mut filter = Filter {
+            filter_config: filter_config.unwrap(),
+        };
+
+        // Exact IP match.
+        let mut mock_envoy_filter =
+            envoy_proxy_dynamic_modules_rust_sdk::MockEnvoyHttpFilter::new();
+        mock_envoy_filter
+            .expect_get_attribute_string()
+            .times(1)
+            .returning(|_| Some(EnvoyBuffer::new("127.0.0.1:9000")));
+        mock_envoy_filter
+            .expect_get_attribute_int()
+            .times(1)
+            .returning(|_| Some(9000));
+        assert_eq!(
+            filter.on_request_headers(&mut mock_envoy_filter, true),
+            abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::Continue
+        );
+
+        // IP within CIDR range.
+        mock_envoy_filter
+            .expect_get_attribute_string()
+            .times(1)
+            .returning(|_| Some(EnvoyBuffer::new("10.100.200.1:9000")));
+        mock_envoy_filter
+            .expect_get_attribute_int()
+            .times(1)
+            .returning(|_| Some(9000));
+        assert_eq!(
+            filter.on_request_headers(&mut mock_envoy_filter, true),
+            abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::Continue
+        );
+
+        // IP not in exact or CIDR.
+        mock_envoy_filter
+            .expect_get_attribute_string()
+            .times(1)
+            .returning(|_| Some(EnvoyBuffer::new("192.168.1.1:9000")));
+        mock_envoy_filter
+            .expect_get_attribute_int()
+            .times(1)
+            .returning(|_| Some(9000));
+        mock_envoy_filter
+            .expect_send_response()
+            .times(1)
+            .returning(|code, _, _, _| assert!(code == 403));
+        assert_eq!(
+            filter.on_request_headers(&mut mock_envoy_filter, true),
+            abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::StopIteration
+        );
+    }
+
+    #[test]
+    fn test_filter_with_ipv6_cidr() {
+        let filter_config = FilterConfig::new(
+            r#"{
+        "allow_addresses": [
+          "2001:db8::/32"
+        ]
+      }"#,
+        );
+        assert!(filter_config.is_some());
+
+        let mut filter = Filter {
+            filter_config: filter_config.unwrap(),
+        };
+
+        // IPv6 address within the CIDR range should be allowed.
+        let mut mock_envoy_filter =
+            envoy_proxy_dynamic_modules_rust_sdk::MockEnvoyHttpFilter::new();
+        mock_envoy_filter
+            .expect_get_attribute_string()
+            .times(1)
+            .returning(|_| Some(EnvoyBuffer::new("[2001:db8::1]:80")));
+        mock_envoy_filter
+            .expect_get_attribute_int()
+            .times(1)
+            .returning(|_| Some(80));
+        assert_eq!(
+            filter.on_request_headers(&mut mock_envoy_filter, true),
+            abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::Continue
+        );
+
+        // IPv6 address outside the CIDR range should be blocked.
+        mock_envoy_filter
+            .expect_get_attribute_string()
+            .times(1)
+            .returning(|_| Some(EnvoyBuffer::new("[2001:db9::1]:80")));
+        mock_envoy_filter
+            .expect_get_attribute_int()
+            .times(1)
+            .returning(|_| Some(80));
+        mock_envoy_filter
+            .expect_send_response()
+            .times(1)
+            .returning(|code, _, _, _| assert!(code == 403));
+        assert_eq!(
+            filter.on_request_headers(&mut mock_envoy_filter, true),
+            abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::StopIteration
         );
     }
 }
