@@ -26,7 +26,7 @@
     "version": {
       "type": "string",
       "description": "Semantic version of the extension. Required unless the `parent` field is set.",
-      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-dev)?$"
     },
     "minEnvoyVersion": {
       "type": "string",
@@ -89,7 +89,7 @@
     "composerVersion": {
       "type": "string",
       "description": "Version of Built On Envoy Composer. Required if type is `composer` unless the `parent` field is set.",
-      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-dev)?$"
     },
     "tags": {
       "type": "array",
