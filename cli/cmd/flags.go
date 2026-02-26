@@ -8,6 +8,7 @@ package cmd
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 )
@@ -22,21 +23,35 @@ type extensionPositions struct {
 // specified via --extension and --local flags.
 func (e extensionPositions) sort(manifests []*extensions.Manifest) ([]*extensions.Manifest, error) {
 	sorted := make([]*extensions.Manifest, len(manifests))
-	for _, m := range manifests {
-		if m.Remote {
-			pos := e.remote[m.Name][0]
-			sorted[pos] = m
-			e.remote[m.Name] = e.remote[m.Name][1:]
-		} else {
+
+	for l, positions := range e.local {
+		pos := slices.IndexFunc(manifests, func(m *extensions.Manifest) bool {
 			flagValue, err := filepath.Abs(filepath.Dir(m.Path))
 			if err != nil {
-				return nil, fmt.Errorf("failed to get absolute path for manifest %s: %w", m.Path, err)
+				return false
 			}
-			pos := e.local[flagValue][0]
-			sorted[pos] = m
-			e.local[flagValue] = e.local[flagValue][1:]
+			return flagValue == l
+		})
+		if pos == -1 {
+			return nil, fmt.Errorf("failed to find manifest for local extension with path %s", l)
+		}
+		for _, p := range positions {
+			sorted[p] = manifests[pos]
 		}
 	}
+
+	for r, positions := range e.remote {
+		pos := slices.IndexFunc(manifests, func(m *extensions.Manifest) bool {
+			return m.Remote && (m.Name+":"+m.Version == r || m.Name == r)
+		})
+		if pos == -1 {
+			return nil, fmt.Errorf("failed to find manifest for remote extension with reference %s", r)
+		}
+		for _, p := range positions {
+			sorted[p] = manifests[pos]
+		}
+	}
+
 	return sorted, nil
 }
 

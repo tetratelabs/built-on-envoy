@@ -212,11 +212,15 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 						name, extensionSrc, err)
 				}
 				manifest.Remote = true // Mark the manifest as remote since it is from a downloaded artifact
+				// The LoadLocalmanifest resolves "parent" the versions from the embedded manifests, but here, after downloading the source
+				// we want to force the version to the ones form the downloaded artifact.
+				manifest.Version = artifact.Manifest.Version
+				manifest.ComposerVersion = artifact.Manifest.ComposerVersion
 
 				if build {
 					fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)
-					downloader.Logger.Info("building downloaded Go extension", "name", manifest.Name, "version", manifest.Version)
-					if err = extensions.BuildLibComposer(downloader.Logger, downloader.Dirs, artifact.Path, manifest.ComposerVersion, false); err != nil {
+					downloader.Logger.Info("building downloaded Go extension", "name", manifest.Name, "version", artifact.Manifest.Version)
+					if err = extensions.BuildLibComposer(downloader.Logger, downloader.Dirs, artifact.Path, artifact.Manifest.Version, false); err != nil {
 						return nil, fmt.Errorf("failed to build libcomposer %s for extension %s: %w",
 							artifact.Manifest.Version, name, err)
 					}
