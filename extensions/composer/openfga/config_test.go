@@ -1,0 +1,340 @@
+// Copyright Built On Envoy
+// SPDX-License-Identifier: Apache-2.0
+// The full text of the Apache license is available in the LICENSE file at
+// the root of the repo.
+
+package openfga
+
+import (
+	"encoding/json"
+	"testing"
+
+	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/fake"
+	"github.com/stretchr/testify/require"
+)
+
+func TestParseConfig_Legacy(t *testing.T) {
+	cfg := openfgaConfig{
+		Cluster:     "openfga",
+		OpenFGAHost: "openfga:8080",
+		StoreID:     "store1",
+		User:        valueSource{Header: "x-user-id", Prefix: "user:"},
+		Relation:    valueSource{Value: "can_use"},
+		Object:      valueSource{Header: "x-ai-model", Prefix: "model:"},
+	}
+	data, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	parsed, err := parseConfig(data)
+	require.NoError(t, err)
+	require.Len(t, parsed.rules, 1)
+	require.Nil(t, parsed.rules[0].match)
+	require.Equal(t, "x-user-id", parsed.rules[0].user.Header)
+	require.Equal(t, "can_use", parsed.rules[0].relation.Value)
+	require.Equal(t, "x-ai-model", parsed.rules[0].object.Header)
+	require.Equal(t, uint64(5000), parsed.timeoutMs)
+	require.Equal(t, 403, parsed.denyStatus)
+	require.Equal(t, "Forbidden", parsed.denyBody)
+}
+
+func TestParseConfig_LegacyDefaults(t *testing.T) {
+	cfg := openfgaConfig{
+		Cluster:     "openfga",
+		OpenFGAHost: "openfga:8080",
+		StoreID:     "store1",
+		User:        valueSource{Header: "x-user-id"},
+		Relation:    valueSource{Value: "reader"},
+		Object:      valueSource{Header: "x-resource"},
+		TimeoutMs:   10000,
+		DenyStatus:  401,
+		DenyBody:    "Unauthorized",
+	}
+	data, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	parsed, err := parseConfig(data)
+	require.NoError(t, err)
+	require.Equal(t, uint64(10000), parsed.timeoutMs)
+	require.Equal(t, 401, parsed.denyStatus)
+	require.Equal(t, "Unauthorized", parsed.denyBody)
+}
+
+func TestParseConfig_MultiRule(t *testing.T) {
+	cfg := openfgaConfig{
+		Cluster:     "openfga",
+		OpenFGAHost: "openfga:8080",
+		StoreID:     "store1",
+		User:        valueSource{Header: "x-user-id", Prefix: "user:"},
+		Rules: []checkRule{
+			{
+				Match:    &ruleMatch{Headers: map[string]string{"x-ai-eg-model": "*"}},
+				Relation: valueSource{Value: "can_use"},
+				Object:   valueSource{Header: "x-ai-eg-model", Prefix: "model:"},
+			},
+			{
+				Match:    &ruleMatch{Headers: map[string]string{"x-mcp-tool": "*"}},
+				Relation: valueSource{Value: "can_invoke"},
+				Object:   valueSource{Header: "x-mcp-tool", Prefix: "tool:"},
+			},
+			{
+				Relation: valueSource{Value: "can_access"},
+				Object:   valueSource{Header: "x-resource-id", Prefix: "resource:"},
+			},
+		},
+	}
+	data, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	parsed, err := parseConfig(data)
+	require.NoError(t, err)
+	require.Len(t, parsed.rules, 3)
+
+	require.NotNil(t, parsed.rules[0].match)
+	require.Equal(t, "can_use", parsed.rules[0].relation.Value)
+	require.Equal(t, "user:", parsed.rules[0].user.Prefix)
+
+	require.NotNil(t, parsed.rules[1].match)
+	require.Equal(t, "can_invoke", parsed.rules[1].relation.Value)
+
+	require.Nil(t, parsed.rules[2].match)
+	require.Equal(t, "can_access", parsed.rules[2].relation.Value)
+}
+
+func TestParseConfig_MultiRule_UserOverride(t *testing.T) {
+	customUser := valueSource{Header: "x-service-account", Prefix: "sa:"}
+	cfg := openfgaConfig{
+		Cluster:     "openfga",
+		OpenFGAHost: "openfga:8080",
+		StoreID:     "store1",
+		User:        valueSource{Header: "x-user-id", Prefix: "user:"},
+		Rules: []checkRule{
+			{
+				User:     &customUser,
+				Relation: valueSource{Value: "can_invoke"},
+				Object:   valueSource{Header: "x-mcp-tool", Prefix: "tool:"},
+			},
+		},
+	}
+	data, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	parsed, err := parseConfig(data)
+	require.NoError(t, err)
+	require.Len(t, parsed.rules, 1)
+	require.Equal(t, "x-service-account", parsed.rules[0].user.Header)
+	require.Equal(t, "sa:", parsed.rules[0].user.Prefix)
+}
+
+func TestParseConfig_CatchAllNotLast(t *testing.T) {
+	cfg := openfgaConfig{
+		Cluster:     "openfga",
+		OpenFGAHost: "openfga:8080",
+		StoreID:     "store1",
+		User:        valueSource{Header: "x-user-id"},
+		Rules: []checkRule{
+			{
+				Relation: valueSource{Value: "can_access"},
+				Object:   valueSource{Header: "x-resource"},
+			},
+			{
+				Match:    &ruleMatch{Headers: map[string]string{"x-ai-model": "*"}},
+				Relation: valueSource{Value: "can_use"},
+				Object:   valueSource{Header: "x-ai-model"},
+			},
+		},
+	}
+	data, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	_, err = parseConfig(data)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "catch-all rule (no match) must be last")
+}
+
+func TestParseConfig_EmptyConfig(t *testing.T) {
+	_, err := parseConfig(nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "configuration is required")
+}
+
+func TestParseConfig_MissingCluster(t *testing.T) {
+	cfg := openfgaConfig{
+		OpenFGAHost: "openfga:8080",
+		StoreID:     "store1",
+		User:        valueSource{Header: "x-user-id"},
+		Relation:    valueSource{Value: "reader"},
+		Object:      valueSource{Header: "x-resource"},
+	}
+	data, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	_, err = parseConfig(data)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "missing required field: cluster")
+}
+
+func TestParseConfig_MissingHost(t *testing.T) {
+	cfg := openfgaConfig{
+		Cluster: "openfga",
+		StoreID: "store1",
+		User:    valueSource{Header: "x-user-id"},
+		Relation: valueSource{Value: "reader"},
+		Object:  valueSource{Header: "x-resource"},
+	}
+	data, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	_, err = parseConfig(data)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "missing required field: openfga_host")
+}
+
+func TestParseConfig_MultiRule_MissingTopLevelUser(t *testing.T) {
+	cfg := openfgaConfig{
+		Cluster:     "openfga",
+		OpenFGAHost: "openfga:8080",
+		StoreID:     "store1",
+		Rules: []checkRule{
+			{
+				Relation: valueSource{Value: "can_access"},
+				Object:   valueSource{Header: "x-resource"},
+			},
+		},
+	}
+	data, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	_, err = parseConfig(data)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "top-level user is required")
+}
+
+func TestParseConfig_MultiRule_InvalidRuleRelation(t *testing.T) {
+	cfg := openfgaConfig{
+		Cluster:     "openfga",
+		OpenFGAHost: "openfga:8080",
+		StoreID:     "store1",
+		User:        valueSource{Header: "x-user-id"},
+		Rules: []checkRule{
+			{
+				Relation: valueSource{},
+				Object:   valueSource{Header: "x-resource"},
+			},
+		},
+	}
+	data, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	_, err = parseConfig(data)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "rule[0].relation")
+}
+
+func TestParseConfig_CheckPath(t *testing.T) {
+	cfg := openfgaConfig{
+		Cluster:     "openfga",
+		OpenFGAHost: "openfga:8080",
+		StoreID:     "STORE_ABC",
+		User:        valueSource{Header: "x-user-id"},
+		Relation:    valueSource{Value: "reader"},
+		Object:      valueSource{Header: "x-resource"},
+	}
+	data, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	parsed, err := parseConfig(data)
+	require.NoError(t, err)
+	require.Equal(t, "/stores/STORE_ABC/check", parsed.checkPath)
+	found := false
+	for _, h := range parsed.calloutHeaders {
+		if h[0] == ":path" {
+			require.Equal(t, "/stores/STORE_ABC/check", h[1])
+			found = true
+		}
+	}
+	require.True(t, found, "expected :path in callout headers")
+}
+
+func TestRuleMatch_Wildcard(t *testing.T) {
+	m := &ruleMatch{Headers: map[string]string{"x-model": "*"}}
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		"x-model": {"gpt-4"},
+	})
+	require.True(t, m.matches(headers))
+
+	empty := fake.NewFakeHeaderMap(map[string][]string{})
+	require.False(t, m.matches(empty))
+}
+
+func TestRuleMatch_ExactValue(t *testing.T) {
+	m := &ruleMatch{Headers: map[string]string{"x-route-type": "ai"}}
+
+	match := fake.NewFakeHeaderMap(map[string][]string{
+		"x-route-type": {"ai"},
+	})
+	require.True(t, m.matches(match))
+
+	noMatch := fake.NewFakeHeaderMap(map[string][]string{
+		"x-route-type": {"mcp"},
+	})
+	require.False(t, m.matches(noMatch))
+}
+
+func TestRuleMatch_MultipleHeaders(t *testing.T) {
+	m := &ruleMatch{Headers: map[string]string{
+		"x-model":   "*",
+		"x-version": "v2",
+	}}
+
+	both := fake.NewFakeHeaderMap(map[string][]string{
+		"x-model":   {"gpt-4"},
+		"x-version": {"v2"},
+	})
+	require.True(t, m.matches(both))
+
+	missingOne := fake.NewFakeHeaderMap(map[string][]string{
+		"x-model": {"gpt-4"},
+	})
+	require.False(t, m.matches(missingOne))
+
+	wrongValue := fake.NewFakeHeaderMap(map[string][]string{
+		"x-model":   {"gpt-4"},
+		"x-version": {"v1"},
+	})
+	require.False(t, m.matches(wrongValue))
+}
+
+func TestValueSource_Resolve(t *testing.T) {
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		"x-user-id": {"alice"},
+	})
+
+	vs := valueSource{Header: "x-user-id", Prefix: "user:"}
+	require.Equal(t, "user:alice", vs.resolve(headers))
+
+	static := valueSource{Value: "can_use"}
+	require.Equal(t, "can_use", static.resolve(headers))
+
+	missing := valueSource{Header: "x-missing"}
+	require.Equal(t, "", missing.resolve(headers))
+}
+
+func TestBuildCheckBody(t *testing.T) {
+	body := buildCheckBody("user:alice", "can_use", "model:gpt-4", "")
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	tk := parsed["tuple_key"].(map[string]any)
+	require.Equal(t, "user:alice", tk["user"])
+	require.Equal(t, "can_use", tk["relation"])
+	require.Equal(t, "model:gpt-4", tk["object"])
+	_, hasModelID := parsed["authorization_model_id"]
+	require.False(t, hasModelID)
+}
+
+func TestBuildCheckBody_WithModelID(t *testing.T) {
+	body := buildCheckBody("user:alice", "can_use", "model:gpt-4", "model-123")
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	require.Equal(t, "model-123", parsed["authorization_model_id"])
+}

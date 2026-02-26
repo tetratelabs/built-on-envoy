@@ -1,0 +1,12 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+services:
+  openfga:
+    image: openfga/openfga
+    command: run
+    ports:
+      - "8082:8080"   # HTTP API (host 8082 to avoid conflicts)
+      - "8083:8081"   # gRPC (host 8083 to avoid conflicts)

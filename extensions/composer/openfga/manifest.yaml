@@ -1,0 +1,227 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: openfga
+parent: composer
+categories:
+  - AI
+  - Security
+author: Tetrate
+description: OpenFGA authorization checks for HTTP requests via Envoy AI Gateway
+longDescription: |
+  This extension implements [OpenFGA](https://openfga.dev/) authorization checks as an
+  inline Envoy HTTP filter. It calls the OpenFGA Check API via Envoy's async HTTP callout
+  mechanism to determine whether a request should be allowed or denied, without requiring
+  a separate authorization sidecar.
+
+  Designed to work with [Envoy AI Gateway](https://aigateway.envoyproxy.io/) routes
+  (AIGatewayRoute, HTTPRoute, MCPRoute), the extension extracts user, relation, and object
+  from configurable request headers and delegates the authorization decision to OpenFGA.
+
+  ## Key Features
+
+  - **Async HTTP callout**: Uses Envoy's built-in `HttpCallout` to call the OpenFGA Check API
+    through a configured cluster, integrating with Envoy's connection pooling and circuit breaking.
+  - **Flexible input mapping**: Configurable extraction of `user`, `relation`, and `object` from
+    request headers or static values, making it adaptable to any route type.
+  - **AI Gateway ready**: Works alongside the AI Gateway External Processor in the same Envoy
+    filter chain. Use it to control access to AI models, MCP tools, or any HTTP resource.
+  - **Dry-run mode**: Log authorization decisions without enforcing them.
+  - **Fail-open mode**: Allow requests through when the OpenFGA server is unreachable.
+
+  ## Configuration
+
+  The extension requires an Envoy cluster pointing to the OpenFGA server. The `user`, `relation`,
+  and `object` fields for the Check API are extracted from request headers or set as static values.
+
+  ```json
+  {
+    "cluster": "openfga",
+    "openfga_host": "openfga.default.svc:8080",
+    "store_id": "01ABCDEF",
+    "user": {"header": "x-user-id", "prefix": "user:"},
+    "relation": {"value": "can_use"},
+    "object": {"header": "x-ai-model", "prefix": "model:"}
+  }
+  ```
+
+  ## Multi-Rule Configuration
+
+  For routes that handle multiple resource types (e.g., AI models, MCP tools, and generic HTTP
+  resources), use the `rules` array instead of the legacy single-rule config. Each rule can match
+  on request headers and define its own `relation` and `object`.
+
+  - **`rules`**: Array of rules evaluated in order. The first matching rule is used. A rule with no
+    `match` or empty `match.headers` is a catch-all and must be last.
+  - **`match.headers`**: Object mapping header names to match values. Use `"*"` to require the
+    header to be present with any non-empty value; use an exact string for a value match.
+  - **Top-level `user`**: Serves as the default user source for all rules. Individual rules can
+    override with their own `user` field.
+
+  Example: AI model rule (header `x-ai-eg-model`), MCP tool rule (header `x-mcp-tool`), and a
+  catch-all for generic resources.
+
+  ```json
+  {
+    "cluster": "openfga",
+    "openfga_host": "openfga.default.svc:8080",
+    "store_id": "01ABCDEF",
+    "user": {"header": "x-user-id", "prefix": "user:"},
+    "rules": [
+      {"match": {"headers": {"x-ai-eg-model": "*"}}, "relation": {"value": "can_use"}, "object": {"header": "x-ai-eg-model", "prefix": "model:"}},
+      {"match": {"headers": {"x-mcp-tool": "*"}}, "relation": {"value": "can_invoke"}, "object": {"header": "x-mcp-tool", "prefix": "tool:"}},
+      {"relation": {"value": "can_access"}, "object": {"header": "x-resource-id", "prefix": "resource:"}}
+    ]
+  }
+  ```
+
+  ### Configuration Reference
+
+  | Field | Type | Required | Default | Description |
+  |-------|------|----------|---------|-------------|
+  | `cluster` | string | yes | | Envoy cluster name routing to the OpenFGA server |
+  | `openfga_host` | string | yes | | Hostname for the `Host` header in callouts |
+  | `store_id` | string | yes | | OpenFGA store ID |
+  | `authorization_model_id` | string | no | | OpenFGA authorization model ID (uses latest if omitted) |
+  | `user` | valueSource | yes* | | How to extract the user for the Check call (*required when using `rules`) |
+  | `relation` | valueSource | yes* | | How to extract the relation (*when not using `rules`) |
+  | `object` | valueSource | yes* | | How to extract the object (*when not using `rules`) |
+  | `rules` | array | no | | Multi-rule config; each rule has `match`, `relation`, `object`, optional `user` |
+  | `match` | object | no | | Per-rule: `headers` map (header name → `"*"` or exact value) |
+  | `fail_open` | bool | no | `false` | Allow requests when OpenFGA is unreachable |
+  | `dry_run` | bool | no | `false` | Log decisions without enforcing them |
+  | `timeout_ms` | int | no | `5000` | HTTP callout timeout in milliseconds |
+  | `deny_status` | int | no | `403` | HTTP status code for denied requests |
+  | `deny_body` | string | no | `"Forbidden"` | Response body for denied requests |
+
+  ### valueSource Reference
+
+  Each of `user`, `relation`, and `object` (and per-rule overrides) is a `valueSource` object.
+  Exactly one of `value` or `header` must be set.
+
+  | Field | Type | Description |
+  |-------|------|-------------|
+  | `value` | string | Static value used as-is |
+  | `header` | string | Read value from this request header |
+  | `prefix` | string | Prepend this string to the extracted value |
+
+  ## Metrics
+
+  The extension exposes the `openfga_requests_total` counter metric with a `decision` tag
+  that tracks authorization outcomes:
+
+  | Decision | Description |
+  |----------|-------------|
+  | `allowed` | The Check API allowed the request. |
+  | `denied` | The Check API denied the request. |
+  | `failopen` | An error occurred and the request was allowed because fail-open is enabled. |
+  | `dryrun_allow` | The request was denied but allowed because dry-run is enabled. |
+  | `error` | An error occurred and the request was denied. |
+type: go
+tags:
+  - go
+  - http
+  - filter
+  - openfga
+  - security
+  - authorization
+  - ai-gateway
+license: Apache-2.0
+examples:
+  - title: AI Model Access Control
+    description: |
+      Control which users can access specific AI models through an AIGatewayRoute.
+      The user identity comes from a header set by upstream authentication, and the
+      model name from a header set by the AI Gateway ExtProc.
+    code: |
+      boe run --local . --config '{
+        "cluster": "openfga",
+        "openfga_host": "localhost:8080",
+        "store_id": "YOUR_STORE_ID",
+        "user": {"header": "x-user-id", "prefix": "user:"},
+        "relation": {"value": "can_use"},
+        "object": {"header": "x-ai-model", "prefix": "model:"}
+      }'
+
+      # Allowed (if user:alice has can_use relation with model:gpt-4 in OpenFGA)
+      curl -H "x-user-id: alice" -H "x-ai-model: gpt-4" http://localhost:10000/v1/chat/completions
+
+      # Denied
+      curl -H "x-user-id: bob" -H "x-ai-model: gpt-4" http://localhost:10000/v1/chat/completions
+  - title: MCP Tool Access Control
+    description: |
+      Control which users can invoke specific MCP tools through an MCPRoute.
+    code: |
+      boe run --local . --config '{
+        "cluster": "openfga",
+        "openfga_host": "localhost:8080",
+        "store_id": "YOUR_STORE_ID",
+        "user": {"header": "x-user-id", "prefix": "user:"},
+        "relation": {"value": "can_invoke"},
+        "object": {"header": "x-mcp-tool", "prefix": "tool:"}
+      }'
+  - title: Multi-Route Authorization
+    description: |
+      Handle AI model access and MCP tool access on the same Gateway with a
+      single filter instance. Rules are evaluated in order; the first match wins.
+      A catch-all rule at the end covers generic HTTP resources.
+    code: |
+      boe run --local . --config '{
+        "cluster": "openfga",
+        "openfga_host": "localhost:8080",
+        "store_id": "YOUR_STORE_ID",
+        "user": {"header": "x-user-id", "prefix": "user:"},
+        "rules": [
+          {
+            "match": {"headers": {"x-ai-eg-model": "*"}},
+            "relation": {"value": "can_use"},
+            "object": {"header": "x-ai-eg-model", "prefix": "model:"}
+          },
+          {
+            "match": {"headers": {"x-mcp-tool": "*"}},
+            "relation": {"value": "can_invoke"},
+            "object": {"header": "x-mcp-tool", "prefix": "tool:"}
+          },
+          {
+            "relation": {"value": "can_access"},
+            "object": {"header": "x-resource-id", "prefix": "resource:"}
+          }
+        ]
+      }'
+
+      # AI model request (matches rule 1)
+      curl -H "x-user-id: alice" -H "x-ai-eg-model: gpt-4" http://localhost:10000/v1/chat/completions
+
+      # MCP tool request (matches rule 2)
+      curl -H "x-user-id: alice" -H "x-mcp-tool: github__issue_read" http://localhost:10000/mcp
+
+      # Generic HTTP request (matches catch-all rule 3)
+      curl -H "x-user-id: alice" -H "x-resource-id: planning" http://localhost:10000/api/docs
+  - title: Dry-Run Mode
+    description: |
+      Log authorization decisions without enforcing them.
+    code: |
+      boe run --local . --config '{
+        "cluster": "openfga",
+        "openfga_host": "localhost:8080",
+        "store_id": "YOUR_STORE_ID",
+        "user": {"header": "x-user-id", "prefix": "user:"},
+        "relation": {"value": "can_access"},
+        "object": {"header": "x-resource", "prefix": "document:"},
+        "dry_run": true
+      }'
+  - title: Fail-Open Mode
+    description: |
+      Allow requests when the OpenFGA server is unreachable.
+    code: |
+      boe run --local . --config '{
+        "cluster": "openfga",
+        "openfga_host": "localhost:8080",
+        "store_id": "YOUR_STORE_ID",
+        "user": {"header": "x-user-id", "prefix": "user:"},
+        "relation": {"value": "can_access"},
+        "object": {"header": "x-resource", "prefix": "document:"},
+        "fail_open": true
+      }'
