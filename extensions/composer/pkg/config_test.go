@@ -31,6 +31,28 @@ func TestMetadataKey_Validate(t *testing.T) {
 	}
 }
 
+func TestLocalResponse_Validate(t *testing.T) {
+	tests := []struct {
+		name    string
+		resp    LocalResponse
+		wantErr error
+	}{
+		{"valid 200", LocalResponse{Status: 200}, nil},
+		{"valid 100", LocalResponse{Status: 100}, nil},
+		{"valid 599", LocalResponse{Status: 599}, nil},
+		{"valid with body and headers", LocalResponse{Status: 403, Body: "forbidden", Headers: map[string]string{"X-Reason": "denied"}}, nil},
+		{"status too low", LocalResponse{Status: 99}, ErrInvalidHTTPStatus},
+		{"status too high", LocalResponse{Status: 600}, ErrInvalidHTTPStatus},
+		{"status zero", LocalResponse{}, ErrInvalidHTTPStatus},
+		{"status negative", LocalResponse{Status: -1}, ErrInvalidHTTPStatus},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.ErrorIs(t, tt.resp.Validate(), tt.wantErr)
+		})
+	}
+}
+
 func TestDataSource_Validate(t *testing.T) {
 	tests := []struct {
 		name    string

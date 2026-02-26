@@ -7,15 +7,33 @@ package goplugin_test
 
 import (
 	"fmt"
-	"strings"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	"github.com/tetratelabs/built-on-envoy/extensions/composer/goplugin"
 )
+
+func TestCreateStreamPluginConfigFactory(t *testing.T) {
+	t.Run("Binary not found", func(t *testing.T) {
+		_, err := goplugin.CreateStreamPluginConfigFactory("plugin", "/nonexistent/path.so", true)
+		require.ErrorContains(t, err, "failed to find a plugin implementation")
+	})
+
+	t.Run("Not a Go binary", func(t *testing.T) {
+		tmpFile := filepath.Join(t.TempDir(), "notgo.so")
+		err := os.WriteFile(tmpFile, []byte("not a go binary"), 0o600)
+		require.NoError(t, err)
+
+		_, err = goplugin.CreateStreamPluginConfigFactory("plugin", tmpFile, true)
+		require.ErrorContains(t, err, "failed to read go plugin build info")
+	})
+}
 
 func Test_Create(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -41,9 +59,7 @@ func Test_Create(t *testing.T) {
 
 		invalidConfig := []byte(`xxxx`)
 		_, err := configFactory.Create(configHandle, invalidConfig)
-		if !strings.Contains(err.Error(), "failed to load go plugin config from module config") {
-			t.Errorf("unexpected error: %v", err)
-		}
+		require.ErrorContains(t, err, "failed to load go plugin config from module config")
 	})
 
 	t.Run("No name or url", func(t *testing.T) {
@@ -53,9 +69,7 @@ func Test_Create(t *testing.T) {
 
 		noNameOrURLConfig := []byte(`{"name": "", "url": ""}`)
 		_, err := configFactory.Create(configHandle, noNameOrURLConfig)
-		if !strings.Contains(err.Error(), "plugin name or url is empty") {
-			t.Errorf("unexpected error: %v", err)
-		}
+		require.ErrorContains(t, err, "plugin name or url is empty")
 	})
 
 	t.Run("Load plugin error", func(t *testing.T) {
@@ -65,9 +79,7 @@ func Test_Create(t *testing.T) {
 
 		validConfig := []byte(`{"name": "test", "url": "test_url"}`)
 		_, err := configFactory.Create(configHandle, validConfig)
-		if !strings.Contains(err.Error(), "failed to handle dynamic module plugin") {
-			t.Errorf("unexpected error: %v", err)
-		}
+		require.ErrorContains(t, err, "failed to handle dynamic module plugin")
 	})
 
 	t.Run("Successful case", func(t *testing.T) {
@@ -79,9 +91,7 @@ func Test_Create(t *testing.T) {
 
 		validConfig := []byte(`{"name": "test", "url": "test_url"}`)
 		_, err := configFactory.Create(configHandle, validConfig)
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
+		require.NoError(t, err)
 	})
 }
 
@@ -109,9 +119,7 @@ func Test_CreatePerRoute(t *testing.T) {
 
 		invalidConfig := []byte(`xxxx`)
 		_, err := configFactory.CreatePerRoute(invalidConfig)
-		if !strings.Contains(err.Error(), "failed to load go plugin config from module config") {
-			t.Errorf("unexpected error: %v", err)
-		}
+		require.ErrorContains(t, err, "failed to load go plugin config from module config")
 	})
 
 	t.Run("No name or url", func(t *testing.T) {
@@ -121,9 +129,7 @@ func Test_CreatePerRoute(t *testing.T) {
 
 		noNameOrURLConfig := []byte(`{"name": "", "url": ""}`)
 		_, err := configFactory.CreatePerRoute(noNameOrURLConfig)
-		if !strings.Contains(err.Error(), "plugin name or url is empty") {
-			t.Errorf("unexpected error: %v", err)
-		}
+		require.ErrorContains(t, err, "plugin name or url is empty")
 	})
 
 	t.Run("Load plugin error", func(t *testing.T) {
@@ -133,9 +139,7 @@ func Test_CreatePerRoute(t *testing.T) {
 
 		validConfig := []byte(`{"name": "test", "url": "test_url"}`)
 		_, err := configFactory.CreatePerRoute(validConfig)
-		if !strings.Contains(err.Error(), "failed to handle dynamic module plugin") {
-			t.Errorf("unexpected error: %v", err)
-		}
+		require.ErrorContains(t, err, "failed to handle dynamic module plugin")
 	})
 
 	t.Run("Successful case", func(t *testing.T) {
@@ -147,8 +151,6 @@ func Test_CreatePerRoute(t *testing.T) {
 
 		validConfig := []byte(`{"name": "test", "url": "test_url"}`)
 		_, err := configFactory.CreatePerRoute(validConfig)
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
+		require.NoError(t, err)
 	})
 }

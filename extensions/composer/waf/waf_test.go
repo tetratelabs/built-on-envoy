@@ -668,6 +668,17 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 	})
 }
 
+func Test_WellKnownHttpFilterConfigFactories(t *testing.T) {
+	factories := WellKnownHttpFilterConfigFactories()
+	require.NotNil(t, factories, "expected non-nil factories map")
+	require.Len(t, factories, 1, "expected exactly one factory")
+
+	factory, ok := factories[ExtensionName]
+	require.True(t, ok, "expected factory for extension name %q", ExtensionName)
+	assert.IsType(t, &wafPluginConfigFactory{}, factory,
+		"expected factory to be of type *wafPluginConfigFactory")
+}
+
 func Test_FullWaf(t *testing.T) {
 	// Full WAF tests can be added here.
 	ctrl := gomock.NewController(t)
