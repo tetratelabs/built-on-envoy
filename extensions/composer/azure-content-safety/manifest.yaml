@@ -56,7 +56,7 @@ longDescription: |
   | `enable_protected_material` | bool | no | `false` | Enable protected material detection on responses |
   | `enable_task_adherence` | bool | no | `false` | Enable task adherence detection on requests |
   | `task_adherence_api_version` | string | no | `"2025-09-15-preview"` | API version for the Task Adherence endpoint |
-type: composer
+type: go
 tags:
   - go
   - http
