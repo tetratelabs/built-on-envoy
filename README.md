@@ -3,9 +3,9 @@
 ---
 
 [![CLI](https://github.com/tetratelabs/built-on-envoy/actions/workflows/cli.yaml/badge.svg)](https://github.com/tetratelabs/built-on-envoy/actions/workflows/cli.yaml)
-[![CLI Coverage](https://img.shields.io/codecov/c/github/tetratelabs/built-on-envoy?token=v4u6VpZSqZ&logo=codecov&flag=cli&label=CLI)](https://codecov.io/gh/tetratelabs/built-on-envoy)
+[![CLI Coverage](https://img.shields.io/codecov/c/github/tetratelabs/built-on-envoy?token=v4u6VpZSqZ&logo=codecov&logoColor=lightgray&flag=cli&label=CLI)](https://codecov.io/gh/tetratelabs/built-on-envoy)
 [![Extensions](https://github.com/tetratelabs/built-on-envoy/actions/workflows/extensions.yaml/badge.svg)](https://github.com/tetratelabs/built-on-envoy/actions/workflows/extensions.yaml)
-[![Extensions Coverage](https://img.shields.io/codecov/c/github/tetratelabs/built-on-envoy?token=v4u6VpZSqZ&logo=codecov&flag=extensions&label=Extensions)](https://codecov.io/gh/tetratelabs/built-on-envoy)
+[![Extensions Coverage](https://img.shields.io/codecov/c/github/tetratelabs/built-on-envoy?token=v4u6VpZSqZ&logo=codecov&logoColor=lightgray&flag=extensions&label=Extensions)](https://codecov.io/gh/tetratelabs/built-on-envoy)
 [![License](https://img.shields.io/badge/License-Apache%202.0-red)](LICENSE)
 [![Slack](https://img.shields.io/badge/Slack-Tetrate%20Community-purple)](https://tetrate-community.slack.com/archives/C0AG8GLT41E)
 
