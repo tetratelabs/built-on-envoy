@@ -18,6 +18,9 @@ var (
 	// ErrDataSourceNeitherSet is returned when neither Inline nor File fields are set in DataSource.
 	ErrDataSourceNeitherSet = errors.New("either 'inline' or 'file' must be set")
 
+	// ErrInvalidHTTPStatus is returned when a LocalResponse has an invalid HTTP status code.
+	ErrInvalidHTTPStatus = errors.New("invalid HTTP status code: must be between 100 and 599")
+
 	// ErrMetadataKeyInvalid is returned when a MetadataKey is missing the Namespace or Key.
 	ErrMetadataKeyInvalid = errors.New("metadata key must have both namespace and key")
 )
@@ -69,4 +72,22 @@ func (d *DataSource) Content() ([]byte, error) {
 		return os.ReadFile(filepath.Clean(d.File))
 	}
 	return nil, ErrDataSourceNeitherSet
+}
+
+// LocalResponse represents a local HTTP response to send to the client.
+type LocalResponse struct {
+	// Status is the HTTP status code to return. If 0, the plugin uses its default.
+	Status int `json:"status,omitempty"`
+	// Body is the response body. If empty, the plugin uses its default.
+	Body string `json:"body,omitempty"`
+	// Headers are additional headers to include in the response.
+	Headers map[string]string `json:"headers,omitempty"`
+}
+
+// Validate checks that the LocalResponse has a valid HTTP status code if one is set.
+func (r *LocalResponse) Validate() error {
+	if r.Status < 100 || r.Status > 599 {
+		return ErrInvalidHTTPStatus
+	}
+	return nil
 }

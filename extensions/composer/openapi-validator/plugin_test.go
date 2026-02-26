@@ -16,6 +16,8 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 const testSpec = `
@@ -84,8 +86,8 @@ func createTestSpecFile(t *testing.T, spec string) string {
 func createTestFilter(t *testing.T, spec string, cfg *openAPIValidatorConfig) (*openAPIValidatorHttpFilter, *mocks.MockHttpFilterHandle) {
 	t.Helper()
 
-	if cfg.SpecFile == "" {
-		cfg.SpecFile = createTestSpecFile(t, spec)
+	if cfg.Spec.File == "" && cfg.Spec.Inline == "" {
+		cfg.Spec.File = createTestSpecFile(t, spec)
 	}
 
 	configJSON, err := json.Marshal(cfg)
@@ -116,7 +118,25 @@ func TestConfigFactory_Create_ValidConfig(t *testing.T) {
 	specFile := createTestSpecFile(t, testSpec)
 
 	configJSON, err := json.Marshal(openAPIValidatorConfig{
-		SpecFile: specFile,
+		Spec: pkg.DataSource{File: specFile},
+	})
+	require.NoError(t, err)
+
+	factory := &OpenAPIValidatorHttpFilterConfigFactory{}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	filterFactory, err := factory.Create(mockHandle, configJSON)
+	require.NoError(t, err)
+	require.NotNil(t, filterFactory)
+}
+
+func TestConfigFactory_Create_InlineSpec(t *testing.T) {
+	configJSON, err := json.Marshal(openAPIValidatorConfig{
+		Spec: pkg.DataSource{Inline: testSpec},
 	})
 	require.NoError(t, err)
 
@@ -173,12 +193,12 @@ func TestConfigFactory_Create_MissingSpecFile(t *testing.T) {
 	filterFactory, err := factory.Create(mockHandle, configJSON)
 	require.Error(t, err)
 	require.Nil(t, filterFactory)
-	require.Contains(t, err.Error(), "spec_file is required")
+	require.Contains(t, err.Error(), "either 'inline' or 'file' must be set")
 }
 
 func TestConfigFactory_Create_SpecFileNotFound(t *testing.T) {
 	configJSON, err := json.Marshal(openAPIValidatorConfig{
-		SpecFile: "/nonexistent/spec.yaml",
+		Spec: pkg.DataSource{File: "/nonexistent/spec.yaml"},
 	})
 	require.NoError(t, err)
 
@@ -192,14 +212,14 @@ func TestConfigFactory_Create_SpecFileNotFound(t *testing.T) {
 	filterFactory, err := factory.Create(mockHandle, configJSON)
 	require.Error(t, err)
 	require.Nil(t, filterFactory)
-	require.Contains(t, err.Error(), "failed to read spec file")
+	require.Contains(t, err.Error(), "failed to read spec")
 }
 
 func TestConfigFactory_Create_InvalidSpec(t *testing.T) {
 	specFile := createTestSpecFile(t, "this is not a valid openapi spec")
 
 	configJSON, err := json.Marshal(openAPIValidatorConfig{
-		SpecFile: specFile,
+		Spec: pkg.DataSource{File: specFile},
 	})
 	require.NoError(t, err)
 
@@ -218,7 +238,7 @@ func TestConfigFactory_Create_InvalidSpec(t *testing.T) {
 func TestConfigFactory_Create_SpecFileReadError(t *testing.T) {
 	nonExistent := filepath.Join(t.TempDir(), "does-not-exist.yaml")
 	cfg := openAPIValidatorConfig{
-		SpecFile: nonExistent,
+		Spec: pkg.DataSource{File: nonExistent},
 	}
 	configJSON, err := json.Marshal(cfg)
 	require.NoError(t, err)
@@ -239,12 +259,14 @@ func TestConfigFactory_Create_CustomConfig(t *testing.T) {
 	specFile := createTestSpecFile(t, testSpec)
 
 	cfg := openAPIValidatorConfig{
-		SpecFile:     specFile,
+		Spec:         pkg.DataSource{File: specFile},
 		MaxBodyBytes: 2048,
 		DryRun:       true,
-		DenyStatus:   422,
-		DenyBody:     "Validation failed",
-		DenyHeaders:  map[string]string{"x-error": "true"},
+		DenyResponse: &pkg.LocalResponse{
+			Status:  422,
+			Body:    "Validation failed",
+			Headers: map[string]string{"x-error": "true"},
+		},
 	}
 	configJSON, err := json.Marshal(cfg)
 	require.NoError(t, err)
@@ -264,9 +286,9 @@ func TestConfigFactory_Create_CustomConfig(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, uint64(2048), oaFactory.config.MaxBodyBytes)
 	require.True(t, oaFactory.config.DryRun)
-	require.Equal(t, 422, oaFactory.config.DenyStatus)
-	require.Equal(t, "Validation failed", oaFactory.config.DenyBody)
-	require.Equal(t, "true", oaFactory.config.DenyHeaders["x-error"])
+	require.Equal(t, 422, oaFactory.config.DenyResponse.Status)
+	require.Equal(t, "Validation failed", oaFactory.config.DenyResponse.Body)
+	require.Equal(t, "true", oaFactory.config.DenyResponse.Headers["x-error"])
 	require.Len(t, oaFactory.config.denyResponseHeaders, 1)
 }
 
@@ -284,7 +306,7 @@ func TestConfigFactory_Create_JSONSpec(t *testing.T) {
 	}`
 	specFile := createTestSpecFile(t, jsonSpec)
 
-	configJSON, err := json.Marshal(openAPIValidatorConfig{SpecFile: specFile})
+	configJSON, err := json.Marshal(openAPIValidatorConfig{Spec: pkg.DataSource{File: specFile}})
 	require.NoError(t, err)
 
 	factory := &OpenAPIValidatorHttpFilterConfigFactory{}
@@ -709,7 +731,7 @@ func TestOnRequestBody_DryRunAllowsOversizedBody(t *testing.T) {
 
 func TestDenyResponse_CustomStatus(t *testing.T) {
 	filter, mockHandle := createTestFilter(t, testSpec, &openAPIValidatorConfig{
-		DenyStatus: 422,
+		DenyResponse: &pkg.LocalResponse{Status: 422},
 	})
 
 	var capturedStatus uint32
@@ -733,7 +755,7 @@ func TestDenyResponse_CustomStatus(t *testing.T) {
 
 func TestDenyResponse_CustomBody(t *testing.T) {
 	filter, mockHandle := createTestFilter(t, testSpec, &openAPIValidatorConfig{
-		DenyBody: "Custom error message",
+		DenyResponse: &pkg.LocalResponse{Body: "Custom error message"},
 	})
 
 	var capturedBody []byte
@@ -757,7 +779,7 @@ func TestDenyResponse_CustomBody(t *testing.T) {
 
 func TestDenyResponse_CustomHeaders(t *testing.T) {
 	filter, mockHandle := createTestFilter(t, testSpec, &openAPIValidatorConfig{
-		DenyHeaders: map[string]string{"x-error": "validation-failed"},
+		DenyResponse: &pkg.LocalResponse{Headers: map[string]string{"x-error": "validation-failed"}},
 	})
 
 	var capturedHeaders [][2]string
@@ -826,7 +848,7 @@ func TestWellKnownHttpFilterConfigFactories(t *testing.T) {
 func TestFilterFactory_Create(t *testing.T) {
 	specFile := createTestSpecFile(t, testSpec)
 	cfg := openAPIValidatorConfig{
-		SpecFile: specFile,
+		Spec: pkg.DataSource{File: specFile},
 	}
 	configJSON, err := json.Marshal(cfg)
 	require.NoError(t, err)
