@@ -48,7 +48,7 @@ func TestOnRequestHeaders_SuccessfulDecryption(t *testing.T) {
 	jweToken := createTestJWE(t, payload)
 
 	config := &jweDecryptConfig{
-		KeyFile:      getTestKeyPath(),
+		PrivateKey:   pkg.DataSource{File: getTestKeyPath()},
 		InputHeader:  "x-jwe-token",
 		OutputHeader: "x-decrypted",
 	}
@@ -89,7 +89,7 @@ func TestOnRequestHeaders_WithMetadataOutput(t *testing.T) {
 	jweToken := createTestJWE(t, payload)
 
 	config := &jweDecryptConfig{
-		KeyFile:     getTestKeyPath(),
+		PrivateKey:  pkg.DataSource{File: getTestKeyPath()},
 		InputHeader: "x-jwe-token",
 		OutputMetadata: &pkg.MetadataKey{
 			Namespace: "jwe-decrypt",
@@ -133,7 +133,7 @@ func TestOnRequestHeaders_WithBothHeaderAndMetadata(t *testing.T) {
 	jweToken := createTestJWE(t, payload)
 
 	config := &jweDecryptConfig{
-		KeyFile:      getTestKeyPath(),
+		PrivateKey:   pkg.DataSource{File: getTestKeyPath()},
 		InputHeader:  "x-jwe-token",
 		OutputHeader: "x-decrypted",
 		OutputMetadata: &pkg.MetadataKey{
@@ -183,7 +183,7 @@ func TestOnRequestHeaders_WithCustomMetadataNamespace(t *testing.T) {
 	jweToken := createTestJWE(t, payload)
 
 	config := &jweDecryptConfig{
-		KeyFile:     getTestKeyPath(),
+		PrivateKey:  pkg.DataSource{File: getTestKeyPath()},
 		InputHeader: "x-jwe-token",
 		OutputMetadata: &pkg.MetadataKey{
 			Namespace: "my-custom-namespace",
@@ -223,7 +223,7 @@ func TestOnRequestHeaders_WithCustomMetadataNamespace(t *testing.T) {
 
 func TestOnRequestHeaders_NoJWEHeader(t *testing.T) {
 	config := &jweDecryptConfig{
-		KeyFile:      getTestKeyPath(),
+		PrivateKey:   pkg.DataSource{File: getTestKeyPath()},
 		InputHeader:  "x-jwe-token",
 		OutputHeader: "x-decrypted",
 	}
@@ -248,7 +248,7 @@ func TestOnRequestHeaders_NoJWEHeader(t *testing.T) {
 
 func TestOnRequestHeaders_InvalidJWE(t *testing.T) {
 	config := &jweDecryptConfig{
-		KeyFile:      getTestKeyPath(),
+		PrivateKey:   pkg.DataSource{File: getTestKeyPath()},
 		InputHeader:  "x-jwe-token",
 		OutputHeader: "x-decrypted",
 	}
@@ -283,7 +283,7 @@ func TestOnRequestHeaders_OutputHeaderSingleValue(t *testing.T) {
 	jweToken1 := createTestJWE(t, payload1)
 
 	config := &jweDecryptConfig{
-		KeyFile:      getTestKeyPath(),
+		PrivateKey:   pkg.DataSource{File: getTestKeyPath()},
 		InputHeader:  "authorization",
 		OutputHeader: "authorization",
 	}
@@ -330,7 +330,7 @@ func TestOnRequestHeaders_WithPrefix(t *testing.T) {
 	jweToken := createTestJWE(t, payload)
 
 	config := &jweDecryptConfig{
-		KeyFile:      getTestKeyPath(),
+		PrivateKey:   pkg.DataSource{File: getTestKeyPath()},
 		InputHeader:  "Authorization",
 		OutputHeader: "x-decrypted",
 		Prefix:       "Bearer ",
@@ -374,7 +374,7 @@ func TestOnRequestHeaders_WithPrefixNotMatching(t *testing.T) {
 	jweToken := createTestJWE(t, payload)
 
 	config := &jweDecryptConfig{
-		KeyFile:      getTestKeyPath(),
+		PrivateKey:   pkg.DataSource{File: getTestKeyPath()},
 		InputHeader:  "Authorization",
 		OutputHeader: "x-decrypted",
 		Prefix:       "Bearer ",
@@ -415,7 +415,7 @@ func TestOnRequestHeaders_WithPrefixNotMatching(t *testing.T) {
 
 func TestOnRequestHeaders_WithPrefixShorterThanValue(t *testing.T) {
 	config := &jweDecryptConfig{
-		KeyFile:      getTestKeyPath(),
+		PrivateKey:   pkg.DataSource{File: getTestKeyPath()},
 		InputHeader:  "Authorization",
 		OutputHeader: "x-decrypted",
 		Prefix:       "Bearer ",
@@ -457,7 +457,7 @@ func TestOnRequestHeaders_WithPrefixAndMetadata(t *testing.T) {
 	jweToken := createTestJWE(t, payload)
 
 	config := &jweDecryptConfig{
-		KeyFile:     getTestKeyPath(),
+		PrivateKey:  pkg.DataSource{File: getTestKeyPath()},
 		InputHeader: "Authorization",
 		OutputMetadata: &pkg.MetadataKey{
 			Namespace: "jwe-decrypt",
@@ -505,7 +505,7 @@ func TestOnRequestHeaders_WithPrefixMultipleValues(t *testing.T) {
 	jweToken2 := createTestJWE(t, payload2)
 
 	config := &jweDecryptConfig{
-		KeyFile:      getTestKeyPath(),
+		PrivateKey:   pkg.DataSource{File: getTestKeyPath()},
 		InputHeader:  "Authorization",
 		OutputHeader: "x-decrypted",
 		Prefix:       "Bearer ",
@@ -548,7 +548,7 @@ func TestOnRequestHeaders_WithEmptyPrefix(t *testing.T) {
 	jweToken := createTestJWE(t, payload)
 
 	config := &jweDecryptConfig{
-		KeyFile:      getTestKeyPath(),
+		PrivateKey:   pkg.DataSource{File: getTestKeyPath()},
 		InputHeader:  "x-jwe-token",
 		OutputHeader: "x-decrypted",
 		Prefix:       "", // Empty prefix should be ignored
@@ -590,7 +590,7 @@ func TestOnRequestHeaders_WithEmptyPrefix(t *testing.T) {
 
 func TestJweDecryptHttpFilterFactory_Create(t *testing.T) {
 	config := &jweDecryptConfig{
-		KeyFile:      getTestKeyPath(),
+		PrivateKey:   pkg.DataSource{File: getTestKeyPath()},
 		InputHeader:  "x-jwe-token",
 		OutputHeader: "x-decrypted",
 	}
@@ -614,7 +614,7 @@ func TestJweDecryptHttpFilterFactory_Create(t *testing.T) {
 
 func TestJWEDecryptHttpFilterConfigFactory_Create_ValidConfig(t *testing.T) {
 	config := jweDecryptConfig{
-		KeyFile:      getTestKeyPath(),
+		PrivateKey:   pkg.DataSource{File: getTestKeyPath()},
 		InputHeader:  "x-jwe-token",
 		OutputHeader: "x-decrypted",
 	}
@@ -635,7 +635,7 @@ func TestJWEDecryptHttpFilterConfigFactory_Create_ValidConfig(t *testing.T) {
 
 	jweFilterFactory, ok := filterFactory.(*jweDecryptHttpFilterFactory)
 	require.True(t, ok)
-	require.Equal(t, config.KeyFile, jweFilterFactory.config.KeyFile)
+	require.Equal(t, config.PrivateKey, jweFilterFactory.config.PrivateKey)
 	require.Equal(t, config.InputHeader, jweFilterFactory.config.InputHeader)
 	require.Equal(t, config.OutputHeader, jweFilterFactory.config.OutputHeader)
 }
@@ -643,7 +643,7 @@ func TestJWEDecryptHttpFilterConfigFactory_Create_ValidConfig(t *testing.T) {
 func TestJWEDecryptHttpFilterConfigFactory_Create_DefaultMetadataNamespace(t *testing.T) {
 	// When output_metadata is set without a namespace, it should default to "jwe-decrypt".
 	config := jweDecryptConfig{
-		KeyFile:        getTestKeyPath(),
+		PrivateKey:     pkg.DataSource{File: getTestKeyPath()},
 		InputHeader:    "x-jwe-token",
 		OutputMetadata: &pkg.MetadataKey{Key: "decrypted-payload"},
 	}
@@ -667,7 +667,7 @@ func TestJWEDecryptHttpFilterConfigFactory_Create_DefaultMetadataNamespace(t *te
 
 func TestJWEDecryptHttpFilterConfigFactory_Create_CustomMetadataNamespace(t *testing.T) {
 	config := jweDecryptConfig{
-		KeyFile:     getTestKeyPath(),
+		PrivateKey:  pkg.DataSource{File: getTestKeyPath()},
 		InputHeader: "x-jwe-token",
 		OutputMetadata: &pkg.MetadataKey{
 			Namespace: "my-namespace",
