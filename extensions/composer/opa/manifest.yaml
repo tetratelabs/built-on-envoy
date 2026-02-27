@@ -31,6 +31,8 @@ longDescription: |
   - **mTLS and SPIFFE identity**: Access client certificate attributes including SPIFFE IDs
     (URI SANs), DNS SANs, and certificate subject for identity-based authorization.
   - **Configurable decision path**: Query any rule path in the policy (default: `envoy.authz.allow`).
+  - **Request body inspection**: Optionally buffer the request body and expose it as parsed JSON
+    in the OPA input document under `input.body`. Only JSON bodies are supported.
 
   ## Input Document Structure
 
@@ -71,9 +73,13 @@ longDescription: |
       }
     },
     "parsed_path":  ["api", "v1", "resource"],  // Path segments
-    "parsed_query": {"key": ["value"]}          // Parsed query parameters
+    "parsed_query": {"key": ["value"]},         // Parsed query parameters
+    "body":  {"field": "value"}          // Parsed JSON body (only when with_body: true)
   }
   ```
+
+  The `body` field is only present when `with_body` is enabled in the configuration
+  and the request body is valid JSON. Non-JSON bodies result in `body` being absent.
 
   ## Metrics
 
@@ -243,3 +249,38 @@ examples:
         "policies": [{"file": "/tmp/policy.rego"}],
         "fail_open": true
       }'
+  - title: Request Body Inspection
+    description: |
+      Enable `with_body` to buffer the request body and include it as
+      parsed JSON in the OPA input document under `input.body`. This allows
+      writing policies that inspect request body content. Only JSON bodies are
+      supported; non-JSON bodies result in `input.body` being absent.
+      Use Envoy's buffer filter or per-route buffer limits to cap body size.
+    code: |
+      cat > /tmp/policy.rego << 'EOF'
+      package envoy.authz
+
+      import rego.v1
+
+      default allow := false
+
+      # Allow only requests where the body contains a valid "role" field.
+      allow if {
+        input.body.role == "admin"
+      }
+      EOF
+
+      boe run --extension opa --config '{
+        "policies": [{"file": "/tmp/policy.rego"}],
+        "with_body": true
+      }'
+
+      # Test with allowed body
+      curl -X POST -H "Content-Type: application/json" \
+        -d '{"role": "admin"}' http://localhost:10000/api/resource
+      # => 200 OK
+
+      # Test with denied body
+      curl -X POST -H "Content-Type: application/json" \
+        -d '{"role": "guest"}' http://localhost:10000/api/resource
+      # => 403 Forbidden
