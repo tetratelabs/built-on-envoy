@@ -275,6 +275,170 @@ func TestValidateParentManifest(t *testing.T) {
 	}
 }
 
+func TestHighestMinEnvoyVersion(t *testing.T) {
+	tests := []struct {
+		name      string
+		manifests []*Manifest
+		want      string
+	}{
+		{
+			name:      "empty list",
+			manifests: nil,
+			want:      "",
+		},
+		{
+			name:      "no min versions set",
+			manifests: []*Manifest{{}, {MaxEnvoyVersion: "1.30.0"}},
+			want:      "",
+		},
+		{
+			name: "single manifest with min",
+			manifests: []*Manifest{
+				{MinEnvoyVersion: "1.28.0"},
+			},
+			want: "1.28.0",
+		},
+		{
+			name: "multiple manifests - picks highest",
+			manifests: []*Manifest{
+				{MinEnvoyVersion: "1.28.0"},
+				{MinEnvoyVersion: "1.31.0"},
+				{MinEnvoyVersion: "1.31.1"},
+				{},
+				{MinEnvoyVersion: "1.29.0"},
+			},
+			want: "1.31.1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := HighestMinEnvoyVersion(tt.manifests)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestLowestMaxEnvoyVersion(t *testing.T) {
+	tests := []struct {
+		name      string
+		manifests []*Manifest
+		want      string
+	}{
+		{
+			name:      "empty list",
+			manifests: nil,
+			want:      "",
+		},
+		{
+			name:      "no max versions set",
+			manifests: []*Manifest{{}, {MinEnvoyVersion: "1.28.0"}},
+			want:      "",
+		},
+		{
+			name: "single manifest with max",
+			manifests: []*Manifest{
+				{MaxEnvoyVersion: "1.32.0"},
+			},
+			want: "1.32.0",
+		},
+		{
+			name: "multiple manifests - picks lowest",
+			manifests: []*Manifest{
+				{MaxEnvoyVersion: "1.35.0"},
+				{MaxEnvoyVersion: "1.30.0"},
+				{MaxEnvoyVersion: "1.30.1"},
+				{},
+				{MaxEnvoyVersion: "1.33.0"},
+			},
+			want: "1.30.0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := LowestMaxEnvoyVersion(tt.manifests)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestResolveMinimumCompatibleEnvoyVersion(t *testing.T) {
+	tests := []struct {
+		name      string
+		manifests []*Manifest
+		want      string
+		wantErr   bool
+	}{
+		{
+			name:      "empty list",
+			manifests: nil,
+			want:      "",
+		},
+		{
+			name: "no version constraints",
+			manifests: []*Manifest{
+				{Name: "ext1"},
+				{Name: "ext2"},
+			},
+			want: "",
+		},
+		{
+			name: "only min versions - returns highest min",
+			manifests: []*Manifest{
+				{MinEnvoyVersion: "1.28.0"},
+				{MinEnvoyVersion: "1.31.0"},
+			},
+			want: "1.31.0",
+		},
+		{
+			name: "only max versions - returns lowest max",
+			manifests: []*Manifest{
+				{MaxEnvoyVersion: "1.35.0"},
+				{MaxEnvoyVersion: "1.32.0"},
+			},
+			want: "1.32.0",
+		},
+		{
+			name: "compatible range - returns highest min",
+			manifests: []*Manifest{
+				{MinEnvoyVersion: "1.28.0"},
+				{MinEnvoyVersion: "1.30.0", MaxEnvoyVersion: "1.35.0"},
+				{MaxEnvoyVersion: "1.33.0"},
+			},
+			want: "1.30.0",
+		},
+		{
+			name: "min equals max - compatible",
+			manifests: []*Manifest{
+				{MinEnvoyVersion: "1.30.0"},
+				{MaxEnvoyVersion: "1.30.0"},
+			},
+			want: "1.30.0",
+		},
+		{
+			name: "incompatible range - error",
+			manifests: []*Manifest{
+				{MinEnvoyVersion: "1.33.0"},
+				{MaxEnvoyVersion: "1.30.0"},
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ResolveMinimumCompatibleEnvoyVersion(tt.manifests)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.want, got)
+			}
+		})
+	}
+}
+
 func TestResolveVersionsMissingParent(t *testing.T) {
 	m := &Manifest{
 		Name:   "child",

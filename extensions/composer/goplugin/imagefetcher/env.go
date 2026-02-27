@@ -25,7 +25,7 @@ import (
 //
 // Pull secret:
 //
-//	GOPLUGIN_PULL_SECRET — path to Docker config JSON file
+//	GOPLUGIN_PULL_SECRET - path to Docker config JSON file
 func OptionFromEnv() Option {
 	opt := Option{}
 
