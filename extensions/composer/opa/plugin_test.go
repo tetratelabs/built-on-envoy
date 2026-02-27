@@ -604,7 +604,7 @@ default allow := true
 		"content-type":  {"application/json"},
 	})
 
-	input := filter.buildInput(headers)
+	input := filter.buildInput(headers, nil)
 
 	// Check top-level structure.
 	attrs, ok := input["attributes"].(map[string]any)
@@ -704,7 +704,7 @@ default allow := true
 		":scheme":    {"https"},
 	})
 
-	input := filter.buildInput(headers)
+	input := filter.buildInput(headers, nil)
 
 	attrs, ok := input["attributes"].(map[string]any)
 	require.True(t, ok)
@@ -1174,4 +1174,229 @@ func TestConfigFactory_Create_PolicyFileReadError(t *testing.T) {
 	filterFactory, err := factory.Create(mockHandle, configJSON)
 	require.Error(t, err)
 	require.Nil(t, filterFactory)
+}
+
+// Tests for with_body
+
+func TestOnRequestHeaders_WithBody_StopsForBody(t *testing.T) {
+	policy := `package envoy.authz
+default allow := false
+allow if { input.body.user == "admin" }
+`
+	filter, _ := createTestFilter(t, opaConfig{
+		WithBody: true,
+		Policies: []pkg.DataSource{{Inline: policy}},
+	})
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":      {"POST"},
+		":path":        {"/api/resource"},
+		":authority":   {"example.com"},
+		":scheme":      {"http"},
+		"content-type": {"application/json"},
+	})
+
+	// With body enabled and endOfStream=false, headers processing must stop to wait for the body.
+	status := filter.OnRequestHeaders(headers, false)
+	require.Equal(t, shared.HeadersStatusStop, status)
+}
+
+func TestOnRequestHeaders_WithBody_EvaluatesImmediatelyOnEndOfStream(t *testing.T) {
+	policy := `package envoy.authz
+default allow := true
+`
+	filter, _ := createTestFilter(t, opaConfig{
+		WithBody: true,
+		Policies: []pkg.DataSource{{Inline: policy}},
+	})
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":    {"GET"},
+		":path":      {"/api/resource"},
+		":authority": {"example.com"},
+		":scheme":    {"http"},
+	})
+
+	// When endOfStream=true (no body), evaluate immediately without body.
+	status := filter.OnRequestHeaders(headers, true)
+	require.Equal(t, shared.HeadersStatusContinue, status)
+}
+
+func TestOnRequestBody_AllowedByBodyPolicy(t *testing.T) {
+	policy := `package envoy.authz
+default allow := false
+allow if { input.body.user == "admin" }
+`
+	filter, mockHandle := createTestFilter(t, opaConfig{
+		WithBody: true,
+		Policies: []pkg.DataSource{{Inline: policy}},
+	})
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":      {"POST"},
+		":path":        {"/api/resource"},
+		":authority":   {"example.com"},
+		":scheme":      {"http"},
+		"content-type": {"application/json"},
+	})
+	status := filter.OnRequestHeaders(headers, false)
+	require.Equal(t, shared.HeadersStatusStop, status)
+
+	body := []byte(`{"user": "admin"}`)
+	fakeBody := fake.NewFakeBodyBuffer(body)
+	mockHandle.EXPECT().RequestHeaders().Return(headers).AnyTimes()
+	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBody)
+	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBody)
+
+	bodyStatus := filter.OnRequestBody(fakeBody, true)
+	require.Equal(t, shared.BodyStatusContinue, bodyStatus)
+}
+
+func TestOnRequestBody_DeniedByBodyPolicy(t *testing.T) {
+	policy := `package envoy.authz
+default allow := false
+allow if { input.body.user == "admin" }
+`
+	filter, mockHandle := createTestFilter(t, opaConfig{
+		WithBody: true,
+		Policies: []pkg.DataSource{{Inline: policy}},
+	})
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":      {"POST"},
+		":path":        {"/api/resource"},
+		":authority":   {"example.com"},
+		":scheme":      {"http"},
+		"content-type": {"application/json"},
+	})
+	status := filter.OnRequestHeaders(headers, false)
+	require.Equal(t, shared.HeadersStatusStop, status)
+
+	body := []byte(`{"user": "guest"}`)
+	fakeBody := fake.NewFakeBodyBuffer(body)
+	mockHandle.EXPECT().RequestHeaders().Return(headers).AnyTimes()
+	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBody)
+	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBody)
+	mockHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "opa_denied")
+
+	bodyStatus := filter.OnRequestBody(fakeBody, true)
+	require.Equal(t, shared.BodyStatusStopNoBuffer, bodyStatus)
+}
+
+func TestOnRequestBody_NonJsonBodyEvaluatesWithNilParsedBody(t *testing.T) {
+	policy := `package envoy.authz
+default allow := false
+allow if { not input.body }
+`
+	filter, mockHandle := createTestFilter(t, opaConfig{
+		WithBody: true,
+		Policies: []pkg.DataSource{{Inline: policy}},
+	})
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":      {"POST"},
+		":path":        {"/api/resource"},
+		":authority":   {"example.com"},
+		":scheme":      {"http"},
+		"content-type": {"text/plain"},
+	})
+	status := filter.OnRequestHeaders(headers, false)
+	require.Equal(t, shared.HeadersStatusStop, status)
+
+	// Non-JSON content-type: body is not read; input.body is absent from the policy input.
+	fakeBody := fake.NewFakeBodyBuffer([]byte(`not json at all`))
+	mockHandle.EXPECT().RequestHeaders().Return(headers).AnyTimes()
+
+	bodyStatus := filter.OnRequestBody(fakeBody, true)
+	require.Equal(t, shared.BodyStatusContinue, bodyStatus)
+}
+
+func TestOnRequestBody_BufferingUntilEndOfStream(t *testing.T) {
+	policy := `package envoy.authz
+default allow := true
+`
+	filter, _ := createTestFilter(t, opaConfig{
+		WithBody: true,
+		Policies: []pkg.DataSource{{Inline: policy}},
+	})
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":      {"POST"},
+		":path":        {"/api/resource"},
+		":authority":   {"example.com"},
+		":scheme":      {"http"},
+		"content-type": {"application/json"},
+	})
+	status := filter.OnRequestHeaders(headers, false)
+	require.Equal(t, shared.HeadersStatusStop, status)
+
+	// First chunk, not end of stream: should buffer.
+	chunk := fake.NewFakeBodyBuffer([]byte(`{"user"`))
+	bodyStatus := filter.OnRequestBody(chunk, false)
+	require.Equal(t, shared.BodyStatusStopAndBuffer, bodyStatus)
+}
+
+func TestOnRequestBody_WithTrailers(t *testing.T) {
+	policy := `package envoy.authz
+default allow := false
+allow if { input.body.user == "admin" }
+`
+	filter, mockHandle := createTestFilter(t, opaConfig{
+		WithBody: true,
+		Policies: []pkg.DataSource{{Inline: policy}},
+	})
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":      {"POST"},
+		":path":        {"/api/resource"},
+		":authority":   {"example.com"},
+		":scheme":      {"http"},
+		"content-type": {"application/json"},
+	})
+	status := filter.OnRequestHeaders(headers, false)
+	require.Equal(t, shared.HeadersStatusStop, status)
+
+	// Body chunk, not end of stream.
+	chunk := fake.NewFakeBodyBuffer([]byte(`{"user"`))
+	bodyStatus := filter.OnRequestBody(chunk, false)
+	require.Equal(t, shared.BodyStatusStopAndBuffer, bodyStatus)
+
+	// Full body available when trailers arrive.
+	fullBody := fake.NewFakeBodyBuffer([]byte(`{"user": "admin"}`))
+	mockHandle.EXPECT().RequestHeaders().Return(headers).AnyTimes()
+	mockHandle.EXPECT().BufferedRequestBody().Return(fullBody)
+	mockHandle.EXPECT().ReceivedRequestBody().Return(fullBody)
+
+	trailers := fake.NewFakeHeaderMap(map[string][]string{})
+	trailersStatus := filter.OnRequestTrailers(trailers)
+	require.Equal(t, shared.TrailersStatusContinue, trailersStatus)
+}
+
+func TestOnRequestBody_AlreadyProcessed(t *testing.T) {
+	policy := `package envoy.authz
+default allow := true
+`
+	filter, _ := createTestFilter(t, opaConfig{
+		WithBody: true,
+		Policies: []pkg.DataSource{{Inline: policy}},
+	})
+	filter.requestProcessed = true
+
+	bodyStatus := filter.OnRequestBody(nil, true)
+	require.Equal(t, shared.BodyStatusContinue, bodyStatus)
+}
+
+func TestOnRequestTrailers_AlreadyProcessed(t *testing.T) {
+	policy := `package envoy.authz
+default allow := true
+`
+	filter, _ := createTestFilter(t, opaConfig{
+		WithBody: true,
+		Policies: []pkg.DataSource{{Inline: policy}},
+	})
+	filter.requestProcessed = true
+
+	trailers := fake.NewFakeHeaderMap(map[string][]string{})
+	trailersStatus := filter.OnRequestTrailers(trailers)
+	require.Equal(t, shared.TrailersStatusContinue, trailersStatus)
 }

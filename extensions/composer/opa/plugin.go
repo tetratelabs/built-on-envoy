@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
+	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/utility"
 	"github.com/open-policy-agent/opa/v1/rego"
 
 	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
@@ -35,6 +36,11 @@ type opaConfig struct {
 	FailOpen bool `json:"fail_open"`
 	// DryRun when true logs the decision but always allows the request.
 	DryRun bool `json:"dry_run"`
+	// WithBody when true buffers the request body and includes it as parsed JSON in the OPA
+	// input document under the "body" key. Only JSON bodies are supported; non-JSON bodies
+	// result in "body" being absent from the input. When false (default), the policy is
+	// evaluated on request headers only.
+	WithBody bool `json:"with_body"`
 }
 
 // Metric tag values for authorization decisions.
@@ -70,6 +76,8 @@ type opaHttpFilter struct { //nolint:revive
 	shared.EmptyHttpFilter
 	handle shared.HttpFilterHandle
 	config *opaParsedConfig
+	// requestProcessed is set to true once the policy has been evaluated to prevent re-evaluation.
+	requestProcessed bool
 }
 
 // policyResponse holds optional structured response details from the policy.
@@ -79,8 +87,54 @@ type policyResponse struct {
 	body       string
 }
 
-func (o *opaHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) shared.HeadersStatus {
-	input := o.buildInput(headers)
+func (o *opaHttpFilter) OnRequestHeaders(headers shared.HeaderMap, endOfStream bool) shared.HeadersStatus {
+	if o.config.WithBody && !endOfStream {
+		// Wait for the request body before evaluating the policy.
+		return shared.HeadersStatusStop
+	}
+	if !o.evaluateAndDecide(headers, nil) {
+		return shared.HeadersStatusStop
+	}
+	return shared.HeadersStatusContinue
+}
+
+// OnRequestBody buffers the request body and evaluates the OPA policy once the full body is received.
+// This is only invoked when with_body is true in the configuration.
+func (o *opaHttpFilter) OnRequestBody(_ shared.BodyBuffer, endOfStream bool) shared.BodyStatus {
+	if o.requestProcessed {
+		return shared.BodyStatusContinue
+	}
+
+	if !endOfStream {
+		// Keep buffering until the full body is received.
+		return shared.BodyStatusStopAndBuffer
+	}
+
+	if !o.evaluateBodyPolicy() {
+		return shared.BodyStatusStopNoBuffer
+	}
+	return shared.BodyStatusContinue
+}
+
+// OnRequestTrailers is called when request trailers are received, signaling the end of the request body.
+// This is only invoked when with_body is true in the configuration.
+func (o *opaHttpFilter) OnRequestTrailers(_ shared.HeaderMap) shared.TrailersStatus {
+	if o.requestProcessed {
+		return shared.TrailersStatusContinue
+	}
+
+	if !o.evaluateBodyPolicy() {
+		return shared.TrailersStatusStop
+	}
+	return shared.TrailersStatusContinue
+}
+
+// evaluateAndDecide evaluates the OPA policy with the given headers and optional parsed body,
+// enforces the decision, and returns true if the request is allowed.
+func (o *opaHttpFilter) evaluateAndDecide(headers shared.HeaderMap, parsedBody any) bool {
+	o.requestProcessed = true
+
+	input := o.buildInput(headers, parsedBody)
 	o.handle.Log(shared.LogLevelDebug, "opa: evaluating policy for %s %s",
 		headers.GetOne(":method"), headers.GetOne(":path"))
 
@@ -92,12 +146,12 @@ func (o *opaHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) share
 		if o.config.FailOpen {
 			o.handle.Log(shared.LogLevelError, "opa: policy evaluation error (fail_open enabled): %s", err.Error())
 			o.config.metrics.IncRequestsTotal(o.handle, decisionFailOpen)
-			return shared.HeadersStatusContinue
+			return true
 		}
 		o.handle.Log(shared.LogLevelError, "opa: policy evaluation error: %s", err.Error())
 		o.handle.SendLocalResponse(500, nil, []byte("Internal Server Error"), "opa_eval_error")
 		o.config.metrics.IncRequestsTotal(o.handle, decisionDenied)
-		return shared.HeadersStatusStop
+		return false
 	}
 
 	allowed, resp := interpretResult(rs)
@@ -123,14 +177,14 @@ func (o *opaHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) share
 			body = "Forbidden"
 		}
 		o.handle.Log(shared.LogLevelDebug, "opa: denying request with status %d", status)
+		o.config.metrics.IncRequestsTotal(o.handle, decisionDenied)
 		o.handle.SendLocalResponse(
 			uint32(status), //nolint:gosec
 			responseHeaders,
 			[]byte(body),
 			"opa_denied",
 		)
-		o.config.metrics.IncRequestsTotal(o.handle, decisionDenied)
-		return shared.HeadersStatusStop
+		return false
 	}
 
 	// If allowed and policy returned headers, add them to the request.
@@ -143,11 +197,34 @@ func (o *opaHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) share
 		o.config.metrics.IncRequestsTotal(o.handle, decisionAllowed)
 	}
 
-	return shared.HeadersStatusContinue
+	return true
 }
 
-// buildInput constructs the input document for OPA evaluation based on request headers and attributes.
-func (o *opaHttpFilter) buildInput(headers shared.HeaderMap) map[string]any {
+// evaluateBodyPolicy reads the buffered request body, parses it as JSON if the content-type is
+// application/json, and evaluates the OPA policy.
+func (o *opaHttpFilter) evaluateBodyPolicy() bool {
+	headers := o.handle.RequestHeaders()
+
+	var parsedBody any
+	contentType := headers.GetOne("content-type")
+	// We may could support other content types in the future if needed, but for now we only parse
+	// JSON bodies since that's the most common and avoids the complexity of handling arbitrary
+	// body formats.
+	if strings.Contains(contentType, "application/json") {
+		bodyBytes := utility.ReadWholeRequestBody(o.handle)
+		if len(bodyBytes) > 0 {
+			if err := json.Unmarshal(bodyBytes, &parsedBody); err != nil {
+				o.handle.Log(shared.LogLevelDebug, "opa: failed to parse JSON body: %s", err.Error())
+			}
+		}
+	}
+
+	return o.evaluateAndDecide(headers, parsedBody)
+}
+
+// buildInput constructs the input document for OPA evaluation based on request headers, attributes,
+// and an optional pre-parsed JSON body.
+func (o *opaHttpFilter) buildInput(headers shared.HeaderMap, parsedBody any) map[string]any {
 	var (
 		method = headers.GetOne(":method")
 		path   = headers.GetOne(":path")
@@ -181,7 +258,7 @@ func (o *opaHttpFilter) buildInput(headers shared.HeaderMap) map[string]any {
 		// mtls, _         = f.handle.GetAttributeBool(shared.AttributeIDConnectionMtls)
 	)
 
-	return map[string]any{
+	result := map[string]any{
 		"attributes": map[string]any{
 			"request": map[string]any{
 				"http": map[string]any{
@@ -214,6 +291,10 @@ func (o *opaHttpFilter) buildInput(headers shared.HeaderMap) map[string]any {
 		"parsed_path":  parsedPath,
 		"parsed_query": parsedQuery,
 	}
+	if parsedBody != nil {
+		result["body"] = parsedBody
+	}
+	return result
 }
 
 // parsePath splits the path into segments and parses query parameters into a map.
