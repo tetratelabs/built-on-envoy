@@ -14,6 +14,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 // allMetrics returns a statsCollector with all metrics enabled for testing.
@@ -191,10 +193,10 @@ func TestOnRequestHeaders(t *testing.T) {
 
 		// Header and attribute expectations
 		mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestHost).
-			Return("example.com", true)
+			Return(pkg.UnsafeBufferFromString("example.com"), true)
 		mockHandle.EXPECT().SetMetadata("example-namespace", "example-key", "example-value")
 		mockHandle.EXPECT().GetMetadataString(shared.MetadataSourceTypeDynamic,
-			"example-namespace", "example-key").Return("example-value", true)
+			"example-namespace", "example-key").Return(pkg.UnsafeBufferFromString("example-value"), true)
 		mockHandle.EXPECT().SetMetadata("example-namespace", "example-number-key", int64(42))
 		mockHandle.EXPECT().GetMetadataNumber(shared.MetadataSourceTypeDynamic,
 			"example-namespace", "example-number-key").Return(float64(42), true)
@@ -207,7 +209,7 @@ func TestOnRequestHeaders(t *testing.T) {
 		status := plugin.OnRequestHeaders(headers, true)
 
 		assert.Equal(t, shared.HeadersStatusContinue, status)
-		assert.Equal(t, "example-value", headers.GetOne("x-example-request-header"))
+		assert.Equal(t, "example-value", headers.GetOne("x-example-request-header").ToUnsafeString())
 	})
 
 	t.Run("without metrics", func(t *testing.T) {
@@ -216,10 +218,10 @@ func TestOnRequestHeaders(t *testing.T) {
 
 		mockHandle := newMockFilterHandle(ctrl)
 		mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestHost).
-			Return("example.com", true)
+			Return(pkg.UnsafeBufferFromString("example.com"), true)
 		mockHandle.EXPECT().SetMetadata("example-namespace", "example-key", "example-value")
 		mockHandle.EXPECT().GetMetadataString(shared.MetadataSourceTypeDynamic,
-			"example-namespace", "example-key").Return("example-value", true)
+			"example-namespace", "example-key").Return(pkg.UnsafeBufferFromString("example-value"), true)
 		mockHandle.EXPECT().SetMetadata("example-namespace", "example-number-key", int64(42))
 		mockHandle.EXPECT().GetMetadataNumber(shared.MetadataSourceTypeDynamic,
 			"example-namespace", "example-number-key").Return(float64(42), true)
@@ -240,10 +242,10 @@ func TestOnRequestHeaders(t *testing.T) {
 
 		mockHandle := newMockFilterHandle(ctrl)
 		mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestHost).
-			Return("example.com", true)
+			Return(pkg.UnsafeBufferFromString("example.com"), true)
 		mockHandle.EXPECT().SetMetadata(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 		mockHandle.EXPECT().GetMetadataString(gomock.Any(), gomock.Any(), gomock.Any()).
-			Return("example-value", true).AnyTimes()
+			Return(pkg.UnsafeBufferFromString("example-value"), true).AnyTimes()
 		mockHandle.EXPECT().GetMetadataNumber(gomock.Any(), gomock.Any(), gomock.Any()).
 			Return(float64(42), true).AnyTimes()
 
@@ -263,10 +265,10 @@ func TestOnRequestHeaders(t *testing.T) {
 
 		mockHandle := newMockFilterHandle(ctrl)
 		mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestHost).
-			Return("example.com", true)
+			Return(pkg.UnsafeBufferFromString("example.com"), true)
 		mockHandle.EXPECT().SetMetadata(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 		mockHandle.EXPECT().GetMetadataString(gomock.Any(), gomock.Any(), gomock.Any()).
-			Return("example-value", true).AnyTimes()
+			Return(pkg.UnsafeBufferFromString("example-value"), true).AnyTimes()
 		mockHandle.EXPECT().GetMetadataNumber(gomock.Any(), gomock.Any(), gomock.Any()).
 			Return(float64(42), true).AnyTimes()
 		mockHandle.EXPECT().SendLocalResponse(
@@ -289,7 +291,7 @@ func TestOnRequestHeaders(t *testing.T) {
 
 		mockHandle := newMockFilterHandle(ctrl)
 		mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestHost).
-			Return("different-host.com", true)
+			Return(pkg.UnsafeBufferFromString("different-host.com"), true)
 
 		headers := fake.NewFakeHeaderMap(map[string][]string{
 			"host": {"example.com"},
@@ -307,10 +309,10 @@ func TestOnRequestHeaders(t *testing.T) {
 
 		mockHandle := newMockFilterHandle(ctrl)
 		mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestHost).
-			Return("example.com", true)
+			Return(pkg.UnsafeBufferFromString("example.com"), true)
 		mockHandle.EXPECT().SetMetadata("example-namespace", "example-key", "example-value")
 		mockHandle.EXPECT().GetMetadataString(shared.MetadataSourceTypeDynamic,
-			"example-namespace", "example-key").Return("wrong-value", true)
+			"example-namespace", "example-key").Return(pkg.UnsafeBufferFromString("wrong-value"), true)
 
 		headers := fake.NewFakeHeaderMap(map[string][]string{
 			"host": {"example.com"},
@@ -328,10 +330,10 @@ func TestOnRequestHeaders(t *testing.T) {
 
 		mockHandle := newMockFilterHandle(ctrl)
 		mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestHost).
-			Return("example.com", true)
+			Return(pkg.UnsafeBufferFromString("example.com"), true)
 		mockHandle.EXPECT().SetMetadata(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 		mockHandle.EXPECT().GetMetadataString(shared.MetadataSourceTypeDynamic,
-			"example-namespace", "example-key").Return("example-value", true)
+			"example-namespace", "example-key").Return(pkg.UnsafeBufferFromString("example-value"), true)
 		mockHandle.EXPECT().GetMetadataNumber(shared.MetadataSourceTypeDynamic,
 			"example-namespace", "example-number-key").Return(float64(99), true)
 
@@ -368,8 +370,8 @@ func TestOnRequestBody(t *testing.T) {
 		status := plugin.OnRequestBody(body, true)
 
 		assert.Equal(t, shared.BodyStatusContinue, status)
-		assert.Equal(t, "plain/text", requestHeaders.GetOne("content-type"))
-		assert.Empty(t, requestHeaders.GetOne("content-length"))
+		assert.Equal(t, "plain/text", requestHeaders.GetOne("content-type").ToUnsafeString())
+		assert.Empty(t, requestHeaders.GetOne("content-length").ToUnsafeString())
 		// Verify the body was rewritten
 		assert.Equal(t, "Modified by ExamplePlugin", string(bufferedBody.Body))
 	})
@@ -410,8 +412,8 @@ func TestOnRequestTrailers(t *testing.T) {
 	status := plugin.OnRequestTrailers(trailers)
 
 	assert.Equal(t, shared.TrailersStatusContinue, status)
-	assert.Equal(t, "plain/text", requestHeaders.GetOne("content-type"))
-	assert.Empty(t, requestHeaders.GetOne("content-length"))
+	assert.Equal(t, "plain/text", requestHeaders.GetOne("content-type").ToUnsafeString())
+	assert.Empty(t, requestHeaders.GetOne("content-length").ToUnsafeString())
 }
 
 func TestOnResponseHeaders(t *testing.T) {
@@ -429,7 +431,7 @@ func TestOnResponseHeaders(t *testing.T) {
 		status := plugin.OnResponseHeaders(headers, true)
 
 		assert.Equal(t, shared.HeadersStatusContinue, status)
-		assert.Equal(t, "example-value", headers.GetOne("x-example-response-header"))
+		assert.Equal(t, "example-value", headers.GetOne("x-example-response-header").ToUnsafeString())
 	})
 
 	t.Run("endStream false returns stop", func(t *testing.T) {
@@ -445,7 +447,7 @@ func TestOnResponseHeaders(t *testing.T) {
 		status := plugin.OnResponseHeaders(headers, false)
 
 		assert.Equal(t, shared.HeadersStatusStop, status)
-		assert.Equal(t, "example-value", headers.GetOne("x-example-response-header"))
+		assert.Equal(t, "example-value", headers.GetOne("x-example-response-header").ToUnsafeString())
 	})
 }
 
@@ -469,7 +471,7 @@ func TestOnResponseBody(t *testing.T) {
 		status := plugin.OnResponseBody(body, true)
 
 		assert.Equal(t, shared.BodyStatusContinue, status)
-		assert.Empty(t, responseHeaders.GetOne("content-length"))
+		assert.Empty(t, responseHeaders.GetOne("content-length").ToUnsafeString())
 		// With empty original body, the result should be JSON-wrapped
 		assert.Contains(t, string(bufferedBody.Body), `"modified_by":"ExamplePlugin"`)
 	})
@@ -493,7 +495,7 @@ func TestOnResponseBody(t *testing.T) {
 		status := plugin.OnResponseBody(body, true)
 
 		assert.Equal(t, shared.BodyStatusContinue, status)
-		assert.Empty(t, responseHeaders.GetOne("content-length"))
+		assert.Empty(t, responseHeaders.GetOne("content-length").ToUnsafeString())
 		// With empty original body, the result should be text-wrapped
 		assert.Contains(t, string(bufferedBody.Body), "Modified by ExamplePlugin")
 		assert.Contains(t, string(bufferedBody.Body), "Original Body:")
@@ -535,5 +537,5 @@ func TestOnResponseTrailers(t *testing.T) {
 	status := plugin.OnResponseTrailers(trailers)
 
 	assert.Equal(t, shared.TrailersStatusContinue, status)
-	assert.Empty(t, responseHeaders.GetOne("content-length"))
+	assert.Empty(t, responseHeaders.GetOne("content-length").ToUnsafeString())
 }

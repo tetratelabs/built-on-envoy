@@ -83,18 +83,22 @@ func WellKnownHttpFilterConfigFactories() map[string]shared.HttpFilterConfigFact
 
 // joinBody returns the body as a single byte slice, avoiding to call bytes.Join
 // when there is only one chunk which always returns a copy.
-func joinBody(body [][]byte) []byte {
+func joinBody(body []shared.UnsafeEnvoyBuffer) []byte {
 	if len(body) == 1 {
-		return body[0]
+		return body[0].ToUnsafeBytes()
 	}
-	return bytes.Join(body, nil)
+	buffers := make([][]byte, len(body))
+	for i, b := range body {
+		buffers[i] = b.ToUnsafeBytes()
+	}
+	return bytes.Join(buffers, nil)
 }
 
-// headerValue returns the first value for a key in a [][2]string header list.
-func headerValue(headers [][2]string, key string) string {
+// headerValue returns the first value for a key in a [][2]shared.UnsafeEnvoyBuffer header list.
+func headerValue(headers [][2]shared.UnsafeEnvoyBuffer, key string) string {
 	for _, h := range headers {
-		if h[0] == key {
-			return h[1]
+		if h[0].ToUnsafeString() == key {
+			return h[1].ToUnsafeString()
 		}
 	}
 	return ""
@@ -136,7 +140,7 @@ func (c *tokenExchangeCallback) incrementExchangeResult(result string) {
 
 func (f *tokenExchangeFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) shared.HeadersStatus {
 	// Extract the bearer token from the Authorization header.
-	authHeader := headers.GetOne("authorization")
+	authHeader := headers.GetOne("authorization").ToUnsafeString()
 	if authHeader == "" {
 		return sendLocalRespError(f.handle, shared.LogLevelWarn, http.StatusUnauthorized, "missing Authorization header", nil)
 	}
@@ -173,7 +177,7 @@ type tokenExchangeCallback struct {
 
 // OnHttpCalloutDone is called when the STS response is received. It processes the response and either continues
 // the request with the new token replacing the original one or sends a local error response.
-func (c *tokenExchangeCallback) OnHttpCalloutDone(_ uint64, result shared.HttpCalloutResult, headers [][2]string, body [][]byte) { //nolint:revive
+func (c *tokenExchangeCallback) OnHttpCalloutDone(_ uint64, result shared.HttpCalloutResult, headers [][2]shared.UnsafeEnvoyBuffer, body []shared.UnsafeEnvoyBuffer) { //nolint:revive
 	fullBody := joinBody(body)
 
 	if result != shared.HttpCalloutSuccess {
