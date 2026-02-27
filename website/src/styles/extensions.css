@@ -105,29 +105,6 @@
 	border-bottom: 2px solid var(--border);
 }
 
-/* Extension Card Links */
-.extension-card-link {
-	text-decoration: none;
-	color: inherit;
-	display: block;
-}
-
-.extension-card-link:hover .extension-card {
-	transform: translateY(-4px);
-	box-shadow: 0 8px 24px rgba(124, 58, 237, 0.15), 0 4px 12px rgba(6, 182, 212, 0.1);
-	border-color: var(--primary-light);
-}
-
-.extension-card-link:focus {
-	outline: none;
-	border-radius: 12px;
-}
-
-.extension-card-link:focus .extension-card {
-	box-shadow: var(--focus-ring), 0 8px 24px rgba(124, 58, 237, 0.15), 0 4px 12px rgba(6, 182, 212, 0.1);
-	border-color: var(--primary-light);
-}
-
 /* Responsive Styles */
 /* Tablet breakpoint */
 @media (max-width: 1024px) {

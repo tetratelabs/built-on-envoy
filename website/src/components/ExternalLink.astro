@@ -8,8 +8,9 @@ const { text, href } = Astro.props;
 ---
 
 <a href={href} target="_blank" rel="noopener noreferrer" class="external-link">
+	<span class="external-link-icon"><slot name="icon" /></span>
 	{text}
-	<svg width="10" height="10" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+	<svg class="external-arrow" width="10" height="10" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
 		<path d="M10.5 1.5L1.5 10.5M10.5 1.5H4.5M10.5 1.5V7.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
 	</svg>
 </a>

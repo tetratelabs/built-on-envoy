@@ -44,9 +44,9 @@ Version of Built On Envoy Composer. Required if type is `composer` unless the `p
 |---|---|
 | **Type** | `string` |
 | **Required** | No |
-| **Pattern** | `^\d+\.\d+\.\d+$` |
+| **Pattern** | `^\d+\.\d+\.\d+(-dev)?$` |
 | **Forbidden when** | `parent` is set |
-| **Required when** | `type` is `composer` and `parent` is not set |
+| **Required when** | `type` is `go` and `parent` is not set |
 
 
 
@@ -266,7 +266,7 @@ Type of the extension.
 |---|---|
 | **Type** | `string` |
 | **Required** | Yes |
-| **Allowed values** | `lua`, `wasm`, `dynamic_module`, `composer` |
+| **Allowed values** | `lua`, `wasm`, `rust`, `go`, `composer` |
 
 
 
@@ -278,7 +278,7 @@ Semantic version of the extension. Required unless the `parent` field is set.
 |---|---|
 | **Type** | `string` |
 | **Required** | No |
-| **Pattern** | `^\d+\.\d+\.\d+$` |
+| **Pattern** | `^\d+\.\d+\.\d+(-dev)?$` |
 | **Forbidden when** | `parent` is set |
 | **Required when** | `parent` is not set |
 

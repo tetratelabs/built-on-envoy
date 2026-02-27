@@ -62,6 +62,49 @@
     "sourcePath": "composer/azure-content-safety"
   },
   {
+    "name": "bedrock-guardrails",
+    "version": "0.3.0-dev",
+    "parent": "composer",
+    "categories": [
+      "AI",
+      "Security"
+    ],
+    "author": "Tetrate",
+    "featured": true,
+    "description": "Apply AWS Bedrock Guardrails to HTTP requests.",
+    "longDescription": "This extension implements an Envoy HTTP filter that applies [AWS Bedrock Guardrails](https://aws.amazon.com/bedrock)\nto incoming HTTP requests.\n\nIt will check the body of the request and see if it is a [create chat completion request](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create).\nIf so, it will match the user prompt against the configured AWS Bedrock Guardrails, applying the necessary actions (mask, block or none).\n\nThe extension uses a [Bedrock API key](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html) to authenticate\nto the Bedrock API. Please check the [Bedrock API documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys-generate.html)\nfor more details on how to obtain an API key.\n\n**NOTE:** Each configured guardrail represents an HTTP request to the Bedrock API, which will introduce some latency in the request. If it\ngets to the point that the delay introduced is unacceptable, you can create a guardrail in Bedrock that unifies several criteria from\ndifferent guardrails.\n",
+    "type": "go",
+    "tags": [
+      "go",
+      "http",
+      "filter",
+      "ai",
+      "bedrock",
+      "guardrails"
+    ],
+    "license": "Apache-2.0",
+    "examples": [
+      {
+        "title": "Quickstart",
+        "description": "In this example, we will run the Bedrock Guardrails extension with a simple configuration that applies a\nsingle guardrail to check if the prompt contains any disallowed content.\n",
+        "code": "boe run \\\n  --extension bedrock-guardrails \\\n  --cluster bedrock.us-east-1.amazonaws.com:443\n  --config '{\n  \"bedrock_cluster\": \"bedrock-runtime.us-east-1.amazonaws.com:443\",\n  \"bedrock_endpoint\": \"bedrock.us-east-1.amazonaws.com\",\n  \"bedrock_api_key\": \"YOUR_BEDROCK_API_KEY\",\n  \"bedrock_guardrails\": [\n    {\n      \"identifier\": \"xxxxxxx\",\n      \"version\": \"1\"\n    }\n  ]\n}'\n\n# Send a create chat completion request\ncurl -v http://localhost:10000/anything -H 'content-type: application/json' -d \\\n'{\n  \"model\":\"VAR_chat_model_id\",\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": [{\n      \"type\": \"text\",\n      \"text\": \"no place like 127.0.0.1!\"\n    }]\n  }]\n}'\n"
+      },
+      {
+        "title": "Multiple guardrails",
+        "description": "You can add as many guardrails as required to the extension configuration. The extension will apply them all,\nand make the necessary changes as needed.\n",
+        "code": "boe run --extension bedrock-guardrails \\\n  --cluster bedrock.us-east-1.amazonaws.com:443 \\\n  --config '{\n  \"bedrock_endpoint\": \"bedrock.us-east-1.amazonaws.com\",\n  \"bedrock_api_key\": \"YOUR_BEDROCK_API_KEY\",\n  \"bedrock_guardrails\": [\n    {\n      \"identifier\": \"xxxxxxx\",\n      \"version\": \"1\"\n    },\n    {\n      \"identifier\": \"yyyyyyy\",\n      \"version\": \"2\"\n    },\n    {\n      \"identifier\": \"zzzzzzz\",\n      \"version\": \"18\"\n    }\n  ]\n}'\n"
+      },
+      {
+        "title": "Custom Bedrock API request timeout",
+        "description": "By default, requests to AWS Bedrock API have a timeout of 10s. If you need to tweak this parameter,\nyou can pass `bedrock_timeoutms` in the plugin config.\n",
+        "code": "boe run --extension bedrock-guardrails \\\n  --cluster bedrock.us-east-1.amazonaws.com:443 \\\n  --config '{\n  \"bedrock_timeoutms\": 20000,\n  \"bedrock_endpoint\": \"bedrock.us-east-1.amazonaws.com\",\n  \"bedrock_api_key\": \"YOUR_BEDROCK_API_KEY\",\n  \"bedrock_guardrails\": [\n    {\n      \"identifier\": \"xxxxxxx\",\n      \"version\": \"1\"\n    }\n  ]\n}'\n"
+      }
+    ],
+    "minEnvoyVersion": "1.37.0",
+    "composerVersion": "0.3.0-dev",
+    "sourcePath": "composer/bedrock-guardrails"
+  },
+  {
     "name": "cedar-auth",
     "version": "0.3.0-dev",
     "parent": "composer",
