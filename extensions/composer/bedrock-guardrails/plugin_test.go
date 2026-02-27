@@ -405,7 +405,7 @@ func TestOnRequestBody_ValidBody_CalloutSuccess(t *testing.T) {
 	bodyBytes := []byte(`{"messages":[{"role":"user","content":"hello"}],"model":"gpt-4"}`)
 	fakeBuffer := newTestBodyBuffer(bodyBytes)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBuffer).AnyTimes()
-	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBuffer).AnyTimes()
 
 	// RequestHeaders().Remove is called to remove content-length
 	fakeHeaders := fake.NewFakeHeaderMap(map[string][]string{"content-length": {"42"}})
@@ -450,7 +450,7 @@ func TestOnRequestBody_InvalidBody_GetCalloutHeadersError(t *testing.T) {
 	invalidBody := []byte(`{invalid json}`)
 	fakeBuffer := newTestBodyBuffer(invalidBody)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBuffer).AnyTimes()
-	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBuffer).AnyTimes()
 
 	fakeHeaders := fake.NewFakeHeaderMap(map[string][]string{})
 	mockHandle.EXPECT().RequestHeaders().Return(fakeHeaders).AnyTimes()
@@ -484,7 +484,7 @@ func TestOnRequestBody_CalloutInitFailure(t *testing.T) {
 	bodyBytes := []byte(`{"messages":[{"role":"user","content":"hello"}],"model":"gpt-4"}`)
 	fakeBuffer := newTestBodyBuffer(bodyBytes)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBuffer).AnyTimes()
-	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBuffer).AnyTimes()
 
 	fakeHeaders := fake.NewFakeHeaderMap(map[string][]string{})
 	mockHandle.EXPECT().RequestHeaders().Return(fakeHeaders).AnyTimes()
@@ -527,7 +527,7 @@ func TestOnRequestBody_MultipleGuardrails_FirstTriggered(t *testing.T) {
 	bodyBytes := []byte(`{"messages":[{"role":"user","content":"hello"}],"model":"gpt-4"}`)
 	fakeBuffer := newTestBodyBuffer(bodyBytes)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBuffer).AnyTimes()
-	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBuffer).AnyTimes()
 
 	fakeHeaders := fake.NewFakeHeaderMap(map[string][]string{})
 	mockHandle.EXPECT().RequestHeaders().Return(fakeHeaders).AnyTimes()

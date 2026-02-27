@@ -88,6 +88,7 @@ func (f *bedrockGuardrailsHTTPFilter) processRequestbody() bool {
 	// Clear content length header and body. The extension will fill it up again
 	f.handle.RequestHeaders().Remove("content-length")
 	f.handle.BufferedRequestBody().Drain(f.handle.BufferedRequestBody().GetSize())
+	f.handle.ReceivedRequestBody().Drain(f.handle.ReceivedRequestBody().GetSize())
 
 	// Trigger the first guardrail
 	guardRail := f.config.BedrockGuardrails[0]
