@@ -380,7 +380,6 @@ func TestOnHttpCalloutDone_CalloutFailure(t *testing.T) {
 		cfg: &bedrockGuardrailsConfig{
 			BedrockGuardrails: []bedrockGuardrail{{Identifier: "g1", Version: "1"}},
 		},
-
 	}
 
 	a.OnHttpCalloutDone(1, shared.HttpCalloutReset, [][2]string{}, [][]byte{})
@@ -400,7 +399,6 @@ func TestOnHttpCalloutDone_NonSuccessHTTPStatus(t *testing.T) {
 		cfg: &bedrockGuardrailsConfig{
 			BedrockGuardrails: []bedrockGuardrail{{Identifier: "g1", Version: "1"}},
 		},
-
 	}
 
 	a.OnHttpCalloutDone(1, shared.HttpCalloutSuccess,
@@ -430,7 +428,6 @@ func TestOnHttpCalloutDone_NoInterventionLastGuardrail(t *testing.T) {
 			Cluster:           "bedrock-cluster",
 			BedrockGuardrails: []bedrockGuardrail{{Identifier: "g1", Version: "1"}},
 		},
-
 	}
 
 	a.OnHttpCalloutDone(1, shared.HttpCalloutSuccess,
@@ -456,7 +453,6 @@ func TestOnHttpCalloutDone_BlockedByContentPolicy(t *testing.T) {
 		cfg: &bedrockGuardrailsConfig{
 			BedrockGuardrails: []bedrockGuardrail{{Identifier: "g1", Version: "1"}},
 		},
-
 	}
 
 	a.OnHttpCalloutDone(1, shared.HttpCalloutSuccess,
@@ -479,7 +475,6 @@ func TestOnHttpCalloutDone_BlockedByTopicPolicy(t *testing.T) {
 		cfg: &bedrockGuardrailsConfig{
 			BedrockGuardrails: []bedrockGuardrail{{Identifier: "g1", Version: "1"}},
 		},
-
 	}
 
 	a.OnHttpCalloutDone(1, shared.HttpCalloutSuccess,
@@ -502,7 +497,6 @@ func TestOnHttpCalloutDone_BlockedByPIIPolicy(t *testing.T) {
 		cfg: &bedrockGuardrailsConfig{
 			BedrockGuardrails: []bedrockGuardrail{{Identifier: "g1", Version: "1"}},
 		},
-
 	}
 
 	a.OnHttpCalloutDone(1, shared.HttpCalloutSuccess,
@@ -533,7 +527,6 @@ func TestOnHttpCalloutDone_MaskedLastGuardrail(t *testing.T) {
 			Cluster:           "bedrock-cluster",
 			BedrockGuardrails: []bedrockGuardrail{{Identifier: "g1", Version: "1"}},
 		},
-
 	}
 
 	a.OnHttpCalloutDone(1, shared.HttpCalloutSuccess,
@@ -578,10 +571,9 @@ func TestOnHttpCalloutDone_NoInterventionTriggersNextGuardrail(t *testing.T) {
 	}
 
 	a := &applyGuardrailCallback{
-		handle:              mockHandle,
-		body:                originalBody,
-		cfg:                 cfg,
-
+		handle: mockHandle,
+		body:   originalBody,
+		cfg:    cfg,
 	}
 
 	a.OnHttpCalloutDone(1, shared.HttpCalloutSuccess,
@@ -618,10 +610,9 @@ func TestOnHttpCalloutDone_MaskedTriggersNextGuardrail(t *testing.T) {
 	}
 
 	a := &applyGuardrailCallback{
-		handle:              mockHandle,
-		body:                originalBody,
-		cfg:                 cfg,
-
+		handle: mockHandle,
+		body:   originalBody,
+		cfg:    cfg,
 	}
 
 	a.OnHttpCalloutDone(1, shared.HttpCalloutSuccess,
@@ -660,10 +651,9 @@ func TestOnHttpCalloutDone_NextGuardrailCalloutFailure(t *testing.T) {
 	}
 
 	a := &applyGuardrailCallback{
-		handle:              mockHandle,
-		body:                originalBody,
-		cfg:                 cfg,
-
+		handle: mockHandle,
+		body:   originalBody,
+		cfg:    cfg,
 	}
 
 	a.OnHttpCalloutDone(1, shared.HttpCalloutSuccess,
@@ -696,7 +686,6 @@ func TestOnHttpCalloutDone_BodyMultipleChunks(t *testing.T) {
 		cfg: &bedrockGuardrailsConfig{
 			BedrockGuardrails: []bedrockGuardrail{{Identifier: "g1", Version: "1"}},
 		},
-
 	}
 
 	a.OnHttpCalloutDone(1, shared.HttpCalloutSuccess,

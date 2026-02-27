@@ -242,31 +242,21 @@ func TestOnRequestHeaders_AlwaysStops(t *testing.T) {
 
 	result := filter.OnRequestHeaders(fake.NewFakeHeaderMap(map[string][]string{}), false)
 	require.Equal(t, shared.HeadersStatusStop, result)
-
-	result = filter.OnRequestHeaders(fake.NewFakeHeaderMap(map[string][]string{}), true)
-	require.Equal(t, shared.HeadersStatusStop, result)
 }
 
-// --- Tests for bedrockGuardrailsHTTPFilter.OnRequestTrailers ---
+func TestOnRequestHeaders_HeadersOnly(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 
-func TestOnRequestTrailers_BodyNotProcessed_Stops(t *testing.T) {
 	filter := &bedrockGuardrailsHTTPFilter{
-		config:               &bedrockGuardrailsConfig{},
-		requestBodyProcessed: false,
+		handle: mockHandle,
+		config: &bedrockGuardrailsConfig{},
 	}
+	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any()).Times(1)
 
-	result := filter.OnRequestTrailers(fake.NewFakeHeaderMap(map[string][]string{}))
-	require.Equal(t, shared.TrailersStatusStop, result)
-}
-
-func TestOnRequestTrailers_BodyProcessed_Continues(t *testing.T) {
-	filter := &bedrockGuardrailsHTTPFilter{
-		config:               &bedrockGuardrailsConfig{},
-		requestBodyProcessed: true,
-	}
-
-	result := filter.OnRequestTrailers(fake.NewFakeHeaderMap(map[string][]string{}))
-	require.Equal(t, shared.TrailersStatusContinue, result)
+	result := filter.OnRequestHeaders(fake.NewFakeHeaderMap(map[string][]string{}), true)
+	require.Equal(t, shared.HeadersStatusContinue, result)
 }
 
 // --- Tests for dedupGuardrails ---
@@ -482,7 +472,7 @@ func TestOnRequestBody_InvalidBody_GetCalloutHeadersError(t *testing.T) {
 	}
 
 	result := filter.OnRequestBody(newTestBodyBuffer(invalidBody), true)
-	require.Equal(t, shared.BodyStatusContinue, result)
+	require.Equal(t, shared.BodyStatusStopAndBuffer, result)
 }
 
 func TestOnRequestBody_CalloutInitFailure(t *testing.T) {
@@ -525,7 +515,7 @@ func TestOnRequestBody_CalloutInitFailure(t *testing.T) {
 	}
 
 	result := filter.OnRequestBody(newTestBodyBuffer(bodyBytes), true)
-	require.Equal(t, shared.BodyStatusContinue, result)
+	require.Equal(t, shared.BodyStatusStopAndBuffer, result)
 }
 
 func TestOnRequestBody_MultipleGuardrails_FirstTriggered(t *testing.T) {

@@ -35,32 +35,54 @@ type bedrockGuardrailsHTTPFilter struct {
 	shared.EmptyHttpFilter
 	handle shared.HttpFilterHandle
 	config *bedrockGuardrailsConfig
-
-	requestBodyProcessed bool
 }
 
-func (f *bedrockGuardrailsHTTPFilter) OnRequestHeaders(headers shared.HeaderMap, endOfStream bool) shared.HeadersStatus {
-	// Stop header processing as they might be modified in OnRequestBody
+func (f *bedrockGuardrailsHTTPFilter) OnRequestHeaders(_ shared.HeaderMap, endOfStream bool) shared.HeadersStatus {
+	if endOfStream {
+		// TODO(wbpcode): this is header only request and we currently to continue processing.
+		// But we may want to reject it in the future if the guardrail requires a body to work.
+		f.handle.Log(shared.LogLevelDebug, "bedrock-guardrails: received header only request")
+		return shared.HeadersStatusContinue
+	}
+	// Stop header processing as they might be modified in OnRequestBody and we may reject the request there
+	// based on the body content
 	return shared.HeadersStatusStop
 }
 
-func (f *bedrockGuardrailsHTTPFilter) OnRequestBody(body shared.BodyBuffer, endStream bool) shared.BodyStatus {
-	f.handle.Log(shared.LogLevelDebug, "bedrock-guardrails: OnRequestBody called with endStream=%v", endStream)
-	if !endStream {
+func (f *bedrockGuardrailsHTTPFilter) OnRequestBody(_ shared.BodyBuffer, endOfStream bool) shared.BodyStatus {
+	f.handle.Log(shared.LogLevelDebug, "bedrock-guardrails: OnRequestBody called with endStream=%v", endOfStream)
+	if !endOfStream {
 		f.handle.Log(shared.LogLevelDebug, "bedrock-guardrails: buffering request body")
 		return shared.BodyStatusStopAndBuffer
 	}
 
+	if !f.processRequestbody() {
+		return shared.BodyStatusStopAndBuffer
+	}
+
+	return shared.BodyStatusContinue
+}
+
+func (f *bedrockGuardrailsHTTPFilter) OnRequestTrailers(_ shared.HeaderMap) shared.TrailersStatus {
+	if !f.processRequestbody() {
+		return shared.TrailersStatusStop
+	}
+	return shared.TrailersStatusContinue
+}
+
+func (f *bedrockGuardrailsHTTPFilter) processRequestbody() bool {
 	bodyBytes := utility.ReadWholeRequestBody(f.handle)
 	if len(bodyBytes) == 0 {
 		f.handle.Log(shared.LogLevelDebug, "bedrock-guardrails: no body provided, skipping")
-		return shared.BodyStatusContinue
+		return true
 	}
 	f.handle.Log(shared.LogLevelDebug, "bedrock-guardrails: received request body: %s", string(bodyBytes))
 
 	if len(f.config.BedrockGuardrails) == 0 {
+		// TODO(wbpcode): we should reject the configuration without any guardrail,
+		// but for now we just log and continue processing the request.
 		f.handle.Log(shared.LogLevelDebug, "bedrock-guardrails: no guardrails configured, skipping")
-		return shared.BodyStatusContinue
+		return true
 	}
 
 	// Clear content length header and body. The extension will fill it up again
@@ -82,7 +104,7 @@ func (f *bedrockGuardrailsHTTPFilter) OnRequestBody(body shared.BodyBuffer, endS
 	calloutHeaders, calloutBody, err := getCalloutHeaders(args)
 	if err != nil {
 		sendLocalRespError(f.handle, shared.LogLevelDebug, http.StatusBadGateway, fmt.Sprintf("error getting callout headers: %v", err.Error()), bodyBytes)
-		return shared.BodyStatusContinue
+		return false
 	}
 	f.handle.Log(shared.LogLevelDebug, "bedrock-guardrails: got callout headers: %+v", calloutHeaders)
 	result, cid := f.handle.HttpCallout(
@@ -99,19 +121,11 @@ func (f *bedrockGuardrailsHTTPFilter) OnRequestBody(body shared.BodyBuffer, endS
 	)
 	if result != shared.HttpCalloutInitSuccess {
 		sendLocalRespError(f.handle, shared.LogLevelDebug, http.StatusBadGateway, fmt.Sprintf("error calling out: %v", result), bodyBytes)
-		return shared.BodyStatusContinue
+		return false
 	}
 	f.handle.Log(shared.LogLevelDebug, "bedrock-guardrails: http callout sent ID: %v", cid)
-
-	f.requestBodyProcessed = true
-	return shared.BodyStatusStopAndBuffer
-}
-
-func (f *bedrockGuardrailsHTTPFilter) OnRequestTrailers(_ shared.HeaderMap) shared.TrailersStatus {
-	if f.requestBodyProcessed {
-		return shared.TrailersStatusContinue
-	}
-	return shared.TrailersStatusStop
+	// Stop processing until the callout response is received and processed in the callback.
+	return false
 }
 
 // This is the factory for the HTTP filter.
