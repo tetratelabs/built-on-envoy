@@ -1,0 +1,112 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: bedrock-guardrails
+parent: composer
+categories:
+  - AI
+  - Security
+author: Tetrate
+featured: true
+description: Apply AWS Bedrock Guardrails to HTTP requests.
+longDescription: |
+  This extension implements an Envoy HTTP filter that applies [AWS Bedrock Guardrails](https://aws.amazon.com/bedrock)
+  to incoming HTTP requests.
+
+  It will check the body of the request and see if it is a [create chat completion request](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create).
+  If so, it will match the user prompt against the configured AWS Bedrock Guardrails, applying the necessary actions (mask, block or none).
+
+  The extension uses a [Bedrock API key](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html) to authenticate
+  to the Bedrock API. Please check the [Bedrock API documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys-generate.html)
+  for more details on how to obtain an API key.
+
+  **NOTE:** Each configured guardrail represents an HTTP request to the Bedrock API, which will introduce some latency in the request. If it
+  gets to the point that the delay introduced is unacceptable, you can create a guardrail in Bedrock that unifies several criteria from
+  different guardrails.
+type: go
+tags:
+  - go
+  - http
+  - filter
+  - ai
+  - bedrock
+  - guardrails
+license: Apache-2.0
+examples:
+  - title: Quickstart
+    description: |
+      In this example, we will run the Bedrock Guardrails extension with a simple configuration that applies a
+      single guardrail to check if the prompt contains any disallowed content.
+    code: |
+      boe run \
+        --extension bedrock-guardrails \
+        --cluster bedrock.us-east-1.amazonaws.com:443
+        --config '{
+        "bedrock_cluster": "bedrock-runtime.us-east-1.amazonaws.com:443",
+        "bedrock_endpoint": "bedrock.us-east-1.amazonaws.com",
+        "bedrock_api_key": "YOUR_BEDROCK_API_KEY",
+        "bedrock_guardrails": [
+          {
+            "identifier": "xxxxxxx",
+            "version": "1"
+          }
+        ]
+      }'
+
+      # Send a create chat completion request
+      curl -v http://localhost:10000/anything -H 'content-type: application/json' -d \
+      '{
+        "model":"VAR_chat_model_id",
+        "messages": [{
+          "role": "user",
+          "content": [{
+            "type": "text",
+            "text": "no place like 127.0.0.1!"
+          }]
+        }]
+      }'
+  - title: Multiple guardrails
+    description: |
+      You can add as many guardrails as required to the extension configuration. The extension will apply them all,
+      and make the necessary changes as needed.
+    code: |
+      boe run --extension bedrock-guardrails \
+        --cluster bedrock.us-east-1.amazonaws.com:443 \
+        --config '{
+        "bedrock_endpoint": "bedrock.us-east-1.amazonaws.com",
+        "bedrock_api_key": "YOUR_BEDROCK_API_KEY",
+        "bedrock_guardrails": [
+          {
+            "identifier": "xxxxxxx",
+            "version": "1"
+          },
+          {
+            "identifier": "yyyyyyy",
+            "version": "2"
+          },
+          {
+            "identifier": "zzzzzzz",
+            "version": "18"
+          }
+        ]
+      }'
+  - title: Custom Bedrock API request timeout
+    description: |
+      By default, requests to AWS Bedrock API have a timeout of 10s. If you need to tweak this parameter,
+      you can pass `bedrock_timeoutms` in the plugin config.
+    code: |
+      boe run --extension bedrock-guardrails \
+        --cluster bedrock.us-east-1.amazonaws.com:443 \
+        --config '{
+        "bedrock_timeoutms": 20000,
+        "bedrock_endpoint": "bedrock.us-east-1.amazonaws.com",
+        "bedrock_api_key": "YOUR_BEDROCK_API_KEY",
+        "bedrock_guardrails": [
+          {
+            "identifier": "xxxxxxx",
+            "version": "1"
+          }
+        ]
+      }'
