@@ -136,6 +136,10 @@ func TestRustRemoteExtension(t *testing.T) {
 }
 
 func TestRustLocalExtension(t *testing.T) {
+	// Set a more gnerous timeout as the default 90s have been causing failures in CI, because
+	// it took a bit more time to compile the Rust extension and start Envoy in some runs.
+	t.Setenv("TEST_BOE_RUN_ENVOY_TIMEOUT", "5m")
+
 	extensionPath := "../../extensions/ip-restriction"
 	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin,
 		"--log-level", "dynamic_modules:debug",
