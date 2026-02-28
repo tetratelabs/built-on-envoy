@@ -45,11 +45,13 @@
         "type": "string",
         "enum": [
           "AI",
+          "Authentication",
           "Examples",
           "Misc",
           "Network",
           "Observability",
           "Performance",
+          "Traffic Control",
           "Transform",
           "Security"
         ]

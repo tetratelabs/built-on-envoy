@@ -6,7 +6,7 @@
 name: jwe-decrypt
 parent: composer
 categories:
-  - Security
+  - Authentication
 author: Tetrate
 description: Decrypt JWE tokens and recover the inner JWT for Envoy to process
 longDescription: |

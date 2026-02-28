@@ -9,6 +9,8 @@ interface Props {
 }
 
 const { name, type, categories, description, href, tags = [] } = Astro.props;
+const sortedCategories = [...categories].sort((a, b) => a.localeCompare(b));
+const sortedTags = [...tags].sort((a, b) => a.localeCompare(b));
 ---
 
 <a href={href} class="extension-card-link">
@@ -16,15 +18,15 @@ const { name, type, categories, description, href, tags = [] } = Astro.props;
 		<div class="extension-header">
 			<h3>{name}</h3>
 			<div class="extension-badges">
-				{categories.map(category => (
-					<span class={`extension-badge extension-badge--${category.toLowerCase()}`}>{category}</span>
+				{sortedCategories.map(category => (
+					<span class={`extension-badge extension-badge--${category.toLowerCase().replace(/\s+/g, '-')}`}>{category}</span>
 				))}
 			</div>
 		</div>
 		<p>{description}</p>
 		{tags.length > 0 && (
 			<div class="extension-tags">
-				{tags.map(tag => (
+				{sortedTags.map(tag => (
 					<span class="extension-tag">{tag}</span>
 				))}
 			</div>
