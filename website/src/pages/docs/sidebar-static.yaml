@@ -16,3 +16,5 @@ sections:
         href: /docs/writing-rust-extensions
       - title: Using a custom registry
         href: /docs/custom-registry
+      - title: Running with a custom Envoy config
+        href: /docs/custom-envoy-config

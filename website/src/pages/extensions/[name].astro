@@ -135,15 +135,15 @@ const { extension } = Astro.props as { extension: Extension };
 							<div class="sidebar-section">
 								<h3>Categories</h3>
 								<div class="categories">
-									{extension.categories.map(category => (
-										<span class={`extension-badge extension-badge--${category.toLowerCase()}`}>{category}</span>
+									{[...extension.categories].sort((a, b) => a.localeCompare(b)).map(category => (
+										<span class={`extension-badge extension-badge--${category.toLowerCase().replace(/\s+/g, '-')}`}>{category}</span>
 									))}
 								</div>
 							</div>
 							<div class="sidebar-section">
 								<h3>Tags</h3>
 								<div class="tags">
-									{extension.tags.map(tag => (
+									{[...extension.tags].sort((a, b) => a.localeCompare(b)).map(tag => (
 										<span class="tag">{tag}</span>
 									))}
 								</div>

@@ -6,7 +6,7 @@
 name: openapi-validator
 parent: composer
 categories:
-  - Security
+  - Traffic Control
 author: Tetrate
 description: Validate HTTP requests against an OpenAPI specification
 longDescription: |

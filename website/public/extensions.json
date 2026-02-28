@@ -71,7 +71,7 @@
     ],
     "author": "Tetrate",
     "featured": true,
-    "description": "Apply AWS Bedrock Guardrails to HTTP requests.",
+    "description": "Apply AWS Bedrock Guardrails for LLM prompt protection and content moderation.",
     "longDescription": "This extension implements an Envoy HTTP filter that applies [AWS Bedrock Guardrails](https://aws.amazon.com/bedrock)\nto incoming HTTP requests.\n\nIt will check the body of the request and see if it is a [create chat completion request](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create).\nIf so, it will match the user prompt against the configured AWS Bedrock Guardrails, applying the necessary actions (mask, block or none).\n\nThe extension uses a [Bedrock API key](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html) to authenticate\nto the Bedrock API. Please check the [Bedrock API documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys-generate.html)\nfor more details on how to obtain an API key.\n\n**NOTE:** Each configured guardrail represents an HTTP request to the Bedrock API, which will introduce some latency in the request. If it\ngets to the point that the delay introduced is unacceptable, you can create a guardrail in Bedrock that unifies several criteria from\ndifferent guardrails.\n",
     "type": "go",
     "tags": [
@@ -80,7 +80,10 @@
       "filter",
       "ai",
       "bedrock",
-      "guardrails"
+      "guardrails",
+      "prompt-injection",
+      "protected-material",
+      "llm"
     ],
     "license": "Apache-2.0",
     "examples": [
@@ -322,7 +325,7 @@
     "version": "0.3.0-dev",
     "parent": "composer",
     "categories": [
-      "Security"
+      "Authentication"
     ],
     "author": "Tetrate",
     "featured": true,
@@ -444,7 +447,7 @@
     "version": "0.3.0-dev",
     "parent": "composer",
     "categories": [
-      "Security"
+      "Traffic Control"
     ],
     "author": "Tetrate",
     "featured": true,
@@ -492,6 +495,7 @@
     "version": "0.3.0-dev",
     "parent": "composer",
     "categories": [
+      "Authentication",
       "Security"
     ],
     "author": "Tetrate",
@@ -540,12 +544,13 @@
     "version": "0.3.0-dev",
     "parent": "composer",
     "categories": [
+      "Authentication",
       "Security"
     ],
     "author": "Tetrate",
     "featured": true,
     "description": "OAuth2 token exchange for Envoy HTTP traffic",
-    "longDescription": "An OAuth 2.0 Token Exchange ([RFC 8693](https://datatracker.ietf.org/doc/html/rfc8693))\nHTTP filter for Envoy Proxy. It intercepts incoming requests and exchanges the bearer\ntoken for a new one connecting to an external Security Token Service (STS) before\nforwarding the request upstream.\n\n## Features\n\n* **RFC 8693 Compliant**: Token exchange implementation with all optional parameters.\n* **Impersonation \u0026 Delegation**: Supports both semantics — omit `actor_token` for impersonation,\n  include it for delegation.\n* **RFC Error Parsing**: Parses and logs error descriptions optionally returned by the STS. \n\n## How It Works\n\nThe filter intercepts incoming HTTP requests, extracts the `Bearer` token from the\nincoming `Authorization` header, and sends an HTTP callout to the configured STS endpoint.\nThe gateway authenticates via HTTP Basic auth using the configured client credentials and\nexchanges the incoming token for a new one. On success, the original `Authorization` header is\nreplaced with the exchanged token before the request continues upstream.\n\n## Configuration\n\nRequired fields:\n- `cluster`: Envoy cluster name that routes to the STS endpoint\n- `token_exchange_url`: URL of the token exchange endpoint (e.g. \"sts.example.com/oauth2/token\").\n- `client_id`: Client identifier for HTTP Basic authentication with the STS\n- `client_secret`: Client secret for HTTP Basic authentication with the STS\n\nOptional fields:\n- `audience`: Logical name of the target service for the exchanged token\n- `resource`: Absolute URI of the target resource (must not contain a fragment)\n- `scope`: Space-delimited scope list for the requested token\n- `requested_token_type`: Desired output token type URI\n- `actor_token` / `actor_token_type`: For delegation semantics (both required together)\n- `subject_token_type`: Input token type (defaults to `urn:ietf:params:oauth:token-type:access_token`)\n- `timeout_ms`: HTTP callout timeout in milliseconds (defaults to `5000`)\n\n## Metrics\n\nThe extension emits the following Envoy counters:\n\n| Metric | Type | Tags | Description |\n|--------|------|------|-------------|\n| `token_exchange_requests_total` | Counter | - | Incremented on each token exchange callout initiated |\n| `token_exchange_results_total` | Counter | `result` (`success` / `rejected` / `error`) | Incremented after the STS response is processed |\n",
+    "longDescription": "An OAuth 2.0 Token Exchange ([RFC 8693](https://datatracker.ietf.org/doc/html/rfc8693))\nHTTP filter for Envoy Proxy. It intercepts incoming requests and exchanges the bearer\ntoken for a new one connecting to an external Security Token Service (STS) before\nforwarding the request upstream.\n\n## Features\n\n* **RFC 8693 Compliant**: Token exchange implementation with all optional parameters.\n* **Impersonation \u0026 Delegation**: Supports both semantics - omit `actor_token` for impersonation,\n  include it for delegation.\n* **RFC Error Parsing**: Parses and logs error descriptions optionally returned by the STS. \n\n## How It Works\n\nThe filter intercepts incoming HTTP requests, extracts the `Bearer` token from the\nincoming `Authorization` header, and sends an HTTP callout to the configured STS endpoint.\nThe gateway authenticates via HTTP Basic auth using the configured client credentials and\nexchanges the incoming token for a new one. On success, the original `Authorization` header is\nreplaced with the exchanged token before the request continues upstream.\n\n## Configuration\n\nRequired fields:\n- `cluster`: Envoy cluster name that routes to the STS endpoint\n- `token_exchange_url`: URL of the token exchange endpoint (e.g. \"sts.example.com/oauth2/token\").\n- `client_id`: Client identifier for HTTP Basic authentication with the STS\n- `client_secret`: Client secret for HTTP Basic authentication with the STS\n\nOptional fields:\n- `audience`: Logical name of the target service for the exchanged token\n- `resource`: Absolute URI of the target resource (must not contain a fragment)\n- `scope`: Space-delimited scope list for the requested token\n- `requested_token_type`: Desired output token type URI\n- `actor_token` / `actor_token_type`: For delegation semantics (both required together)\n- `subject_token_type`: Input token type (defaults to `urn:ietf:params:oauth:token-type:access_token`)\n- `timeout_ms`: HTTP callout timeout in milliseconds (defaults to `5000`)\n\n## Metrics\n\nThe extension emits the following Envoy counters:\n\n| Metric | Type | Tags | Description |\n|--------|------|------|-------------|\n| `token_exchange_requests_total` | Counter | - | Incremented on each token exchange callout initiated |\n| `token_exchange_results_total` | Counter | `result` (`success` / `rejected` / `error`) | Incremented after the STS response is processed |\n",
     "type": "go",
     "tags": [
       "oauth2",

@@ -6,6 +6,7 @@
 name: saml
 parent: composer
 categories:
+  - Authentication
   - Security
 author: Tetrate
 featured: true
