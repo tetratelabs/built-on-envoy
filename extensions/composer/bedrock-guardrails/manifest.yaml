@@ -10,7 +10,7 @@ categories:
   - Security
 author: Tetrate
 featured: true
-description: Apply AWS Bedrock Guardrails to HTTP requests.
+description: Apply AWS Bedrock Guardrails for LLM prompt protection and content moderation.
 longDescription: |
   This extension implements an Envoy HTTP filter that applies [AWS Bedrock Guardrails](https://aws.amazon.com/bedrock)
   to incoming HTTP requests.
@@ -33,6 +33,9 @@ tags:
   - ai
   - bedrock
   - guardrails
+  - prompt-injection
+  - protected-material
+  - llm
 license: Apache-2.0
 examples:
   - title: Quickstart

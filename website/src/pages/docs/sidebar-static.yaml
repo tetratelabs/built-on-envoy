@@ -4,7 +4,7 @@
 sections:
   - title: Guides
     items:
-      - title: Getting started
+      - title: Quick Start
         href: /docs/getting-started
       - title: Extension types
         href: /docs/extension-types
@@ -14,5 +14,9 @@ sections:
         href: /docs/writing-go-extensions
       - title: Writing Rust extensions
         href: /docs/writing-rust-extensions
+  - title: Customization
+    items:
       - title: Using a custom registry
         href: /docs/custom-registry
+      - title: Running with a custom Envoy config
+        href: /docs/custom-envoy-config

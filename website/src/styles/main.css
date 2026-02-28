@@ -471,7 +471,6 @@ header nav a:focus {
 	transition: transform 0.2s, box-shadow 0.2s;
 	display: flex;
 	flex-direction: column;
-	height: 100%;
 }
 
 .extension-card:hover {
@@ -528,6 +527,10 @@ header nav a:focus {
 	background: #c026d3;
 }
 
+.extension-badge--authentication {
+	background: #660273;
+}
+
 .extension-badge--network {
 	background: #7c3aed;
 }
@@ -540,6 +543,10 @@ header nav a:focus {
 	background: #d946ef;
 }
 
+.extension-badge--traffic-control {
+	background: #9106a7;
+}
+
 .extension-badge--misc {
 	background: #8b5cf6;
 }
@@ -548,14 +555,12 @@ header nav a:focus {
 	color: var(--text-muted);
 	font-size: 14px;
 	margin-bottom: 16px;
-	min-height: 40px;
 }
 
 .extension-tags {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 6px;
-	margin-top: auto;
 }
 
 .extension-tag {
