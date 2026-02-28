@@ -63,6 +63,7 @@ tags:
   - ai
   - azure
   - content-safety
+  - guardrails
   - prompt-injection
   - protected-material
   - task-adherence
