@@ -28,7 +28,7 @@ local one.
 ```bash
 boe gen-config \
         --extension ip-restriction --config '{"allow_addresses":["127.0.0.1"]}' \
-        --local ../extensions/composer/example/ \
+        --local ./extensions/composer/example/ \
         | tee /tmp/envoy.yaml
 ```
 
