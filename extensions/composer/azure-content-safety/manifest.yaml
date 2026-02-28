@@ -51,7 +51,7 @@ longDescription: |
   | `self_harm_threshold` | int | no | `2` | Severity threshold for self-harm content (0-6) |
   | `sexual_threshold` | int | no | `2` | Severity threshold for sexual content (0-6) |
   | `violence_threshold` | int | no | `2` | Severity threshold for violence content (0-6) |
-  | `categories` | []string | no | `["Hate","SelfHarm","Sexual","Violence"]` | Categories to analyze |
+  | `categories` | []string | no | `["Hate", "SelfHarm", "Sexual", "Violence"]` | Categories to analyze |
   | `enable_protected_material` | bool | no | `false` | Enable protected material detection on responses |
   | `enable_task_adherence` | bool | no | `false` | Enable task adherence detection on requests |
   | `task_adherence_api_version` | string | no | `"2025-09-15-preview"` | API version for the Task Adherence endpoint |
