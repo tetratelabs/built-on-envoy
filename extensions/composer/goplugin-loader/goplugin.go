@@ -21,7 +21,7 @@ import (
 	sdk "github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 
-	"github.com/tetratelabs/built-on-envoy/extensions/composer/goplugin/imagefetcher"
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/goplugin-loader/imagefetcher"
 )
 
 var (
@@ -251,7 +251,7 @@ func (f *GoPluginLoaderConfigFactory) CreatePerRoute(unparsedConfig []byte) (any
 }
 
 var wellKnownHttpFilterConfigFactories = map[string]shared.HttpFilterConfigFactory{ //nolint:revive
-	"goplugin": &GoPluginLoaderConfigFactory{
+	"goplugin-loader": &GoPluginLoaderConfigFactory{
 		LoadPlugin: loadPluginImpl,
 	},
 }

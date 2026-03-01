@@ -14,7 +14,8 @@ import (
 	// Register built-in plugins into the binary. Because only one golang shared library
 	// can be loaded into a process, we need to register all built-in plugins here and
 	// build them into the same binary.
-	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/goplugin"
+	// Go plugin to loader other composer plugins that be compiled into separate shared libraries.
+	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/goplugin-loader"
 )
 
 func main() {} // main is required to build as a C shared library.
