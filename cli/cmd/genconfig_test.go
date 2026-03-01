@@ -9,11 +9,14 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/alecthomas/kong"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tetratelabs/built-on-envoy/cli/internal"
+	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
@@ -73,6 +76,8 @@ Flags:
                                    ($BOE_REGISTRY_USERNAME).
       --password=STRING            Password for the OCI registry
                                    ($BOE_REGISTRY_PASSWORD).
+      --output="-"                 Directory to put the generated config into.
+                                   Use "-" to print it to the standard output.
 `, internaltesting.WrapHelp(genConfigHelp))
 
 	require.Equal(t, expected, buf.String())
@@ -177,7 +182,8 @@ func TestGenConfig(t *testing.T) {
 					Insecure: tt.clustersInsecure,
 					JSONSpec: tt.clustersJSON,
 				},
-				output: &buf,
+				Output: "-",
+				stdout: &buf,
 			}
 
 			var args []string
@@ -227,4 +233,80 @@ func TestGenConfigMultipleArgsWithCommas(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{config1, config2}, cli.GenConfig.Configs)
 	require.Equal(t, []string{clusterJSON1, clusterJSON2}, cli.GenConfig.Clusters.JSONSpec)
+}
+
+func TestGenConfigCreatesExportDir(t *testing.T) {
+	var (
+		buf    bytes.Buffer
+		cmd    = &GenConfig{stdout: &buf, Output: "/dev/null"} // Force mkdir failure
+		logger = internaltesting.NewTLogger(t)
+		dirs   = &xdg.Directories{DataHome: t.TempDir()}
+	)
+
+	err := cmd.Run(t.Context(), dirs, logger)
+
+	// We just wantto check that the command attempts to create the directory when the
+	// output flag is provided. We just expect the operation to fail as we're using an
+	// unwriteable path.
+	var want *os.PathError
+	require.ErrorAs(t, err, &want)
+}
+
+func TestGenConfigWriteConfig(t *testing.T) {
+	var buf bytes.Buffer
+
+	t.Run("write failure", func(t *testing.T) {
+		var (
+			cmd    = &GenConfig{stdout: &buf, Output: "/dev/null"} // Force write failure
+			logger = internaltesting.NewTLogger(t)
+			dirs   = &xdg.Directories{DataHome: t.TempDir()}
+		)
+		_, err := cmd.writeConfig("dummy", nil, dirs, logger)
+		var want *os.PathError
+		require.ErrorAs(t, err, &want)
+	})
+
+	t.Run("write success", func(t *testing.T) {
+		var (
+			cmd    = &GenConfig{stdout: &buf, Output: t.TempDir()}
+			logger = internaltesting.NewTLogger(t)
+			dirs   = &xdg.Directories{DataHome: t.TempDir()}
+
+			mockRustExtension         = &extensions.Manifest{Name: "test-rust", Type: extensions.TypeRust}
+			mockGoExtension           = &extensions.Manifest{Name: "test-go", Type: extensions.TypeGo, ComposerVersion: "1.0.0"}
+			mockRustExtensionFile     = extensions.LocalCacheExtension(dirs, mockRustExtension)
+			mockGoExtensionFile       = extensions.LocalCacheExtension(dirs, mockGoExtension)
+			mockComposerExtensionFile = extensions.LocalCacheComposerLib(dirs, "1.0.0")
+		)
+
+		// Create the mock extensions at the source
+		require.NoError(t, os.MkdirAll(filepath.Dir(mockRustExtensionFile), 0o750))
+		require.NoError(t, os.MkdirAll(filepath.Dir(mockGoExtensionFile), 0o750))
+		require.NoError(t, os.MkdirAll(filepath.Dir(mockComposerExtensionFile), 0o750))
+		require.NoError(t, os.WriteFile(mockRustExtensionFile, []byte("mock rust"), 0o600))
+		require.NoError(t, os.WriteFile(mockGoExtensionFile, []byte("mock go"), 0o600))
+		require.NoError(t, os.WriteFile(mockComposerExtensionFile, []byte("mock go"), 0o600))
+
+		_, err := cmd.writeConfig("dummy", []*extensions.Manifest{mockRustExtension, mockGoExtension}, dirs, logger)
+		require.NoError(t, err)
+		require.FileExists(t, cmd.Output+"/envoy.yaml")
+		require.FileExists(t, cmd.Output+"/libtest-rust.so")
+		require.FileExists(t, cmd.Output+"/libcomposer.so")
+		require.FileExists(t, cmd.Output+"/test-go.so")
+	})
+}
+
+func TestPrintExportSummary(t *testing.T) {
+	var buf bytes.Buffer
+	printExportSummary(&buf, "/tmp", []string{"envoy.yaml", "libcomposer.so"})
+	require.Equal(t, fmt.Sprintf(`
+%[1]v✓ Config exported to:%[2]v /tmp
+    - envoy.yaml
+    - libcomposer.so
+
+%[1]s→ Run localy with with func-e:%[2]s (https://func-e.io/)
+    export ENVOY_DYNAMIC_MODULES_SEARCH_PATH=/tmp
+    export GODEBUG=cgocheck=0
+    func-e run -c /tmp/envoy.yaml --log-level info --component-log-level dynamic_modules:debug
+`, internal.ANSIBold, internal.ANSIReset), buf.String())
 }
