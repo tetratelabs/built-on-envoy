@@ -160,7 +160,12 @@ func (g *GenConfig) writeConfig(
 			srcExtensionFile = extensions.LocalCacheExtension(dirs, m)
 			dstExtensionFile string
 		)
-		if m.Type == extensions.TypeGo {
+
+		switch m.Type {
+		case extensions.TypeLua:
+			// Lua extensions are rendered inline, so there is nothing to copy
+			continue
+		case extensions.TypeGo:
 			// If it is a Go extension we need to copy the composer library too
 			composerFile := extensions.LocalCacheComposerLib(dirs, m.ComposerVersion)
 			dst := filepath.Join(g.Output, filepath.Base(composerFile))
@@ -173,7 +178,7 @@ func (g *GenConfig) writeConfig(
 			// will not be actually used, but it's conveient to copy it as well to let users easily play
 			// with the raw Envoy configs.
 			dstExtensionFile = filepath.Join(g.Output, m.Name+".so")
-		} else {
+		default:
 			dstExtensionFile = filepath.Join(g.Output, filepath.Base(srcExtensionFile))
 		}
 
