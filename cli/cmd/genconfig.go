@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/envoy"
@@ -98,9 +99,17 @@ func (g *GenConfig) Run(ctx context.Context, dirs *xdg.Directories, logger *slog
 	if err != nil {
 		return err
 	}
-	extensions, err := g.extensionPositions.sort(append(downloaded, local...))
+	resolvedExtensions, err := g.extensionPositions.sort(append(downloaded, local...))
 	if err != nil {
 		return err
+	}
+
+	envoyVersion, err := extensions.ResolveMinimumCompatibleEnvoyVersion(resolvedExtensions)
+	if err != nil {
+		return err
+	}
+	if envoyVersion != "" {
+		logger.Debug("resolved Envoy version from manifests", "envoy_version", envoyVersion)
 	}
 
 	var renderer envoy.ConfigRenderer
@@ -115,7 +124,7 @@ func (g *GenConfig) Run(ctx context.Context, dirs *xdg.Directories, logger *slog
 		AdminPort:        g.AdminPort,
 		ListenerPort:     g.ListenPort,
 		Dirs:             dirs,
-		Extensions:       extensions,
+		Extensions:       resolvedExtensions,
 		Configs:          g.Configs,
 		Clusters:         g.Clusters.Secure,
 		ClustersInsecure: g.Clusters.Insecure,
@@ -130,11 +139,11 @@ func (g *GenConfig) Run(ctx context.Context, dirs *xdg.Directories, logger *slog
 		return nil
 	}
 
-	files, err := g.writeConfig(config, extensions, dirs, logger)
+	files, err := g.writeConfig(config, resolvedExtensions, dirs, logger)
 	if err != nil {
 		return err
 	}
-	printExportSummary(stdout, g.Output, files)
+	printExportSummary(stdout, g.Output, files, g.ListenPort, g.AdminPort, envoyVersion)
 	return nil
 }
 
@@ -147,14 +156,6 @@ func (g *GenConfig) writeConfig(
 	logger *slog.Logger,
 ) ([]string, error) {
 	var files []string
-
-	logger.Info("writing configuration", "path", g.Output)
-	envoyConfig := filepath.Join(g.Output, "envoy.yaml")
-	if err := os.WriteFile(envoyConfig, []byte(config), 0o600); err != nil {
-		return nil, fmt.Errorf("failed to save Envoy config: %w", err)
-	}
-	files = append(files, envoyConfig)
-
 	for _, m := range manifests {
 		var (
 			srcExtensionFile = extensions.LocalCacheExtension(dirs, m)
@@ -173,11 +174,11 @@ func (g *GenConfig) writeConfig(
 				return nil, err
 			}
 			files = append(files, dst)
-			// We also copy the Go plugin file just for convenience, as the config will be generated
-			// with an 'oci://' path or with a 'file://' path pointing to the local cache, so this file
-			// will not be actually used, but it's conveient to copy it as well to let users easily play
-			// with the raw Envoy configs.
+			// We also copy the Go plugin file to the export directory and update the configuration to point to it.
+			// This way we can generate an exported Envoy configuration that works out-of-the-box with func-e and
+			// Docker, without requiring users to manually copy the extension files.
 			dstExtensionFile = filepath.Join(g.Output, m.Name+".so")
+			config = strings.ReplaceAll(config, srcExtensionFile, m.Name+".so")
 		default:
 			dstExtensionFile = filepath.Join(g.Output, filepath.Base(srcExtensionFile))
 		}
@@ -187,6 +188,13 @@ func (g *GenConfig) writeConfig(
 		}
 		files = append(files, dstExtensionFile)
 	}
+
+	logger.Info("writing configuration", "path", g.Output)
+	envoyConfig := filepath.Join(g.Output, "envoy.yaml")
+	if err := os.WriteFile(envoyConfig, []byte(config), 0o600); err != nil {
+		return nil, fmt.Errorf("failed to save Envoy config: %w", err)
+	}
+	files = append(files, envoyConfig)
 
 	return files, nil
 }
@@ -213,16 +221,32 @@ func copyFile(srcPath, dstPath string, logger *slog.Logger) error {
 }
 
 // printExportSummary prints information about how to use the exported configuration.
-func printExportSummary(stdout io.Writer, outputPath string, files []string) {
+func printExportSummary(stdout io.Writer, outputPath string, files []string, listenPort, adminPort uint32, envoyVersion string) {
+	if envoyVersion == "" {
+		envoyVersion = "dev"
+	} else if !strings.HasPrefix(envoyVersion, "v") {
+		envoyVersion = "v" + envoyVersion
+	}
+
 	_, _ = fmt.Fprintf(stdout, "\n%v✓ Config exported to:%v %s\n",
 		internal.ANSIBold, internal.ANSIReset, outputPath)
 	for _, f := range files {
 		_, _ = fmt.Fprintf(stdout, "    - %s\n", filepath.Base(f))
 	}
 	_, _ = fmt.Fprintf(stdout, `
-%[1]s→ Run localy with with func-e:%[2]s (https://func-e.io/)
-    export ENVOY_DYNAMIC_MODULES_SEARCH_PATH=%[3]s
+%[1]s→ Run locally with with func-e:%[2]s (https://func-e.io/)
+    cd %[3]s
     export GODEBUG=cgocheck=0
-    func-e run -c %[3]s/envoy.yaml --log-level info --component-log-level dynamic_modules:debug
-`, internal.ANSIBold, internal.ANSIReset, outputPath)
+    func-e run -c envoy.yaml --log-level info --component-log-level dynamic_modules:debug
+
+%[1]s→ Run locally in Docker:%[2]s (not supported in Darwin hosts yet)
+    docker run --rm \
+        -p %[4]d:%[4]d \
+        -p %[5]d:%[5]d \
+        -e ENVOY_DYNAMIC_MODULES_SEARCH_PATH=/boe \
+        -e GODEBUG=cgocheck=0 \
+        -v /tmp/boe-export:/boe \
+        -w /boe \
+        envoyproxy/envoy:%[6]s -c /boe/envoy.yaml --log-level info --component-log-level dynamic_modules:debug
+`, internal.ANSIBold, internal.ANSIReset, outputPath, listenPort, adminPort, envoyVersion)
 }

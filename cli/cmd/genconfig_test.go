@@ -274,6 +274,7 @@ func TestGenConfigWriteConfig(t *testing.T) {
 
 			mockRustExtension         = &extensions.Manifest{Name: "test-rust", Type: extensions.TypeRust}
 			mockGoExtension           = &extensions.Manifest{Name: "test-go", Type: extensions.TypeGo, ComposerVersion: "1.0.0"}
+			mockLuaExtension          = &extensions.Manifest{Name: "test-lua", Type: extensions.TypeLua}
 			mockRustExtensionFile     = extensions.LocalCacheExtension(dirs, mockRustExtension)
 			mockGoExtensionFile       = extensions.LocalCacheExtension(dirs, mockGoExtension)
 			mockComposerExtensionFile = extensions.LocalCacheComposerLib(dirs, "1.0.0")
@@ -287,7 +288,7 @@ func TestGenConfigWriteConfig(t *testing.T) {
 		require.NoError(t, os.WriteFile(mockGoExtensionFile, []byte("mock go"), 0o600))
 		require.NoError(t, os.WriteFile(mockComposerExtensionFile, []byte("mock go"), 0o600))
 
-		_, err := cmd.writeConfig("dummy", []*extensions.Manifest{mockRustExtension, mockGoExtension}, dirs, logger)
+		_, err := cmd.writeConfig("dummy", []*extensions.Manifest{mockRustExtension, mockGoExtension, mockLuaExtension}, dirs, logger)
 		require.NoError(t, err)
 		require.FileExists(t, cmd.Output+"/envoy.yaml")
 		require.FileExists(t, cmd.Output+"/libtest-rust.so")
@@ -297,16 +298,36 @@ func TestGenConfigWriteConfig(t *testing.T) {
 }
 
 func TestPrintExportSummary(t *testing.T) {
-	var buf bytes.Buffer
-	printExportSummary(&buf, "/tmp", []string{"envoy.yaml", "libcomposer.so"})
-	require.Equal(t, fmt.Sprintf(`
-%[1]v✓ Config exported to:%[2]v /tmp
+	wantTemplate := `
+%[1]v✓ Config exported to:%[2]v /tmp/boe-export
     - envoy.yaml
     - libcomposer.so
 
-%[1]s→ Run localy with with func-e:%[2]s (https://func-e.io/)
-    export ENVOY_DYNAMIC_MODULES_SEARCH_PATH=/tmp
+%[1]s→ Run locally with with func-e:%[2]s (https://func-e.io/)
+    cd /tmp/boe-export
     export GODEBUG=cgocheck=0
-    func-e run -c /tmp/envoy.yaml --log-level info --component-log-level dynamic_modules:debug
-`, internal.ANSIBold, internal.ANSIReset), buf.String())
+    func-e run -c envoy.yaml --log-level info --component-log-level dynamic_modules:debug
+
+%[1]s→ Run locally in Docker:%[2]s (not supported in Darwin hosts yet)
+    docker run --rm \
+        -p 10000:10000 \
+        -p 9901:9901 \
+        -e ENVOY_DYNAMIC_MODULES_SEARCH_PATH=/boe \
+        -e GODEBUG=cgocheck=0 \
+        -v /tmp/boe-export:/boe \
+        -w /boe \
+        envoyproxy/envoy:%[3]s -c /boe/envoy.yaml --log-level info --component-log-level dynamic_modules:debug
+`
+
+	t.Run("with Envoy version", func(t *testing.T) {
+		var buf bytes.Buffer
+		printExportSummary(&buf, "/tmp/boe-export", []string{"envoy.yaml", "libcomposer.so"}, 10000, 9901, "1.37.0")
+		require.Equal(t, fmt.Sprintf(wantTemplate, internal.ANSIBold, internal.ANSIReset, "v1.37.0"), buf.String())
+	})
+
+	t.Run("without Envoy version defaults to 'dev' for Docker", func(t *testing.T) {
+		var buf bytes.Buffer
+		printExportSummary(&buf, "/tmp/boe-export", []string{"envoy.yaml", "libcomposer.so"}, 10000, 9901, "")
+		require.Equal(t, fmt.Sprintf(wantTemplate, internal.ANSIBold, internal.ANSIReset, "dev"), buf.String())
+	})
 }
