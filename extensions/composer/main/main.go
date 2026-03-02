@@ -8,12 +8,6 @@
 // Package main builds a Go shared library that registers built-in plugins.
 package main
 
-/*
-#cgo darwin LDFLAGS: -Wl,-undefined,dynamic_lookup
-#cgo linux LDFLAGS: -Wl,--unresolved-symbols=ignore-all
-*/
-import "C"
-
 import (
 	_ "github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/abi"
 
