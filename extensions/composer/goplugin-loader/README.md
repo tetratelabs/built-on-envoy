@@ -8,7 +8,7 @@ The Go Plugin Loader is a built-in Envoy Dynamic Module that enables loading ext
 
 ## How It Works
 
-1. The loader is registered as a well-known HTTP filter config factory named `goplugin`
+1. The loader is registered as a well-known HTTP filter config factory named `goplugin-loader`
 2. When Envoy loads the configuration, it parses the `GoPlugin` protobuf message containing:
    - `name`: The plugin name to load
    - `url`: The location of the plugin binary (currently supports `file://` URLs)

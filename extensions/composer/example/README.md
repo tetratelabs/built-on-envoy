@@ -32,7 +32,7 @@ The plugin is compiled as a separate Go plugin binary (`.so` file) and loaded at
 
 **How it works:**
 - [standalone/main.go](standalone/main.go) exports `WellKnownHttpFilterConfigFactories()` as the entry point
-- The Composer's [goplugin loader](../goplugin/goplugin.go) loads the `.so` file at runtime
+- The Composer's [goplugin loader](../goplugin-loader/goplugin.go) loads the `.so` file at runtime
 - Before loading, the loader validates that the plugin was built with the same Go version and matching dependency versions
 
 **Advantages:**
