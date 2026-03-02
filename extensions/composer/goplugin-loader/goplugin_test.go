@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"github.com/tetratelabs/built-on-envoy/extensions/composer/goplugin"
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/goplugin-loader"
 )
 
 func TestCreateStreamPluginConfigFactory(t *testing.T) {
