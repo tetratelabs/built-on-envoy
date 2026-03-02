@@ -248,7 +248,7 @@ func TestComposerFilterGenerator(t *testing.T) {
 								Name:         "composer",
 								LoadGlobally: true,
 							},
-							FilterName: "goplugin",
+							FilterName: "goplugin-loader",
 							FilterConfig: func() *anypb.Any {
 								configStruct := &structpb.Struct{
 									Fields: map[string]*structpb.Value{
@@ -296,7 +296,7 @@ func TestComposerFilterGenerator(t *testing.T) {
 								Name:         "composer",
 								LoadGlobally: true,
 							},
-							FilterName: "goplugin",
+							FilterName: "goplugin-loader",
 							FilterConfig: func() *anypb.Any {
 								configStruct := &structpb.Struct{
 									Fields: map[string]*structpb.Value{
@@ -350,7 +350,7 @@ func TestComposerFilterGenerator(t *testing.T) {
 								Name:         "composer",
 								LoadGlobally: true,
 							},
-							FilterName: "goplugin",
+							FilterName: "goplugin-loader",
 							FilterConfig: func() *anypb.Any {
 								configStruct := &structpb.Struct{
 									Fields: map[string]*structpb.Value{

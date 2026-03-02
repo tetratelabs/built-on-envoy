@@ -241,7 +241,7 @@ func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manif
 			// the changes in https://github.com/envoyproxy/envoy/pull/43266 are available.
 			// Currently defaults to `dynamicmodulescustom`.
 		},
-		FilterName:   "goplugin",
+		FilterName:   "goplugin-loader",
 		FilterConfig: anyConfig,
 	}
 	composerAny, err := anypb.New(protoConfig)
