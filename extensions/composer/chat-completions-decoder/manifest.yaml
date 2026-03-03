@@ -1,0 +1,113 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: chat-completions-decoder
+parent: composer
+categories:
+  - AI
+author: Tetrate
+featured: true
+description: Decodes OpenAI Chat Completion requests and exposes structured metadata for downstream filters
+longDescription: |
+  An HTTP filter plugin that parses incoming OpenAI Chat Completions API requests and
+  populates Envoy's dynamic filter metadata with structured information extracted from
+  the request body.
+
+  This allows downstream filters and route configurations to make decisions based on
+  the contents of the LLM request without re-parsing the body themselves.
+
+  ## Extracted Metadata
+
+  The following fields are written into the configured metadata namespace (default: `openai`):
+
+  | Key | Type | Description |
+  |-----|------|-------------|
+  | `model` | string | The requested model name (e.g., `gpt-4o`) |
+  | `system_prompt` | string | System role messages joined with newlines |
+  | `user_prompt` | string | User role messages joined with newlines |
+  | `message_count` | int | Total number of messages in the conversation |
+  | `has_tools` | string | `"true"` if tool definitions are present, `"false"` otherwise |
+  | `tool_names` | string | JSON array of tool function names (only set when tools are present) |
+  | `has_tool_calls` | string | `"true"` if any message contains tool calls, `"false"` otherwise |
+
+  ## Supported API Formats
+
+  The filter parses the OpenAI Chat Completions format (`POST /v1/chat/completions`).
+  Requests that cannot be parsed are passed through without modification.
+
+  ## Configuration Reference
+
+  | Field | Type | Required | Default | Description |
+  |-------|------|----------|---------|-------------|
+  | `metadata_namespace` | string | no | `"openai"` | The filter metadata namespace for the decoded fields |
+
+type: go
+tags:
+  - go
+  - http
+  - ai
+  - openai
+  - chat-completions
+  - metadata
+  - decoder
+  - llm
+license: Apache-2.0
+examples:
+  - title: Basic usage (default namespace)
+    description: |
+      Decode incoming OpenAI Chat Completion requests and expose metadata under the
+      default `openai` namespace. Downstream filters can access `openai.model`,
+      `openai.user_prompt`, etc.
+    code: |
+      boe run --extension chat-completions-decoder
+
+      # Send a chat completion request
+      curl -X POST http://localhost:10000/v1/chat/completions \
+        -H "Content-Type: application/json" \
+        -d '{
+          "model": "gpt-4o",
+          "messages": [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "What is the weather today?"}
+          ]
+        }'
+
+      # Envoy filter metadata will contain:
+      # openai.model         = "gpt-4o"
+      # openai.system_prompt = "You are a helpful assistant."
+      # openai.user_prompt   = "What is the weather today?"
+      # openai.message_count = 2
+      # openai.has_tools     = "false"
+      # openai.has_tool_calls = "false"
+  - title: Custom metadata namespace
+    description: |
+      Use a custom namespace to avoid conflicts with other filters that also write
+      to filter metadata.
+    code: |
+      boe run --extension chat-completions-decoder --config '{"metadata_namespace": "llm-request"}'
+
+      # Metadata will now be under the "llm-request" namespace:
+      # llm-request.model         = "gpt-4o"
+      # llm-request.user_prompt   = "..."
+  - title: Request with tools
+    description: |
+      When the request includes tool definitions, `has_tools` and `tool_names` are
+      populated for downstream routing or policy decisions.
+    code: |
+      boe run --extension chat-completions-decoder
+
+      curl -X POST http://localhost:10000/v1/chat/completions \
+        -H "Content-Type: application/json" \
+        -d '{
+          "model": "gpt-4o",
+          "messages": [{"role": "user", "content": "Book a flight to NYC"}],
+          "tools": [
+            {"type": "function", "function": {"name": "book_flight", "description": "Book a flight"}},
+            {"type": "function", "function": {"name": "cancel_flight", "description": "Cancel a flight"}}
+          ]
+        }'
+
+      # openai.has_tools  = "true"
+      # openai.tool_names = '["book_flight","cancel_flight"]'
