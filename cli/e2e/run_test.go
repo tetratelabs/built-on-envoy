@@ -193,6 +193,8 @@ func TestRustCreateAndRun(t *testing.T) {
 }
 
 func TestLocalGoExtension(t *testing.T) {
+	t.Setenv("TEST_BOE_RUN_ENVOY_TIMEOUT", "5m")
+
 	dataDir := t.TempDir()
 
 	// Create a brand new extension
