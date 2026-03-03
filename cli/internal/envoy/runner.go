@@ -351,7 +351,16 @@ func (r *RunnerDocker) processCommandArgs(args []string) []string {
 		// Skip the --docker and --pull flags as they are only relevant to the host CLI
 		// and should not be passed to the container.
 		// Need to do prefix match not equality because flags could be in the form of --docker=true or --pull=always.
-		if strings.HasPrefix(arg, "--docker") || strings.HasPrefix(arg, "--pull") {
+		if strings.HasPrefix(arg, "--docker") {
+			continue
+		}
+		// Handle --pull=value
+		if strings.HasPrefix(arg, "--pull=") {
+			continue
+		}
+		// Handle --pull value
+		if arg == "--pull" && i+1 < len(args) {
+			i++ // skip next arg (the value for --pull)
 			continue
 		}
 

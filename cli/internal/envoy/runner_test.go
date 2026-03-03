@@ -153,6 +153,7 @@ func TestProcessCommandArgs(t *testing.T) {
 	args := []string{
 		"boe", "run",
 		"--docker", "--docker=true",
+		"--pull=always", "--pull", "never",
 		"--local", "/path/ext.so",
 		"--local", "/host/path/ext2.so",
 		"--local=./ext3.so",
