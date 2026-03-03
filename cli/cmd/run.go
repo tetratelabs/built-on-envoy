@@ -43,6 +43,7 @@ type Run struct {
 	Configs  []string     `name:"config" sep:"none" help:"Optional JSON config string for extensions. Applied in order to combined --extension and --local flags."`
 	Clusters ClusterFlags `embed:""`
 	Docker   bool         `help:"Run Envoy as a Docker container instead of using func-e." default:"false" env:"BOE_RUN_DOCKER"`
+	Pull     string       `name:"pull" help:"Pull policy for the BOE Docker image (missing, always, never). Only applicable when running with --docker." enum:"missing,always,never" default:"missing"`
 	OCI      OCIFlags     `embed:""`
 
 	extensionPositions extensionPositions `kong:"-"` // Internal field: tracks the original position of extensions specified via both --extension and --local flags
@@ -110,6 +111,7 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 			Dirs:            dirs,
 			Arch:            runtime.GOARCH,
 			LocalExtensions: r.Local,
+			Pull:            r.Pull,
 		}
 		return runner.Run(ctx)
 	}
@@ -194,7 +196,7 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 		case extensions.ArtifactBinary:
 			if artifact.Manifest.Type == extensions.TypeGo {
 				// Ensure the composer is downloaded before running any extensions that may depend on it.
-				if err = extensions.CheckOrDownloadLibComposer(ctx, downloader, artifact.Manifest.ComposerVersion); err != nil {
+				if err = extensions.CheckOrDownloadLibComposer(ctx, downloader, artifact.Manifest.ComposerVersion, false); err != nil {
 					return nil, fmt.Errorf("failed to download libcomposer %s for extension %s: %w",
 						artifact.Manifest.ComposerVersion, name, err)
 				}
@@ -226,9 +228,12 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 				if build {
 					fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)
 					downloader.Logger.Info("building downloaded Go extension", "name", manifest.Name, "version", artifact.Manifest.Version)
-					if err = extensions.BuildLibComposer(downloader.Logger, downloader.Dirs, artifact.Path, artifact.Manifest.Version, false); err != nil {
-						return nil, fmt.Errorf("failed to build libcomposer %s for extension %s: %w",
-							artifact.Manifest.Version, name, err)
+					// Build libcomposer from the downloaded source if it does not exist in the local cache.
+					if _, err = os.Stat(extensions.LocalCacheComposerLib(downloader.Dirs, artifact.Manifest.Version)); err != nil {
+						if err = extensions.BuildLibComposer(downloader.Logger, downloader.Dirs, artifact.Path, artifact.Manifest.Version, false); err != nil {
+							return nil, fmt.Errorf("failed to build libcomposer %s for extension %s: %w",
+								artifact.Manifest.Version, name, err)
+						}
 					}
 					if err = extensions.BuildExtensionFromPath(downloader.Logger, downloader.Dirs, manifest, extensionSrc); err != nil {
 						return nil, fmt.Errorf("failed to build Go extension %s from source artifact: %w", name, err)
@@ -307,6 +312,7 @@ var errFailedToLoadLocalManifest = errors.New("failed to load local manifest")
 // loadLocalManifests loads extension manifests from the specified local paths.
 func loadLocalManifests(ctx context.Context, logger *slog.Logger, downloader *extensions.Downloader, paths []string, build bool) ([]*extensions.Manifest, error) {
 	manifests := make([]*extensions.Manifest, 0, len(paths))
+
 	for _, path := range paths {
 		logger.Info("loading local extension manifest", "path", path)
 
@@ -323,7 +329,7 @@ func loadLocalManifests(ctx context.Context, logger *slog.Logger, downloader *ex
 				if err := extensions.BuildExtensionFromPath(downloader.Logger, downloader.Dirs, manifest, path); err != nil {
 					return nil, err
 				}
-				if err := extensions.CheckOrDownloadLibComposer(ctx, downloader, manifest.ComposerVersion); err != nil {
+				if err := extensions.DownloadLibComposerAndBuildIfNeeded(ctx, downloader, manifest.ComposerVersion, true); err != nil {
 					return nil, err
 				}
 			case extensions.TypeRust:

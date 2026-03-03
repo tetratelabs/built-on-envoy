@@ -26,12 +26,17 @@ var LibComposerVersion string
 
 // CheckOrDownloadLibComposer checks if the libcomposer.so exists in the local cache directory.
 // If not, it tries to download the pre-built libcomposer from OCI registry.
-func CheckOrDownloadLibComposer(ctx context.Context, downloader *Downloader, version string) error {
+func CheckOrDownloadLibComposer(ctx context.Context, downloader *Downloader, version string, sourceArtifact bool) error {
 	if _, err := os.Stat(LocalCacheComposerLib(downloader.Dirs, version)); err == nil {
 		downloader.Logger.Debug("libcomposer already exists in local cache. skipping download", "version", version)
 		return nil
 	}
-	artifact, err := downloader.DownloadComposer(ctx, version)
+	return DownloadLibComposerAndBuildIfNeeded(ctx, downloader, version, sourceArtifact)
+}
+
+// DownloadLibComposerAndBuildIfNeeded is a helper function that combines downloading and building the libcomposer.
+func DownloadLibComposerAndBuildIfNeeded(ctx context.Context, downloader *Downloader, version string, sourceArtifact bool) error {
+	artifact, err := downloader.DownloadComposer(ctx, version, sourceArtifact)
 	if err != nil {
 		return fmt.Errorf("failed to download libcomposer: %w", err)
 	}
@@ -76,11 +81,6 @@ func BuildExtensionFromPath(logger *slog.Logger, dirs *xdg.Directories, manifest
 // to be at composerSrcPath. The built libcomposer.so will be saved in the local cache directory for
 // composer to load.
 func BuildLibComposer(logger *slog.Logger, dirs *xdg.Directories, composerSrcPath string, version string, buildPlugins bool) error {
-	if _, err := os.Stat(LocalCacheComposerLib(dirs, version)); err == nil {
-		logger.Debug("libcomposer already exists in local cache. skipping build", "version", version)
-		return nil
-	}
-
 	// Build the libcomposer from source.
 	// #nosec G204
 	cmd := exec.Command("make",

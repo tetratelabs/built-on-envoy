@@ -240,6 +240,7 @@ type RunnerDocker struct {
 	Dirs            *xdg.Directories
 	Arch            string
 	LocalExtensions []string
+	Pull            string
 }
 
 // Run starts Envoy in a Docker container.
@@ -260,6 +261,7 @@ func (r *RunnerDocker) Run(ctx context.Context) error {
 
 	args := []string{
 		"run", "--rm",
+		"--pull", r.Pull,
 		"--platform", "linux/" + r.Arch,
 		"-p", fmt.Sprintf("%d:%d", r.ListenPort, r.ListenPort),
 		"-p", fmt.Sprintf("%d:%d", r.AdminPort, r.AdminPort),
@@ -346,8 +348,19 @@ func (r *RunnerDocker) processCommandArgs(args []string) []string {
 	for i := 1; i < len(args); i++ {
 		arg := args[i]
 
-		// Skip the --docker
+		// Skip the --docker and --pull flags as they are only relevant to the host CLI
+		// and should not be passed to the container.
+		// Need to do prefix match not equality because flags could be in the form of --docker=true or --pull=always.
 		if strings.HasPrefix(arg, "--docker") {
+			continue
+		}
+		// Handle --pull=value
+		if strings.HasPrefix(arg, "--pull=") {
+			continue
+		}
+		// Handle --pull value
+		if arg == "--pull" && i+1 < len(args) {
+			i++ // skip next arg (the value for --pull)
 			continue
 		}
 

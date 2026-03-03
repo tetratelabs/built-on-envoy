@@ -77,6 +77,9 @@ Flags:
                                    the complete cluster config in JSON format.
       --docker                     Run Envoy as a Docker container instead of
                                    using func-e ($BOE_RUN_DOCKER).
+      --pull="missing"             Pull policy for the BOE Docker image
+                                   (missing, always, never). Only applicable
+                                   when running with --docker.
       --registry="ghcr.io/tetratelabs/built-on-envoy"
                                    OCI registry URL for the extensions
                                    ($BOE_REGISTRY).

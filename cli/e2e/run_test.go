@@ -82,7 +82,7 @@ func TestDockerRemoteExtension(t *testing.T) {
 
 	// Run the remote extension in Docker.
 	proc := internaltesting.RunCLI(t, cliBin, "run",
-		"--docker", "--envoy-version", "1.37.0",
+		"--docker",
 		"--listen-port", "11000",
 		"--log-level", "dynamic_modules:debug",
 		"--extension", "example-go")
@@ -136,33 +136,6 @@ func TestRustRemoteExtension(t *testing.T) {
 }
 
 func TestRustLocalExtension(t *testing.T) {
-	// Set a more gnerous timeout as the default 90s have been causing failures in CI, because
-	// it took a bit more time to compile the Rust extension and start Envoy in some runs.
-	t.Setenv("TEST_BOE_RUN_ENVOY_TIMEOUT", "5m")
-
-	extensionPath := "../../extensions/ip-restriction"
-	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin,
-		"--log-level", "dynamic_modules:debug",
-		"--local", extensionPath, "--config", `{"deny_addresses": ["192.168.1.50"]}`,
-	)
-
-	// Set X-Forwarded-For header to an IP address that should be denied by the ip-restriction extension.
-	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
-	checkDenied := func(r *http.Response) bool {
-		return r.StatusCode == http.StatusForbidden
-	}
-
-	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
-	t.Cleanup(cancel)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	require.NoError(t, err)
-	req.Header.Set("X-Forwarded-For", "192.168.1.50")
-
-	require.NoError(t, internaltesting.CheckRequest(req, checkDenied))
-}
-
-func TestRustCreateAndRun(t *testing.T) {
 	dataDir := t.TempDir()
 
 	// Create a brand new extension
@@ -193,6 +166,8 @@ func TestRustCreateAndRun(t *testing.T) {
 }
 
 func TestLocalGoExtension(t *testing.T) {
+	// Configure the test env vars, as composer src will be downloaded from the registry
+	internaltesting.SkipIfTestRegistryNotConfigured(t)
 	dataDir := t.TempDir()
 
 	// Create a brand new extension

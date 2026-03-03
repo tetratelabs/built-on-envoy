@@ -76,9 +76,8 @@ test-integration: gen-code  ## Run the unit and integration tests
 	  go test -tags integration $(GO_TEST_ARGS) $$PKGS
 
 .PHONY: test-e2e
-test-e2e: GO_TEST_ARGS = -timeout 30m
+test-e2e: GO_TEST_ARGS += -timeout 30m
 test-e2e: gen-code  ## Run the end-to-end tests
-	@$(MAKE) -C $(ROOT)/extensions/composer install
 	@echo "Run e2e tests"
 	@go test $(GO_TEST_ARGS) ./e2e/...
 
