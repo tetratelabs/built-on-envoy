@@ -135,9 +135,9 @@ func TestCheckOrDownloadComposer(t *testing.T) {
 		Arch:     "amd64",
 	}
 
-	assert.ErrorContains(t, CheckOrDownloadLibComposer(t.Context(), downloader, "unexisting"), "not found") //nolint: testifylint
-	assert.NoError(t, CheckOrDownloadLibComposer(t.Context(), downloader, "1.2.3"))                         //nolint: testifylint
-	assert.FileExists(t, LocalCacheComposerLib(downloader.Dirs, "1.2.3"))                                   //nolint: testifylint
+	assert.ErrorContains(t, CheckOrDownloadLibComposer(t.Context(), downloader, "unexisting", false), "not found") //nolint: testifylint
+	assert.NoError(t, CheckOrDownloadLibComposer(t.Context(), downloader, "1.2.3", false))                         //nolint: testifylint
+	assert.FileExists(t, LocalCacheComposerLib(downloader.Dirs, "1.2.3"))                                          //nolint: testifylint
 }
 
 func TestFallbackToSourceDynamicModule(t *testing.T) {

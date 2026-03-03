@@ -49,9 +49,15 @@ type DownloadedExtension struct {
 }
 
 // DownloadComposer downloads the composer from the specified repository and version into the downloadDir.
-func (d *Downloader) DownloadComposer(ctx context.Context, version string) (DownloadedExtension, error) {
-	d.Logger.Info("downloading composer", "repository", d.Registry, "version", version)
-	return d.download(ctx, d.Registry+"/composer-lite", version, func(manifest *ocispec.Manifest) string {
+func (d *Downloader) DownloadComposer(ctx context.Context, version string, sourceArtifact bool) (DownloadedExtension, error) {
+	var artifact string
+	if sourceArtifact {
+		artifact = "composer-src"
+	} else {
+		artifact = "composer-lite"
+	}
+	d.Logger.Info("downloading composer", "repository", d.Registry, "artifact", artifact, "version", version)
+	return d.download(ctx, d.Registry+"/"+artifact, version, func(manifest *ocispec.Manifest) string {
 		extensionManifest := ManifestFromOCI(manifest)
 		if isComposerSourceArtifact(manifest) {
 			return LocalCacheComposerSourceArtifactDir(d.Dirs, extensionManifest)
