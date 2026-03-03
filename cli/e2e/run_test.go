@@ -166,6 +166,8 @@ func TestRustLocalExtension(t *testing.T) {
 }
 
 func TestLocalGoExtension(t *testing.T) {
+	// Configure the test env vars, as composer src will be downloaded from the registry
+	internaltesting.SkipIfTestRegistryNotConfigured(t)
 	dataDir := t.TempDir()
 
 	// Create a brand new extension
