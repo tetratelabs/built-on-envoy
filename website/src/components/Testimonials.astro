@@ -1,0 +1,130 @@
+---
+const testimonials = [
+	{
+		quote: "To date, writing extensions for Envoy has been a laborious process that involves writing C++ and compiling a fully custom build of the entire proxy. The rise of dynamic modules, and allowing either Go or Rust to be used for extensions, is going to unlock Envoy extensibility to way more people. I'm really excited about the Built on Envoy effort making it super easy for everyone to get started with Envoy extensions and I'm looking forward to using it to build Rust Envoy extensions for use at bitdrift.",
+		author: "Matt Klein",
+		role: "Envoy Creator, Co-founder & CTO at bitdrift",
+	},
+	{
+		quote: "Envoy is powerful, but it can be complicated and tricky to configure and extend. Built-on-Envoy makes it extremely easy to extend Envoy using Go and Rust, and the developer experience is simple enough for our non-power users who don't know Envoy's internals.",
+		author: "Rohit Agrawal",
+		role: "Envoy Maintainer, SWE @Databricks, Inc",
+	},
+	{
+		quote: "Envoy has become one of the most high velocity and impactful open source projects in the cloud native ecosystem. When contributing organizations like Tetrate step forward to lower the barriers to adoption, they create pathways for more developers to contribute, that kind of leadership strengthens the entire ecosystem.",
+		author: "Chris Aniszczyk",
+		role: "CTO at the Cloud Native Computing Foundation (CNCF)",
+	},
+];
+
+const showArrows = testimonials.length > 3;
+---
+
+<section class="testimonials">
+	<div class="container">
+		<h2>What People Are Saying</h2>
+		<div class="testimonials-carousel">
+			{
+				showArrows && (
+					<button
+						class="carousel-arrow carousel-arrow-left"
+						aria-label="Previous testimonials"
+					>
+						<svg
+							viewBox="0 0 24 24"
+							fill="none"
+							xmlns="http://www.w3.org/2000/svg"
+						>
+							<path
+								d="M15 18L9 12L15 6"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							/>
+						</svg>
+					</button>
+				)
+			}
+			<div class="testimonials-track">
+				{
+					testimonials.map((t) => (
+						<div class="testimonial-card">
+							<svg
+								class="quote-icon"
+								viewBox="0 0 24 24"
+								fill="none"
+								xmlns="http://www.w3.org/2000/svg"
+							>
+								<path
+									d="M11 7H7.5C6.12 7 5 8.12 5 9.5V10C5 11.1 5.9 12 7 12H9V13C9 14.1 8.1 15 7 15H6.5C5.95 15 5.5 15.45 5.5 16C5.5 16.55 5.95 17 6.5 17H7C9.21 17 11 15.21 11 13V7ZM19 7H15.5C14.12 7 13 8.12 13 9.5V10C13 11.1 13.9 12 15 12H17V13C17 14.1 16.1 15 15 15H14.5C13.95 15 13.5 15.45 13.5 16C13.5 16.55 13.95 17 14.5 17H15C17.21 17 19 15.21 19 13V7Z"
+									fill="currentColor"
+								/>
+							</svg>
+							<div class="testimonial-body">
+								<p class="testimonial-quote">{t.quote}</p>
+								<div class="testimonial-author">
+									<span class="author-name">{t.author}</span>
+									<span class="author-role">{t.role}</span>
+								</div>
+							</div>
+						</div>
+					))
+				}
+			</div>
+			{
+				showArrows && (
+					<button
+						class="carousel-arrow carousel-arrow-right"
+						aria-label="Next testimonials"
+					>
+						<svg
+							viewBox="0 0 24 24"
+							fill="none"
+							xmlns="http://www.w3.org/2000/svg"
+						>
+							<path
+								d="M9 18L15 12L9 6"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							/>
+						</svg>
+					</button>
+				)
+			}
+		</div>
+	</div>
+</section>
+
+<script>
+	const track = document.querySelector(".testimonials-track");
+	const leftBtn = document.querySelector(".carousel-arrow-left");
+	const rightBtn = document.querySelector(".carousel-arrow-right");
+
+	if (track && leftBtn && rightBtn) {
+		const updateArrows = () => {
+			const atStart = track.scrollLeft <= 0;
+			const atEnd =
+				track.scrollLeft + track.clientWidth >= track.scrollWidth - 1;
+			leftBtn.classList.toggle("hidden", atStart);
+			rightBtn.classList.toggle("hidden", atEnd);
+		};
+
+		const scrollByCards = (direction: number) => {
+			const card = track.querySelector(
+				".testimonial-card",
+			) as HTMLElement;
+			if (!card) return;
+			const gap = 24;
+			const scrollAmount = (card.offsetWidth + gap) * 3 * direction;
+			track.scrollBy({ left: scrollAmount, behavior: "smooth" });
+		};
+
+		leftBtn.addEventListener("click", () => scrollByCards(-1));
+		rightBtn.addEventListener("click", () => scrollByCards(1));
+		track.addEventListener("scroll", updateArrows);
+		updateArrows();
+	}
+</script>
