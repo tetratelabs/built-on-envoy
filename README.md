@@ -16,10 +16,10 @@
 > For **early access to Built On Envoy**, you'll have to configure the following
 > environment variables, and to a `docker login` as follows because the GitHub repository is still private:
 > ```
-> export BOE_REGITRY_USERNAME=<your GitHub user>
+> export BOE_REGISTRY_USERNAME=<your GitHub user>
 > export BOE_REGISTRY_PASSWORD=<GitHub Personal Access Token>
 >
-> echo $BOE_REGISTRY_PASSWORD | docker login ghcr.io -u $BOE_REGITRY_USERNAME --password-stdin
+> echo $BOE_REGISTRY_PASSWORD | docker login ghcr.io -u $BOE_REGISTRY_USERNAME --password-stdin
 > ```
 > The GitHub PAT needs to have the `read:packages` scope. You can find more information on how to create your PAT
 > [here](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens?versionId=free-pro-team%40latest&productId=apps&restPage=oauth-apps%2Cbuilding-oauth-apps%2Cscopes-for-oauth-apps#creating-a-personal-access-token-classic).
