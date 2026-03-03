@@ -277,6 +277,41 @@
     "sourcePath": "example-lua"
   },
   {
+    "name": "file-server",
+    "version": "0.3.0-dev",
+    "parent": "composer",
+    "categories": [
+      "Traffic Control"
+    ],
+    "author": "Databricks",
+    "description": "Serve static files from the local filesystem through Envoy",
+    "longDescription": "A file server HTTP filter that serves static files from the local filesystem.\nThe filter intercepts incoming HTTP requests and maps URL path prefixes to\nfilesystem directories, responding with the matching file contents. It supports\nconfigurable content-type mapping, directory index files, HTTP Range and HEAD\nrequests, and validates paths to prevent directory traversal attacks.\n",
+    "type": "go",
+    "tags": [
+      "go",
+      "http",
+      "filter",
+      "static",
+      "files"
+    ],
+    "license": "Apache-2.0",
+    "examples": [
+      {
+        "title": "Serve static files",
+        "description": "Serve files from the extension's bundled `www` directory. The included\n`index.html` lets you verify the extension works out of the box.\n",
+        "code": "boe run --extension file-server --config '{\n  \"path_mappings\": [\n    {\n      \"request_path_prefix\": \"/\",\n      \"file_path_prefix\": \"/path/to/www\"\n    }\n  ],\n  \"content_types\": {\n    \"html\": \"text/html\",\n    \"css\": \"text/css\",\n    \"js\": \"application/javascript\",\n    \"png\": \"image/png\"\n  },\n  \"default_content_type\": \"application/octet-stream\",\n  \"directory_index_files\": [\"index.html\"]\n}'\n\n# Request a file\ncurl http://localhost:10000/index.html\n"
+      },
+      {
+        "title": "Multiple path mappings",
+        "description": "Configure multiple path mappings to serve files from different directories.\nThe longest matching prefix takes precedence.\n",
+        "code": "boe run --extension file-server --config '{\n  \"path_mappings\": [\n    {\n      \"request_path_prefix\": \"/\",\n      \"file_path_prefix\": \"/var/www/default\"\n    },\n    {\n      \"request_path_prefix\": \"/docs\",\n      \"file_path_prefix\": \"/var/www/docs\"\n    }\n  ],\n  \"content_types\": {\n    \"html\": \"text/html\",\n    \"txt\": \"text/plain\"\n  },\n  \"directory_index_files\": [\"index.html\", \"index.txt\"]\n}'\n"
+      }
+    ],
+    "minEnvoyVersion": "1.37.0",
+    "composerVersion": "0.3.0-dev",
+    "sourcePath": "composer/file-server"
+  },
+  {
     "name": "ip-restriction",
     "version": "0.1.1",
     "categories": [

@@ -1,0 +1,72 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: file-server
+parent: composer
+categories:
+  - Traffic Control
+author: Databricks
+description: Serve static files from the local filesystem through Envoy
+longDescription: |
+  A file server HTTP filter that serves static files from the local filesystem.
+  The filter intercepts incoming HTTP requests and maps URL path prefixes to
+  filesystem directories, responding with the matching file contents. It supports
+  configurable content-type mapping, directory index files, HTTP Range and HEAD
+  requests, and validates paths to prevent directory traversal attacks.
+type: go
+tags:
+  - go
+  - http
+  - filter
+  - static
+  - files
+license: Apache-2.0
+examples:
+  - title: Serve static files
+    description: |
+      Serve files from the extension's bundled `www` directory. The included
+      `index.html` lets you verify the extension works out of the box.
+    code: |
+      boe run --extension file-server --config '{
+        "path_mappings": [
+          {
+            "request_path_prefix": "/",
+            "file_path_prefix": "/path/to/www"
+          }
+        ],
+        "content_types": {
+          "html": "text/html",
+          "css": "text/css",
+          "js": "application/javascript",
+          "png": "image/png"
+        },
+        "default_content_type": "application/octet-stream",
+        "directory_index_files": ["index.html"]
+      }'
+
+      # Request a file
+      curl http://localhost:10000/index.html
+  - title: Multiple path mappings
+    description: |
+      Configure multiple path mappings to serve files from different directories.
+      The longest matching prefix takes precedence.
+    code: |
+      boe run --extension file-server --config '{
+        "path_mappings": [
+          {
+            "request_path_prefix": "/",
+            "file_path_prefix": "/var/www/default"
+          },
+          {
+            "request_path_prefix": "/docs",
+            "file_path_prefix": "/var/www/docs"
+          }
+        ],
+        "content_types": {
+          "html": "text/html",
+          "txt": "text/plain"
+        },
+        "directory_index_files": ["index.html", "index.txt"]
+      }'
