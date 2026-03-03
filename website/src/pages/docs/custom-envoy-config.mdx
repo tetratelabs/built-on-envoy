@@ -13,14 +13,12 @@ and proxies https://httpbin.org. While this configuration is convenient to test 
 there are situations where customizing the generated Envoy configuration is needed.
 
 This guide explains how to run the extensions locally in Envoy using [func-e](https://func-e.io/) (the tool
-internally used by `boe`).
+internally used by `boe`) or using Docker.
 
-<ToC maxDepth="3"/>
+## Export the configuration and run it locally
 
-## 1. Generating the configuration
-
-First, generate the default configuration for the extensions using the [boe gen-config](/docs/cli/gen-config)
-command.
+Export the configuration for the extensions using the [boe gen-config](/docs/cli/gen-config)
+command with the `--output` flag.
 
 In this example we will use the `ip-restriction` as a remote extension and the `example-go` as a
 local one.
@@ -29,80 +27,44 @@ local one.
 boe gen-config \
         --extension ip-restriction --config '{"allow_addresses":["127.0.0.1"]}' \
         --local ./extensions/composer/example/ \
-        | tee /tmp/envoy.yaml
+        --output /tmp/boe-export
 ```
 
-This will print out the Envoy config and also save it in `/tmp/envoy.yaml`.
-
-## 2. Setting the Envoy Dynamic Modules search path
-
-Once the config has been generated, we need to place the extension Dynamic Modules [in a directory where
-Envoy can find them](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/dynamic_modules#module-discovery).
-To this end, inspect the generated Envoy confifuration, and find the Dynamic modules
-there. In our example, they look like:
-
-```yaml
-http_filters:
-- name: ip-restriction
-  typed_config:
-    '@type': type.googleapis.com/envoy.extensions.filters.http.dynamic_modules.v3.DynamicModuleFilter
-    dynamic_module_config:
-      name: ip-restriction
-    filter_config:
-      '@type': type.googleapis.com/google.protobuf.StringValue
-      value: '{"allow_addresses":["127.0.0.1"]}'
-    filter_name: ip-restriction
-- name: example-go
-  typed_config:
-    '@type': type.googleapis.com/envoy.extensions.filters.http.dynamic_modules.v3.DynamicModuleFilter
-    dynamic_module_config:
-      load_globally: true
-      name: composer
-    filter_config:
-      '@type': type.googleapis.com/google.protobuf.StringValue
-      value: '{"config":null,"name":"example-go","strict_check":false,"url":"file:///Users/nacx/.local/share/boe/extensions/goplugin/example-go/0.3.0-dev/plugin.so"}'
-    filter_name: goplugin
-```
-
-The important part is the `dynamic_module_config.name` property, as it is used by Envoy for the
-[Dynamic Module discovery](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/dynamic_modules#module-discovery).
-
-Fom the Dynamic Module names, we know the libraries Envoy will be looking for are:
-
-* `libip-restriction.so`
-* `libcomposer.so`
-
-`boe` places them in a local cache directory configured by the `BOE_DATA_HOME`
-[environment variable](/docs/reference/environment-variables).
+This will export the Envoy configuration and the extensions to the given directory and produce a detailed
+output with instructions explaining how to run Envoy with `func-e` or Docker:
 
 ```bash
-find $BOE_DATA_HOME \( -name libip-restriction.so -o -name libcomposer.so \)
+→ Fetching ip-restriction...
+→ Building example-go...
 
-/Users/nacx/.local/share/boe/extensions/dym/composer/0.3.0-dev/libcomposer.so
-/Users/nacx/.local/share/boe/extensions/dym/ip-restriction/0.1.1/libip-restriction.so
+✓ Config exported to: /tmp/boe-export
+    - envoy.yaml
+    - libip-restriction.so
+    - libcomposer.so
+    - example-go.so
+
+→ Run locally with with func-e: (https://func-e.io/)
+    cd /tmp/boe-export
+    export GODEBUG=cgocheck=0
+    func-e run -c envoy.yaml --log-level info --component-log-level dynamic_modules:debug
+
+→ Run locally in Docker: (not supported in Darwin hosts yet)
+    docker run --rm \
+        -p 10000:10000 \
+        -p 9901:9901 \
+        -e ENVOY_DYNAMIC_MODULES_SEARCH_PATH=/boe \
+        -e GODEBUG=cgocheck=0 \
+        -v /tmp/boe-export:/boe \
+        -w /boe \
+        envoyproxy/envoy:v1.37.0 -c /boe/envoy.yaml --log-level info --component-log-level dynamic_modules:debug
 ```
 
-We need to put them in a single directory where Envoy can find them. In our example we'll put them in
-`/tmp/extensions`:
+This will export the Envoy configuration to the configured output directory (`/tmp/boe-export` in out example)
+and copy the Envoy Dynamic Module library files to that same directory to facilitate configuring the
+[Envoy Dynamic Module search path](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/dynamic_modules#module-discovery).
 
-```bash
-mkdir -p /tmp/extensions
-ln -s ~/.local/share/boe/extensions/dym/composer/0.3.0-dev/libcomposer.so /tmp/extensions/
-ln -s ~/.local/share/boe/extensions/dym/ip-restriction/0.1.1/libip-restriction.so /tmp/extensions/
-```
+> ⚠️ Make sure you export the `GODEBUG` environment variable. It is needed to disable the cgo pointer checks as
+> Envoy may hold pointers to Go memory.
 
-## 3. Running Envoy
-
-Once the Dynamic Module libraries are in a directory where Envoy can find them, can can use
-[func-e](https://func-e.io/) to start Envoy with our configuration:
-
-```bash
-export ENVOY_DYNAMIC_MODULES_SEARCH_PATH=/tmp/extensions/
-export GODEBUG=cgocheck=0      # Disable cgo pointer checks as Envoy may hold pointers to Go memory
-
-# Run Envoy with 'debug' level set for Dynamic Module logs, to see the extension logs
-func-e run -c /tmp/envoy.yaml --log-level info --component-log-level dynamic_modules:debug
-```
-
-At this point, Envoy will be up & running with the extensions configured and you can change and customize
-the Envoy configuration at your convenience.
+Onve ready, follow the instructions in the output and Envoy start & run with the extensions
+configured. You can change and customize the Envoy configuration at your convenience.

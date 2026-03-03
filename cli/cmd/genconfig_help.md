@@ -18,25 +18,16 @@ Local extensions use `file://` URLs pointing to the locally cached binaries.
 Generate a complete Envoy configuration with the `example-lua` extension:
 
     ```shell
-    boe gen-config --extension example-lua
-    ```
-
-Generate minimal configuration with only extension-generated resources (useful for embedding in existing configs):
-
-    ```shell
-    boe gen-config --extension example-lua --minimal
-    ```
-
-Generate configuration using a local extension during development:
-
-    ```shell
+    boe gen-config --extension ip-restriction
     boe gen-config --local ~/src/my-extension
+    # Generate minimal configuration with only extension-generated resources
+    boe gen-config --extension ip-restriction --minimal
     ```
 
-Save the generated configuration to a file:
+Export the configuration and extension files to a folder by providing the `--output` flag:
 
     ```shell
-    boe gen-config --extension example-lua > envoy.yaml
+    boe gen-config --extension ip-restriction --output /tmp/export
     ```
 
 Generate configuration providing dedicated JSON config to an extension:

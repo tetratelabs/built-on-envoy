@@ -26,25 +26,16 @@ Local extensions use `file://` URLs pointing to the locally cached binaries.
 Generate a complete Envoy configuration with the `example-lua` extension:
 
     ```shell
-    boe gen-config --extension example-lua
-    ```
-
-Generate minimal configuration with only extension-generated resources (useful for embedding in existing configs):
-
-    ```shell
-    boe gen-config --extension example-lua --minimal
-    ```
-
-Generate configuration using a local extension during development:
-
-    ```shell
+    boe gen-config --extension ip-restriction
     boe gen-config --local ~/src/my-extension
+    # Generate minimal configuration with only extension-generated resources
+    boe gen-config --extension ip-restriction --minimal
     ```
 
-Save the generated configuration to a file:
+Export the configuration and extension files to a folder by providing the `--output` flag:
 
     ```shell
-    boe gen-config --extension example-lua > envoy.yaml
+    boe gen-config --extension ip-restriction --output /tmp/export
     ```
 
 Generate configuration providing dedicated JSON config to an extension:
@@ -103,4 +94,5 @@ boe gen-config --help
 | `--insecure` | Allow connecting to an insecure (HTTP) registry. | `bool` | `false` | `BOE_REGISTRY_INSECURE` | No |
 | `--username` | Username for the OCI registry. | `string` | - | `BOE_REGISTRY_USERNAME` | No |
 | `--password` | Password for the OCI registry. | `string` | - | `BOE_REGISTRY_PASSWORD` | No |
+| `--output` | Directory to put the generated config into. Use "-" to print it to the standard output. | `string` | `-` | - | No |
 
