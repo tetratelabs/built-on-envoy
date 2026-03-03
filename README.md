@@ -11,6 +11,8 @@
 
 
 > [!Note]
+> Site password: https://linkly.link/2cgfR
+>
 > For **early access to Built On Envoy**, you'll have to configure the following
 > environment variables, and to a `docker login` as follows because the GitHub repository is still private:
 > ```
