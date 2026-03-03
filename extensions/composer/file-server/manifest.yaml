@@ -7,7 +7,7 @@ name: file-server
 parent: composer
 categories:
   - Traffic Control
-author: Tetrate
+author: Databricks
 description: Serve static files from the local filesystem through Envoy
 longDescription: |
   A file server HTTP filter that serves static files from the local filesystem.

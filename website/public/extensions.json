@@ -283,7 +283,7 @@
     "categories": [
       "Traffic Control"
     ],
-    "author": "Tetrate",
+    "author": "Databricks",
     "description": "Serve static files from the local filesystem through Envoy",
     "longDescription": "A file server HTTP filter that serves static files from the local filesystem.\nThe filter intercepts incoming HTTP requests and maps URL path prefixes to\nfilesystem directories, responding with the matching file contents. It supports\nconfigurable content-type mapping, directory index files, HTTP Range and HEAD\nrequests, and validates paths to prevent directory traversal attacks.\n",
     "type": "go",
