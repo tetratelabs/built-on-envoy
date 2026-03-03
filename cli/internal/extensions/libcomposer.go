@@ -31,11 +31,11 @@ func CheckOrDownloadLibComposer(ctx context.Context, downloader *Downloader, ver
 		downloader.Logger.Debug("libcomposer already exists in local cache. skipping download", "version", version)
 		return nil
 	}
-	return DownloadAndBuildLibComposer(ctx, downloader, version, sourceArtifact)
+	return DownloadLibComposerAndBuildIfNeeded(ctx, downloader, version, sourceArtifact)
 }
 
-// DownloadAndBuildLibComposer is a helper function that combines downloading and building the libcomposer.
-func DownloadAndBuildLibComposer(ctx context.Context, downloader *Downloader, version string, sourceArtifact bool) error {
+// DownloadLibComposerAndBuildIfNeeded is a helper function that combines downloading and building the libcomposer.
+func DownloadLibComposerAndBuildIfNeeded(ctx context.Context, downloader *Downloader, version string, sourceArtifact bool) error {
 	artifact, err := downloader.DownloadComposer(ctx, version, sourceArtifact)
 	if err != nil {
 		return fmt.Errorf("failed to download libcomposer: %w", err)

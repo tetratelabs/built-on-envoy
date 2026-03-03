@@ -329,7 +329,7 @@ func loadLocalManifests(ctx context.Context, logger *slog.Logger, downloader *ex
 				if err := extensions.BuildExtensionFromPath(downloader.Logger, downloader.Dirs, manifest, path); err != nil {
 					return nil, err
 				}
-				if err := extensions.DownloadAndBuildLibComposer(ctx, downloader, manifest.ComposerVersion, true); err != nil {
+				if err := extensions.DownloadLibComposerAndBuildIfNeeded(ctx, downloader, manifest.ComposerVersion, true); err != nil {
 					return nil, err
 				}
 			case extensions.TypeRust:
