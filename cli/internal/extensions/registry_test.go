@@ -68,6 +68,11 @@ func TestSourceRepositoryName(t *testing.T) {
 	require.Equal(t,
 		"ghcr.io/tetratelabs/built-on-envoy/composer-src",
 		SourceRepositoryName(DefaultOCIRegistry, goManifest))
+
+	composerManifest := &Manifest{Name: "my-set", Type: TypeComposer}
+	require.Equal(t,
+		"ghcr.io/tetratelabs/built-on-envoy/composer-src",
+		SourceRepositoryName(DefaultOCIRegistry, composerManifest))
 }
 
 func TestOCIAnnotationsForManifest(t *testing.T) {

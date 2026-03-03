@@ -52,7 +52,7 @@ func NameFromRepository(repository string) string {
 
 // SourceRepositoryName constructs the source repository name for an extension based on the manifest.
 func SourceRepositoryName(registry string, manifest *Manifest) string {
-	if manifest.Type == TypeGo {
+	if manifest.Type == TypeGo || manifest.Type == TypeComposer {
 		return registry + "/composer-src"
 	}
 	return registry + "/extension-src-" + manifest.Name
