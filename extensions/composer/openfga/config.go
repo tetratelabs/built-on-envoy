@@ -22,17 +22,17 @@ const defaultTimeoutMs uint64 = 5000
 
 // openfgaConfig holds the JSON configuration for this filter.
 type openfgaConfig struct {
-	Cluster              string      `json:"cluster"`
-	OpenFGAHost          string      `json:"openfga_host"`
-	StoreID              string      `json:"store_id"`
-	AuthorizationModelID string      `json:"authorization_model_id"`
-	User                 valueSource `json:"user"`
-	Relation             valueSource `json:"relation"`
-	Object               valueSource `json:"object"`
-	Rules                []checkRule `json:"rules"`
-	FailOpen             bool        `json:"fail_open"`
-	DryRun               bool        `json:"dry_run"`
-	TimeoutMs            uint64      `json:"timeout_ms"`
+	Cluster              string           `json:"cluster"`
+	OpenFGAHost          string           `json:"openfga_host"`
+	StoreID              string           `json:"store_id"`
+	AuthorizationModelID string           `json:"authorization_model_id"`
+	User                 valueSource      `json:"user"`
+	Relation             valueSource      `json:"relation"`
+	Object               valueSource      `json:"object"`
+	Rules                []checkRule      `json:"rules"`
+	FailOpen             bool             `json:"fail_open"`
+	DryRun               bool             `json:"dry_run"`
+	TimeoutMs            uint64           `json:"timeout_ms"`
 	DenyStatus           int              `json:"deny_status"`
 	DenyBody             string           `json:"deny_body"`
 	Metadata             *pkg.MetadataKey `json:"metadata,omitempty"`

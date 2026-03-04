@@ -26,6 +26,7 @@ header:
     - "**/*.txt"
     - "**/Dockerfile.godym"
     - "**/Dockerfile.plugin"
+    - "**/Dockerfile.composer-init"
     - .editorconfig
     - LICENSE
     - "**/coraza/rules/**"

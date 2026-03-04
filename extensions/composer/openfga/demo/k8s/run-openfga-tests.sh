@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Copyright Built On Envoy
 # SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
 #
 # Runs OpenFGA authorization tests (alice allowed, bob denied) against the
 # Envoy AI Gateway. Call after setup-ai-gateway.sh completes.

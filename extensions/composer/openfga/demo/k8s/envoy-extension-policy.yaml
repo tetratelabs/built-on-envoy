@@ -1,5 +1,10 @@
 # Copyright Built On Envoy
 # SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
 #
 # EnvoyExtensionPolicy that attaches the openfga Composer filter to an HTTPRoute.
 # The filter is configured with multi-rule authorization: AI model access, MCP tool

@@ -175,11 +175,11 @@ func TestParseConfig_MissingCluster(t *testing.T) {
 
 func TestParseConfig_MissingHost(t *testing.T) {
 	cfg := openfgaConfig{
-		Cluster: "openfga",
-		StoreID: "store1",
-		User:    valueSource{Header: "x-user-id"},
+		Cluster:  "openfga",
+		StoreID:  "store1",
+		User:     valueSource{Header: "x-user-id"},
 		Relation: valueSource{Value: "reader"},
-		Object:  valueSource{Header: "x-resource"},
+		Object:   valueSource{Header: "x-resource"},
 	}
 	data, err := json.Marshal(cfg)
 	require.NoError(t, err)
