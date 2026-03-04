@@ -1,0 +1,65 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+#
+# EnvoyExtensionPolicy for Envoy AI Gateway. Uses goplugin-loader to load the
+# openfga standalone plugin, matching the pattern used by other composer extensions.
+# Attaches to the HTTPRoute created by AIGatewayRoute (envoy-ai-gateway-basic).
+#
+# The AI Gateway controller creates an HTTPRoute from AIGatewayRoute; the route
+# name matches the AIGatewayRoute name. Update store_id with the output from
+# the openfga-setup job.
+#
+# Usage: Replace YOUR_STORE_ID with the store ID from setup-job, then:
+#   kubectl apply -f envoy-extension-policy-ai-gateway.yaml
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyExtensionPolicy
+metadata:
+  name: openfga-ai-gateway
+  namespace: default
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: envoy-ai-gateway-basic
+  dynamicModule:
+    - name: composer
+      filterName: goplugin-loader
+      config:
+        name: openfga
+        url: "file:///mnt/composer/openfga.so"
+        config:
+          cluster: "openfga|openfga.openfga.svc.cluster.local|8080"
+          openfga_host: "openfga.openfga.svc.cluster.local:8080"
+          store_id: "YOUR_STORE_ID"
+          user:
+            header: x-user-id
+            prefix: "user:"
+          fail_open: false
+          rules:
+            - match:
+                headers:
+                  x-ai-eg-model: "*"
+              relation:
+                value: can_use
+              object:
+                header: x-ai-eg-model
+                prefix: "model:"
+            - match:
+                headers:
+                  x-mcp-tool: "*"
+              relation:
+                value: can_invoke
+              object:
+                header: x-mcp-tool
+                prefix: "tool:"
+            - relation:
+                value: can_access
+              object:
+                path_segment: -1
+                prefix: "resource:"

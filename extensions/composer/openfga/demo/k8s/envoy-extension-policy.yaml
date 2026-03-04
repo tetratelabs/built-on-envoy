@@ -1,0 +1,62 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+#
+# EnvoyExtensionPolicy that attaches the openfga Composer filter to an HTTPRoute.
+# The filter is configured with multi-rule authorization: AI model access, MCP tool
+# access, and a catch-all for generic REST resources identified by URL path segment.
+#
+# Update:
+#   - metadata.name / targetRef.name: match your HTTPRoute name
+#   - targetRef.namespace: match your HTTPRoute namespace
+#   - store_id: your OpenFGA store ID (from setup-job output)
+#   - rules: adjust to match your authorization model and route structure
+#   - user.header: must match the header name configured in security-policy.yaml claimsToHeaders
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyExtensionPolicy
+metadata:
+  name: openfga-extension-policy
+  namespace: default
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: my-route          # <-- update to your HTTPRoute name
+  dynamicModule:
+    - name: composer
+      filterName: openfga
+      config:
+        cluster: "openfga|openfga.openfga.svc.cluster.local|8080"
+        openfga_host: "openfga.openfga.svc.cluster.local:8080"
+        store_id: "YOUR_STORE_ID"
+        user:
+          header: x-user-id
+          prefix: "user:"
+        fail_open: false
+        rules:
+          - match:
+              headers:
+                x-ai-eg-model: "*"
+            relation:
+              value: can_use
+            object:
+              header: x-ai-eg-model
+              prefix: "model:"
+          - match:
+              headers:
+                x-mcp-tool: "*"
+            relation:
+              value: can_invoke
+            object:
+              header: x-mcp-tool
+              prefix: "tool:"
+          - relation:
+              value: can_access
+            object:
+              path_segment: -1
+              prefix: "resource:"

@@ -1,0 +1,87 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openfga
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openfga
+  namespace: openfga
+  labels:
+    app: openfga
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openfga
+  template:
+    metadata:
+      labels:
+        app: openfga
+    spec:
+      containers:
+        - name: openfga
+          image: openfga/openfga:latest
+          args: ["run"]
+          ports:
+            - containerPort: 8080
+              name: http
+            - containerPort: 8081
+              name: grpc
+          env:
+            # In-memory store — suitable for demos only.
+            # For production, set OPENFGA_DATASTORE_ENGINE=postgres and configure
+            # OPENFGA_DATASTORE_URI to point to your database.
+            - name: OPENFGA_DATASTORE_ENGINE
+              value: "memory"
+            - name: OPENFGA_HTTP_ADDR
+              value: "0.0.0.0:8080"
+            - name: OPENFGA_GRPC_ADDR
+              value: "0.0.0.0:8081"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openfga
+  namespace: openfga
+  labels:
+    app: openfga
+spec:
+  selector:
+    app: openfga
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+    - name: grpc
+      port: 8081
+      targetPort: grpc
+  type: ClusterIP

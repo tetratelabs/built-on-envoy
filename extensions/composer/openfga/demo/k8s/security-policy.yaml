@@ -1,0 +1,40 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+#
+# SecurityPolicy that validates JWTs from your OIDC provider and injects the
+# `sub` claim as the `x-user-id` request header. The openfga filter reads this
+# header to identify the requesting user — no manual identity header needed.
+#
+# Update:
+#   - metadata.name / targetRef.name: match your HTTPRoute name
+#   - targetRef.namespace: match your HTTPRoute namespace
+#   - issuer: your OIDC provider's issuer URL
+#   - remoteJWKS.uri: your provider's JWKS endpoint
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: openfga-jwt-policy
+  namespace: default
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: my-route          # <-- update to your HTTPRoute name
+  jwt:
+    providers:
+      - name: my-idp
+        issuer: https://auth.example.com              # <-- update to your issuer
+        remoteJWKS:
+          uri: https://auth.example.com/.well-known/jwks.json  # <-- update to your JWKS URI
+        claimsToHeaders:
+          # Map the JWT `sub` claim to a request header that the openfga filter reads.
+          # The header name is fully configurable — change it to match your organization's
+          # conventions and update the openfga filter config's "user.header" field to match.
+          - claim: sub
+            header: x-user-id
