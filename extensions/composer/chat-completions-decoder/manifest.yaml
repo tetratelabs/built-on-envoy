@@ -7,35 +7,24 @@ name: chat-completions-decoder
 parent: composer
 categories:
   - AI
+  - Decoder
 author: Tetrate
 featured: true
-description: Decodes OpenAI Chat Completion requests and exposes structured metadata for downstream filters
+description: Decodes OpenAI Chat Completion requests and responses and exposes structured metadata for downstream filters
 longDescription: |
-  An HTTP filter plugin that parses incoming OpenAI Chat Completions API requests and
+  An HTTP filter plugin that parses OpenAI Chat Completions API requests and responses and
   populates Envoy's dynamic filter metadata with structured information extracted from
-  the request body.
+  both the request and response bodies.
 
   This allows downstream filters and route configurations to make decisions based on
-  the contents of the LLM request without re-parsing the body themselves.
+  the contents of the LLM request and response without re-parsing the bodies themselves.
 
-  ## Extracted Metadata
+  ## Attribute Naming
 
-  The following fields are written into the configured metadata namespace (default: `openai`):
-
-  | Key | Type | Description |
-  |-----|------|-------------|
-  | `model` | string | The requested model name (e.g., `gpt-4o`) |
-  | `system_prompt` | string | System role messages joined with newlines |
-  | `user_prompt` | string | User role messages joined with newlines |
-  | `message_count` | int | Total number of messages in the conversation |
-  | `has_tools` | string | `"true"` if tool definitions are present, `"false"` otherwise |
-  | `tool_names` | string | JSON array of tool function names (only set when tools are present) |
-  | `has_tool_calls` | string | `"true"` if any message contains tool calls, `"false"` otherwise |
-
-  ## Supported API Formats
-
-  The filter parses the OpenAI Chat Completions format (`POST /v1/chat/completions`).
-  Requests that cannot be parsed are passed through without modification.
+  Metadata keys follow the [OpenInference Semantic Conventions](https://github.com/Arize-ai/openinference/blob/main/spec/semantic_conventions.md).
+  List attributes are flattened using indexed dot notation as described in the
+  [LLM Spans attribute flattening spec](https://github.com/Arize-ai/openinference/blob/main/spec/llm_spans.md#attribute-flattening)
+  (e.g. `llm.input_messages.0.message.role`).
 
   ## Configuration Reference
 
@@ -58,8 +47,9 @@ examples:
   - title: Basic usage (default namespace)
     description: |
       Decode incoming OpenAI Chat Completion requests and expose metadata under the
-      default `openai` namespace. Downstream filters can access `openai.model`,
-      `openai.user_prompt`, etc.
+      default `openai` namespace using OpenInference semantic conventions.
+      Downstream filters can access `openai.llm.model_name`,
+      `openai.llm.input_messages.0.message.role`, etc.
     code: |
       boe run --extension chat-completions-decoder
 
@@ -74,13 +64,13 @@ examples:
           ]
         }'
 
-      # Envoy filter metadata will contain:
-      # openai.model         = "gpt-4o"
-      # openai.system_prompt = "You are a helpful assistant."
-      # openai.user_prompt   = "What is the weather today?"
-      # openai.message_count = 2
-      # openai.has_tools     = "false"
-      # openai.has_tool_calls = "false"
+      # Envoy filter metadata will contain (namespace: "openai"):
+      # llm.model_name                         = "gpt-4o"
+      # llm.system                             = "openai"
+      # llm.input_messages.0.message.role      = "system"
+      # llm.input_messages.0.message.content   = "You are a helpful assistant."
+      # llm.input_messages.1.message.role      = "user"
+      # llm.input_messages.1.message.content   = "What is the weather today?"
   - title: Custom metadata namespace
     description: |
       Use a custom namespace to avoid conflicts with other filters that also write
@@ -89,12 +79,14 @@ examples:
       boe run --extension chat-completions-decoder --config '{"metadata_namespace": "llm-request"}'
 
       # Metadata will now be under the "llm-request" namespace:
-      # llm-request.model         = "gpt-4o"
-      # llm-request.user_prompt   = "..."
+      # llm.model_name                       = "gpt-4o"
+      # llm.system                           = "openai"
+      # llm.input_messages.0.message.role    = "user"
+      # llm.input_messages.0.message.content = "..."
   - title: Request with tools
     description: |
-      When the request includes tool definitions, `has_tools` and `tool_names` are
-      populated for downstream routing or policy decisions.
+      When the request includes tool definitions, each tool is stored under
+      `llm.tools.N.tool.json_schema` as a JSON string, following the OpenInference spec.
     code: |
       boe run --extension chat-completions-decoder
 
@@ -109,5 +101,44 @@ examples:
           ]
         }'
 
-      # openai.has_tools  = "true"
-      # openai.tool_names = '["book_flight","cancel_flight"]'
+      # llm.tools.0.tool.json_schema = '{"type":"function","function":{"name":"book_flight","description":"Book a flight"}}'
+      # llm.tools.1.tool.json_schema = '{"type":"function","function":{"name":"cancel_flight","description":"Cancel a flight"}}'
+  - title: Tool call in conversation with response metadata
+    description: |
+      When a multi-turn conversation includes an assistant message with a tool call, the filter
+      captures the tool call details from the request. The response metadata includes the
+      assistant reply and token usage.
+    code: |
+      boe run --extension chat-completions-decoder
+
+      curl -X POST http://localhost:10000/v1/chat/completions \
+        -H "Content-Type: application/json" \
+        -d '{
+          "model": "gpt-4o",
+          "messages": [
+            {"role": "user", "content": "What is the weather in NYC?"},
+            {"role": "assistant", "content": null, "tool_calls": [
+              {"id": "call_abc", "type": "function", "function": {"name": "get_weather", "arguments": "{\"location\":\"NYC\"}"}}
+            ]},
+            {"role": "tool", "content": "Sunny, 72F"}
+          ]
+        }'
+
+      # Request metadata (namespace: "openai"):
+      # llm.model_name                                                         = "gpt-4o"
+      # llm.system                                                             = "openai"
+      # llm.input_messages.0.message.role                                      = "user"
+      # llm.input_messages.0.message.content                                   = "What is the weather in NYC?"
+      # llm.input_messages.1.message.role                                      = "assistant"
+      # llm.input_messages.1.message.tool_calls.0.tool_call.id                = "call_abc"
+      # llm.input_messages.1.message.tool_calls.0.tool_call.function.name     = "get_weather"
+      # llm.input_messages.1.message.tool_calls.0.tool_call.function.arguments = '{"location":"NYC"}'
+      # llm.input_messages.2.message.role                                      = "tool"
+      # llm.input_messages.2.message.content                                   = "Sunny, 72F"
+
+      # Response metadata (when the model sends its final reply):
+      # llm.output_messages.0.message.role                                     = "assistant"
+      # llm.output_messages.0.message.content                                  = "The weather in NYC is sunny and 72F."
+      # llm.token_count.prompt                                                 = 85
+      # llm.token_count.completion                                             = 14
+

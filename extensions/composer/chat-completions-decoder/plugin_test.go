@@ -6,7 +6,6 @@
 package impl
 
 import (
-	"encoding/json"
 	"testing"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
@@ -209,12 +208,12 @@ func TestOnRequestBody_ValidRequest_SetsMetadata(t *testing.T) {
 	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
 
-	mockHandle.EXPECT().SetMetadata("openai", "model", "gpt-4o").Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "system_prompt", "You are a helpful assistant.").Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "user_prompt", "What is the weather?").Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "message_count", int64(2)).Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "has_tools", "false").Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "has_tool_calls", "false").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.model_name", "gpt-4o").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.system", "openai").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.0.message.role", "system").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.0.message.content", "You are a helpful assistant.").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.1.message.role", "user").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.1.message.content", "What is the weather?").Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
 	result := filter.OnRequestBody(newTestBodyBuffer(body), true)
@@ -236,14 +235,44 @@ func TestOnRequestBody_WithTools_SetsMetadata(t *testing.T) {
 	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
 
-	toolNamesJSON, _ := json.Marshal([]string{"my_func"})
-	mockHandle.EXPECT().SetMetadata("openai", "model", "gpt-4o").Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "system_prompt", "").Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "user_prompt", "Call a tool").Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "message_count", int64(1)).Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "has_tools", "true").Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "has_tool_calls", "false").Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "tool_names", string(toolNamesJSON)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.model_name", "gpt-4o").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.system", "openai").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.0.message.role", "user").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.0.message.content", "Call a tool").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.tools.0.tool.json_schema",
+		`{"type":"function","function":{"name":"my_func","description":"A function"}}`).Times(1)
+
+	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
+	result := filter.OnRequestBody(newTestBodyBuffer(body), true)
+	require.Equal(t, shared.BodyStatusContinue, result)
+}
+
+func TestOnRequestBody_WithToolCalls_SetsMetadata(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+
+	body := []byte(`{
+		"model": "gpt-4o",
+		"messages": [
+			{"role": "user", "content": "What is the weather?"},
+			{"role": "assistant", "content": null, "tool_calls": [
+				{"id": "call_1", "type": "function", "function": {"name": "get_weather", "arguments": "{}"}}
+			]}
+		]
+	}`)
+	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
+	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
+
+	mockHandle.EXPECT().SetMetadata("openai", "llm.model_name", "gpt-4o").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.system", "openai").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.0.message.role", "user").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.0.message.content", "What is the weather?").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.1.message.role", "assistant").Times(1)
+	// assistant message has null content, so no content key is set
+	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.1.message.tool_calls.0.tool_call.id", "call_1").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.1.message.tool_calls.0.tool_call.function.name", "get_weather").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.1.message.tool_calls.0.tool_call.function.arguments", "{}").Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
 	result := filter.OnRequestBody(newTestBodyBuffer(body), true)
@@ -262,12 +291,10 @@ func TestOnRequestBody_CustomNamespace(t *testing.T) {
 	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
 
-	mockHandle.EXPECT().SetMetadata("my-namespace", "model", "gpt-4o").Times(1)
-	mockHandle.EXPECT().SetMetadata("my-namespace", "system_prompt", "").Times(1)
-	mockHandle.EXPECT().SetMetadata("my-namespace", "user_prompt", "Hello").Times(1)
-	mockHandle.EXPECT().SetMetadata("my-namespace", "message_count", int64(1)).Times(1)
-	mockHandle.EXPECT().SetMetadata("my-namespace", "has_tools", "false").Times(1)
-	mockHandle.EXPECT().SetMetadata("my-namespace", "has_tool_calls", "false").Times(1)
+	mockHandle.EXPECT().SetMetadata("my-namespace", "llm.model_name", "gpt-4o").Times(1)
+	mockHandle.EXPECT().SetMetadata("my-namespace", "llm.system", "openai").Times(1)
+	mockHandle.EXPECT().SetMetadata("my-namespace", "llm.input_messages.0.message.role", "user").Times(1)
+	mockHandle.EXPECT().SetMetadata("my-namespace", "llm.input_messages.0.message.content", "Hello").Times(1)
 
 	filter := &decoderFilter{
 		handle: mockHandle,
@@ -291,43 +318,178 @@ func TestOnRequestTrailers_SetsMetadata(t *testing.T) {
 	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
 
-	mockHandle.EXPECT().SetMetadata("openai", "model", "gpt-4o").Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "system_prompt", "").Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "user_prompt", "Hello").Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "message_count", int64(1)).Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "has_tools", "false").Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "has_tool_calls", "false").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.model_name", "gpt-4o").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.system", "openai").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.0.message.role", "user").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.0.message.content", "Hello").Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
 	result := filter.OnRequestTrailers(fake.NewFakeHeaderMap(map[string][]string{}))
 	require.Equal(t, shared.TrailersStatusContinue, result)
 }
 
-func TestOnRequestBody_WithToolCalls_SetsMetadata(t *testing.T) {
+// --- Tests for decoderFilter.OnResponseHeaders ---
+
+func TestOnResponseHeaders_EndOfStream(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+
+	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
+	result := filter.OnResponseHeaders(fake.NewFakeHeaderMap(map[string][]string{}), true)
+	require.Equal(t, shared.HeadersStatusContinue, result)
+}
+
+func TestOnResponseHeaders_NotEndOfStream(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+
+	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
+	result := filter.OnResponseHeaders(fake.NewFakeHeaderMap(map[string][]string{}), false)
+	require.Equal(t, shared.HeadersStatusStop, result)
+}
+
+// --- Tests for decoderFilter.OnResponseBody ---
+
+func TestOnResponseBody_NotEndOfStream(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+
+	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
+	result := filter.OnResponseBody(newTestBodyBuffer([]byte("data")), false)
+	require.Equal(t, shared.BodyStatusStopAndBuffer, result)
+}
+
+func TestOnResponseBody_EmptyBody(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+
+	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer([]byte{})).AnyTimes()
+	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
+
+	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
+	result := filter.OnResponseBody(newTestBodyBuffer([]byte{}), true)
+	require.Equal(t, shared.BodyStatusContinue, result)
+}
+
+func TestOnResponseBody_InvalidJSON(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+
+	body := []byte(`{invalid json}`)
+	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
+	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any(), gomock.Any()).Times(1)
+
+	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
+	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
+	require.Equal(t, shared.BodyStatusContinue, result)
+}
+
+func TestOnResponseBody_ValidResponse_SetsMetadata(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 
 	body := []byte(`{
-		"model": "gpt-4o",
-		"messages": [
-			{"role": "user", "content": "What is the weather?"},
-			{"role": "assistant", "content": null, "tool_calls": [
-				{"id": "call_1", "type": "function", "function": {"name": "get_weather", "arguments": "{}"}}
-			]}
-		]
+		"choices": [
+			{
+				"index": 0,
+				"message": {"role": "assistant", "content": "The weather is sunny."},
+				"finish_reason": "stop"
+			}
+		],
+		"usage": {
+			"prompt_tokens": 20,
+			"completion_tokens": 10,
+			"total_tokens": 30
+		}
 	}`)
-	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
-	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
+	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 
-	mockHandle.EXPECT().SetMetadata("openai", "model", "gpt-4o").Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "system_prompt", "").Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "user_prompt", "What is the weather?").Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "message_count", int64(2)).Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "has_tools", "false").Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "has_tool_calls", "true").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.role", "assistant").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.content", "The weather is sunny.").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.prompt", int64(20)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.completion", int64(10)).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
-	result := filter.OnRequestBody(newTestBodyBuffer(body), true)
+	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
+}
+
+func TestOnResponseBody_NoUsage_SetsMetadataWithoutTokenCounts(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+
+	body := []byte(`{
+		"choices": [
+			{"index": 0, "message": {"role": "assistant", "content": "Hello!"}, "finish_reason": "stop"}
+		]
+	}`)
+	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
+	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
+
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.role", "assistant").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.content", "Hello!").Times(1)
+	// No token count calls expected when usage is absent
+
+	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
+	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
+	require.Equal(t, shared.BodyStatusContinue, result)
+}
+
+func TestOnResponseBody_CustomNamespace(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+
+	body := []byte(`{
+		"choices": [
+			{"index": 0, "message": {"role": "assistant", "content": "Hi"}, "finish_reason": "stop"}
+		]
+	}`)
+	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
+	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
+
+	mockHandle.EXPECT().SetMetadata("my-ns", "llm.output_messages.0.message.role", "assistant").Times(1)
+	mockHandle.EXPECT().SetMetadata("my-ns", "llm.output_messages.0.message.content", "Hi").Times(1)
+
+	filter := &decoderFilter{
+		handle: mockHandle,
+		config: &chatCompletionsDecoderConfig{MetadataNamespace: "my-ns"},
+	}
+	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
+	require.Equal(t, shared.BodyStatusContinue, result)
+}
+
+// --- Tests for decoderFilter.OnResponseTrailers ---
+
+func TestOnResponseTrailers_SetsMetadata(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+
+	body := []byte(`{
+		"choices": [
+			{"index": 0, "message": {"role": "assistant", "content": "Done."}, "finish_reason": "stop"}
+		],
+		"usage": {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8}
+	}`)
+	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
+	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
+
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.role", "assistant").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.content", "Done.").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.prompt", int64(5)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.completion", int64(3)).Times(1)
+
+	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
+	result := filter.OnResponseTrailers(fake.NewFakeHeaderMap(map[string][]string{}))
+	require.Equal(t, shared.TrailersStatusContinue, result)
 }

@@ -8,6 +8,7 @@ package impl
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/utility"
@@ -18,7 +19,7 @@ const defaultMetadataNamespace = "openai"
 // chatCompletionsDecoderConfig holds the configuration for the decoder filter.
 type chatCompletionsDecoderConfig struct {
 	// MetadataNamespace is the filter metadata namespace under which the decoded
-	// request fields are stored. Defaults to "openai".
+	// fields are stored. Defaults to "openai".
 	MetadataNamespace string `json:"metadata_namespace"`
 }
 
@@ -91,6 +92,32 @@ func (f *decoderFilter) OnRequestTrailers(_ shared.HeaderMap) shared.TrailersSta
 	return shared.TrailersStatusContinue
 }
 
+func (f *decoderFilter) OnResponseHeaders(
+	_ shared.HeaderMap,
+	endOfStream bool,
+) shared.HeadersStatus {
+	if endOfStream {
+		return shared.HeadersStatusContinue
+	}
+	return shared.HeadersStatusStop
+}
+
+func (f *decoderFilter) OnResponseBody(
+	_ shared.BodyBuffer,
+	endOfStream bool,
+) shared.BodyStatus {
+	if !endOfStream {
+		return shared.BodyStatusStopAndBuffer
+	}
+	f.decodeResponseBody()
+	return shared.BodyStatusContinue
+}
+
+func (f *decoderFilter) OnResponseTrailers(_ shared.HeaderMap) shared.TrailersStatus {
+	f.decodeResponseBody()
+	return shared.TrailersStatusContinue
+}
+
 // decodeRequestBody reads the request body, parses the OpenAI ChatCompletion request,
 // and sets the structured information in filter metadata.
 func (f *decoderFilter) decodeRequestBody() {
@@ -105,33 +132,74 @@ func (f *decoderFilter) decodeRequestBody() {
 		return
 	}
 
-	f.setMetadata(f.config.namespace(), decoded)
+	f.setRequestMetadata(f.config.namespace(), decoded)
 }
 
-// setMetadata writes the decoded fields into Envoy's dynamic filter metadata.
-func (f *decoderFilter) setMetadata(namespace string, d *decodedRequest) {
-	f.handle.SetMetadata(namespace, "model", d.Model)
-	f.handle.SetMetadata(namespace, "system_prompt", d.SystemPrompt)
-	f.handle.SetMetadata(namespace, "user_prompt", d.UserPrompt)
-	f.handle.SetMetadata(namespace, "message_count", int64(d.MessageCount))
-
-	if d.HasTools {
-		f.handle.SetMetadata(namespace, "has_tools", "true")
-	} else {
-		f.handle.SetMetadata(namespace, "has_tools", "false")
+// decodeResponseBody reads the response body, parses the OpenAI ChatCompletion response,
+// and sets the structured information in filter metadata.
+func (f *decoderFilter) decodeResponseBody() {
+	bodyBytes := utility.ReadWholeResponseBody(f.handle)
+	if len(bodyBytes) == 0 {
+		return
 	}
 
-	if d.HasToolCalls {
-		f.handle.SetMetadata(namespace, "has_tool_calls", "true")
-	} else {
-		f.handle.SetMetadata(namespace, "has_tool_calls", "false")
+	decoded, err := decodeChatResponse(bodyBytes)
+	if err != nil {
+		f.handle.Log(shared.LogLevelDebug, "chat-completions-decoder: failed to parse response: %s", err.Error())
+		return
 	}
 
-	if len(d.ToolNames) > 0 {
-		toolNamesJSON, err := json.Marshal(d.ToolNames)
-		if err == nil {
-			f.handle.SetMetadata(namespace, "tool_names", string(toolNamesJSON))
+	f.setResponseMetadata(f.config.namespace(), decoded)
+}
+
+// setRequestMetadata writes the decoded request fields into Envoy's dynamic filter metadata
+// following the OpenInference Semantic Conventions.
+func (f *decoderFilter) setRequestMetadata(namespace string, d *decodedRequest) {
+	f.handle.SetMetadata(namespace, "llm.model_name", d.Model)
+	f.handle.SetMetadata(namespace, "llm.system", "openai")
+
+	for i, msg := range d.Messages {
+		f.handle.SetMetadata(namespace, fmt.Sprintf("llm.input_messages.%d.message.role", i), msg.Role)
+		if content := extractContent(msg.Content); content != "" {
+			f.handle.SetMetadata(namespace, fmt.Sprintf("llm.input_messages.%d.message.content", i), content)
 		}
+		for j, tc := range msg.ToolCalls {
+			f.handle.SetMetadata(namespace,
+				fmt.Sprintf("llm.input_messages.%d.message.tool_calls.%d.tool_call.id", i, j), tc.ID)
+			f.handle.SetMetadata(namespace,
+				fmt.Sprintf("llm.input_messages.%d.message.tool_calls.%d.tool_call.function.name", i, j), tc.Function.Name)
+			f.handle.SetMetadata(namespace,
+				fmt.Sprintf("llm.input_messages.%d.message.tool_calls.%d.tool_call.function.arguments", i, j), tc.Function.Arguments)
+		}
+	}
+
+	for i, tool := range d.Tools {
+		if toolJSON, err := json.Marshal(tool); err == nil {
+			f.handle.SetMetadata(namespace, fmt.Sprintf("llm.tools.%d.tool.json_schema", i), string(toolJSON))
+		}
+	}
+}
+
+// setResponseMetadata writes the decoded response fields into Envoy's dynamic filter metadata
+// following the OpenInference Semantic Conventions.
+func (f *decoderFilter) setResponseMetadata(namespace string, d *decodedResponse) {
+	for i, choice := range d.Choices {
+		f.handle.SetMetadata(namespace, fmt.Sprintf("llm.output_messages.%d.message.role", i), choice.Message.Role)
+		if content := extractContent(choice.Message.Content); content != "" {
+			f.handle.SetMetadata(namespace, fmt.Sprintf("llm.output_messages.%d.message.content", i), content)
+		}
+		for j, tc := range choice.Message.ToolCalls {
+			f.handle.SetMetadata(namespace,
+				fmt.Sprintf("llm.output_messages.%d.message.tool_calls.%d.tool_call.id", i, j), tc.ID)
+			f.handle.SetMetadata(namespace,
+				fmt.Sprintf("llm.output_messages.%d.message.tool_calls.%d.tool_call.function.name", i, j), tc.Function.Name)
+			f.handle.SetMetadata(namespace,
+				fmt.Sprintf("llm.output_messages.%d.message.tool_calls.%d.tool_call.function.arguments", i, j), tc.Function.Arguments)
+		}
+	}
+	if d.Usage != nil {
+		f.handle.SetMetadata(namespace, "llm.token_count.prompt", int64(d.Usage.PromptTokens))
+		f.handle.SetMetadata(namespace, "llm.token_count.completion", int64(d.Usage.CompletionTokens))
 	}
 }
 

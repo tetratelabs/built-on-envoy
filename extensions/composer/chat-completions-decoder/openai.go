@@ -55,15 +55,35 @@ type contentPart struct {
 	Text string `json:"text"`
 }
 
+// chatCompletionResponse represents an OpenAI chat completions response.
+type chatCompletionResponse struct {
+	Choices []chatChoice `json:"choices"`
+	Usage   *chatUsage   `json:"usage"`
+}
+
+// chatChoice represents a single choice in a chat completion response.
+type chatChoice struct {
+	Index   int         `json:"index"`
+	Message chatMessage `json:"message"`
+}
+
+// chatUsage represents token usage information in a chat completion response.
+type chatUsage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+}
+
 // decodedRequest holds the structured information extracted from a ChatCompletion request.
 type decodedRequest struct {
-	Model        string
-	SystemPrompt string
-	UserPrompt   string
-	MessageCount int
-	HasTools     bool
-	HasToolCalls bool
-	ToolNames    []string
+	Model    string
+	Messages []chatMessage
+	Tools    []chatTool
+}
+
+// decodedResponse holds the structured information extracted from a ChatCompletion response.
+type decodedResponse struct {
+	Choices []chatChoice
+	Usage   *chatUsage
 }
 
 // decodeChatRequest parses an OpenAI chat completions request body and extracts
@@ -73,43 +93,24 @@ func decodeChatRequest(body []byte) (*decodedRequest, error) {
 	if err := json.Unmarshal(body, &req); err != nil {
 		return nil, err
 	}
+	return &decodedRequest{
+		Model:    req.Model,
+		Messages: req.Messages,
+		Tools:    req.Tools,
+	}, nil
+}
 
-	result := &decodedRequest{
-		Model:        req.Model,
-		MessageCount: len(req.Messages),
-		HasTools:     len(req.Tools) > 0,
+// decodeChatResponse parses an OpenAI chat completions response body and extracts
+// structured information for use in filter metadata.
+func decodeChatResponse(body []byte) (*decodedResponse, error) {
+	var resp chatCompletionResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, err
 	}
-
-	// Extract tool names from tool definitions.
-	for _, t := range req.Tools {
-		if t.Function.Name != "" {
-			result.ToolNames = append(result.ToolNames, t.Function.Name)
-		}
-	}
-
-	var systemParts []string
-	var userParts []string
-	for _, msg := range req.Messages {
-		text := extractContent(msg.Content)
-		switch msg.Role {
-		case "system":
-			if text != "" {
-				systemParts = append(systemParts, text)
-			}
-		case "user":
-			if text != "" {
-				userParts = append(userParts, text)
-			}
-		}
-		if len(msg.ToolCalls) > 0 {
-			result.HasToolCalls = true
-		}
-	}
-
-	result.SystemPrompt = strings.Join(systemParts, "\n")
-	result.UserPrompt = strings.Join(userParts, "\n")
-
-	return result, nil
+	return &decodedResponse{
+		Choices: resp.Choices,
+		Usage:   resp.Usage,
+	}, nil
 }
 
 // extractContent handles both string and array content formats.

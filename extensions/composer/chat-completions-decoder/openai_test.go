@@ -23,15 +23,15 @@ func TestDecodeChatRequest_SimpleMessages(t *testing.T) {
 	result, err := decodeChatRequest(body)
 	require.NoError(t, err)
 	require.Equal(t, "gpt-4o", result.Model)
-	require.Equal(t, "You are a helpful assistant.", result.SystemPrompt)
-	require.Equal(t, "Hello, how are you?", result.UserPrompt)
-	require.Equal(t, 2, result.MessageCount)
-	require.False(t, result.HasTools)
-	require.False(t, result.HasToolCalls)
-	require.Empty(t, result.ToolNames)
+	require.Len(t, result.Messages, 2)
+	require.Equal(t, "system", result.Messages[0].Role)
+	require.Equal(t, "You are a helpful assistant.", extractContent(result.Messages[0].Content))
+	require.Equal(t, "user", result.Messages[1].Role)
+	require.Equal(t, "Hello, how are you?", extractContent(result.Messages[1].Content))
+	require.Empty(t, result.Tools)
 }
 
-func TestDecodeChatRequest_MultipleUserMessages(t *testing.T) {
+func TestDecodeChatRequest_MultiTurnConversation(t *testing.T) {
 	body := []byte(`{
 		"model": "gpt-4o",
 		"messages": [
@@ -43,25 +43,13 @@ func TestDecodeChatRequest_MultipleUserMessages(t *testing.T) {
 
 	result, err := decodeChatRequest(body)
 	require.NoError(t, err)
-	require.Equal(t, "First question\nSecond question", result.UserPrompt)
-	require.Empty(t, result.SystemPrompt)
-	require.Equal(t, 3, result.MessageCount)
-}
-
-func TestDecodeChatRequest_MultipleSystemMessages(t *testing.T) {
-	body := []byte(`{
-		"model": "gpt-4o",
-		"messages": [
-			{"role": "system", "content": "First system prompt"},
-			{"role": "system", "content": "Second system prompt"},
-			{"role": "user", "content": "Hello"}
-		]
-	}`)
-
-	result, err := decodeChatRequest(body)
-	require.NoError(t, err)
-	require.Equal(t, "First system prompt\nSecond system prompt", result.SystemPrompt)
-	require.Equal(t, "Hello", result.UserPrompt)
+	require.Len(t, result.Messages, 3)
+	require.Equal(t, "user", result.Messages[0].Role)
+	require.Equal(t, "First question", extractContent(result.Messages[0].Content))
+	require.Equal(t, "assistant", result.Messages[1].Role)
+	require.Equal(t, "First answer", extractContent(result.Messages[1].Content))
+	require.Equal(t, "user", result.Messages[2].Role)
+	require.Equal(t, "Second question", extractContent(result.Messages[2].Content))
 }
 
 func TestDecodeChatRequest_MultimodalContent(t *testing.T) {
@@ -77,7 +65,8 @@ func TestDecodeChatRequest_MultimodalContent(t *testing.T) {
 
 	result, err := decodeChatRequest(body)
 	require.NoError(t, err)
-	require.Equal(t, "What is in this image?", result.UserPrompt)
+	require.Len(t, result.Messages, 1)
+	require.Equal(t, "What is in this image?", extractContent(result.Messages[0].Content))
 }
 
 func TestDecodeChatRequest_MultipleTextParts(t *testing.T) {
@@ -93,7 +82,8 @@ func TestDecodeChatRequest_MultipleTextParts(t *testing.T) {
 
 	result, err := decodeChatRequest(body)
 	require.NoError(t, err)
-	require.Equal(t, "First part\nSecond part", result.UserPrompt)
+	require.Len(t, result.Messages, 1)
+	require.Equal(t, "First part\nSecond part", extractContent(result.Messages[0].Content))
 }
 
 func TestDecodeChatRequest_WithTools(t *testing.T) {
@@ -110,9 +100,9 @@ func TestDecodeChatRequest_WithTools(t *testing.T) {
 
 	result, err := decodeChatRequest(body)
 	require.NoError(t, err)
-	require.True(t, result.HasTools)
-	require.Equal(t, []string{"get_weather", "send_email"}, result.ToolNames)
-	require.False(t, result.HasToolCalls)
+	require.Len(t, result.Tools, 2)
+	require.Equal(t, "get_weather", result.Tools[0].Function.Name)
+	require.Equal(t, "send_email", result.Tools[1].Function.Name)
 }
 
 func TestDecodeChatRequest_WithToolCalls(t *testing.T) {
@@ -128,8 +118,12 @@ func TestDecodeChatRequest_WithToolCalls(t *testing.T) {
 
 	result, err := decodeChatRequest(body)
 	require.NoError(t, err)
-	require.True(t, result.HasToolCalls)
-	require.Equal(t, 2, result.MessageCount)
+	require.Len(t, result.Messages, 2)
+	require.Equal(t, "assistant", result.Messages[1].Role)
+	require.Len(t, result.Messages[1].ToolCalls, 1)
+	require.Equal(t, "call_1", result.Messages[1].ToolCalls[0].ID)
+	require.Equal(t, "get_weather", result.Messages[1].ToolCalls[0].Function.Name)
+	require.JSONEq(t, `{"location": "NYC"}`, result.Messages[1].ToolCalls[0].Function.Arguments)
 }
 
 func TestDecodeChatRequest_EmptyMessages(t *testing.T) {
@@ -138,9 +132,8 @@ func TestDecodeChatRequest_EmptyMessages(t *testing.T) {
 	result, err := decodeChatRequest(body)
 	require.NoError(t, err)
 	require.Equal(t, "gpt-4o", result.Model)
-	require.Empty(t, result.SystemPrompt)
-	require.Empty(t, result.UserPrompt)
-	require.Equal(t, 0, result.MessageCount)
+	require.Empty(t, result.Messages)
+	require.Empty(t, result.Tools)
 }
 
 func TestDecodeChatRequest_NoModel(t *testing.T) {
@@ -153,7 +146,7 @@ func TestDecodeChatRequest_NoModel(t *testing.T) {
 	result, err := decodeChatRequest(body)
 	require.NoError(t, err)
 	require.Empty(t, result.Model)
-	require.Equal(t, "Hello", result.UserPrompt)
+	require.Len(t, result.Messages, 1)
 }
 
 func TestDecodeChatRequest_InvalidJSON(t *testing.T) {
@@ -163,17 +156,87 @@ func TestDecodeChatRequest_InvalidJSON(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestDecodeChatRequest_EmptyUserContent(t *testing.T) {
+func TestDecodeChatResponse_SimpleResponse(t *testing.T) {
 	body := []byte(`{
+		"id": "chatcmpl-123",
+		"object": "chat.completion",
 		"model": "gpt-4o",
-		"messages": [
-			{"role": "user", "content": ""}
+		"choices": [
+			{
+				"index": 0,
+				"message": {
+					"role": "assistant",
+					"content": "The weather in NYC is sunny and 72F."
+				},
+				"finish_reason": "stop"
+			}
+		],
+		"usage": {
+			"prompt_tokens": 85,
+			"completion_tokens": 14,
+			"total_tokens": 99
+		}
+	}`)
+
+	result, err := decodeChatResponse(body)
+	require.NoError(t, err)
+	require.Len(t, result.Choices, 1)
+	require.Equal(t, "assistant", result.Choices[0].Message.Role)
+	require.Equal(t, "The weather in NYC is sunny and 72F.", extractContent(result.Choices[0].Message.Content))
+	require.NotNil(t, result.Usage)
+	require.Equal(t, 85, result.Usage.PromptTokens)
+	require.Equal(t, 14, result.Usage.CompletionTokens)
+}
+
+func TestDecodeChatResponse_NoUsage(t *testing.T) {
+	body := []byte(`{
+		"choices": [
+			{
+				"index": 0,
+				"message": {
+					"role": "assistant",
+					"content": "Hello!"
+				},
+				"finish_reason": "stop"
+			}
 		]
 	}`)
 
-	result, err := decodeChatRequest(body)
+	result, err := decodeChatResponse(body)
 	require.NoError(t, err)
-	require.Empty(t, result.UserPrompt)
+	require.Len(t, result.Choices, 1)
+	require.Nil(t, result.Usage)
+}
+
+func TestDecodeChatResponse_MultipleChoices(t *testing.T) {
+	body := []byte(`{
+		"choices": [
+			{"index": 0, "message": {"role": "assistant", "content": "Answer 1"}},
+			{"index": 1, "message": {"role": "assistant", "content": "Answer 2"}}
+		]
+	}`)
+
+	result, err := decodeChatResponse(body)
+	require.NoError(t, err)
+	require.Len(t, result.Choices, 2)
+	require.Equal(t, "Answer 1", extractContent(result.Choices[0].Message.Content))
+	require.Equal(t, "Answer 2", extractContent(result.Choices[1].Message.Content))
+}
+
+func TestDecodeChatResponse_InvalidJSON(t *testing.T) {
+	body := []byte(`{invalid json`)
+
+	_, err := decodeChatResponse(body)
+	require.Error(t, err)
+}
+
+func TestDecodeChatResponse_EmptyChoices(t *testing.T) {
+	body := []byte(`{"choices": []}`)
+
+	result, err := decodeChatResponse(body)
+	require.NoError(t, err)
+	require.Empty(t, result.Choices)
+	require.Nil(t, result.Usage)
 }
 
 func TestExtractContent_PlainString(t *testing.T) {
