@@ -106,8 +106,8 @@ type openfgaFilter struct {
 }
 
 func (f *openfgaFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) shared.HeadersStatus {
-	method := headers.GetOne(":method")
-	path := headers.GetOne(":path")
+	method := headers.GetOne(":method").ToString()
+	path := headers.GetOne(":path").ToString()
 
 	rule := f.matchRule(headers)
 	if rule == nil {
@@ -216,7 +216,7 @@ func (c *openfgaCallback) handleCallbackError(logFormat, grpcStatus string, resp
 }
 
 // OnHttpCalloutDone processes the Check API response and continues or denies the request.
-func (c *openfgaCallback) OnHttpCalloutDone(_ uint64, result shared.HttpCalloutResult, headers [][2]string, body [][]byte) { //nolint:revive
+func (c *openfgaCallback) OnHttpCalloutDone(_ uint64, result shared.HttpCalloutResult, headers [][2]shared.UnsafeEnvoyBuffer, body []shared.UnsafeEnvoyBuffer) { //nolint:revive
 	elapsed := time.Since(c.startTime).Milliseconds()
 	c.metrics.recordDuration(c.handle, uint64(elapsed))
 
@@ -270,21 +270,25 @@ func (c *openfgaCallback) OnHttpCalloutDone(_ uint64, result shared.HttpCalloutR
 }
 
 // joinBody concatenates body chunks into a single slice.
-func joinBody(body [][]byte) []byte {
+func joinBody(body []shared.UnsafeEnvoyBuffer) []byte {
 	if len(body) == 0 {
 		return nil
 	}
 	if len(body) == 1 {
-		return body[0]
+		return body[0].ToBytes()
 	}
-	return bytes.Join(body, nil)
+	chunks := make([][]byte, len(body))
+	for i, b := range body {
+		chunks[i] = b.ToBytes()
+	}
+	return bytes.Join(chunks, nil)
 }
 
 // headerValue returns the first value for a key in a callout response header list.
-func headerValue(headers [][2]string, key string) string {
+func headerValue(headers [][2]shared.UnsafeEnvoyBuffer, key string) string {
 	for _, h := range headers {
-		if h[0] == key {
-			return h[1]
+		if h[0].ToString() == key {
+			return h[1].ToString()
 		}
 	}
 	return ""

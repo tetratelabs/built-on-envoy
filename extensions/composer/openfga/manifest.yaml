@@ -9,25 +9,26 @@ categories:
   - AI
   - Security
 author: Tetrate
-description: OpenFGA authorization checks for HTTP requests via Envoy AI Gateway
+description: Inline OpenFGA authorization for Envoy, Envoy Gateway, and AI Gateway — no sidecar required
 longDescription: |
   This extension implements [OpenFGA](https://openfga.dev/) authorization checks as an
   inline Envoy HTTP filter. It calls the OpenFGA Check API via Envoy's async HTTP callout
   mechanism to determine whether a request should be allowed or denied, without requiring
   a separate authorization sidecar.
 
-  Designed to work with [Envoy AI Gateway](https://aigateway.envoyproxy.io/) routes
-  (AIGatewayRoute, HTTPRoute, MCPRoute), the extension extracts user, relation, and object
-  from configurable request headers and delegates the authorization decision to OpenFGA.
+  Works with [Envoy](https://www.envoyproxy.io/), [Envoy Gateway](https://gateway.envoyproxy.io/),
+  and [Envoy AI Gateway](https://aigateway.envoyproxy.io/) (AIGatewayRoute, HTTPRoute, MCPRoute).
+  The extension extracts user, relation, and object from request headers, URL path segments,
+  query parameters, or static values, then delegates the authorization decision to OpenFGA.
 
   ## Key Features
 
   - **Async HTTP callout**: Uses Envoy's built-in `HttpCallout` to call the OpenFGA Check API
     through a configured cluster, integrating with Envoy's connection pooling and circuit breaking.
-  - **Flexible input mapping**: Configurable extraction of `user`, `relation`, and `object` from
-    request headers or static values, making it adaptable to any route type.
-  - **AI Gateway ready**: Works alongside the AI Gateway External Processor in the same Envoy
-    filter chain. Use it to control access to AI models, MCP tools, or any HTTP resource.
+  - **Flexible input mapping**: Extract `user`, `relation`, and `object` from request headers,
+    URL path segments, query parameters, or static values — no ExtProc needed for REST APIs.
+  - **AI Gateway ready**: Works in the same Envoy filter chain as the AI Gateway External
+    Processor. Use it to control access to AI models, MCP tools, or any HTTP resource.
   - **Dry-run mode**: Log authorization decisions without enforcing them.
   - **Fail-open mode**: Allow requests through when the OpenFGA server is unreachable.
 
@@ -100,13 +101,81 @@ longDescription: |
   ### valueSource Reference
 
   Each of `user`, `relation`, and `object` (and per-rule overrides) is a `valueSource` object.
-  Exactly one of `value` or `header` must be set.
+  Exactly one of `value`, `header`, `path_segment`, or `query_param` must be set.
 
   | Field | Type | Description |
   |-------|------|-------------|
   | `value` | string | Static value used as-is |
   | `header` | string | Read value from this request header |
+  | `path_segment` | int | Extract the URL path segment at this 0-based index. Negative values count from the end: `-1` is the last segment. The query string is stripped before indexing. |
+  | `query_param` | string | Extract the first value of this named query parameter from the URL. URL-encoding is decoded automatically. |
   | `prefix` | string | Prepend this string to the extracted value |
+
+  ## Filter Chain Ordering
+
+  When deploying with Envoy AI Gateway, filter chain order determines which headers are
+  available when the openfga filter runs.
+
+  **Recommended order:**
+
+  1. **JWT Authentication** (Envoy built-in) — validates the token and optionally injects
+     claims as request headers via `SecurityPolicy.jwt.claimsToHeaders`
+  2. **jwe-decrypt** (optional) — decrypts a JWE-wrapped token before JWT authn processes it
+  3. **openfga** — reads user identity from a header, checks authorization against OpenFGA
+  4. **AI Gateway ExtProc** — parses the request body to route to the correct AI model
+
+  **Why openfga before the AI Gateway ExtProc?**
+
+  OpenFGA is a header-only filter: it runs on `OnRequestHeaders` before the request body is
+  read. The AI Gateway ExtProc processes the request body and may set headers like
+  `x-ai-eg-model` based on the JSON payload. When openfga runs first, it reads
+  `x-ai-eg-model` as set by the **client** — which is the intended control point for
+  access control (the client declares what it wants, and the check runs before any
+  processing). If the model name must come from the body-parsed value injected by ExtProc,
+  place openfga **after** the AI Gateway ExtProc in the filter chain instead.
+
+  ## Identity Integration
+
+  **Envoy Gateway JWT claims injection (recommended)**
+
+  The simplest way to pass user identity to openfga is via Envoy Gateway's `SecurityPolicy`
+  with `claimsToHeaders`. Envoy validates the JWT and injects any claim (e.g. `sub`) into a
+  request header before the filter chain runs — no extra plugins needed. The header name is
+  fully configurable; examples here use `x-user-id` for consistency with the rest of the
+  Composer extension ecosystem.
+
+  ```yaml
+  apiVersion: gateway.envoyproxy.io/v1alpha1
+  kind: SecurityPolicy
+  metadata:
+    name: jwt-policy
+  spec:
+    targetRef:
+      group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: my-route
+    jwt:
+      providers:
+        - name: my-provider
+          issuer: https://auth.example.com
+          remoteJWKS:
+            uri: https://auth.example.com/.well-known/jwks.json
+          claimsToHeaders:
+            - claim: sub
+              header: x-user-id
+  ```
+
+  Then configure openfga to read that header:
+  ```json
+  {"header": "x-user-id", "prefix": "user:"}
+  ```
+
+  **jwe-decrypt + JWT authn (for encrypted tokens)**
+
+  For deployments where clients send JWE-encrypted JWTs, chain the `jwe-decrypt` plugin
+  before openfga in the same Composer filter. The `jwe-decrypt` plugin decrypts the
+  `Authorization` header in-place; Envoy's JWT authn filter then validates the inner JWT
+  and `claimsToHeaders` makes the `sub` claim available as `x-user-id` for openfga to read.
 
   ## Metrics
 
@@ -228,3 +297,28 @@ examples:
         "object": {"header": "x-resource", "prefix": "document:"},
         "fail_open": true
       }'
+  - title: REST Resource Authorization via URL Path
+    description: |
+      Authorize access to REST resources identified by URL path segment — no custom
+      headers or ExtProc needed. For an API at `/api/documents/{docId}`, use
+      `path_segment: 2` to extract the document ID from the third path segment (0-indexed).
+      Negative values count from the end: use `path_segment: -1` to always get the last
+      segment, regardless of path depth.
+    code: |
+      boe run --local . --config '{
+        "cluster": "openfga",
+        "openfga_host": "localhost:8080",
+        "store_id": "YOUR_STORE_ID",
+        "user": {"header": "x-user-id", "prefix": "user:"},
+        "relation": {"value": "can_access"},
+        "object": {"path_segment": 2, "prefix": "document:"}
+      }'
+
+      # GET /api/documents/planning -> checks user:alice can_access document:planning
+      curl -H "x-user-id: alice" http://localhost:10000/api/documents/planning
+
+      # GET /api/documents/budget -> checks user:alice can_access document:budget
+      curl -H "x-user-id: alice" http://localhost:10000/api/documents/budget
+
+      # Using -1 to always capture the last segment (works for /docs/budget or /api/v2/docs/budget)
+      # object: {"path_segment": -1, "prefix": "document:"}

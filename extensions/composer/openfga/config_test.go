@@ -344,6 +344,156 @@ func TestValueSource_Resolve(t *testing.T) {
 	require.Equal(t, "", missing.resolve(headers))
 }
 
+func TestValueSource_PathSegment(t *testing.T) {
+	tests := []struct {
+		name   string
+		path   string
+		idx    int
+		prefix string
+		want   string
+	}{
+		{"segment 0", "/api/documents/planning", 0, "", "api"},
+		{"segment 1 with prefix", "/api/documents/planning", 1, "doc:", "doc:documents"},
+		{"segment 2 last", "/api/documents/planning", 2, "resource:", "resource:planning"},
+		{"negative -1 is last", "/api/documents/planning", -1, "", "planning"},
+		{"negative -2", "/api/documents/planning", -2, "", "documents"},
+		{"out of range high", "/api/documents/planning", 5, "", ""},
+		{"out of range negative", "/api/documents/planning", -10, "", ""},
+		{"query string stripped", "/api/docs/budget?v=2", 2, "", "budget"},
+		{"root path", "/", 0, "", ""},
+		{"single segment", "/health", 0, "", "health"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			idx := tt.idx
+			vs := valueSource{PathSegment: &idx, Prefix: tt.prefix}
+			headers := fake.NewFakeHeaderMap(map[string][]string{":path": {tt.path}})
+			require.Equal(t, tt.want, vs.resolve(headers))
+		})
+	}
+}
+
+func TestValueSource_QueryParam(t *testing.T) {
+	tests := []struct {
+		name   string
+		path   string
+		param  string
+		prefix string
+		want   string
+	}{
+		{"present", "/api?resource=planning", "resource", "doc:", "doc:planning"},
+		{"absent", "/api?other=val", "resource", "", ""},
+		{"no query string", "/api/resource", "resource", "", ""},
+		{"multi-value first wins", "/api?resource=a&resource=b", "resource", "", "a"},
+		{"url-encoded value", "/api?resource=my%20doc", "resource", "", "my doc"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			vs := valueSource{QueryParam: tt.param, Prefix: tt.prefix}
+			headers := fake.NewFakeHeaderMap(map[string][]string{":path": {tt.path}})
+			require.Equal(t, tt.want, vs.resolve(headers))
+		})
+	}
+}
+
+func TestValueSource_Validate(t *testing.T) {
+	idx := 2
+	tests := []struct {
+		name    string
+		vs      valueSource
+		wantErr string
+	}{
+		{"value ok", valueSource{Value: "x"}, ""},
+		{"header ok", valueSource{Header: "x-h"}, ""},
+		{"path_segment ok", valueSource{PathSegment: &idx}, ""},
+		{"path_segment zero ok", valueSource{PathSegment: new(int)}, ""},
+		{"query_param ok", valueSource{QueryParam: "q"}, ""},
+		{"none set", valueSource{}, "must be set"},
+		{"value+header", valueSource{Value: "x", Header: "y"}, "only one"},
+		{"value+path_segment", valueSource{Value: "x", PathSegment: &idx}, "only one"},
+		{"header+query_param", valueSource{Header: "x-h", QueryParam: "q"}, "only one"},
+		{"path_segment+query_param", valueSource{PathSegment: &idx, QueryParam: "q"}, "only one"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateValueSource("field", &tt.vs)
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestParseConfig_PathSegmentSource(t *testing.T) {
+	idx := 2
+	cfg := openfgaConfig{
+		Cluster:     "openfga",
+		OpenFGAHost: "openfga:8080",
+		StoreID:     "store1",
+		User:        valueSource{Header: "x-user-id", Prefix: "user:"},
+		Relation:    valueSource{Value: "can_access"},
+		Object:      valueSource{PathSegment: &idx, Prefix: "document:"},
+	}
+	data, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	parsed, err := parseConfig(data)
+	require.NoError(t, err)
+	require.Len(t, parsed.rules, 1)
+	require.NotNil(t, parsed.rules[0].object.PathSegment)
+	require.Equal(t, 2, *parsed.rules[0].object.PathSegment)
+	require.Equal(t, "document:", parsed.rules[0].object.Prefix)
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":path":     {"/api/documents/budget"},
+		"x-user-id": {"alice"},
+	})
+	require.Equal(t, "document:budget", parsed.rules[0].object.resolve(headers))
+}
+
+func TestParseConfig_QueryParamSource(t *testing.T) {
+	cfg := openfgaConfig{
+		Cluster:     "openfga",
+		OpenFGAHost: "openfga:8080",
+		StoreID:     "store1",
+		User:        valueSource{Header: "x-user-id", Prefix: "user:"},
+		Relation:    valueSource{Value: "can_access"},
+		Object:      valueSource{QueryParam: "resource", Prefix: "doc:"},
+	}
+	data, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	parsed, err := parseConfig(data)
+	require.NoError(t, err)
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":path":     {"/api/search?resource=planning&v=2"},
+		"x-user-id": {"alice"},
+	})
+	require.Equal(t, "doc:planning", parsed.rules[0].object.resolve(headers))
+}
+
+func TestExtractPathSegment(t *testing.T) {
+	require.Equal(t, "api", extractPathSegment("/api/docs/budget", 0))
+	require.Equal(t, "docs", extractPathSegment("/api/docs/budget", 1))
+	require.Equal(t, "budget", extractPathSegment("/api/docs/budget", 2))
+	require.Equal(t, "budget", extractPathSegment("/api/docs/budget", -1))
+	require.Equal(t, "docs", extractPathSegment("/api/docs/budget", -2))
+	require.Equal(t, "", extractPathSegment("/api/docs/budget", 5))
+	require.Equal(t, "", extractPathSegment("/api/docs/budget", -10))
+	require.Equal(t, "budget", extractPathSegment("/api/docs/budget?foo=bar", 2))
+}
+
+func TestExtractQueryParam(t *testing.T) {
+	require.Equal(t, "planning", extractQueryParam("/api?resource=planning", "resource"))
+	require.Equal(t, "", extractQueryParam("/api?other=val", "resource"))
+	require.Equal(t, "", extractQueryParam("/api/resource", "resource"))
+	require.Equal(t, "a", extractQueryParam("/api?resource=a&resource=b", "resource"))
+	require.Equal(t, "my doc", extractQueryParam("/api?resource=my%20doc", "resource"))
+}
+
 func TestBuildCheckBody(t *testing.T) {
 	body := buildCheckBody("user:alice", "can_use", "model:gpt-4", "")
 	var parsed map[string]any
@@ -361,6 +511,18 @@ func TestBuildCheckBody_WithModelID(t *testing.T) {
 	var parsed map[string]any
 	require.NoError(t, json.Unmarshal(body, &parsed))
 	require.Equal(t, "model-123", parsed["authorization_model_id"])
+}
+
+func TestBuildCheckBody_JSONSafety(t *testing.T) {
+	// Values with special characters must produce valid JSON without injection.
+	body := buildCheckBody(`user:alice"evil`, `can_use`, `model:gpt-4\nother`, "")
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(body, &parsed), "body must be valid JSON even with special characters")
+	tk := parsed["tuple_key"].(map[string]any)
+	require.Equal(t, `user:alice"evil`, tk["user"])
+	require.Equal(t, `model:gpt-4\nother`, tk["object"])
+	_, hasModelID := parsed["authorization_model_id"]
+	require.False(t, hasModelID)
 }
 
 func BenchmarkBuildCheckBody(b *testing.B) {

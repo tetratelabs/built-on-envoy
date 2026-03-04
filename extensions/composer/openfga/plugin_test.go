@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"unsafe"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/fake"
@@ -104,6 +105,32 @@ func newMockFilterHandle(ctrl *gomock.Controller) *mocks.MockHttpFilterHandle {
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	return mockHandle
+}
+
+// testHeaders converts [][2]string to [][2]shared.UnsafeEnvoyBuffer for tests.
+func testHeaders(h [][2]string) [][2]shared.UnsafeEnvoyBuffer {
+	result := make([][2]shared.UnsafeEnvoyBuffer, len(h))
+	for i, p := range h {
+		result[i] = [2]shared.UnsafeEnvoyBuffer{
+			{Ptr: unsafe.StringData(p[0]), Len: uint64(len(p[0]))},
+			{Ptr: unsafe.StringData(p[1]), Len: uint64(len(p[1]))},
+		}
+	}
+	return result
+}
+
+// testBody converts [][]byte to []shared.UnsafeEnvoyBuffer for tests.
+func testBody(chunks [][]byte) []shared.UnsafeEnvoyBuffer {
+	if chunks == nil {
+		return nil
+	}
+	result := make([]shared.UnsafeEnvoyBuffer, len(chunks))
+	for i, c := range chunks {
+		if len(c) > 0 {
+			result[i] = shared.UnsafeEnvoyBuffer{Ptr: unsafe.SliceData(c), Len: uint64(len(c))}
+		}
+	}
+	return result
 }
 
 func TestOnRequestHeaders(t *testing.T) {
@@ -237,10 +264,10 @@ func TestOnRequestHeaders(t *testing.T) {
 
 		require.Equal(t, "openfga", capturedCluster)
 		require.Equal(t, uint64(5000), capturedTimeout)
-		require.Equal(t, "POST", headerValue(capturedHeaders, ":method"))
-		require.Equal(t, "/stores/store1/check", headerValue(capturedHeaders, ":path"))
-		require.Equal(t, "openfga:8080", headerValue(capturedHeaders, "host"))
-		require.Equal(t, "application/json", headerValue(capturedHeaders, "content-type"))
+		require.Equal(t, "POST", headerValue(testHeaders(capturedHeaders), ":method"))
+		require.Equal(t, "/stores/store1/check", headerValue(testHeaders(capturedHeaders), ":path"))
+		require.Equal(t, "openfga:8080", headerValue(testHeaders(capturedHeaders), "host"))
+		require.Equal(t, "application/json", headerValue(testHeaders(capturedHeaders), "content-type"))
 
 		var body map[string]any
 		require.NoError(t, json.Unmarshal(capturedBody, &body))
@@ -363,8 +390,8 @@ func TestCallback(t *testing.T) {
 
 		cb := &openfgaCallback{handle: mockHandle, config: testConfig(t), metrics: testMetrics()}
 		cb.OnHttpCalloutDone(0, shared.HttpCalloutSuccess,
-			[][2]string{{":status", "200"}},
-			[][]byte{[]byte(`{"allowed":true}`)},
+			testHeaders([][2]string{{":status", "200"}}),
+			testBody([][]byte{[]byte(`{"allowed":true}`)}),
 		)
 	})
 
@@ -377,8 +404,8 @@ func TestCallback(t *testing.T) {
 
 		cb := &openfgaCallback{handle: mockHandle, config: testConfig(t), metrics: testMetrics()}
 		cb.OnHttpCalloutDone(0, shared.HttpCalloutSuccess,
-			[][2]string{{":status", "200"}},
-			[][]byte{[]byte(`{"allowed":false}`)},
+			testHeaders([][2]string{{":status", "200"}}),
+			testBody([][]byte{[]byte(`{"allowed":false}`)}),
 		)
 	})
 
@@ -393,8 +420,8 @@ func TestCallback(t *testing.T) {
 		cfg.dryRun = true
 		cb := &openfgaCallback{handle: mockHandle, config: cfg, metrics: testMetrics()}
 		cb.OnHttpCalloutDone(0, shared.HttpCalloutSuccess,
-			[][2]string{{":status", "200"}},
-			[][]byte{[]byte(`{"allowed":false}`)},
+			testHeaders([][2]string{{":status", "200"}}),
+			testBody([][]byte{[]byte(`{"allowed":false}`)}),
 		)
 	})
 
@@ -407,11 +434,11 @@ func TestCallback(t *testing.T) {
 
 		cb := &openfgaCallback{handle: mockHandle, config: testConfig(t), metrics: testMetrics()}
 		cb.OnHttpCalloutDone(0, shared.HttpCalloutSuccess,
-			[][2]string{{":status", "200"}},
-			[][]byte{
+			testHeaders([][2]string{{":status", "200"}}),
+			testBody([][]byte{
 				[]byte(`{"allowed":tru`),
 				[]byte(`e}`),
-			},
+			}),
 		)
 	})
 
@@ -501,7 +528,7 @@ func TestCallback(t *testing.T) {
 				}
 				mockHandle.EXPECT().IncrementCounterValue(gomock.Any(), uint64(1), tt.metric).Return(shared.MetricsSuccess)
 
-				cb.OnHttpCalloutDone(0, tt.result, tt.headers, tt.body)
+				cb.OnHttpCalloutDone(0, tt.result, testHeaders(tt.headers), testBody(tt.body))
 			})
 		}
 	})
@@ -572,8 +599,8 @@ func TestFullFlow(t *testing.T) {
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 	).Do(func(_ string, _ [][2]string, _ []byte, _ uint64, cb shared.HttpCalloutCallback) {
 		cb.OnHttpCalloutDone(0, shared.HttpCalloutSuccess,
-			[][2]string{{":status", "200"}},
-			[][]byte{[]byte(`{"allowed":true}`)},
+			testHeaders([][2]string{{":status", "200"}}),
+			testBody([][]byte{[]byte(`{"allowed":true}`)}),
 		)
 	}).Return(shared.HttpCalloutInitSuccess, uint64(1))
 
@@ -601,8 +628,8 @@ func TestFullFlow_Denied(t *testing.T) {
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 	).Do(func(_ string, _ [][2]string, _ []byte, _ uint64, cb shared.HttpCalloutCallback) {
 		cb.OnHttpCalloutDone(0, shared.HttpCalloutSuccess,
-			[][2]string{{":status", "200"}},
-			[][]byte{[]byte(`{"allowed":false}`)},
+			testHeaders([][2]string{{":status", "200"}}),
+			testBody([][]byte{[]byte(`{"allowed":false}`)}),
 		)
 	}).Return(shared.HttpCalloutInitSuccess, uint64(1))
 
@@ -622,7 +649,7 @@ func TestCallback_EmptyBody(t *testing.T) {
 
 	cb := &openfgaCallback{handle: mockHandle, config: testConfig(t), metrics: testMetrics()}
 	cb.OnHttpCalloutDone(0, shared.HttpCalloutSuccess,
-		[][2]string{{":status", "200"}},
-		[][]byte{},
+		testHeaders([][2]string{{":status", "200"}}),
+		testBody([][]byte{}),
 	)
 }

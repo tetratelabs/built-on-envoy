@@ -7,11 +7,11 @@
 package openfga
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sync"
+	"net/url"
+	"strings"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 
@@ -39,16 +39,19 @@ type openfgaConfig struct {
 }
 
 // valueSource defines how to extract a value from the request.
-// Exactly one of Value or Header must be set. Prefix is optional and prepended to the result.
+// Exactly one of Value, Header, PathSegment, or QueryParam must be set.
+// Prefix is optional and prepended to the result.
 type valueSource struct {
-	Value    string `json:"value"`
-	Header   string `json:"header"`
-	Prefix   string `json:"prefix"`
-	resolved string // set at config time when Value is static; used by resolve to avoid per-request work
+	Value       string `json:"value"`
+	Header      string `json:"header"`
+	PathSegment *int   `json:"path_segment,omitempty"` // 0-indexed; negative values count from end (-1 = last)
+	QueryParam  string `json:"query_param,omitempty"`
+	Prefix      string `json:"prefix"`
+	resolved    string // set at config time when Value is static; used by resolve to avoid per-request work
 }
 
 func (v *valueSource) isEmpty() bool {
-	return v.Value == "" && v.Header == ""
+	return v.Value == "" && v.Header == "" && v.PathSegment == nil && v.QueryParam == ""
 }
 
 // precompute sets resolved when Value is static, so resolve can return it without per-request work.
@@ -64,10 +67,15 @@ func (v *valueSource) resolve(headers shared.HeaderMap) string {
 		return v.resolved
 	}
 	var raw string
-	if v.Value != "" {
+	switch {
+	case v.Value != "":
 		raw = v.Value
-	} else if v.Header != "" {
-		raw = headers.GetOne(v.Header)
+	case v.Header != "":
+		raw = headers.GetOne(v.Header).ToString()
+	case v.PathSegment != nil:
+		raw = extractPathSegment(headers.GetOne(":path").ToString(), *v.PathSegment)
+	case v.QueryParam != "":
+		raw = extractQueryParam(headers.GetOne(":path").ToString(), v.QueryParam)
 	}
 	if raw == "" {
 		return ""
@@ -84,7 +92,7 @@ type ruleMatch struct {
 
 func (m *ruleMatch) matches(headers shared.HeaderMap) bool {
 	for name, want := range m.Headers {
-		got := headers.GetOne(name)
+		got := headers.GetOne(name).ToString()
 		if got == "" {
 			return false
 		}
@@ -300,11 +308,24 @@ func buildLegacyRule(cfg *openfgaConfig) ([]parsedRule, error) {
 }
 
 func validateValueSource(name string, vs *valueSource) error {
-	if vs.Value == "" && vs.Header == "" {
-		return fmt.Errorf("%s: one of 'value' or 'header' must be set", name)
+	set := 0
+	if vs.Value != "" {
+		set++
 	}
-	if vs.Value != "" && vs.Header != "" {
-		return fmt.Errorf("%s: only one of 'value' or 'header' may be set", name)
+	if vs.Header != "" {
+		set++
+	}
+	if vs.PathSegment != nil {
+		set++
+	}
+	if vs.QueryParam != "" {
+		set++
+	}
+	if set == 0 {
+		return fmt.Errorf("%s: one of 'value', 'header', 'path_segment', or 'query_param' must be set", name)
+	}
+	if set > 1 {
+		return fmt.Errorf("%s: only one of 'value', 'header', 'path_segment', or 'query_param' may be set", name)
 	}
 	return nil
 }
@@ -337,29 +358,50 @@ func (c *parsedConfig) writeMetadata(handle shared.HttpFilterHandle, decision st
 	}
 }
 
-var bufPool = sync.Pool{New: func() any { return new(bytes.Buffer) }}
-
 // buildCheckBody constructs the JSON body for the OpenFGA Check API call.
-// Values come from trusted sources (static config or Envoy request headers) and
-// are assumed not to contain characters requiring JSON escaping (", \, control chars).
+// Uses encoding/json to safely marshal values that may contain arbitrary characters.
 func buildCheckBody(user, relation, object, authorizationModelID string) []byte {
-	buf := bufPool.Get().(*bytes.Buffer)
-	buf.Reset()
-	buf.WriteString(`{"tuple_key":{"user":"`)
-	buf.WriteString(user)
-	buf.WriteString(`","relation":"`)
-	buf.WriteString(relation)
-	buf.WriteString(`","object":"`)
-	buf.WriteString(object)
-	buf.WriteString(`"}`)
-	if authorizationModelID != "" {
-		buf.WriteString(`,"authorization_model_id":"`)
-		buf.WriteString(authorizationModelID)
-		buf.WriteString(`"`)
+	type tupleKey struct {
+		User     string `json:"user"`
+		Relation string `json:"relation"`
+		Object   string `json:"object"`
 	}
-	buf.WriteByte('}')
-	out := make([]byte, buf.Len())
-	copy(out, buf.Bytes())
-	bufPool.Put(buf)
-	return out
+	type checkRequest struct {
+		TupleKey             tupleKey `json:"tuple_key"`
+		AuthorizationModelID string   `json:"authorization_model_id,omitempty"`
+	}
+	body, _ := json.Marshal(checkRequest{
+		TupleKey:             tupleKey{User: user, Relation: relation, Object: object},
+		AuthorizationModelID: authorizationModelID,
+	})
+	return body
+}
+
+// extractPathSegment returns the path segment at idx (0-based) from the URL path.
+// Negative indices count from the end: -1 is the last segment.
+// Returns "" if idx is out of range or the path is empty.
+func extractPathSegment(fullPath string, idx int) string {
+	pathPart, _, _ := strings.Cut(fullPath, "?")
+	segments := strings.Split(strings.TrimPrefix(pathPart, "/"), "/")
+	if idx < 0 {
+		idx = len(segments) + idx
+	}
+	if idx < 0 || idx >= len(segments) {
+		return ""
+	}
+	return segments[idx]
+}
+
+// extractQueryParam returns the first value of the named query parameter.
+// Returns "" if the parameter is absent or the path has no query string.
+func extractQueryParam(fullPath string, name string) string {
+	_, queryPart, ok := strings.Cut(fullPath, "?")
+	if !ok {
+		return ""
+	}
+	vals, err := url.ParseQuery(queryPart)
+	if err != nil {
+		return ""
+	}
+	return vals.Get(name)
 }
