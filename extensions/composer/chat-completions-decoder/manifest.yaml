@@ -67,7 +67,7 @@ examples:
       # Envoy filter metadata will contain (namespace: "openai"):
       # llm.model_name                         = "gpt-4o"
       # llm.system                             = "openai"
-      # llm.input_messages.count              = 2
+      # llm.input_messages.count               = 2
       # llm.input_messages.0.message.role      = "system"
       # llm.input_messages.0.message.content   = "You are a helpful assistant."
       # llm.input_messages.1.message.role      = "user"
@@ -83,7 +83,7 @@ examples:
       # Metadata will now be under the "llm-request" namespace:
       # llm.model_name                       = "gpt-4o"
       # llm.system                           = "openai"
-      # llm.input_messages.count            = 1
+      # llm.input_messages.count             = 1
       # llm.input_messages.0.message.role    = "user"
       # llm.input_messages.0.message.content = "..."
       # llm.tools.count                      = 0
@@ -132,13 +132,13 @@ examples:
       # Request metadata (namespace: "openai"):
       # llm.model_name                                                         = "gpt-4o"
       # llm.system                                                             = "openai"
-      # llm.input_messages.count                                              = 3
+      # llm.input_messages.count                                               = 3
       # llm.input_messages.0.message.role                                      = "user"
       # llm.input_messages.0.message.content                                   = "What is the weather in NYC?"
       # llm.input_messages.1.message.role                                      = "assistant"
-      # llm.input_messages.1.message.tool_calls.count                         = 1
-      # llm.input_messages.1.message.tool_calls.0.tool_call.id                = "call_abc"
-      # llm.input_messages.1.message.tool_calls.0.tool_call.function.name     = "get_weather"
+      # llm.input_messages.1.message.tool_calls.count                          = 1
+      # llm.input_messages.1.message.tool_calls.0.tool_call.id                 = "call_abc"
+      # llm.input_messages.1.message.tool_calls.0.tool_call.function.name      = "get_weather"
       # llm.input_messages.1.message.tool_calls.0.tool_call.function.arguments = '{"location":"NYC"}'
       # llm.input_messages.2.message.role                                      = "tool"
       # llm.input_messages.2.message.content                                   = "Sunny, 72F"
