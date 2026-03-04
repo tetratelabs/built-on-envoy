@@ -14,6 +14,57 @@ The demo uses an OpenFGA store with the following types and relations:
 | `tool`   | `can_invoke` | User can invoke an MCP tool        |
 | `resource` | `can_access` | User can access a generic resource |
 
+### Authorization Model Design Patterns
+
+The demo uses a flat model for clarity. Real deployments typically need organizational hierarchy.
+
+**Organizational membership pattern** — grant access at the org level; members inherit it:
+
+```
+model
+  schema 1.1
+
+type user
+
+type organization
+  relations
+    define member: [user]
+
+type model
+  relations
+    define owner: [organization]
+    define can_use: [user] or member from owner
+
+type tool
+  relations
+    define owner: [organization]
+    define can_invoke: [user] or member from owner
+```
+
+With this model, a single tuple `(organization:acme, member, user:alice)` grants `user:alice`
+access to all models and tools owned by `organization:acme` — no per-resource tuples needed.
+
+**Role-based tier pattern** — differentiate basic and premium model access:
+
+```
+type model
+  relations
+    define basic_user: [user]
+    define premium_user: [user]
+    define can_use: basic_user or premium_user
+```
+
+**Choosing the right model:**
+
+| Use case | Recommended pattern |
+|----------|---------------------|
+| Individual permissions | Direct tuples (this demo) |
+| Team / org-based access | Organizational membership with `member from owner` |
+| Role-based tiers | Role relations with computed union |
+| Service-to-service | Separate `service` type with its own relations |
+
+See the [OpenFGA modeling documentation](https://openfga.dev/docs/modeling) for the full guide.
+
 ## Demo Scenario
 
 ```
@@ -132,6 +183,17 @@ curl -H "x-user-id: bob" -H "x-resource-id: planning" http://localhost:10000/get
 ```bash
 docker compose down -v
 ```
+
+## Kubernetes / Envoy Gateway Deployment
+
+For production deployments on Kubernetes with Envoy Gateway, see [demo/k8s/README.md](k8s/README.md) which provides:
+
+- OpenFGA `Deployment` and `Service` manifests
+- Envoy Gateway `EnvoyExtensionPolicy` to attach the openfga filter to an `HTTPRoute`
+- `SecurityPolicy` for JWT claim injection — maps the JWT `sub` claim to `x-user-id`, eliminating the need for a manual identity header
+- A Kubernetes `Job` for automated store, model, and tuple setup
+
+**Envoy AI Gateway (local):** For a local cluster with Envoy AI Gateway, run `./k8s/setup-ai-gateway.sh` from the `k8s/` directory for one-command setup. See [k8s/README.md#envoy-ai-gateway-local-cluster](k8s/README.md#envoy-ai-gateway-local-cluster).
 
 ## Troubleshooting
 

@@ -1,0 +1,119 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+#
+# One-shot Job that creates the OpenFGA store, authorization model, and demo tuples.
+# Run after openfga-deployment.yaml is ready.
+# The store ID is printed to stdout — capture it with:
+#   kubectl logs -n openfga -l job-name=openfga-setup
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: openfga-setup
+  namespace: openfga
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: setup
+          image: curlimages/curl:latest
+          env:
+            - name: OPENFGA_URL
+              value: "http://openfga.openfga.svc.cluster.local:8080"
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+
+              echo "=== Waiting for OpenFGA to be ready ==="
+              for i in $(seq 1 30); do
+                if curl -sf "$OPENFGA_URL/healthz" > /dev/null 2>&1; then
+                  echo "OpenFGA is ready"
+                  break
+                fi
+                echo "Waiting for OpenFGA... ($i/30)"
+                sleep 2
+              done
+              if ! curl -sf "$OPENFGA_URL/healthz" > /dev/null 2>&1; then
+                echo "ERROR: OpenFGA is not ready after 60s"
+                exit 1
+              fi
+
+              echo "=== Creating store ==="
+              STORE_RESP=$(curl -sf -X POST "$OPENFGA_URL/stores" \
+                -H "Content-Type: application/json" \
+                -d '{"name":"demo"}')
+              STORE_ID=$(echo "$STORE_RESP" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+              echo "Store ID: $STORE_ID"
+
+              echo "=== Creating authorization model ==="
+              MODEL_RESP=$(curl -sf -X POST "$OPENFGA_URL/stores/$STORE_ID/authorization-models" \
+                -H "Content-Type: application/json" \
+                -d '{
+                  "schema_version": "1.1",
+                  "type_definitions": [
+                    {"type": "user", "relations": {}, "metadata": {"relations": {}}},
+                    {
+                      "type": "model",
+                      "relations": {
+                        "can_use": {"this": {}}
+                      },
+                      "metadata": {
+                        "relations": {
+                          "can_use": {"directly_related_user_types": [{"type": "user"}]}
+                        }
+                      }
+                    },
+                    {
+                      "type": "tool",
+                      "relations": {
+                        "can_invoke": {"this": {}}
+                      },
+                      "metadata": {
+                        "relations": {
+                          "can_invoke": {"directly_related_user_types": [{"type": "user"}]}
+                        }
+                      }
+                    },
+                    {
+                      "type": "resource",
+                      "relations": {
+                        "can_access": {"this": {}}
+                      },
+                      "metadata": {
+                        "relations": {
+                          "can_access": {"directly_related_user_types": [{"type": "user"}]}
+                        }
+                      }
+                    }
+                  ]
+                }')
+              MODEL_ID=$(echo "$MODEL_RESP" | grep -o '"authorization_model_id":"[^"]*"' | cut -d'"' -f4)
+              echo "Authorization Model ID: $MODEL_ID"
+
+              echo "=== Writing tuples (alice gets access, bob gets nothing) ==="
+              curl -sf -X POST "$OPENFGA_URL/stores/$STORE_ID/write" \
+                -H "Content-Type: application/json" \
+                -d "{
+                  \"writes\": {
+                    \"tuple_keys\": [
+                      {\"user\": \"user:alice\", \"relation\": \"can_use\",    \"object\": \"model:gpt-4\"},
+                      {\"user\": \"user:alice\", \"relation\": \"can_use\",    \"object\": \"model:some-cool-self-hosted-model\"},
+                      {\"user\": \"user:alice\", \"relation\": \"can_invoke\",  \"object\": \"tool:github__issue_read\"},
+                      {\"user\": \"user:alice\", \"relation\": \"can_access\",  \"object\": \"resource:planning\"}
+                    ]
+                  },
+                  \"authorization_model_id\": \"$MODEL_ID\"
+                }"
+
+              echo ""
+              echo "=== Setup complete ==="
+              echo "STORE_ID=$STORE_ID"
+              echo "MODEL_ID=$MODEL_ID"
+              echo ""
+              echo "Update envoy-extension-policy.yaml with:"
+              echo "  store_id: $STORE_ID"
+              echo "  authorization_model_id: $MODEL_ID  (optional — omit to use latest)"

@@ -1,0 +1,28 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+#
+# Builds libcomposer.so and packages it into an init container image.
+# The init container copies the .so to a shared volume that the Envoy pod mounts.
+#
+# Build context must be the extensions/composer/ directory:
+#   docker buildx build --platform linux/arm64 --load -t composer-init:local \
+#     -f extensions/composer/openfga/demo/k8s/Dockerfile.composer-init \
+#     extensions/composer/
+FROM golang:1.25.7 AS builder
+
+WORKDIR /workspace
+COPY . .
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc build-essential && rm -rf /var/lib/apt/lists/*
+
+RUN go mod download all
+
+# Build the composer shared library with only OpenFGA plugin (for AI Gateway demo).
+# Uses -tags openfga to avoid pulling in other plugins that need SDK migration.
+RUN CGO_ENABLED=1 go build -tags openfga -buildmode=c-shared -o libcomposer.so ./main
+
+# Minimal image: just copies libcomposer.so to the target volume on startup.
+FROM alpine:3.19
+COPY --from=builder /workspace/libcomposer.so /opt/libcomposer.so
+CMD ["cp", "/opt/libcomposer.so", "/mnt/composer/libcomposer.so"]
