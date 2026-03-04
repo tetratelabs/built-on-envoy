@@ -30,7 +30,7 @@ longDescription: |
 
   | Field | Type | Required | Default | Description |
   |-------|------|----------|---------|-------------|
-  | `metadata_namespace` | string | no | `"openai"` | The filter metadata namespace for the decoded fields |
+  | `metadata_namespace` | string | no | `openai` | The filter metadata namespace for the decoded fields |
 
 type: go
 tags:

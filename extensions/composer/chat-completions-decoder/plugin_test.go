@@ -37,16 +37,9 @@ func (b *testBodyBuffer) Drain(size uint64) {
 }
 func (b *testBodyBuffer) Append(data []byte) { b.body = append(b.body, data...) }
 
-// --- Tests for chatCompletionsDecoderConfig ---
-
-func TestNamespace_Default(t *testing.T) {
-	cfg := &chatCompletionsDecoderConfig{}
-	require.Equal(t, "openai", cfg.namespace())
-}
-
-func TestNamespace_Custom(t *testing.T) {
-	cfg := &chatCompletionsDecoderConfig{MetadataNamespace: "my-ns"}
-	require.Equal(t, "my-ns", cfg.namespace())
+// defaultCfg returns a config with the default namespace set (simulates what Create does).
+func defaultCfg() *chatCompletionsDecoderConfig {
+	return &chatCompletionsDecoderConfig{MetadataNamespace: defaultMetadataNamespace}
 }
 
 // --- Tests for decoderConfigFactory.Create ---
@@ -60,6 +53,10 @@ func TestDecoderConfigFactory_Create_EmptyConfig(t *testing.T) {
 	filterFactory, err := factory.Create(mockConfigHandle, []byte{})
 	require.NoError(t, err)
 	require.NotNil(t, filterFactory)
+
+	ff, ok := filterFactory.(*decoderFilterFactory)
+	require.True(t, ok)
+	require.Equal(t, defaultMetadataNamespace, ff.config.MetadataNamespace)
 }
 
 func TestDecoderConfigFactory_Create_NilConfig(t *testing.T) {
@@ -71,6 +68,10 @@ func TestDecoderConfigFactory_Create_NilConfig(t *testing.T) {
 	filterFactory, err := factory.Create(mockConfigHandle, nil)
 	require.NoError(t, err)
 	require.NotNil(t, filterFactory)
+
+	ff, ok := filterFactory.(*decoderFilterFactory)
+	require.True(t, ok)
+	require.Equal(t, defaultMetadataNamespace, ff.config.MetadataNamespace)
 }
 
 func TestDecoderConfigFactory_Create_WithNamespace(t *testing.T) {
@@ -107,7 +108,7 @@ func TestDecoderFilterFactory_Create(t *testing.T) {
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 
-	cfg := &chatCompletionsDecoderConfig{}
+	cfg := defaultCfg()
 	factory := &decoderFilterFactory{config: cfg}
 	filter := factory.Create(mockHandle)
 
@@ -137,7 +138,7 @@ func TestOnRequestHeaders_EndOfStream(t *testing.T) {
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 
-	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
+	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnRequestHeaders(fake.NewFakeHeaderMap(map[string][]string{}), true)
 	require.Equal(t, shared.HeadersStatusContinue, result)
 }
@@ -147,7 +148,7 @@ func TestOnRequestHeaders_NotEndOfStream(t *testing.T) {
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 
-	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
+	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnRequestHeaders(fake.NewFakeHeaderMap(map[string][]string{}), false)
 	require.Equal(t, shared.HeadersStatusStop, result)
 }
@@ -159,7 +160,7 @@ func TestOnRequestBody_NotEndOfStream(t *testing.T) {
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 
-	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
+	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnRequestBody(newTestBodyBuffer([]byte("data")), false)
 	require.Equal(t, shared.BodyStatusStopAndBuffer, result)
 }
@@ -172,7 +173,7 @@ func TestOnRequestBody_EmptyBody(t *testing.T) {
 	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer([]byte{})).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
 
-	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
+	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnRequestBody(newTestBodyBuffer([]byte{}), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
@@ -187,7 +188,7 @@ func TestOnRequestBody_InvalidJSON(t *testing.T) {
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
 	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any(), gomock.Any()).Times(1)
 
-	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
+	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnRequestBody(newTestBodyBuffer(body), true)
 	// Even with invalid JSON, we continue (graceful degradation)
 	require.Equal(t, shared.BodyStatusContinue, result)
@@ -210,12 +211,14 @@ func TestOnRequestBody_ValidRequest_SetsMetadata(t *testing.T) {
 
 	mockHandle.EXPECT().SetMetadata("openai", "llm.model_name", "gpt-4o").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.system", "openai").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.count", int64(2)).Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.0.message.role", "system").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.0.message.content", "You are a helpful assistant.").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.1.message.role", "user").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.1.message.content", "What is the weather?").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.tools.count", int64(0)).Times(1)
 
-	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
+	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnRequestBody(newTestBodyBuffer(body), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
@@ -237,12 +240,14 @@ func TestOnRequestBody_WithTools_SetsMetadata(t *testing.T) {
 
 	mockHandle.EXPECT().SetMetadata("openai", "llm.model_name", "gpt-4o").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.system", "openai").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.count", int64(1)).Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.0.message.role", "user").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.0.message.content", "Call a tool").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.tools.count", int64(1)).Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.tools.0.tool.json_schema",
 		`{"type":"function","function":{"name":"my_func","description":"A function"}}`).Times(1)
 
-	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
+	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnRequestBody(newTestBodyBuffer(body), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
@@ -266,15 +271,18 @@ func TestOnRequestBody_WithToolCalls_SetsMetadata(t *testing.T) {
 
 	mockHandle.EXPECT().SetMetadata("openai", "llm.model_name", "gpt-4o").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.system", "openai").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.count", int64(2)).Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.0.message.role", "user").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.0.message.content", "What is the weather?").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.1.message.role", "assistant").Times(1)
 	// assistant message has null content, so no content key is set
+	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.1.message.tool_calls.count", int64(1)).Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.1.message.tool_calls.0.tool_call.id", "call_1").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.1.message.tool_calls.0.tool_call.function.name", "get_weather").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.1.message.tool_calls.0.tool_call.function.arguments", "{}").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.tools.count", int64(0)).Times(1)
 
-	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
+	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnRequestBody(newTestBodyBuffer(body), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
@@ -293,8 +301,10 @@ func TestOnRequestBody_CustomNamespace(t *testing.T) {
 
 	mockHandle.EXPECT().SetMetadata("my-namespace", "llm.model_name", "gpt-4o").Times(1)
 	mockHandle.EXPECT().SetMetadata("my-namespace", "llm.system", "openai").Times(1)
+	mockHandle.EXPECT().SetMetadata("my-namespace", "llm.input_messages.count", int64(1)).Times(1)
 	mockHandle.EXPECT().SetMetadata("my-namespace", "llm.input_messages.0.message.role", "user").Times(1)
 	mockHandle.EXPECT().SetMetadata("my-namespace", "llm.input_messages.0.message.content", "Hello").Times(1)
+	mockHandle.EXPECT().SetMetadata("my-namespace", "llm.tools.count", int64(0)).Times(1)
 
 	filter := &decoderFilter{
 		handle: mockHandle,
@@ -320,10 +330,12 @@ func TestOnRequestTrailers_SetsMetadata(t *testing.T) {
 
 	mockHandle.EXPECT().SetMetadata("openai", "llm.model_name", "gpt-4o").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.system", "openai").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.count", int64(1)).Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.0.message.role", "user").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.0.message.content", "Hello").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.tools.count", int64(0)).Times(1)
 
-	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
+	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnRequestTrailers(fake.NewFakeHeaderMap(map[string][]string{}))
 	require.Equal(t, shared.TrailersStatusContinue, result)
 }
@@ -335,7 +347,7 @@ func TestOnResponseHeaders_EndOfStream(t *testing.T) {
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 
-	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
+	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnResponseHeaders(fake.NewFakeHeaderMap(map[string][]string{}), true)
 	require.Equal(t, shared.HeadersStatusContinue, result)
 }
@@ -345,7 +357,7 @@ func TestOnResponseHeaders_NotEndOfStream(t *testing.T) {
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 
-	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
+	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnResponseHeaders(fake.NewFakeHeaderMap(map[string][]string{}), false)
 	require.Equal(t, shared.HeadersStatusStop, result)
 }
@@ -357,7 +369,7 @@ func TestOnResponseBody_NotEndOfStream(t *testing.T) {
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 
-	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
+	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnResponseBody(newTestBodyBuffer([]byte("data")), false)
 	require.Equal(t, shared.BodyStatusStopAndBuffer, result)
 }
@@ -370,7 +382,7 @@ func TestOnResponseBody_EmptyBody(t *testing.T) {
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer([]byte{})).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 
-	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
+	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnResponseBody(newTestBodyBuffer([]byte{}), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
@@ -385,7 +397,7 @@ func TestOnResponseBody_InvalidJSON(t *testing.T) {
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any(), gomock.Any()).Times(1)
 
-	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
+	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
@@ -412,12 +424,14 @@ func TestOnResponseBody_ValidResponse_SetsMetadata(t *testing.T) {
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.count", int64(1)).Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.role", "assistant").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.content", "The weather is sunny.").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.prompt", int64(20)).Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.completion", int64(10)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.total", int64(30)).Times(1)
 
-	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
+	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
@@ -435,11 +449,81 @@ func TestOnResponseBody_NoUsage_SetsMetadataWithoutTokenCounts(t *testing.T) {
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.count", int64(1)).Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.role", "assistant").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.content", "Hello!").Times(1)
 	// No token count calls expected when usage is absent
 
-	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
+	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
+	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
+	require.Equal(t, shared.BodyStatusContinue, result)
+}
+
+func TestOnResponseBody_WithCompletionTokensDetails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+
+	body := []byte(`{
+		"choices": [
+			{"index": 0, "message": {"role": "assistant", "content": "Done."}, "finish_reason": "stop"}
+		],
+		"usage": {
+			"prompt_tokens": 10,
+			"completion_tokens": 50,
+			"total_tokens": 60,
+			"completion_tokens_details": {"reasoning_tokens": 40, "audio_tokens": 10}
+		}
+	}`)
+	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
+	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
+
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.count", int64(1)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.role", "assistant").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.content", "Done.").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.prompt", int64(10)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.completion", int64(50)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.total", int64(60)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.completion_details.reasoning", int64(40)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.completion_details.audio", int64(10)).Times(1)
+
+	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
+	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
+	require.Equal(t, shared.BodyStatusContinue, result)
+}
+
+func TestOnResponseBody_WithOutputToolCalls_SetsMetadata(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+
+	body := []byte(`{
+		"choices": [
+			{
+				"index": 0,
+				"message": {
+					"role": "assistant",
+					"content": null,
+					"tool_calls": [
+						{"id": "call_abc", "type": "function", "function": {"name": "get_weather", "arguments": "{\"loc\":\"NYC\"}"}}
+					]
+				},
+				"finish_reason": "tool_calls"
+			}
+		]
+	}`)
+	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
+	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
+
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.count", int64(1)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.role", "assistant").Times(1)
+	// null content: no content key
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.tool_calls.count", int64(1)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.tool_calls.0.tool_call.id", "call_abc").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.tool_calls.0.tool_call.function.name", "get_weather").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.tool_calls.0.tool_call.function.arguments", `{"loc":"NYC"}`).Times(1)
+
+	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
@@ -457,6 +541,7 @@ func TestOnResponseBody_CustomNamespace(t *testing.T) {
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 
+	mockHandle.EXPECT().SetMetadata("my-ns", "llm.output_messages.count", int64(1)).Times(1)
 	mockHandle.EXPECT().SetMetadata("my-ns", "llm.output_messages.0.message.role", "assistant").Times(1)
 	mockHandle.EXPECT().SetMetadata("my-ns", "llm.output_messages.0.message.content", "Hi").Times(1)
 
@@ -484,12 +569,14 @@ func TestOnResponseTrailers_SetsMetadata(t *testing.T) {
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.count", int64(1)).Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.role", "assistant").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.content", "Done.").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.prompt", int64(5)).Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.completion", int64(3)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.total", int64(8)).Times(1)
 
-	filter := &decoderFilter{handle: mockHandle, config: &chatCompletionsDecoderConfig{}}
+	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnResponseTrailers(fake.NewFakeHeaderMap(map[string][]string{}))
 	require.Equal(t, shared.TrailersStatusContinue, result)
 }

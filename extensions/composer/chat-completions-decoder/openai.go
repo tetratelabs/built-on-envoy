@@ -69,8 +69,16 @@ type chatChoice struct {
 
 // chatUsage represents token usage information in a chat completion response.
 type chatUsage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
+	PromptTokens            int                      `json:"prompt_tokens"`
+	CompletionTokens        int                      `json:"completion_tokens"`
+	TotalTokens             int                      `json:"total_tokens"`
+	CompletionTokensDetails *completionTokensDetails `json:"completion_tokens_details"`
+}
+
+// completionTokensDetails represents the breakdown of completion token usage.
+type completionTokensDetails struct {
+	ReasoningTokens int `json:"reasoning_tokens"`
+	AudioTokens     int `json:"audio_tokens"`
 }
 
 // decodedRequest holds the structured information extracted from a ChatCompletion request.
