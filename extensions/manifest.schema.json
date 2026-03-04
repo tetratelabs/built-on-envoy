@@ -46,6 +46,7 @@
         "enum": [
           "AI",
           "Authentication",
+          "Decoder",
           "Examples",
           "Misc",
           "Network",

@@ -551,6 +551,10 @@ header nav a:focus {
 	background: #8b5cf6;
 }
 
+.extension-badge--decoder {
+	background: #d835ad;
+}
+
 .extension-card > p {
 	color: var(--text-muted);
 	font-size: 14px;
