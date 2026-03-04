@@ -138,7 +138,7 @@ func (f *decoderFilter) decodeResponseBody() {
 func (f *decoderFilter) setRequestMetadata(namespace string, d *decodedRequest) {
 	f.handle.SetMetadata(namespace, "llm.model_name", d.Model)
 	f.handle.SetMetadata(namespace, "llm.system", "openai")
-	f.handle.SetMetadata(namespace, "llm.input_messages.count", int64(len(d.Messages)))
+	f.handle.SetMetadata(namespace, "llm.input_messages.count", len(d.Messages))
 
 	for i, msg := range d.Messages {
 		f.handle.SetMetadata(namespace, fmt.Sprintf("llm.input_messages.%d.message.role", i), msg.Role)
@@ -146,7 +146,7 @@ func (f *decoderFilter) setRequestMetadata(namespace string, d *decodedRequest) 
 			f.handle.SetMetadata(namespace, fmt.Sprintf("llm.input_messages.%d.message.content", i), content)
 		}
 		if len(msg.ToolCalls) > 0 {
-			f.handle.SetMetadata(namespace, fmt.Sprintf("llm.input_messages.%d.message.tool_calls.count", i), int64(len(msg.ToolCalls)))
+			f.handle.SetMetadata(namespace, fmt.Sprintf("llm.input_messages.%d.message.tool_calls.count", i), len(msg.ToolCalls))
 			for j, tc := range msg.ToolCalls {
 				f.handle.SetMetadata(namespace,
 					fmt.Sprintf("llm.input_messages.%d.message.tool_calls.%d.tool_call.id", i, j), tc.ID)
@@ -158,7 +158,7 @@ func (f *decoderFilter) setRequestMetadata(namespace string, d *decodedRequest) 
 		}
 	}
 
-	f.handle.SetMetadata(namespace, "llm.tools.count", int64(len(d.Tools)))
+	f.handle.SetMetadata(namespace, "llm.tools.count", len(d.Tools))
 	for i, tool := range d.Tools {
 		toolJSON, err := json.Marshal(tool)
 		if err != nil {
@@ -172,14 +172,14 @@ func (f *decoderFilter) setRequestMetadata(namespace string, d *decodedRequest) 
 // setResponseMetadata writes the decoded response fields into Envoy's dynamic filter metadata
 // following the OpenInference Semantic Conventions.
 func (f *decoderFilter) setResponseMetadata(namespace string, d *decodedResponse) {
-	f.handle.SetMetadata(namespace, "llm.output_messages.count", int64(len(d.Choices)))
+	f.handle.SetMetadata(namespace, "llm.output_messages.count", len(d.Choices))
 	for i, choice := range d.Choices {
 		f.handle.SetMetadata(namespace, fmt.Sprintf("llm.output_messages.%d.message.role", i), choice.Message.Role)
 		if content := extractContent(choice.Message.Content); content != "" {
 			f.handle.SetMetadata(namespace, fmt.Sprintf("llm.output_messages.%d.message.content", i), content)
 		}
 		if len(choice.Message.ToolCalls) > 0 {
-			f.handle.SetMetadata(namespace, fmt.Sprintf("llm.output_messages.%d.message.tool_calls.count", i), int64(len(choice.Message.ToolCalls)))
+			f.handle.SetMetadata(namespace, fmt.Sprintf("llm.output_messages.%d.message.tool_calls.count", i), len(choice.Message.ToolCalls))
 			for j, tc := range choice.Message.ToolCalls {
 				f.handle.SetMetadata(namespace,
 					fmt.Sprintf("llm.output_messages.%d.message.tool_calls.%d.tool_call.id", i, j), tc.ID)
@@ -191,12 +191,12 @@ func (f *decoderFilter) setResponseMetadata(namespace string, d *decodedResponse
 		}
 	}
 	if d.Usage != nil {
-		f.handle.SetMetadata(namespace, "llm.token_count.prompt", int64(d.Usage.PromptTokens))
-		f.handle.SetMetadata(namespace, "llm.token_count.completion", int64(d.Usage.CompletionTokens))
-		f.handle.SetMetadata(namespace, "llm.token_count.total", int64(d.Usage.TotalTokens))
+		f.handle.SetMetadata(namespace, "llm.token_count.prompt", d.Usage.PromptTokens)
+		f.handle.SetMetadata(namespace, "llm.token_count.completion", d.Usage.CompletionTokens)
+		f.handle.SetMetadata(namespace, "llm.token_count.total", d.Usage.TotalTokens)
 		if d.Usage.CompletionTokensDetails != nil {
-			f.handle.SetMetadata(namespace, "llm.token_count.completion_details.reasoning", int64(d.Usage.CompletionTokensDetails.ReasoningTokens))
-			f.handle.SetMetadata(namespace, "llm.token_count.completion_details.audio", int64(d.Usage.CompletionTokensDetails.AudioTokens))
+			f.handle.SetMetadata(namespace, "llm.token_count.completion_details.reasoning", d.Usage.CompletionTokensDetails.ReasoningTokens)
+			f.handle.SetMetadata(namespace, "llm.token_count.completion_details.audio", d.Usage.CompletionTokensDetails.AudioTokens)
 		}
 	}
 }

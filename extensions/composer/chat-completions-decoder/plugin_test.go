@@ -211,12 +211,12 @@ func TestOnRequestBody_ValidRequest_SetsMetadata(t *testing.T) {
 
 	mockHandle.EXPECT().SetMetadata("openai", "llm.model_name", "gpt-4o").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.system", "openai").Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.count", int64(2)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.count", 2).Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.0.message.role", "system").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.0.message.content", "You are a helpful assistant.").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.1.message.role", "user").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.1.message.content", "What is the weather?").Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "llm.tools.count", int64(0)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.tools.count", 0).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnRequestBody(newTestBodyBuffer(body), true)
@@ -240,10 +240,10 @@ func TestOnRequestBody_WithTools_SetsMetadata(t *testing.T) {
 
 	mockHandle.EXPECT().SetMetadata("openai", "llm.model_name", "gpt-4o").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.system", "openai").Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.count", int64(1)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.count", 1).Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.0.message.role", "user").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.0.message.content", "Call a tool").Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "llm.tools.count", int64(1)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.tools.count", 1).Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.tools.0.tool.json_schema",
 		`{"type":"function","function":{"name":"my_func","description":"A function"}}`).Times(1)
 
@@ -271,16 +271,16 @@ func TestOnRequestBody_WithToolCalls_SetsMetadata(t *testing.T) {
 
 	mockHandle.EXPECT().SetMetadata("openai", "llm.model_name", "gpt-4o").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.system", "openai").Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.count", int64(2)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.count", 2).Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.0.message.role", "user").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.0.message.content", "What is the weather?").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.1.message.role", "assistant").Times(1)
 	// assistant message has null content, so no content key is set
-	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.1.message.tool_calls.count", int64(1)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.1.message.tool_calls.count", 1).Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.1.message.tool_calls.0.tool_call.id", "call_1").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.1.message.tool_calls.0.tool_call.function.name", "get_weather").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.1.message.tool_calls.0.tool_call.function.arguments", "{}").Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "llm.tools.count", int64(0)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.tools.count", 0).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnRequestBody(newTestBodyBuffer(body), true)
@@ -301,10 +301,10 @@ func TestOnRequestBody_CustomNamespace(t *testing.T) {
 
 	mockHandle.EXPECT().SetMetadata("my-namespace", "llm.model_name", "gpt-4o").Times(1)
 	mockHandle.EXPECT().SetMetadata("my-namespace", "llm.system", "openai").Times(1)
-	mockHandle.EXPECT().SetMetadata("my-namespace", "llm.input_messages.count", int64(1)).Times(1)
+	mockHandle.EXPECT().SetMetadata("my-namespace", "llm.input_messages.count", 1).Times(1)
 	mockHandle.EXPECT().SetMetadata("my-namespace", "llm.input_messages.0.message.role", "user").Times(1)
 	mockHandle.EXPECT().SetMetadata("my-namespace", "llm.input_messages.0.message.content", "Hello").Times(1)
-	mockHandle.EXPECT().SetMetadata("my-namespace", "llm.tools.count", int64(0)).Times(1)
+	mockHandle.EXPECT().SetMetadata("my-namespace", "llm.tools.count", 0).Times(1)
 
 	filter := &decoderFilter{
 		handle: mockHandle,
@@ -330,10 +330,10 @@ func TestOnRequestTrailers_SetsMetadata(t *testing.T) {
 
 	mockHandle.EXPECT().SetMetadata("openai", "llm.model_name", "gpt-4o").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.system", "openai").Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.count", int64(1)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.count", 1).Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.0.message.role", "user").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.input_messages.0.message.content", "Hello").Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "llm.tools.count", int64(0)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.tools.count", 0).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnRequestTrailers(fake.NewFakeHeaderMap(map[string][]string{}))
@@ -424,12 +424,12 @@ func TestOnResponseBody_ValidResponse_SetsMetadata(t *testing.T) {
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 
-	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.count", int64(1)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.count", 1).Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.role", "assistant").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.content", "The weather is sunny.").Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.prompt", int64(20)).Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.completion", int64(10)).Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.total", int64(30)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.prompt", 20).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.completion", 10).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.total", 30).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
@@ -449,7 +449,7 @@ func TestOnResponseBody_NoUsage_SetsMetadataWithoutTokenCounts(t *testing.T) {
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 
-	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.count", int64(1)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.count", 1).Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.role", "assistant").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.content", "Hello!").Times(1)
 	// No token count calls expected when usage is absent
@@ -478,14 +478,14 @@ func TestOnResponseBody_WithCompletionTokensDetails(t *testing.T) {
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 
-	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.count", int64(1)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.count", 1).Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.role", "assistant").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.content", "Done.").Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.prompt", int64(10)).Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.completion", int64(50)).Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.total", int64(60)).Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.completion_details.reasoning", int64(40)).Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.completion_details.audio", int64(10)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.prompt", 10).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.completion", 50).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.total", 60).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.completion_details.reasoning", 40).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.completion_details.audio", 10).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
@@ -515,10 +515,10 @@ func TestOnResponseBody_WithOutputToolCalls_SetsMetadata(t *testing.T) {
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 
-	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.count", int64(1)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.count", 1).Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.role", "assistant").Times(1)
 	// null content: no content key
-	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.tool_calls.count", int64(1)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.tool_calls.count", 1).Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.tool_calls.0.tool_call.id", "call_abc").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.tool_calls.0.tool_call.function.name", "get_weather").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.tool_calls.0.tool_call.function.arguments", `{"loc":"NYC"}`).Times(1)
@@ -541,7 +541,7 @@ func TestOnResponseBody_CustomNamespace(t *testing.T) {
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 
-	mockHandle.EXPECT().SetMetadata("my-ns", "llm.output_messages.count", int64(1)).Times(1)
+	mockHandle.EXPECT().SetMetadata("my-ns", "llm.output_messages.count", 1).Times(1)
 	mockHandle.EXPECT().SetMetadata("my-ns", "llm.output_messages.0.message.role", "assistant").Times(1)
 	mockHandle.EXPECT().SetMetadata("my-ns", "llm.output_messages.0.message.content", "Hi").Times(1)
 
@@ -569,12 +569,12 @@ func TestOnResponseTrailers_SetsMetadata(t *testing.T) {
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 
-	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.count", int64(1)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.count", 1).Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.role", "assistant").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.content", "Done.").Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.prompt", int64(5)).Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.completion", int64(3)).Times(1)
-	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.total", int64(8)).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.prompt", 5).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.completion", 3).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.total", 8).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnResponseTrailers(fake.NewFakeHeaderMap(map[string][]string{}))
