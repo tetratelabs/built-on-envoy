@@ -1,8 +1,9 @@
 # Copyright Built On Envoy
 # SPDX-License-Identifier: Apache-2.0
 #
-# EnvoyExtensionPolicy for Envoy AI Gateway. Attaches the openfga Composer filter
-# to the HTTPRoute created by AIGatewayRoute (envoy-ai-gateway-basic).
+# EnvoyExtensionPolicy for Envoy AI Gateway. Uses goplugin-loader to load the
+# openfga standalone plugin, matching the pattern used by other composer extensions.
+# Attaches to the HTTPRoute created by AIGatewayRoute (envoy-ai-gateway-basic).
 #
 # The AI Gateway controller creates an HTTPRoute from AIGatewayRoute; the route
 # name matches the AIGatewayRoute name. Update store_id with the output from
@@ -23,34 +24,37 @@ spec:
       name: envoy-ai-gateway-basic
   dynamicModule:
     - name: composer
-      filterName: openfga
+      filterName: goplugin-loader
       config:
-        cluster: "openfga|openfga.openfga.svc.cluster.local|8080"
-        openfga_host: "openfga.openfga.svc.cluster.local:8080"
-        store_id: "YOUR_STORE_ID"
-        user:
-          header: x-user-id
-          prefix: "user:"
-        fail_open: false
-        rules:
-          - match:
-              headers:
-                x-ai-eg-model: "*"
-            relation:
-              value: can_use
-            object:
-              header: x-ai-eg-model
-              prefix: "model:"
-          - match:
-              headers:
-                x-mcp-tool: "*"
-            relation:
-              value: can_invoke
-            object:
-              header: x-mcp-tool
-              prefix: "tool:"
-          - relation:
-              value: can_access
-            object:
-              path_segment: -1
-              prefix: "resource:"
+        name: openfga
+        url: "file:///mnt/composer/openfga.so"
+        config:
+          cluster: "openfga|openfga.openfga.svc.cluster.local|8080"
+          openfga_host: "openfga.openfga.svc.cluster.local:8080"
+          store_id: "YOUR_STORE_ID"
+          user:
+            header: x-user-id
+            prefix: "user:"
+          fail_open: false
+          rules:
+            - match:
+                headers:
+                  x-ai-eg-model: "*"
+              relation:
+                value: can_use
+              object:
+                header: x-ai-eg-model
+                prefix: "model:"
+            - match:
+                headers:
+                  x-mcp-tool: "*"
+              relation:
+                value: can_invoke
+              object:
+                header: x-mcp-tool
+                prefix: "tool:"
+            - relation:
+                value: can_access
+              object:
+                path_segment: -1
+                prefix: "resource:"

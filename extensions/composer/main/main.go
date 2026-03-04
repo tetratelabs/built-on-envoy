@@ -3,7 +3,7 @@
 // The full text of the Apache license is available in the LICENSE file at
 // the root of the repo.
 
-//go:build !lite && !openfga
+//go:build !lite
 
 // Package main builds a Go shared library that registers built-in plugins.
 package main

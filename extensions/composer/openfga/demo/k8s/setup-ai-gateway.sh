@@ -239,7 +239,7 @@ kubectl patch envoyproxy envoy-ai-gateway-basic -n default --type=merge -p '{
               "name": "install-composer",
               "image": "composer-init:local",
               "imagePullPolicy": "Never",
-              "command": ["cp", "/opt/libcomposer.so", "/mnt/composer/libcomposer.so"],
+              "command": ["sh", "-c", "cp /opt/libcomposer.so /mnt/composer/ && cp /opt/openfga.so /mnt/composer/"],
               "volumeMounts": [
                 {
                   "name": "composer-lib",

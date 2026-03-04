@@ -18,11 +18,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN go mod download all
 
-# Build the composer shared library with only OpenFGA plugin (for AI Gateway demo).
-# Uses -tags openfga to avoid pulling in other plugins that need SDK migration.
-RUN CGO_ENABLED=1 go build -tags openfga -buildmode=c-shared -o libcomposer.so ./main
+# Build libcomposer.so (lite = goplugin-loader only) and openfga.so (standalone plugin).
+# Same pattern as other composer extensions: loader + plugin loaded at runtime.
+RUN CGO_ENABLED=1 go build -tags lite -buildmode=c-shared -o libcomposer.so ./main
+RUN CGO_ENABLED=1 go build -buildmode=plugin -o openfga.so ./openfga/standalone
 
-# Minimal image: just copies libcomposer.so to the target volume on startup.
+# Minimal image: copies both .so files to the target volume on startup.
 FROM alpine:3.19
 COPY --from=builder /workspace/libcomposer.so /opt/libcomposer.so
-CMD ["cp", "/opt/libcomposer.so", "/mnt/composer/libcomposer.so"]
+COPY --from=builder /workspace/openfga.so /opt/openfga.so
+CMD ["sh", "-c", "cp /opt/libcomposer.so /mnt/composer/ && cp /opt/openfga.so /mnt/composer/"]

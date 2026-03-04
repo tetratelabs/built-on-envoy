@@ -121,7 +121,7 @@ For a local Kubernetes cluster with [Envoy AI Gateway](https://aigateway.envoypr
 ./setup-ai-gateway.sh
 ```
 
-This creates a kind cluster, installs Envoy Gateway with AI Gateway integration, deploys OpenFGA, runs the setup job, deploys the basic AI Gateway example, and attaches the openfga filter via `EnvoyExtensionPolicy`.
+This creates a kind cluster, installs Envoy Gateway with AI Gateway integration, deploys OpenFGA, runs the setup job, deploys the basic AI Gateway example, and attaches the openfga filter via `EnvoyExtensionPolicy`. The setup builds libcomposer.so (lite = goplugin-loader) and openfga.so (standalone plugin), matching the pattern used by other composer extensions.
 
 **Options:**
 - `--no-cluster` — Use existing cluster instead of creating one
@@ -171,7 +171,8 @@ curl -H "x-user-id: bob" -H "x-ai-eg-model: some-cool-self-hosted-model" \
 | `openfga-deployment.yaml` | OpenFGA `Namespace`, `Deployment`, and `Service` |
 | `setup-job.yaml` | One-shot `Job` to create the store, model, and tuples |
 | `envoy-extension-policy.yaml` | `EnvoyExtensionPolicy` attaching the openfga filter (generic HTTPRoute) |
-| `envoy-extension-policy-ai-gateway.yaml` | `EnvoyExtensionPolicy` for Envoy AI Gateway (targets AIGatewayRoute-generated HTTPRoute) |
+| `envoy-extension-policy-ai-gateway.yaml` | `EnvoyExtensionPolicy` for Envoy AI Gateway; uses goplugin-loader to load openfga.so |
+| `Dockerfile.composer-init` | Builds libcomposer.so (lite) and openfga.so (standalone); init container copies both to Envoy volume |
 | `security-policy.yaml` | `SecurityPolicy` for JWT validation and claim injection |
 | `ai-gateway-openfga.yaml` | Combined OpenFGA deployment + setup job for AI Gateway demo |
 | `setup-ai-gateway.sh` | End-to-end setup script for local Envoy AI Gateway + OpenFGA |
