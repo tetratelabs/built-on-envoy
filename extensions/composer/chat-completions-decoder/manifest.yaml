@@ -105,7 +105,7 @@ examples:
           ]
         }'
 
-      # llm.tools.count                      = 2
+      # llm.tools.count              = 2
       # llm.tools.0.tool.json_schema = '{"type":"function","function":{"name":"book_flight","description":"Book a flight"}}'
       # llm.tools.1.tool.json_schema = '{"type":"function","function":{"name":"cancel_flight","description":"Cancel a flight"}}'
   - title: Tool call in conversation with response metadata
