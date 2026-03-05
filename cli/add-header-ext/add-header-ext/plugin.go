@@ -1,0 +1,85 @@
+package main
+
+import (
+	"encoding/json"
+
+	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
+)
+
+// Config represents the JSON configuration for this filter.
+type customHttpFilterConfig struct {
+	HeaderValue string `json:"header_value"`
+}
+
+// This is the implementation of the HTTP filter.
+type customHttpFilter struct {
+	shared.EmptyHttpFilter
+	handle shared.HttpFilterHandle
+	config *customHttpFilterConfig
+}
+
+func (f *customHttpFilter) OnRequestHeaders(headers shared.HeaderMap, endStream bool) shared.HeadersStatus {
+	// TODO: To implement your own custom logic here.
+	headers.Add("x-add-header-ext", f.config.HeaderValue)
+	f.handle.Log(shared.LogLevelInfo, "add-header-ext: OnRequestHeaders called")
+	return shared.HeadersStatusContinue
+}
+
+func (f *customHttpFilter) OnRequestBody(body shared.BodyBuffer, endStream bool) shared.BodyStatus {
+	return shared.BodyStatusContinue
+}
+
+func (f *customHttpFilter) OnRequestTrailers(trailers shared.HeaderMap) shared.TrailersStatus {
+	return shared.TrailersStatusContinue
+}
+
+func (f *customHttpFilter) OnResponseHeaders(headers shared.HeaderMap, endStream bool) shared.HeadersStatus {
+	// TODO: To implement your own custom logic here.
+	headers.Add("x-add-header-ext", f.config.HeaderValue)
+	f.handle.Log(shared.LogLevelInfo, "add-header-ext: OnResponseHeaders called")
+	return shared.HeadersStatusContinue
+}
+
+func (f *customHttpFilter) OnResponseBody(body shared.BodyBuffer, endStream bool) shared.BodyStatus {
+	return shared.BodyStatusContinue
+}
+
+func (f *customHttpFilter) OnResponseTrailers(trailers shared.HeaderMap) shared.TrailersStatus {
+	return shared.TrailersStatusContinue
+}
+
+// This is the factory for the HTTP filter.
+type customHttpFilterFactory struct {
+	config *customHttpFilterConfig
+}
+
+func (f *customHttpFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
+	return &customHttpFilter{handle: handle, config: f.config}
+}
+
+// This is the configuration factory for the HTTP filter.
+type customHttpFilterConfigFactory struct {
+	shared.EmptyHttpFilterConfigFactory
+}
+
+func (f *customHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
+	// Parse JSON configuration
+	// TODO: To implement your own configuration parsing and validation logic here.
+	cfg := &customHttpFilterConfig{
+		HeaderValue: "example",
+	}
+	if len(config) > 0 {
+		if err := json.Unmarshal(config, cfg); err != nil {
+			handle.Log(shared.LogLevelError, "add-header-ext: failed to parse config: "+err.Error())
+			return nil, err
+		}
+	}
+	handle.Log(shared.LogLevelInfo, "add-header-ext: loaded config with header_value="+cfg.HeaderValue)
+	return &customHttpFilterFactory{config: cfg}, nil
+}
+
+func WellKnownHttpFilterConfigFactories() map[string]shared.HttpFilterConfigFactory {
+	return map[string]shared.HttpFilterConfigFactory{
+		"add-header-ext": &customHttpFilterConfigFactory{},
+	}
+}

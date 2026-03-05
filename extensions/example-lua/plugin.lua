@@ -34,7 +34,7 @@ function envoy_on_request(request_handle)
     headers:add("x-request-timestamp", tostring(request_handle:timestamp()))
 
     -- Replace a header (adds if not present)
-    headers:replace("x-custom-header", "custom-value")
+    headers:replace("x-custom-header", "varun")
 
     -- Get number of values for a header (useful for multi-value headers)
     local cookie_count = headers:getNumValues("cookie")

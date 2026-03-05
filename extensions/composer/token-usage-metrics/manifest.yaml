@@ -1,0 +1,68 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: token-usage-metrics
+parent: composer
+categories:
+  - AI
+  - Observability
+author: Tetrate
+featured: true
+description: Records LLM token usage as Envoy metrics using data from the chat-completions-decoder filter
+longDescription: |
+  An HTTP filter plugin that reads token usage information from filter metadata
+  populated by the `chat-completions-decoder` filter and records it as Envoy counters,
+  enabling observability of LLM token consumption per model.
+
+  This filter must be placed **after** `chat-completions-decoder` in the filter chain so that
+  the metadata is populated before this filter reads it on the response path.
+
+  ## Metrics
+
+  The following counters are emitted, each tagged with the `model` label (e.g. `gpt-4o`):
+
+  | Metric                      | Description                          |
+  |-----------------------------|--------------------------------------|
+  | `llm_token_count_prompt`    | Number of prompt (input) tokens      |
+  | `llm_token_count_completion`| Number of completion (output) tokens |
+  | `llm_token_count_total`     | Total tokens (prompt + completion)   |
+
+  ## Configuration Reference
+
+  | Field | Type | Required | Default | Description |
+  |-------|------|----------|---------|-------------|
+  | `metadata_namespace` | string | no | `openai` | Metadata namespace to read token counts from. Must match the `metadata_namespace` configured in `chat-completions-decoder`. |
+
+type: go
+tags:
+  - go
+  - http
+  - ai
+  - openai
+  - metrics
+  - observability
+  - tokens
+  - llm
+license: Apache-2.0
+examples:
+  - title: Basic usage with chat-completions-decoder
+    description: |
+      Place `token-usage-metrics` after `chat-completions-decoder` so the decoder populates
+      the metadata before the metrics filter reads it on the response path.
+    code: |
+      boe run --extension chat-completions-decoder --extension token-usage-metrics
+
+      # After a chat completion request, Envoy will expose counters such as:
+      # llm_token_count_prompt{model="gpt-4o"}     += <prompt tokens>
+      # llm_token_count_completion{model="gpt-4o"} += <completion tokens>
+      # llm_token_count_total{model="gpt-4o"}      += <total tokens>
+  - title: Custom metadata namespace
+    description: |
+      Use a custom namespace when `chat-completions-decoder` is configured with a
+      non-default namespace.
+    code: |
+      boe run \
+        --extension chat-completions-decoder --config '{"metadata_namespace":"llm"}' \
+        --extension token-usage-metrics      --config '{"metadata_namespace":"llm"}'
