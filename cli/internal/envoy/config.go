@@ -52,7 +52,11 @@ type ConfigGenerationParams struct {
 	ClustersInsecure []string
 	// ClustersJSON specifies additional Envoy cluster JSON strings to include in the configuration.
 	ClustersJSON []string
+	// TestUpstreamHost specifies the hostname for the test upstream cluster. Defaults to "httpbin.org".
+	TestUpstreamHost string
 }
+
+const defaultTestUpstreamHost = "httpbin.org"
 
 // GeneratedConfigResources holds the generated Envoy resources for an extension.
 type GeneratedConfigResources struct {
@@ -84,7 +88,11 @@ func RenderConfig(params *ConfigGenerationParams, renderer ConfigRenderer) (stri
 func FullConfigRenderer(params *ConfigGenerationParams, gen GeneratedConfigResources) (string, error) {
 	params.Logger.Info("rendering full Envoy config")
 
-	cfg, err := buildFullConfig(params.AdminPort, params.ListenerPort, gen.HTTPFilters, gen.Clusters)
+	testUpstreamHost := params.TestUpstreamHost
+	if testUpstreamHost == "" {
+		testUpstreamHost = defaultTestUpstreamHost
+	}
+	cfg, err := buildFullConfig(params.AdminPort, params.ListenerPort, testUpstreamHost, gen.HTTPFilters, gen.Clusters)
 	if err != nil {
 		return "", fmt.Errorf("failed to build config: %w", err)
 	}
@@ -206,13 +214,13 @@ func parseCluster(shortSpec string, tls bool) (*clusterv3.Cluster, error) {
 // and allows us to use the proto marshalling functions. Otherwise, we would have to create a wrapper
 // proto on our own, or marshal the config manually.
 // TODO(nacx): Is there a wrapper for `admin` and `static_resources` we could use other than Bootstrap?
-func buildFullConfig(adminPort, listenerPort uint32, filters []*hcmv3.HttpFilter, clusters []*clusterv3.Cluster) (*bootstrapv3.Bootstrap, error) {
-	testupstreamCluster, err := buildTestUpstreamCluster("httpbin", "httpbin.org", 443, true)
+func buildFullConfig(adminPort, listenerPort uint32, testUpstreamHost string, filters []*hcmv3.HttpFilter, clusters []*clusterv3.Cluster) (*bootstrapv3.Bootstrap, error) {
+	testupstreamCluster, err := buildTestUpstreamCluster("test-upstream", testUpstreamHost, 443, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build test upstream cluster: %w", err)
 	}
 
-	hcm, err := buildHTTPConnectionManager(filters, testupstreamCluster)
+	hcm, err := buildHTTPConnectionManager(filters, testupstreamCluster, testUpstreamHost)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build HTTP connection manager: %w", err)
 	}
@@ -271,7 +279,7 @@ func buildFullConfig(adminPort, listenerPort uint32, filters []*hcmv3.HttpFilter
 }
 
 // buildHTTPConnectionManager creates the HTTP connection manager configuration.
-func buildHTTPConnectionManager(filters []*hcmv3.HttpFilter, testUpstreamCluster *clusterv3.Cluster) (*hcmv3.HttpConnectionManager, error) {
+func buildHTTPConnectionManager(filters []*hcmv3.HttpFilter, testUpstreamCluster *clusterv3.Cluster, testUpstreamHost string) (*hcmv3.HttpConnectionManager, error) {
 	// Build the router filter
 	router := &routerv3.Router{}
 	routerAny, err := anypb.New(router)
@@ -323,6 +331,9 @@ func buildHTTPConnectionManager(filters []*hcmv3.HttpFilter, testUpstreamCluster
 									Route: &routev3.RouteAction{
 										ClusterSpecifier: &routev3.RouteAction_Cluster{
 											Cluster: testUpstreamCluster.Name,
+										},
+										HostRewriteSpecifier: &routev3.RouteAction_HostRewriteLiteral{
+											HostRewriteLiteral: testUpstreamHost,
 										},
 									},
 								},

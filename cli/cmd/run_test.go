@@ -75,6 +75,8 @@ Flags:
       --cluster-json=CLUSTER-JSON
                                    Optional additional Envoy cluster providing
                                    the complete cluster config in JSON format.
+      --test-upstream-host="httpbin.org"
+                                   Hostname for the test upstream cluster.
       --docker                     Run Envoy as a Docker container instead of
                                    using func-e ($BOE_RUN_DOCKER).
       --pull="missing"             Pull policy for the BOE Docker image

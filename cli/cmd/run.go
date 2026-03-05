@@ -40,11 +40,12 @@ type Run struct {
 	// sep:"none" disables Kong's default comma-separated splitting for []string flags.
 	// JSON config values contain commas (e.g. {"a":"1","b":"2"}) which would otherwise
 	// be split into separate invalid fragments, causing protobuf unmarshal failures.
-	Configs  []string     `name:"config" sep:"none" help:"Optional JSON config string for extensions. Applied in order to combined --extension and --local flags."`
-	Clusters ClusterFlags `embed:""`
-	Docker   bool         `help:"Run Envoy as a Docker container instead of using func-e." default:"false" env:"BOE_RUN_DOCKER"`
-	Pull     string       `name:"pull" help:"Pull policy for the BOE Docker image (missing, always, never). Only applicable when running with --docker." enum:"missing,always,never" default:"missing"`
-	OCI      OCIFlags     `embed:""`
+	Configs          []string     `name:"config" sep:"none" help:"Optional JSON config string for extensions. Applied in order to combined --extension and --local flags."`
+	Clusters         ClusterFlags `embed:""`
+	TestUpstreamHost string       `name:"test-upstream-host" help:"Hostname for the test upstream cluster." default:"httpbin.org"`
+	Docker           bool         `help:"Run Envoy as a Docker container instead of using func-e." default:"false" env:"BOE_RUN_DOCKER"`
+	Pull             string       `name:"pull" help:"Pull policy for the BOE Docker image (missing, always, never). Only applicable when running with --docker." enum:"missing,always,never" default:"missing"`
+	OCI              OCIFlags     `embed:""`
 
 	extensionPositions extensionPositions `kong:"-"` // Internal field: tracks the original position of extensions specified via both --extension and --local flags
 	defaultLogLevel    string             `kong:"-"` // Internal field: parsed defaut log level
@@ -176,6 +177,7 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 		Clusters:          r.Clusters.Secure,
 		ClustersInsecure:  r.Clusters.Insecure,
 		ClustersJSON:      r.Clusters.JSONSpec,
+		TestUpstreamHost:  r.TestUpstreamHost,
 	}
 
 	return runner.Run(ctx)

@@ -76,6 +76,8 @@ Flags:
                                    ($BOE_REGISTRY_USERNAME).
       --password=STRING            Password for the OCI registry
                                    ($BOE_REGISTRY_PASSWORD).
+      --test-upstream-host="httpbin.org"
+                                   Hostname for the test upstream cluster.
       --output="-"                 Directory to put the generated config into.
                                    Use "-" to print it to the standard output.
 `, internaltesting.WrapHelp(genConfigHelp))

@@ -12,7 +12,7 @@ static_resources:
   clusters:
   - dns_lookup_family: V4_ONLY
     load_assignment:
-      cluster_name: httpbin
+      cluster_name: test-upstream
       endpoints:
       - lb_endpoints:
         - endpoint:
@@ -20,7 +20,7 @@ static_resources:
               socket_address:
                 address: httpbin.org
                 port_value: 443
-    name: httpbin
+    name: test-upstream
     transport_socket:
       name: envoy.transport_sockets.tls
       typed_config:
@@ -74,6 +74,7 @@ static_resources:
               - match:
                   prefix: /
                 route:
-                  cluster: httpbin
+                  cluster: test-upstream
+                  host_rewrite_literal: httpbin.org
           stat_prefix: ingress_http
     name: main
