@@ -12,6 +12,8 @@ import (
 	"strings"
 )
 
+var dataPrefix = []byte("data: ")
+
 // chatCompletionRequest represents an OpenAI chat completions request.
 type chatCompletionRequest struct {
 	Model    string        `json:"model"`
@@ -182,7 +184,7 @@ func extractContent(raw json.RawMessage) string {
 
 // isSSEFormat reports whether body is in Server-Sent Events format (streaming response).
 func isSSEFormat(body []byte) bool {
-	return bytes.HasPrefix(bytes.TrimSpace(body), []byte("data: "))
+	return bytes.HasPrefix(bytes.TrimSpace(body), dataPrefix)
 }
 
 // decodeStreamingChatResponse parses an SSE-formatted streaming response body,
@@ -197,18 +199,18 @@ func decodeStreamingChatResponse(body []byte, logFn func(string, ...any)) (*deco
 	toolCallsByChoice := map[int]map[int]*chatToolCall{}
 	maxChoiceIdx := -1
 
-	for line := range strings.SplitSeq(string(body), "\n") {
-		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "data: ") {
+	for line := range bytes.SplitSeq(body, []byte("\n")) {
+		line = bytes.TrimSpace(line)
+		if !bytes.HasPrefix(line, dataPrefix) {
 			continue
 		}
-		data := strings.TrimPrefix(line, "data: ")
-		if data == "[DONE]" {
+		data := bytes.TrimPrefix(line, dataPrefix)
+		if bytes.Equal(data, []byte("[DONE]")) {
 			break
 		}
 
 		var chunk chatCompletionChunk
-		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+		if err := json.Unmarshal(data, &chunk); err != nil {
 			logFn("chat-completions-decoder: failed to parse streaming chunk: %s", err.Error())
 			continue
 		}
