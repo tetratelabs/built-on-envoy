@@ -128,7 +128,9 @@ func (f *decoderFilter) decodeResponseBody() {
 	var decoded *decodedResponse
 	var err error
 	if isSSEFormat(bodyBytes) {
-		decoded, err = decodeStreamingChatResponse(bodyBytes)
+		decoded, err = decodeStreamingChatResponse(bodyBytes, func(format string, args ...any) {
+			f.handle.Log(shared.LogLevelDebug, format, args...)
+		})
 	} else {
 		decoded, err = decodeChatResponse(bodyBytes)
 	}

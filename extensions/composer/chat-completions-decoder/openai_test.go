@@ -6,6 +6,7 @@
 package impl
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -292,7 +293,7 @@ func TestDecodeStreamingChatResponse_SimpleStream(t *testing.T) {
 			"data: [DONE]\n",
 	)
 
-	result, err := decodeStreamingChatResponse(body)
+	result, err := decodeStreamingChatResponse(body, t.Logf)
 	require.NoError(t, err)
 	require.Len(t, result.Choices, 1)
 	require.Equal(t, "assistant", result.Choices[0].Message.Role)
@@ -310,7 +311,7 @@ func TestDecodeStreamingChatResponse_NoUsage(t *testing.T) {
 			"data: [DONE]\n",
 	)
 
-	result, err := decodeStreamingChatResponse(body)
+	result, err := decodeStreamingChatResponse(body, t.Logf)
 	require.NoError(t, err)
 	require.Len(t, result.Choices, 1)
 	require.Equal(t, "Hi", extractContent(result.Choices[0].Message.Content))
@@ -331,7 +332,7 @@ func TestDecodeStreamingChatResponse_WithToolCalls(t *testing.T) {
 			"data: [DONE]\n",
 	)
 
-	result, err := decodeStreamingChatResponse(body)
+	result, err := decodeStreamingChatResponse(body, t.Logf)
 	require.NoError(t, err)
 	require.Len(t, result.Choices, 1)
 	require.Equal(t, "assistant", result.Choices[0].Message.Role)
@@ -347,7 +348,7 @@ func TestDecodeStreamingChatResponse_WithToolCalls(t *testing.T) {
 func TestDecodeStreamingChatResponse_EmptyStream(t *testing.T) {
 	body := []byte("data: [DONE]\n")
 
-	result, err := decodeStreamingChatResponse(body)
+	result, err := decodeStreamingChatResponse(body, t.Logf)
 	require.NoError(t, err)
 	require.Empty(t, result.Choices)
 	require.Nil(t, result.Usage)
@@ -360,8 +361,13 @@ func TestDecodeStreamingChatResponse_SkipsInvalidChunks(t *testing.T) {
 			"data: [DONE]\n",
 	)
 
-	result, err := decodeStreamingChatResponse(body)
+	var logMessages []string
+	result, err := decodeStreamingChatResponse(body, func(format string, args ...any) {
+		logMessages = append(logMessages, fmt.Sprintf(format, args...))
+	})
 	require.NoError(t, err)
 	require.Len(t, result.Choices, 1)
 	require.Equal(t, "OK", extractContent(result.Choices[0].Message.Content))
+	require.Len(t, logMessages, 1)
+	require.Contains(t, logMessages[0], "failed to parse streaming chunk")
 }

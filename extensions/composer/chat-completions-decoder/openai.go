@@ -187,8 +187,9 @@ func isSSEFormat(body []byte) bool {
 
 // decodeStreamingChatResponse parses an SSE-formatted streaming response body,
 // accumulating delta content and tool call arguments across all chunks into a
-// single decodedResponse.
-func decodeStreamingChatResponse(body []byte) (*decodedResponse, error) {
+// single decodedResponse. logFn is called at debug level for any chunk that
+// cannot be parsed.
+func decodeStreamingChatResponse(body []byte, logFn func(string, ...any)) (*decodedResponse, error) {
 	var usage *chatUsage
 	roleByChoice := map[int]string{}
 	contentByChoice := map[int]string{}
@@ -196,18 +197,19 @@ func decodeStreamingChatResponse(body []byte) (*decodedResponse, error) {
 	toolCallsByChoice := map[int]map[int]*chatToolCall{}
 	maxChoiceIdx := -1
 
-	for _, line := range strings.Split(string(body), "\n") {
+	for line := range strings.SplitSeq(string(body), "\n") {
 		line = strings.TrimSpace(line)
 		if !strings.HasPrefix(line, "data: ") {
 			continue
 		}
 		data := strings.TrimPrefix(line, "data: ")
 		if data == "[DONE]" {
-			continue
+			break
 		}
 
 		var chunk chatCompletionChunk
 		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+			logFn("chat-completions-decoder: failed to parse streaming chunk: %s", err.Error())
 			continue
 		}
 
@@ -258,8 +260,12 @@ func decodeStreamingChatResponse(body []byte) (*decodedResponse, error) {
 	for i := 0; i <= maxChoiceIdx; i++ {
 		var rawContent json.RawMessage
 		if content := contentByChoice[i]; content != "" {
-			// json.Marshal on a plain string never returns an error.
-			rawContent, _ = json.Marshal(content)
+			b, err := json.Marshal(content)
+			if err != nil {
+				logFn("chat-completions-decoder: failed to marshal content for choice %d: %s", i, err.Error())
+			} else {
+				rawContent = b
+			}
 		}
 
 		var toolCalls []chatToolCall
