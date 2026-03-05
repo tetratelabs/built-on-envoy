@@ -12,7 +12,7 @@ require (
 	github.com/cedar-policy/cedar-go v1.5.2
 	github.com/corazawaf/coraza/v3 v3.3.3
 	github.com/crewjam/saml v0.5.1
-	github.com/docker/cli v29.0.3+incompatible
+	github.com/docker/cli v29.2.0+incompatible
 	github.com/envoyproxy/envoy/source/extensions/dynamic_modules v0.0.0-20260224023207-910d516c7b4e
 	github.com/getkin/kin-openapi v0.133.0
 	github.com/google/go-containerregistry v0.20.7
