@@ -117,14 +117,21 @@ func (f *decoderFilter) decodeRequestBody() {
 }
 
 // decodeResponseBody reads the response body, parses the OpenAI ChatCompletion response,
-// and sets the structured information in filter metadata.
+// and sets the structured information in filter metadata. Both regular JSON responses
+// and streaming SSE responses (when stream=true was requested) are supported.
 func (f *decoderFilter) decodeResponseBody() {
 	bodyBytes := utility.ReadWholeResponseBody(f.handle)
 	if len(bodyBytes) == 0 {
 		return
 	}
 
-	decoded, err := decodeChatResponse(bodyBytes)
+	var decoded *decodedResponse
+	var err error
+	if isSSEFormat(bodyBytes) {
+		decoded, err = decodeStreamingChatResponse(bodyBytes)
+	} else {
+		decoded, err = decodeChatResponse(bodyBytes)
+	}
 	if err != nil {
 		f.handle.Log(shared.LogLevelDebug, "chat-completions-decoder: failed to parse response: %s", err.Error())
 		return

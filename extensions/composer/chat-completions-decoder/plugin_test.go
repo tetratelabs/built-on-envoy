@@ -580,3 +580,89 @@ func TestOnResponseTrailers_SetsMetadata(t *testing.T) {
 	result := filter.OnResponseTrailers(fake.NewFakeHeaderMap(map[string][]string{}))
 	require.Equal(t, shared.TrailersStatusContinue, result)
 }
+
+// --- Tests for streaming (SSE) response handling ---
+
+func TestOnResponseBody_StreamingResponse_SetsMetadata(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+
+	body := []byte(
+		"data: {\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\n" +
+			"data: {\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hello\"},\"finish_reason\":null}]}\n\n" +
+			"data: {\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" world\"},\"finish_reason\":null}]}\n\n" +
+			"data: {\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]," +
+			"\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"total_tokens\":15}}\n\n" +
+			"data: [DONE]\n",
+	)
+	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
+	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
+
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.count", 1).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.role", "assistant").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.content", "Hello world").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.prompt", 10).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.completion", 5).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.total", 15).Times(1)
+
+	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
+	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
+	require.Equal(t, shared.BodyStatusContinue, result)
+}
+
+func TestOnResponseBody_StreamingResponse_NoUsage(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+
+	body := []byte(
+		"data: {\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"Hi\"},\"finish_reason\":null}]}\n\n" +
+			"data: {\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n" +
+			"data: [DONE]\n",
+	)
+	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
+	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
+
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.count", 1).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.role", "assistant").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.content", "Hi").Times(1)
+	// No token count calls expected when usage is absent.
+
+	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
+	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
+	require.Equal(t, shared.BodyStatusContinue, result)
+}
+
+func TestOnResponseBody_StreamingResponse_WithToolCalls(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+
+	body := []byte(
+		"data: {\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":null," +
+			"\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"\"}}]},\"finish_reason\":null}]}\n\n" +
+			"data: {\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{" +
+			"\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"loc\\\":\\\"NYC\\\"}\"}}]},\"finish_reason\":null}]}\n\n" +
+			"data: {\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]," +
+			"\"usage\":{\"prompt_tokens\":20,\"completion_tokens\":10,\"total_tokens\":30}}\n\n" +
+			"data: [DONE]\n",
+	)
+	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
+	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
+
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.count", 1).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.role", "assistant").Times(1)
+	// null content: no content key expected.
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.tool_calls.count", 1).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.tool_calls.0.tool_call.id", "call_1").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.tool_calls.0.tool_call.function.name", "get_weather").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.tool_calls.0.tool_call.function.arguments", `{"loc":"NYC"}`).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.prompt", 20).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.completion", 10).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.total", 30).Times(1)
+
+	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
+	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
+	require.Equal(t, shared.BodyStatusContinue, result)
+}
