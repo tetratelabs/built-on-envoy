@@ -182,96 +182,131 @@ func extractContent(raw json.RawMessage) string {
 	return ""
 }
 
-// isSSEFormat reports whether body is in Server-Sent Events format (streaming response).
-func isSSEFormat(body []byte) bool {
-	return bytes.HasPrefix(bytes.TrimSpace(body), dataPrefix)
+// sseAccumulator holds the incremental state for parsing a streaming SSE response.
+// Data is fed via the feed method as body chunks arrive, and the final result is
+// obtained by calling finish.
+type sseAccumulator struct {
+	buf               []byte
+	done              bool
+	usage             *chatUsage
+	roleByChoice      map[int]string
+	contentByChoice   map[int]string
+	toolCallsByChoice map[int]map[int]*chatToolCall
+	maxChoiceIdx      int
+	logFn             func(string, ...any)
 }
 
-// decodeStreamingChatResponse parses an SSE-formatted streaming response body,
-// accumulating delta content and tool call arguments across all chunks into a
-// single decodedResponse. logFn is called at debug level for any chunk that
-// cannot be parsed.
-func decodeStreamingChatResponse(body []byte, logFn func(string, ...any)) (*decodedResponse, error) {
-	var usage *chatUsage
-	roleByChoice := map[int]string{}
-	contentByChoice := map[int]string{}
-	// toolCallsByChoice: choice index -> tool call index -> accumulated tool call.
-	toolCallsByChoice := map[int]map[int]*chatToolCall{}
-	maxChoiceIdx := -1
+// newSSEAccumulator creates a new SSE accumulator.
+func newSSEAccumulator(logFn func(string, ...any)) *sseAccumulator {
+	return &sseAccumulator{
+		roleByChoice:      map[int]string{},
+		contentByChoice:   map[int]string{},
+		toolCallsByChoice: map[int]map[int]*chatToolCall{},
+		maxChoiceIdx:      -1,
+		logFn:             logFn,
+	}
+}
 
-	for line := range bytes.SplitSeq(body, []byte("\n")) {
-		line = bytes.TrimSpace(line)
+// feed appends new data to the internal buffer and parses as many complete
+// SSE events as possible. Parsed data is trimmed from the buffer.
+func (a *sseAccumulator) feed(data []byte) {
+	if a.done {
+		return
+	}
+	a.buf = append(a.buf, data...)
+	a.parseEvents()
+}
+
+// parseEvents consumes complete lines from the buffer and processes SSE events.
+func (a *sseAccumulator) parseEvents() {
+	for {
+		// Find a complete line (terminated by \n).
+		idx := bytes.IndexByte(a.buf, '\n')
+		if idx < 0 {
+			break
+		}
+
+		line := bytes.TrimSpace(a.buf[:idx])
+		a.buf = a.buf[idx+1:]
 		if !bytes.HasPrefix(line, dataPrefix) {
 			continue
 		}
 		data := bytes.TrimPrefix(line, dataPrefix)
 		if bytes.Equal(data, []byte("[DONE]")) {
-			break
+			a.done = true
+			return
+		}
+		a.processChunk(data)
+	}
+}
+
+// processChunk parses a single SSE data payload and accumulates it.
+func (a *sseAccumulator) processChunk(data []byte) {
+	var chunk chatCompletionChunk
+	if err := json.Unmarshal(data, &chunk); err != nil {
+		a.logFn("chat-completions-decoder: failed to parse streaming chunk: %s", err.Error())
+		return
+	}
+
+	if chunk.Usage != nil {
+		a.usage = chunk.Usage
+	}
+
+	for _, choice := range chunk.Choices {
+		idx := choice.Index
+		if idx > a.maxChoiceIdx {
+			a.maxChoiceIdx = idx
 		}
 
-		var chunk chatCompletionChunk
-		if err := json.Unmarshal(data, &chunk); err != nil {
-			logFn("chat-completions-decoder: failed to parse streaming chunk: %s", err.Error())
-			continue
+		if choice.Delta.Role != "" {
+			a.roleByChoice[idx] = choice.Delta.Role
 		}
 
-		if chunk.Usage != nil {
-			usage = chunk.Usage
+		if content := extractContent(choice.Delta.Content); content != "" {
+			a.contentByChoice[idx] += content
 		}
 
-		for _, choice := range chunk.Choices {
-			idx := choice.Index
-			if idx > maxChoiceIdx {
-				maxChoiceIdx = idx
+		for _, tcDelta := range choice.Delta.ToolCalls {
+			if _, ok := a.toolCallsByChoice[idx]; !ok {
+				a.toolCallsByChoice[idx] = map[int]*chatToolCall{}
 			}
-
-			if choice.Delta.Role != "" {
-				roleByChoice[idx] = choice.Delta.Role
-			}
-
-			if content := extractContent(choice.Delta.Content); content != "" {
-				contentByChoice[idx] += content
-			}
-
-			for _, tcDelta := range choice.Delta.ToolCalls {
-				if _, ok := toolCallsByChoice[idx]; !ok {
-					toolCallsByChoice[idx] = map[int]*chatToolCall{}
-				}
-				tcIdx := tcDelta.Index
-				if tc, ok := toolCallsByChoice[idx][tcIdx]; ok {
-					tc.Function.Arguments += tcDelta.Function.Arguments
-				} else {
-					toolCallsByChoice[idx][tcIdx] = &chatToolCall{
-						ID:   tcDelta.ID,
-						Type: tcDelta.Type,
-						Function: chatToolCallFunction{
-							Name:      tcDelta.Function.Name,
-							Arguments: tcDelta.Function.Arguments,
-						},
-					}
+			tcIdx := tcDelta.Index
+			if tc, ok := a.toolCallsByChoice[idx][tcIdx]; ok {
+				tc.Function.Arguments += tcDelta.Function.Arguments
+			} else {
+				a.toolCallsByChoice[idx][tcIdx] = &chatToolCall{
+					ID:   tcDelta.ID,
+					Type: tcDelta.Type,
+					Function: chatToolCallFunction{
+						Name:      tcDelta.Function.Name,
+						Arguments: tcDelta.Function.Arguments,
+					},
 				}
 			}
 		}
 	}
+}
 
-	if maxChoiceIdx < 0 {
-		return &decodedResponse{}, nil
+// finish assembles the accumulated state into a decodedResponse.
+func (a *sseAccumulator) finish() *decodedResponse {
+	if a.maxChoiceIdx < 0 {
+		return &decodedResponse{Usage: a.usage}
 	}
 
-	choices := make([]chatChoice, maxChoiceIdx+1)
-	for i := 0; i <= maxChoiceIdx; i++ {
+	choices := make([]chatChoice, a.maxChoiceIdx+1)
+	for i := 0; i <= a.maxChoiceIdx; i++ {
 		var rawContent json.RawMessage
-		if content := contentByChoice[i]; content != "" {
+		if content := a.contentByChoice[i]; content != "" {
 			b, err := json.Marshal(content)
 			if err != nil {
-				logFn("chat-completions-decoder: failed to marshal content for choice %d: %s", i, err.Error())
+				a.logFn("chat-completions-decoder: failed to marshal content for choice %d: %s", i, err.Error())
 			} else {
 				rawContent = b
 			}
 		}
 
 		var toolCalls []chatToolCall
-		if tcMap, ok := toolCallsByChoice[i]; ok {
+		if tcMap, ok := a.toolCallsByChoice[i]; ok {
 			tcIdxs := make([]int, 0, len(tcMap))
 			for k := range tcMap {
 				tcIdxs = append(tcIdxs, k)
@@ -285,7 +320,7 @@ func decodeStreamingChatResponse(body []byte, logFn func(string, ...any)) (*deco
 		choices[i] = chatChoice{
 			Index: i,
 			Message: chatMessage{
-				Role:      roleByChoice[i],
+				Role:      a.roleByChoice[i],
 				Content:   rawContent,
 				ToolCalls: toolCalls,
 			},
@@ -294,6 +329,6 @@ func decodeStreamingChatResponse(body []byte, logFn func(string, ...any)) (*deco
 
 	return &decodedResponse{
 		Choices: choices,
-		Usage:   usage,
-	}, nil
+		Usage:   a.usage,
+	}
 }

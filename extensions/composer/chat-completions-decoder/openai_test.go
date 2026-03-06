@@ -264,27 +264,15 @@ func TestExtractContent_NullJSON(t *testing.T) {
 	require.Empty(t, extractContent([]byte(`null`)))
 }
 
-func TestIsSSEFormat_SSEBody(t *testing.T) {
-	body := []byte("data: {\"id\":\"chatcmpl-123\"}\n\ndata: [DONE]\n")
-	require.True(t, isSSEFormat(body))
+// feedByteByByte feeds data to the accumulator one byte at a time to exercise
+// incremental buffering of partial lines across multiple feed calls.
+func feedByteByByte(acc *sseAccumulator, data []byte) {
+	for _, b := range data {
+		acc.feed([]byte{b})
+	}
 }
 
-func TestIsSSEFormat_JSONBody(t *testing.T) {
-	body := []byte(`{"choices":[]}`)
-	require.False(t, isSSEFormat(body))
-}
-
-func TestIsSSEFormat_LeadingWhitespace(t *testing.T) {
-	body := []byte("\n\ndata: {}\n")
-	require.True(t, isSSEFormat(body))
-}
-
-func TestIsSSEFormat_Empty(t *testing.T) {
-	require.False(t, isSSEFormat([]byte{}))
-	require.False(t, isSSEFormat(nil))
-}
-
-func TestDecodeStreamingChatResponse_SimpleStream(t *testing.T) {
+func TestSSEAccumulator_SimpleStream_ByteByByte(t *testing.T) {
 	body := []byte(
 		"data: {\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\n" +
 			"data: {\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hello\"},\"finish_reason\":null}]}\n\n" +
@@ -293,8 +281,10 @@ func TestDecodeStreamingChatResponse_SimpleStream(t *testing.T) {
 			"data: [DONE]\n",
 	)
 
-	result, err := decodeStreamingChatResponse(body, t.Logf)
-	require.NoError(t, err)
+	acc := newSSEAccumulator(t.Logf)
+	feedByteByByte(acc, body)
+	result := acc.finish()
+
 	require.Len(t, result.Choices, 1)
 	require.Equal(t, "assistant", result.Choices[0].Message.Role)
 	require.Equal(t, "Hello world", extractContent(result.Choices[0].Message.Content))
@@ -304,36 +294,54 @@ func TestDecodeStreamingChatResponse_SimpleStream(t *testing.T) {
 	require.Equal(t, 15, result.Usage.TotalTokens)
 }
 
-func TestDecodeStreamingChatResponse_NoUsage(t *testing.T) {
+func TestSSEAccumulator_SimpleStream_SingleFeed(t *testing.T) {
 	body := []byte(
-		"data: {\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"Hi\"},\"finish_reason\":null}]}\n\n" +
-			"data: {\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n" +
+		"data: {\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\n" +
+			"data: {\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hello\"},\"finish_reason\":null}]}\n\n" +
+			"data: {\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" world\"},\"finish_reason\":null}]}\n\n" +
+			"data: {\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"total_tokens\":15}}\n\n" +
 			"data: [DONE]\n",
 	)
 
-	result, err := decodeStreamingChatResponse(body, t.Logf)
-	require.NoError(t, err)
+	acc := newSSEAccumulator(t.Logf)
+	acc.feed(body)
+	result := acc.finish()
+
+	require.Len(t, result.Choices, 1)
+	require.Equal(t, "assistant", result.Choices[0].Message.Role)
+	require.Equal(t, "Hello world", extractContent(result.Choices[0].Message.Content))
+	require.NotNil(t, result.Usage)
+	require.Equal(t, 10, result.Usage.PromptTokens)
+	require.Equal(t, 5, result.Usage.CompletionTokens)
+	require.Equal(t, 15, result.Usage.TotalTokens)
+}
+
+func TestSSEAccumulator_NoUsage(t *testing.T) {
+	acc := newSSEAccumulator(t.Logf)
+	acc.feed([]byte("data: {\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"Hi\"},\"finish_reason\":null}]}\n\n"))
+	acc.feed([]byte("data: {\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n"))
+	acc.feed([]byte("data: [DONE]\n"))
+	result := acc.finish()
+
 	require.Len(t, result.Choices, 1)
 	require.Equal(t, "Hi", extractContent(result.Choices[0].Message.Content))
 	require.Nil(t, result.Usage)
 }
 
-func TestDecodeStreamingChatResponse_WithToolCalls(t *testing.T) {
-	body := []byte(
-		// First chunk: start of tool call with id/name.
-		"data: {\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":null," +
-			"\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"\"}}]},\"finish_reason\":null}]}\n\n" +
-			// Second chunk: arguments fragment.
-			"data: {\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{" +
-			"\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"loc\\\":\\\"NYC\\\"}\"}}]},\"finish_reason\":null}]}\n\n" +
-			// Final chunk.
-			"data: {\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]," +
-			"\"usage\":{\"prompt_tokens\":20,\"completion_tokens\":10,\"total_tokens\":30}}\n\n" +
-			"data: [DONE]\n",
-	)
+func TestSSEAccumulator_WithToolCalls(t *testing.T) {
+	acc := newSSEAccumulator(t.Logf)
+	// First chunk: start of tool call with id/name.
+	acc.feed([]byte("data: {\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":null," +
+		"\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"\"}}]},\"finish_reason\":null}]}\n\n"))
+	// Second chunk: arguments fragment.
+	acc.feed([]byte("data: {\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{" +
+		"\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"loc\\\":\\\"NYC\\\"}\"}}]},\"finish_reason\":null}]}\n\n"))
+	// Final chunk.
+	acc.feed([]byte("data: {\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]," +
+		"\"usage\":{\"prompt_tokens\":20,\"completion_tokens\":10,\"total_tokens\":30}}\n\n"))
+	acc.feed([]byte("data: [DONE]\n"))
+	result := acc.finish()
 
-	result, err := decodeStreamingChatResponse(body, t.Logf)
-	require.NoError(t, err)
 	require.Len(t, result.Choices, 1)
 	require.Equal(t, "assistant", result.Choices[0].Message.Role)
 	require.Len(t, result.Choices[0].Message.ToolCalls, 1)
@@ -345,29 +353,55 @@ func TestDecodeStreamingChatResponse_WithToolCalls(t *testing.T) {
 	require.Equal(t, 30, result.Usage.TotalTokens)
 }
 
-func TestDecodeStreamingChatResponse_EmptyStream(t *testing.T) {
-	body := []byte("data: [DONE]\n")
+func TestSSEAccumulator_EmptyStream(t *testing.T) {
+	acc := newSSEAccumulator(t.Logf)
+	acc.feed([]byte("data: [DONE]\n"))
+	result := acc.finish()
 
-	result, err := decodeStreamingChatResponse(body, t.Logf)
-	require.NoError(t, err)
 	require.Empty(t, result.Choices)
 	require.Nil(t, result.Usage)
 }
 
-func TestDecodeStreamingChatResponse_SkipsInvalidChunks(t *testing.T) {
-	body := []byte(
+func TestSSEAccumulator_SkipsInvalidChunks(t *testing.T) {
+	var logMessages []string
+	acc := newSSEAccumulator(func(format string, args ...any) {
+		logMessages = append(logMessages, fmt.Sprintf(format, args...))
+	})
+	acc.feed([]byte(
 		"data: {invalid json}\n\n" +
 			"data: {\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"OK\"},\"finish_reason\":\"stop\"}]}\n\n" +
 			"data: [DONE]\n",
-	)
+	))
+	result := acc.finish()
 
-	var logMessages []string
-	result, err := decodeStreamingChatResponse(body, func(format string, args ...any) {
-		logMessages = append(logMessages, fmt.Sprintf(format, args...))
-	})
-	require.NoError(t, err)
 	require.Len(t, result.Choices, 1)
 	require.Equal(t, "OK", extractContent(result.Choices[0].Message.Content))
 	require.Len(t, logMessages, 1)
 	require.Contains(t, logMessages[0], "failed to parse streaming chunk")
+}
+
+func TestSSEAccumulator_IgnoresDataAfterDone(t *testing.T) {
+	acc := newSSEAccumulator(t.Logf)
+	acc.feed([]byte("data: {\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"Hi\"},\"finish_reason\":null}]}\n\n"))
+	acc.feed([]byte("data: [DONE]\n"))
+	// Data after [DONE] should be ignored.
+	acc.feed([]byte("data: {\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" extra\"},\"finish_reason\":null}]}\n\n"))
+	result := acc.finish()
+
+	require.Len(t, result.Choices, 1)
+	require.Equal(t, "Hi", extractContent(result.Choices[0].Message.Content))
+}
+
+func TestSSEAccumulator_PartialLineSplitAcrossFeeds(t *testing.T) {
+	acc := newSSEAccumulator(t.Logf)
+	// Split a data line right in the middle of the JSON payload.
+	line := "data: {\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"OK\"},\"finish_reason\":\"stop\"}]}\n\n"
+	acc.feed([]byte(line[:25]))
+	acc.feed([]byte(line[25:]))
+	acc.feed([]byte("data: [DONE]\n"))
+	result := acc.finish()
+
+	require.Len(t, result.Choices, 1)
+	require.Equal(t, "assistant", result.Choices[0].Message.Role)
+	require.Equal(t, "OK", extractContent(result.Choices[0].Message.Content))
 }

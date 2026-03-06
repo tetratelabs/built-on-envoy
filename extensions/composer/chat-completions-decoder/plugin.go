@@ -9,6 +9,7 @@ package impl
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/utility"
@@ -57,36 +58,75 @@ type decoderFilter struct {
 	shared.EmptyHttpFilter
 	handle shared.HttpFilterHandle
 	config *chatCompletionsDecoderConfig
+
+	requestProcessed  bool
+	responseProcessed bool
+	// sseAcc is non-nil when the response is a streaming SSE response.
+	// It accumulates parsed SSE events incrementally as body chunks arrive.
+	sseAcc *sseAccumulator
 }
 
 func (f *decoderFilter) OnRequestHeaders(_ shared.HeaderMap, endOfStream bool) shared.HeadersStatus {
-	if endOfStream {
-		return shared.HeadersStatusContinue
+	if !endOfStream {
+		// Wait for body and buffer it so we can parse the full request at once.
+		return shared.HeadersStatusStop
 	}
-	return shared.HeadersStatusStop
+	return shared.HeadersStatusContinue
 }
 
 func (f *decoderFilter) OnRequestBody(_ shared.BodyBuffer, endOfStream bool) shared.BodyStatus {
+	if f.requestProcessed {
+		return shared.BodyStatusContinue
+	}
 	if !endOfStream {
-		return shared.BodyStatusStopAndBuffer
+		return shared.BodyStatusStopAndBuffer // Keep buffering
 	}
 	f.decodeRequestBody()
 	return shared.BodyStatusContinue
 }
 
 func (f *decoderFilter) OnRequestTrailers(_ shared.HeaderMap) shared.TrailersStatus {
-	f.decodeRequestBody()
+	if !f.requestProcessed {
+		f.decodeRequestBody()
+	}
 	return shared.TrailersStatusContinue
 }
 
-func (f *decoderFilter) OnResponseHeaders(_ shared.HeaderMap, endOfStream bool) shared.HeadersStatus {
+func (f *decoderFilter) OnResponseHeaders(headers shared.HeaderMap, endOfStream bool) shared.HeadersStatus {
 	if endOfStream {
 		return shared.HeadersStatusContinue
 	}
+	// Detect streaming SSE responses by content-type so we can parse
+	// chunks incrementally without buffering the entire response.
+	if ct := headers.GetOne("content-type"); strings.HasPrefix(ct, "text/event-stream") {
+		f.sseAcc = newSSEAccumulator(func(format string, args ...any) {
+			f.handle.Log(shared.LogLevelDebug, format, args...)
+		})
+		return shared.HeadersStatusContinue
+	}
+	// If it's not a streaming response, buffer the entire body to decode it
 	return shared.HeadersStatusStop
 }
 
-func (f *decoderFilter) OnResponseBody(_ shared.BodyBuffer, endOfStream bool) shared.BodyStatus {
+func (f *decoderFilter) OnResponseBody(body shared.BodyBuffer, endOfStream bool) shared.BodyStatus {
+	if f.responseProcessed {
+		return shared.BodyStatusContinue
+	}
+
+	if f.sseAcc != nil { // Streaming SSE: feed each chunk incrementally.
+		if body != nil {
+			for _, chunk := range body.GetChunks() {
+				f.sseAcc.feed(chunk)
+			}
+		}
+		if endOfStream {
+			decoded := f.sseAcc.finish()
+			f.setResponseMetadata(f.config.MetadataNamespace, decoded)
+		}
+		return shared.BodyStatusContinue
+	}
+
+	// Non-streaming: buffer the entire response.
 	if !endOfStream {
 		return shared.BodyStatusStopAndBuffer
 	}
@@ -95,6 +135,16 @@ func (f *decoderFilter) OnResponseBody(_ shared.BodyBuffer, endOfStream bool) sh
 }
 
 func (f *decoderFilter) OnResponseTrailers(_ shared.HeaderMap) shared.TrailersStatus {
+	if f.responseProcessed {
+		return shared.TrailersStatusContinue
+	}
+
+	if f.sseAcc != nil {
+		decoded := f.sseAcc.finish()
+		f.setResponseMetadata(f.config.MetadataNamespace, decoded)
+		return shared.TrailersStatusContinue
+	}
+	// Non-streaming: buffer the entire response.
 	f.decodeResponseBody()
 	return shared.TrailersStatusContinue
 }
@@ -117,23 +167,14 @@ func (f *decoderFilter) decodeRequestBody() {
 }
 
 // decodeResponseBody reads the response body, parses the OpenAI ChatCompletion response,
-// and sets the structured information in filter metadata. Both regular JSON responses
-// and streaming SSE responses (when stream=true was requested) are supported.
+// and sets the structured information in filter metadata.
 func (f *decoderFilter) decodeResponseBody() {
 	bodyBytes := utility.ReadWholeResponseBody(f.handle)
 	if len(bodyBytes) == 0 {
 		return
 	}
 
-	var decoded *decodedResponse
-	var err error
-	if isSSEFormat(bodyBytes) {
-		decoded, err = decodeStreamingChatResponse(bodyBytes, func(format string, args ...any) {
-			f.handle.Log(shared.LogLevelDebug, format, args...)
-		})
-	} else {
-		decoded, err = decodeChatResponse(bodyBytes)
-	}
+	decoded, err := decodeChatResponse(bodyBytes)
 	if err != nil {
 		f.handle.Log(shared.LogLevelDebug, "chat-completions-decoder: failed to parse response: %s", err.Error())
 		return
@@ -145,6 +186,8 @@ func (f *decoderFilter) decodeResponseBody() {
 // setRequestMetadata writes the decoded request fields into Envoy's dynamic filter metadata
 // following the OpenInference Semantic Conventions.
 func (f *decoderFilter) setRequestMetadata(namespace string, d *decodedRequest) {
+	f.requestProcessed = true
+
 	f.handle.SetMetadata(namespace, "llm.model_name", d.Model)
 	f.handle.SetMetadata(namespace, "llm.system", "openai")
 	f.handle.SetMetadata(namespace, "llm.input_messages.count", len(d.Messages))
@@ -181,6 +224,8 @@ func (f *decoderFilter) setRequestMetadata(namespace string, d *decodedRequest) 
 // setResponseMetadata writes the decoded response fields into Envoy's dynamic filter metadata
 // following the OpenInference Semantic Conventions.
 func (f *decoderFilter) setResponseMetadata(namespace string, d *decodedResponse) {
+	f.responseProcessed = true
+
 	f.handle.SetMetadata(namespace, "llm.output_messages.count", len(d.Choices))
 	for i, choice := range d.Choices {
 		f.handle.SetMetadata(namespace, fmt.Sprintf("llm.output_messages.%d.message.role", i), choice.Message.Role)

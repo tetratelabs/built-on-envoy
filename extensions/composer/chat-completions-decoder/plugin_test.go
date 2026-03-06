@@ -360,11 +360,38 @@ func TestOnResponseHeaders_NotEndOfStream(t *testing.T) {
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnResponseHeaders(fake.NewFakeHeaderMap(map[string][]string{}), false)
 	require.Equal(t, shared.HeadersStatusStop, result)
+	require.Nil(t, filter.sseAcc)
+}
+
+func TestOnResponseHeaders_SSEContentType(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+
+	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
+	result := filter.OnResponseHeaders(fake.NewFakeHeaderMap(map[string][]string{
+		"content-type": {"text/event-stream"},
+	}), false)
+	require.Equal(t, shared.HeadersStatusContinue, result)
+	require.NotNil(t, filter.sseAcc)
+}
+
+func TestOnResponseHeaders_SSEContentTypeWithCharset(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+
+	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
+	result := filter.OnResponseHeaders(fake.NewFakeHeaderMap(map[string][]string{
+		"content-type": {"text/event-stream; charset=utf-8"},
+	}), false)
+	require.Equal(t, shared.HeadersStatusContinue, result)
+	require.NotNil(t, filter.sseAcc)
 }
 
 // --- Tests for decoderFilter.OnResponseBody ---
 
-func TestOnResponseBody_NotEndOfStream(t *testing.T) {
+func TestOnResponseBody_NotEndOfStream_NonStreaming(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
@@ -372,6 +399,17 @@ func TestOnResponseBody_NotEndOfStream(t *testing.T) {
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnResponseBody(newTestBodyBuffer([]byte("data")), false)
 	require.Equal(t, shared.BodyStatusStopAndBuffer, result)
+}
+
+func TestOnResponseBody_NotEndOfStream_Streaming(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+
+	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
+	filter.sseAcc = newSSEAccumulator(t.Logf)
+	result := filter.OnResponseBody(newTestBodyBuffer([]byte("data: {}\n\n")), false)
+	require.Equal(t, shared.BodyStatusContinue, result)
 }
 
 func TestOnResponseBody_EmptyBody(t *testing.T) {
@@ -583,7 +621,47 @@ func TestOnResponseTrailers_SetsMetadata(t *testing.T) {
 
 // --- Tests for streaming (SSE) response handling ---
 
+// sseHeaders returns a fake header map with content-type: text/event-stream.
+func sseHeaders() shared.HeaderMap {
+	return fake.NewFakeHeaderMap(map[string][]string{
+		"content-type": {"text/event-stream"},
+	})
+}
+
 func TestOnResponseBody_StreamingResponse_SetsMetadata(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+
+	chunk1 := []byte(
+		"data: {\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\n" +
+			"data: {\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hello\"},\"finish_reason\":null}]}\n\n",
+	)
+	chunk2 := []byte(
+		"data: {\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" world\"},\"finish_reason\":null}]}\n\n" +
+			"data: {\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]," +
+			"\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"total_tokens\":15}}\n\n" +
+			"data: [DONE]\n",
+	)
+
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.count", 1).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.role", "assistant").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.content", "Hello world").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.prompt", 10).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.completion", 5).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.total", 15).Times(1)
+
+	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
+	filter.OnResponseHeaders(sseHeaders(), false)
+
+	result := filter.OnResponseBody(newTestBodyBuffer(chunk1), false)
+	require.Equal(t, shared.BodyStatusContinue, result)
+
+	result = filter.OnResponseBody(newTestBodyBuffer(chunk2), true)
+	require.Equal(t, shared.BodyStatusContinue, result)
+}
+
+func TestOnResponseBody_StreamingResponse_SingleChunk(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
@@ -596,8 +674,6 @@ func TestOnResponseBody_StreamingResponse_SetsMetadata(t *testing.T) {
 			"\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"total_tokens\":15}}\n\n" +
 			"data: [DONE]\n",
 	)
-	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
-	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 
 	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.count", 1).Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.role", "assistant").Times(1)
@@ -607,6 +683,8 @@ func TestOnResponseBody_StreamingResponse_SetsMetadata(t *testing.T) {
 	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.total", 15).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
+	filter.OnResponseHeaders(sseHeaders(), false)
+
 	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
@@ -621,15 +699,14 @@ func TestOnResponseBody_StreamingResponse_NoUsage(t *testing.T) {
 			"data: {\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n" +
 			"data: [DONE]\n",
 	)
-	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
-	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 
 	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.count", 1).Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.role", "assistant").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.content", "Hi").Times(1)
-	// No token count calls expected when usage is absent.
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
+	filter.OnResponseHeaders(sseHeaders(), false)
+
 	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
@@ -648,12 +725,9 @@ func TestOnResponseBody_StreamingResponse_WithToolCalls(t *testing.T) {
 			"\"usage\":{\"prompt_tokens\":20,\"completion_tokens\":10,\"total_tokens\":30}}\n\n" +
 			"data: [DONE]\n",
 	)
-	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
-	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 
 	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.count", 1).Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.role", "assistant").Times(1)
-	// null content: no content key expected.
 	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.tool_calls.count", 1).Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.tool_calls.0.tool_call.id", "call_1").Times(1)
 	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.tool_calls.0.tool_call.function.name", "get_weather").Times(1)
@@ -663,6 +737,32 @@ func TestOnResponseBody_StreamingResponse_WithToolCalls(t *testing.T) {
 	mockHandle.EXPECT().SetMetadata("openai", "llm.token_count.total", 30).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
+	filter.OnResponseHeaders(sseHeaders(), false)
+
 	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
+	require.Equal(t, shared.BodyStatusContinue, result)
+}
+
+func TestOnResponseBody_StreamingResponse_ChunkSplitMidLine(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+
+	// Split a data line in the middle to test buffering of partial lines.
+	fullLine := "data: {\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"OK\"},\"finish_reason\":\"stop\"}]}\n\n"
+	chunk1 := []byte(fullLine[:20])
+	chunk2 := []byte(fullLine[20:] + "data: [DONE]\n")
+
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.count", 1).Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.role", "assistant").Times(1)
+	mockHandle.EXPECT().SetMetadata("openai", "llm.output_messages.0.message.content", "OK").Times(1)
+
+	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
+	filter.OnResponseHeaders(sseHeaders(), false)
+
+	result := filter.OnResponseBody(newTestBodyBuffer(chunk1), false)
+	require.Equal(t, shared.BodyStatusContinue, result)
+
+	result = filter.OnResponseBody(newTestBodyBuffer(chunk2), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
