@@ -48,6 +48,7 @@ func TestDecoderConfigFactory_Create_EmptyConfig(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockConfigHandle.EXPECT().Log(shared.LogLevelInfo, gomock.Any(), gomock.Any()).Times(1)
 
 	factory := &decoderConfigFactory{}
 	filterFactory, err := factory.Create(mockConfigHandle, []byte{})
@@ -63,6 +64,7 @@ func TestDecoderConfigFactory_Create_NilConfig(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockConfigHandle.EXPECT().Log(shared.LogLevelInfo, gomock.Any(), gomock.Any()).Times(1)
 
 	factory := &decoderConfigFactory{}
 	filterFactory, err := factory.Create(mockConfigHandle, nil)
@@ -78,6 +80,7 @@ func TestDecoderConfigFactory_Create_WithNamespace(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockConfigHandle.EXPECT().Log(shared.LogLevelInfo, gomock.Any(), gomock.Any()).Times(1)
 
 	cfg := `{"metadata_namespace": "custom-ns"}`
 	factory := &decoderConfigFactory{}
@@ -367,6 +370,7 @@ func TestOnResponseHeaders_SSEContentType(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any(), gomock.Any()).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnResponseHeaders(fake.NewFakeHeaderMap(map[string][]string{
@@ -380,6 +384,7 @@ func TestOnResponseHeaders_SSEContentTypeWithCharset(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any(), gomock.Any()).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnResponseHeaders(fake.NewFakeHeaderMap(map[string][]string{
@@ -632,6 +637,7 @@ func TestOnResponseBody_StreamingResponse_SetsMetadata(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any(), gomock.Any()).Times(1)
 
 	chunk1 := []byte(
 		"data: {\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\n" +
@@ -665,6 +671,7 @@ func TestOnResponseBody_StreamingResponse_SingleChunk(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any(), gomock.Any()).Times(1)
 
 	body := []byte(
 		"data: {\"id\":\"chatcmpl-123\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\n" +
@@ -693,6 +700,7 @@ func TestOnResponseBody_StreamingResponse_NoUsage(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any(), gomock.Any()).Times(1)
 
 	body := []byte(
 		"data: {\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"Hi\"},\"finish_reason\":null}]}\n\n" +
@@ -715,6 +723,7 @@ func TestOnResponseBody_StreamingResponse_WithToolCalls(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any(), gomock.Any()).Times(1)
 
 	body := []byte(
 		"data: {\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":null," +
@@ -747,6 +756,7 @@ func TestOnResponseBody_StreamingResponse_ChunkSplitMidLine(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any(), gomock.Any()).Times(1)
 
 	// Split a data line in the middle to test buffering of partial lines.
 	fullLine := "data: {\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"OK\"},\"finish_reason\":\"stop\"}]}\n\n"

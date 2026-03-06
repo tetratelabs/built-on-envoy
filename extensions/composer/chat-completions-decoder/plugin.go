@@ -29,7 +29,7 @@ type decoderConfigFactory struct {
 	shared.EmptyHttpFilterConfigFactory
 }
 
-func (f *decoderConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
+func (d *decoderConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
 	var cfg chatCompletionsDecoderConfig
 	if len(config) > 0 {
 		if err := json.Unmarshal(config, &cfg); err != nil {
@@ -40,6 +40,9 @@ func (f *decoderConfigFactory) Create(handle shared.HttpFilterConfigHandle, conf
 	if cfg.MetadataNamespace == "" {
 		cfg.MetadataNamespace = defaultMetadataNamespace
 	}
+
+	handle.Log(shared.LogLevelInfo, "chat-completions-decder: using metadata namespace %q", cfg.MetadataNamespace)
+
 	return &decoderFilterFactory{config: &cfg}, nil
 }
 
@@ -49,8 +52,8 @@ type decoderFilterFactory struct {
 	config *chatCompletionsDecoderConfig
 }
 
-func (f *decoderFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
-	return &decoderFilter{handle: handle, config: f.config}
+func (d *decoderFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
+	return &decoderFilter{handle: handle, config: d.config}
 }
 
 // decoderFilter implements shared.HttpFilter.
@@ -59,198 +62,211 @@ type decoderFilter struct {
 	handle shared.HttpFilterHandle
 	config *chatCompletionsDecoderConfig
 
-	requestProcessed  bool
-	responseProcessed bool
+	requestProcessed  bool // Guard to avoid processing the response body again in the request trailers.
+	responseProcessed bool // Guard to avoid processing the response body again in the response trailers.
 	// sseAcc is non-nil when the response is a streaming SSE response.
 	// It accumulates parsed SSE events incrementally as body chunks arrive.
 	sseAcc *sseAccumulator
 }
 
-func (f *decoderFilter) OnRequestHeaders(_ shared.HeaderMap, endOfStream bool) shared.HeadersStatus {
+func (d *decoderFilter) OnRequestHeaders(_ shared.HeaderMap, endOfStream bool) shared.HeadersStatus {
 	if !endOfStream {
-		// Wait for body and buffer it so we can parse the full request at once.
+		// If there is a body, we don't want to eagerly send the headers to the upstream until
+		// we've parsed it. Stop header processing here. It will be resumed when the OnRequestBody
+		// returns.
 		return shared.HeadersStatusStop
 	}
 	return shared.HeadersStatusContinue
 }
 
-func (f *decoderFilter) OnRequestBody(_ shared.BodyBuffer, endOfStream bool) shared.BodyStatus {
-	if f.requestProcessed {
-		return shared.BodyStatusContinue
-	}
+func (d *decoderFilter) OnRequestBody(_ shared.BodyBuffer, endOfStream bool) shared.BodyStatus {
 	if !endOfStream {
-		return shared.BodyStatusStopAndBuffer // Keep buffering
+		// Keep buffering the body until complete.
+		return shared.BodyStatusStopAndBuffer
 	}
-	f.decodeRequestBody()
+	d.decodeRequestBody()
 	return shared.BodyStatusContinue
 }
 
-func (f *decoderFilter) OnRequestTrailers(_ shared.HeaderMap) shared.TrailersStatus {
-	if !f.requestProcessed {
-		f.decodeRequestBody()
+func (d *decoderFilter) OnRequestTrailers(shared.HeaderMap) shared.TrailersStatus {
+	// If the request had trailers, Envoy would have not set the `endOfStream` flag, so the
+	// OnRequestBody method would have buffered the body but not processed it.
+	// If that's the case, we process the body here.
+	if !d.requestProcessed {
+		d.decodeRequestBody()
 	}
 	return shared.TrailersStatusContinue
 }
 
-func (f *decoderFilter) OnResponseHeaders(headers shared.HeaderMap, endOfStream bool) shared.HeadersStatus {
+func (d *decoderFilter) OnResponseHeaders(headers shared.HeaderMap, endOfStream bool) shared.HeadersStatus {
 	if endOfStream {
 		return shared.HeadersStatusContinue
 	}
 	// Detect streaming SSE responses by content-type so we can parse
 	// chunks incrementally without buffering the entire response.
 	if ct := headers.GetOne("content-type"); strings.HasPrefix(ct, "text/event-stream") {
-		f.sseAcc = newSSEAccumulator(func(format string, args ...any) {
-			f.handle.Log(shared.LogLevelDebug, format, args...)
+		d.handle.Log(shared.LogLevelDebug, "chat-completions-decoder: handling SSE response")
+		d.sseAcc = newSSEAccumulator(func(format string, args ...any) {
+			d.handle.Log(shared.LogLevelDebug, format, args...)
 		})
+		// Continue processing the response headers to leverage the response streaming
 		return shared.HeadersStatusContinue
 	}
-	// If it's not a streaming response, buffer the entire body to decode it
+	// If it's not a streaming response, we don't want to eagerly forward the response headers until
+	// we have processed the response body. We stop the header processing here and it will be resumed
+	// when the OnResponseBody returns.
 	return shared.HeadersStatusStop
 }
 
-func (f *decoderFilter) OnResponseBody(body shared.BodyBuffer, endOfStream bool) shared.BodyStatus {
-	if f.responseProcessed {
-		return shared.BodyStatusContinue
-	}
-
-	if f.sseAcc != nil { // Streaming SSE: feed each chunk incrementally.
+func (d *decoderFilter) OnResponseBody(body shared.BodyBuffer, endOfStream bool) shared.BodyStatus {
+	if d.sseAcc != nil { // Streaming SSE: feed each chunk incrementally.
 		if body != nil {
 			for _, chunk := range body.GetChunks() {
-				f.sseAcc.feed(chunk)
+				d.sseAcc.feed(chunk)
 			}
 		}
 		if endOfStream {
-			decoded := f.sseAcc.finish()
-			f.setResponseMetadata(f.config.MetadataNamespace, decoded)
+			d.decodeStreamingResponse()
 		}
 		return shared.BodyStatusContinue
 	}
 
 	// Non-streaming: buffer the entire response.
 	if !endOfStream {
+		// Keep buffering the body until complete.
 		return shared.BodyStatusStopAndBuffer
 	}
-	f.decodeResponseBody()
+	d.decodeResponseBody()
 	return shared.BodyStatusContinue
 }
 
-func (f *decoderFilter) OnResponseTrailers(_ shared.HeaderMap) shared.TrailersStatus {
-	if f.responseProcessed {
+func (d *decoderFilter) OnResponseTrailers(shared.HeaderMap) shared.TrailersStatus {
+	// If the response had trailers, Envoy would have not set the `endOfStream` flag, so the
+	// OnResponseBody method would have buffered the body but not processed it.
+	// If that's the case, we process the body here.
+	if d.responseProcessed {
 		return shared.TrailersStatusContinue
 	}
 
-	if f.sseAcc != nil {
-		decoded := f.sseAcc.finish()
-		f.setResponseMetadata(f.config.MetadataNamespace, decoded)
-		return shared.TrailersStatusContinue
+	if d.sseAcc != nil {
+		// Streaming SSE: complete processing the body.
+		d.decodeStreamingResponse()
+	} else {
+		// Non-streaming: read the buffered body.
+		d.decodeResponseBody()
 	}
-	// Non-streaming: buffer the entire response.
-	f.decodeResponseBody()
+
 	return shared.TrailersStatusContinue
 }
 
 // decodeRequestBody reads the request body, parses the OpenAI ChatCompletion request,
 // and sets the structured information in filter metadata.
-func (f *decoderFilter) decodeRequestBody() {
-	bodyBytes := utility.ReadWholeRequestBody(f.handle)
+func (d *decoderFilter) decodeRequestBody() {
+	d.requestProcessed = true
+
+	bodyBytes := utility.ReadWholeRequestBody(d.handle)
 	if len(bodyBytes) == 0 {
 		return
 	}
-
 	decoded, err := decodeChatRequest(bodyBytes)
 	if err != nil {
-		f.handle.Log(shared.LogLevelDebug, "chat-completions-decoder: failed to parse request: %s", err.Error())
+		d.handle.Log(shared.LogLevelDebug, "chat-completions-decoder: failed to parse request: %s", err.Error())
 		return
 	}
 
-	f.setRequestMetadata(f.config.MetadataNamespace, decoded)
+	d.setRequestMetadata(d.config.MetadataNamespace, decoded)
 }
 
 // decodeResponseBody reads the response body, parses the OpenAI ChatCompletion response,
 // and sets the structured information in filter metadata.
-func (f *decoderFilter) decodeResponseBody() {
-	bodyBytes := utility.ReadWholeResponseBody(f.handle)
+func (d *decoderFilter) decodeResponseBody() {
+	d.responseProcessed = true
+
+	bodyBytes := utility.ReadWholeResponseBody(d.handle)
 	if len(bodyBytes) == 0 {
 		return
 	}
-
 	decoded, err := decodeChatResponse(bodyBytes)
 	if err != nil {
-		f.handle.Log(shared.LogLevelDebug, "chat-completions-decoder: failed to parse response: %s", err.Error())
+		d.handle.Log(shared.LogLevelDebug, "chat-completions-decoder: failed to parse response: %s", err.Error())
 		return
 	}
 
-	f.setResponseMetadata(f.config.MetadataNamespace, decoded)
+	d.setResponseMetadata(d.config.MetadataNamespace, decoded)
+}
+
+// decodeStreamingResponse completes the processing of the response body after having
+// read all the SSE events.
+func (d *decoderFilter) decodeStreamingResponse() {
+	d.responseProcessed = true
+	decoded := d.sseAcc.finish()
+	d.setResponseMetadata(d.config.MetadataNamespace, decoded)
 }
 
 // setRequestMetadata writes the decoded request fields into Envoy's dynamic filter metadata
 // following the OpenInference Semantic Conventions.
-func (f *decoderFilter) setRequestMetadata(namespace string, d *decodedRequest) {
-	f.requestProcessed = true
+func (d *decoderFilter) setRequestMetadata(namespace string, req *chatCompletionRequest) {
+	d.handle.SetMetadata(namespace, "llm.model_name", req.Model)
+	d.handle.SetMetadata(namespace, "llm.system", "openai")
+	d.handle.SetMetadata(namespace, "llm.input_messages.count", len(req.Messages))
 
-	f.handle.SetMetadata(namespace, "llm.model_name", d.Model)
-	f.handle.SetMetadata(namespace, "llm.system", "openai")
-	f.handle.SetMetadata(namespace, "llm.input_messages.count", len(d.Messages))
-
-	for i, msg := range d.Messages {
-		f.handle.SetMetadata(namespace, fmt.Sprintf("llm.input_messages.%d.message.role", i), msg.Role)
+	for i, msg := range req.Messages {
+		d.handle.SetMetadata(namespace, fmt.Sprintf("llm.input_messages.%d.message.role", i), msg.Role)
 		if content := extractContent(msg.Content); content != "" {
-			f.handle.SetMetadata(namespace, fmt.Sprintf("llm.input_messages.%d.message.content", i), content)
+			d.handle.SetMetadata(namespace, fmt.Sprintf("llm.input_messages.%d.message.content", i), content)
 		}
 		if len(msg.ToolCalls) > 0 {
-			f.handle.SetMetadata(namespace, fmt.Sprintf("llm.input_messages.%d.message.tool_calls.count", i), len(msg.ToolCalls))
+			d.handle.SetMetadata(namespace, fmt.Sprintf("llm.input_messages.%d.message.tool_calls.count", i), len(msg.ToolCalls))
 			for j, tc := range msg.ToolCalls {
-				f.handle.SetMetadata(namespace,
+				d.handle.SetMetadata(namespace,
 					fmt.Sprintf("llm.input_messages.%d.message.tool_calls.%d.tool_call.id", i, j), tc.ID)
-				f.handle.SetMetadata(namespace,
+				d.handle.SetMetadata(namespace,
 					fmt.Sprintf("llm.input_messages.%d.message.tool_calls.%d.tool_call.function.name", i, j), tc.Function.Name)
-				f.handle.SetMetadata(namespace,
+				d.handle.SetMetadata(namespace,
 					fmt.Sprintf("llm.input_messages.%d.message.tool_calls.%d.tool_call.function.arguments", i, j), tc.Function.Arguments)
 			}
 		}
 	}
 
-	f.handle.SetMetadata(namespace, "llm.tools.count", len(d.Tools))
-	for i, tool := range d.Tools {
+	d.handle.SetMetadata(namespace, "llm.tools.count", len(req.Tools))
+	for i, tool := range req.Tools {
 		toolJSON, err := json.Marshal(tool)
 		if err != nil {
-			f.handle.Log(shared.LogLevelDebug, "chat-completions-decoder: failed to marshal tool %d: %s", i, err.Error())
+			d.handle.Log(shared.LogLevelDebug, "chat-completions-decoder: failed to marshal tool %d: %s", i, err.Error())
 			continue
 		}
-		f.handle.SetMetadata(namespace, fmt.Sprintf("llm.tools.%d.tool.json_schema", i), string(toolJSON))
+		d.handle.SetMetadata(namespace, fmt.Sprintf("llm.tools.%d.tool.json_schema", i), string(toolJSON))
 	}
 }
 
 // setResponseMetadata writes the decoded response fields into Envoy's dynamic filter metadata
 // following the OpenInference Semantic Conventions.
-func (f *decoderFilter) setResponseMetadata(namespace string, d *decodedResponse) {
-	f.responseProcessed = true
-
-	f.handle.SetMetadata(namespace, "llm.output_messages.count", len(d.Choices))
-	for i, choice := range d.Choices {
-		f.handle.SetMetadata(namespace, fmt.Sprintf("llm.output_messages.%d.message.role", i), choice.Message.Role)
+func (d *decoderFilter) setResponseMetadata(namespace string, resp *chatCompletionResponse) {
+	d.handle.SetMetadata(namespace, "llm.output_messages.count", len(resp.Choices))
+	for i, choice := range resp.Choices {
+		d.handle.SetMetadata(namespace, fmt.Sprintf("llm.output_messages.%d.message.role", i), choice.Message.Role)
 		if content := extractContent(choice.Message.Content); content != "" {
-			f.handle.SetMetadata(namespace, fmt.Sprintf("llm.output_messages.%d.message.content", i), content)
+			d.handle.SetMetadata(namespace, fmt.Sprintf("llm.output_messages.%d.message.content", i), content)
 		}
 		if len(choice.Message.ToolCalls) > 0 {
-			f.handle.SetMetadata(namespace, fmt.Sprintf("llm.output_messages.%d.message.tool_calls.count", i), len(choice.Message.ToolCalls))
+			d.handle.SetMetadata(namespace, fmt.Sprintf("llm.output_messages.%d.message.tool_calls.count", i), len(choice.Message.ToolCalls))
 			for j, tc := range choice.Message.ToolCalls {
-				f.handle.SetMetadata(namespace,
+				d.handle.SetMetadata(namespace,
 					fmt.Sprintf("llm.output_messages.%d.message.tool_calls.%d.tool_call.id", i, j), tc.ID)
-				f.handle.SetMetadata(namespace,
+				d.handle.SetMetadata(namespace,
 					fmt.Sprintf("llm.output_messages.%d.message.tool_calls.%d.tool_call.function.name", i, j), tc.Function.Name)
-				f.handle.SetMetadata(namespace,
+				d.handle.SetMetadata(namespace,
 					fmt.Sprintf("llm.output_messages.%d.message.tool_calls.%d.tool_call.function.arguments", i, j), tc.Function.Arguments)
 			}
 		}
 	}
-	if d.Usage != nil {
-		f.handle.SetMetadata(namespace, "llm.token_count.prompt", d.Usage.PromptTokens)
-		f.handle.SetMetadata(namespace, "llm.token_count.completion", d.Usage.CompletionTokens)
-		f.handle.SetMetadata(namespace, "llm.token_count.total", d.Usage.TotalTokens)
-		if d.Usage.CompletionTokensDetails != nil {
-			f.handle.SetMetadata(namespace, "llm.token_count.completion_details.reasoning", d.Usage.CompletionTokensDetails.ReasoningTokens)
-			f.handle.SetMetadata(namespace, "llm.token_count.completion_details.audio", d.Usage.CompletionTokensDetails.AudioTokens)
+	if resp.Usage != nil {
+		d.handle.SetMetadata(namespace, "llm.token_count.prompt", resp.Usage.PromptTokens)
+		d.handle.SetMetadata(namespace, "llm.token_count.completion", resp.Usage.CompletionTokens)
+		d.handle.SetMetadata(namespace, "llm.token_count.total", resp.Usage.TotalTokens)
+		if resp.Usage.CompletionTokensDetails != nil {
+			d.handle.SetMetadata(namespace, "llm.token_count.completion_details.reasoning", resp.Usage.CompletionTokensDetails.ReasoningTokens)
+			d.handle.SetMetadata(namespace, "llm.token_count.completion_details.audio", resp.Usage.CompletionTokensDetails.AudioTokens)
 		}
 	}
 }
