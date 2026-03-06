@@ -51,10 +51,11 @@ examples:
       Downstream filters can access `openai.llm.model_name`,
       `openai.llm.input_messages.0.message.role`, etc.
     code: |
-      boe run --extension chat-completions-decoder
+      boe run --extension chat-completions-decoder --test-upstream-host api.openai.com
 
       # Send a chat completion request
       curl -X POST http://localhost:10000/v1/chat/completions \
+        -H "Authorization: Bearer $OPENAI_APIKEY" \
         -H "Content-Type: application/json" \
         -d '{
           "model": "gpt-4o",
@@ -78,7 +79,8 @@ examples:
       Use a custom namespace to avoid conflicts with other filters that also write
       to filter metadata.
     code: |
-      boe run --extension chat-completions-decoder --config '{"metadata_namespace": "llm-request"}'
+      boe run --extension chat-completions-decoder --config '{"metadata_namespace": "llm-request"}' \
+        --test-upstream-host api.openai.com
 
       # Metadata will now be under the "llm-request" namespace:
       # llm.model_name                       = "gpt-4o"
@@ -92,9 +94,10 @@ examples:
       When the request includes tool definitions, each tool is stored under
       `llm.tools.N.tool.json_schema` as a JSON string, following the OpenInference spec.
     code: |
-      boe run --extension chat-completions-decoder
+      boe run --extension chat-completions-decoder --test-upstream-host api.openai.com
 
       curl -X POST http://localhost:10000/v1/chat/completions \
+        -H "Authorization: Bearer $OPENAI_APIKEY" \
         -H "Content-Type: application/json" \
         -d '{
           "model": "gpt-4o",
@@ -114,9 +117,10 @@ examples:
       captures the tool call details from the request. The response metadata includes the
       assistant reply and token usage.
     code: |
-      boe run --extension chat-completions-decoder
+      boe run --extension chat-completions-decoder --test-upstream-host api.openai.com
 
       curl -X POST http://localhost:10000/v1/chat/completions \
+        -H "Authorization: Bearer $OPENAI_APIKEY" \
         -H "Content-Type: application/json" \
         -d '{
           "model": "gpt-4o",
