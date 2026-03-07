@@ -7,19 +7,26 @@ package cmd
 
 import (
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"text/tabwriter"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 )
 
+// indexURL is the URL for the extensions index JSON.
+const indexURL = "https://builtonenvoy.io/extensions.json"
+
 // List is a command that lists available extensions.
 type List struct {
-	output io.Writer `kong:"-"` // Internal field for testing
+	output   io.Writer `kong:"-"` // Internal field for testing
+	indexURL string    `kong:"-"` // Internal field for testing
 }
 
 //go:embed list_help.md
@@ -32,6 +39,15 @@ func (l *List) Help() string { return listHelp }
 func (l *List) Run(logger *slog.Logger) error {
 	logger.Debug("handling list command", "cmd", l)
 
+	url := indexURL
+	if l.indexURL != "" {
+		url = l.indexURL
+	}
+	index, err := fetchIndex(url)
+	if err != nil {
+		return fmt.Errorf("failed to fetch extensions index: %w", err)
+	}
+
 	out := l.output
 	if out == nil {
 		out = os.Stdout
@@ -41,7 +57,7 @@ func (l *List) Run(logger *slog.Logger) error {
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	_, _ = fmt.Fprintln(w, "NAME\tVERSION\tTYPE\tDESCRIPTION")
 
-	for _, m := range extensions.ManifestsIndex() {
+	for _, m := range index {
 		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
 			m.Name,
 			m.Version,
@@ -51,6 +67,34 @@ func (l *List) Run(logger *slog.Logger) error {
 	}
 
 	return w.Flush()
+}
+
+// fetchIndex fetches the extensions index from the given URL.
+func fetchIndex(url string) ([]*extensions.ManifestIndexEntry, error) {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		_ = resp.Body.Close()
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var index []*extensions.ManifestIndexEntry
+	if err := json.NewDecoder(resp.Body).Decode(&index); err != nil {
+		return nil, err
+	}
+
+	slices.SortFunc(index, func(a, b *extensions.ManifestIndexEntry) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+
+	return index, nil
 }
 
 // truncateDescription truncates a description to the specified max length,
