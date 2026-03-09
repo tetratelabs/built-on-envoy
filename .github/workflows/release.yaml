@@ -45,7 +45,9 @@ jobs:
         shell: bash
         run: |
           # Set the TAG to force the version of the Docker images
-          echo "TAG=${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}" >> "$GITHUB_ENV"
+          TAG="${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}"
+          # Strip the `v` prefix if it exists, as our tags are in the format `v0.2.0` but we want the version to be `0.2.0`
+          echo "TAG=${TAG#v}" >> "$GITHUB_ENV"
 
       - run: make build
       - run: make push_image
