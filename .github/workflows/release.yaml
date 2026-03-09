@@ -40,14 +40,13 @@ jobs:
       - uses: docker/setup-qemu-action@v3
         with:
           platforms: amd64,arm64
-      
+
       - name: "Set release tag"
-        if: ${{ github.ref_type == 'tag' }}
         shell: bash
         run: |
           # Set the TAG to force the version of the Docker images
-          echo "TAG=${{ inputs.tag }}" >> "$GITHUB_ENV"
-      
+          echo "TAG=${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}" >> "$GITHUB_ENV"
+
       - run: make build
       - run: make push_image
 
