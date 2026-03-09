@@ -35,12 +35,6 @@ cd built-on-envoy/cli
 make
 ```
 
-### List Available Extensions
-
-```bash
-boe list
-```
-
 ### Run an Extension
 
 ```bash
@@ -51,11 +45,18 @@ boe run --extension example-go
 boe run --local ./my-extension
 ```
 
+For more examples, take a look at the [extension catalog](https://builtonenvoy.io/extensions/) and the
+[run command](https://builtonenvoy.io/docs/cli/run/).
+
+
 ### Generate Envoy Configuration
 
 ```bash
 boe gen-config --extension example-go > envoy.yaml
 ```
+
+Read more about [exporting configuration and extensions](https://builtonenvoy.io/docs/custom-envoy-config/) and the
+[gen-config command](https://builtonenvoy.io/docs/cli/gen-config/).
 
 ## Contributing Extensions
 
@@ -63,9 +64,10 @@ boe gen-config --extension example-go > envoy.yaml
 2. Create a new directory under `extensions/` with your extension name.
 3. Add a `manifest.yaml` file with the required metadata.
 4. Add your extension code.
-5. Open a pull request!
+5. Add tests.
+6. Open a pull request!
 
-See the [Extension Guide](./extensions/) for more details.
+See the [Contributing Guidelines](./CONTRIBUTING.md) and the [Project Documentation](https://builtonenvoy.io/docs) for more details.
 
 ## License
 
