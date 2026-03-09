@@ -46,6 +46,9 @@ jobs:
           # Strip the `v` prefix if it exists, as our tags are in the format `v0.2.0` but we want the version to be `0.2.0`
           echo "TAG=${TAG#v}" >> "$GITHUB_ENV"
 
+      # Build the Darwin binaries separately as we are not pushing Docker images for Darwin.
+      # The push_image job will already build the Linux binaries before building the Docker image.
+      - run: make -C cli build GOOS_LIST="darwin" GOARCH_LIST="amd64 arm64"
       - run: make -C cli push_image
 
       # If it is an RC, upload the release bundle as an artifact, as we won't be generating
