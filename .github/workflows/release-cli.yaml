@@ -3,7 +3,7 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-name: Release
+name: Release CLI
 
 on:
   push:
@@ -22,9 +22,6 @@ env:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./cli
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -49,8 +46,7 @@ jobs:
           # Strip the `v` prefix if it exists, as our tags are in the format `v0.2.0` but we want the version to be `0.2.0`
           echo "TAG=${TAG#v}" >> "$GITHUB_ENV"
 
-      - run: make build
-      - run: make push_image
+      - run: make -C cli push_image
 
       # If it is an RC, upload the release bundle as an artifact, as we won't be generating
       # a GitHub release for RCs.
@@ -58,13 +54,13 @@ jobs:
         if: contains(github.ref, '-rc')
         with:
           name: cli-binaries
-          path: out/
+          path: cli/out/
           if-no-files-found: ignore
 
       # Only generate GitHub releases for final releases, not RCs.
       - uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref, '-rc')
         with:
-          files: out/*
+          files: cli/out/*
           draft: true
           generate_release_notes: true
