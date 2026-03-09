@@ -29,6 +29,7 @@ type GenConfig struct {
 	AdminPort  uint32   `help:"Port for Envoy admin interface." default:"9901"`
 	Extensions []string `name:"extension" help:"Extensions to enable (in the format: \"name\" or \"name:version\")." sep:","`
 	Local      []string `name:"local" help:"Path to a directory containing a local Extension to enable." type:"existingdir" sep:","`
+	Dev        bool     `help:"Whether to allow downloading dev versions of extensions (with -dev suffix). By default, only stable versions are allowed." default:"false"`
 	// sep:"none" disables Kong's default comma-separated splitting for []string flags.
 	// JSON config values contain commas (e.g. {"a":"1","b":"2"}) which would otherwise
 	// be split into separate invalid fragments, causing protobuf unmarshal failures.
@@ -74,14 +75,15 @@ func (g *GenConfig) Run(ctx context.Context, dirs *xdg.Directories, logger *slog
 	}
 
 	downloader := &extensions.Downloader{
-		Logger:   logger,
-		Registry: g.OCI.Registry,
-		Username: g.OCI.Username,
-		Password: g.OCI.Password,
-		Insecure: g.OCI.Insecure,
-		Dirs:     dirs,
-		OS:       runtime.GOOS,
-		Arch:     runtime.GOARCH,
+		Logger:      logger,
+		Registry:    g.OCI.Registry,
+		Username:    g.OCI.Username,
+		Password:    g.OCI.Password,
+		Insecure:    g.OCI.Insecure,
+		Dirs:        dirs,
+		OS:          runtime.GOOS,
+		Arch:        runtime.GOARCH,
+		DevVersions: g.Dev,
 	}
 
 	// If we're only generating config to print to the stdout, we can skip building the extensions

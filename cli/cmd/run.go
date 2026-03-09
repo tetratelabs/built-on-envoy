@@ -37,6 +37,7 @@ type Run struct {
 	AdminPort    uint32   `help:"Port for Envoy admin interface." default:"9901"`
 	Extensions   []string `name:"extension" help:"Extensions to enable (in the format: \"name\" or \"name:version\")."`
 	Local        []string `name:"local" sep:"none" help:"Path to a directory containing a local Extension to enable." type:"existingdir"`
+	Dev          bool     `help:"Whether to allow downloading dev versions of extensions (with -dev suffix). By default, only stable versions are allowed." default:"false"`
 	// sep:"none" disables Kong's default comma-separated splitting for []string flags.
 	// JSON config values contain commas (e.g. {"a":"1","b":"2"}) which would otherwise
 	// be split into separate invalid fragments, causing protobuf unmarshal failures.
@@ -118,14 +119,15 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 	}
 
 	downloader := &extensions.Downloader{
-		Logger:   logger,
-		Registry: r.OCI.Registry,
-		Username: r.OCI.Username,
-		Password: r.OCI.Password,
-		Insecure: r.OCI.Insecure,
-		Dirs:     dirs,
-		OS:       runtime.GOOS,
-		Arch:     runtime.GOARCH,
+		Logger:      logger,
+		Registry:    r.OCI.Registry,
+		Username:    r.OCI.Username,
+		Password:    r.OCI.Password,
+		Insecure:    r.OCI.Insecure,
+		Dirs:        dirs,
+		OS:          runtime.GOOS,
+		Arch:        runtime.GOARCH,
+		DevVersions: r.Dev,
 	}
 
 	downloaded, err := downloadExtensions(ctx, downloader, r.Extensions, true)

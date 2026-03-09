@@ -54,16 +54,23 @@ func TestGetLatestTag(t *testing.T) {
 	errNetwork := errors.New("network error")
 
 	tests := []struct {
-		name    string
-		tags    []string
-		tagsErr error
-		wantTag string
-		wantErr error
+		name     string
+		tags     []string
+		allowDev bool
+		tagsErr  error
+		wantTag  string
+		wantErr  error
 	}{
 		{
-			name:    "returns first tag from sorted list",
-			tags:    []string{"2.0.0", "1.5.0", "1.0.0"},
+			name:    "returns first tag from sorted list does not allow dev",
+			tags:    []string{"3.0.0-dev", "2.0.0", "1.5.0", "1.0.0"},
 			wantTag: "2.0.0",
+		},
+		{
+			name:     "returns first tag from sorted list allows dev",
+			tags:     []string{"3.0.0-dev", "2.0.0", "1.5.0", "1.0.0"},
+			allowDev: true,
+			wantTag:  "3.0.0-dev",
 		},
 		{
 			name:    "empty tags list",
@@ -89,7 +96,7 @@ func TestGetLatestTag(t *testing.T) {
 				tagsErr: tt.tagsErr,
 			}
 
-			tag, err := getLatestTag(t.Context(), client, "test-repo")
+			tag, err := getLatestTag(t.Context(), client, "test-repo", tt.allowDev)
 			require.ErrorIs(t, err, tt.wantErr)
 			require.Equal(t, tt.wantTag, tag)
 		})

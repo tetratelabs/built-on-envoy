@@ -84,6 +84,7 @@ func TestDockerRemoteExtension(t *testing.T) {
 	proc := internaltesting.RunCLI(t, cliBin, "run",
 		"--docker",
 		"--listen-port", "11000",
+		"--dev",
 		"--log-level", "dynamic_modules:debug",
 		"--extension", "example-go")
 

@@ -55,6 +55,9 @@ Flags:
                                    or "name:version").
       --local=LOCAL                Path to a directory containing a local
                                    Extension to enable.
+      --dev                        Whether to allow downloading dev versions of
+                                   extensions (with -dev suffix). By default,
+                                   only stable versions are allowed.
       --config=CONFIG              Optional JSON config string for extensions.
                                    Applied in order to combined --extension and
                                    --local flags.
