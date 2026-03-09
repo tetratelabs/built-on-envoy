@@ -90,6 +90,7 @@ boe run --help
 | `--admin-port` | Port for Envoy admin interface. | `uint32` | `9901` | - | No |
 | `--extension` | Extensions to enable (in the format: "name" or "name:version"). | `[]string` | - | - | No |
 | `--local` | Path to a directory containing a local Extension to enable. | `[]string` | - | - | No |
+| `--dev` | Whether to allow downloading dev versions of extensions (with -dev suffix). By default, only stable versions are allowed. | `bool` | `false` | - | No |
 | `--config` | Optional JSON config string for extensions. Applied in order to combined --extension and --local flags. | `[]string` | - | - | No |
 | `--cluster` | Optional additional Envoy cluster provided in the host:tlsPort pattern. | `[]string` | - | - | No |
 | `--cluster-insecure` | Optional additional Envoy cluster (with TLS transport disabled) provided in the host:port pattern. | `[]string` | - | - | No |
