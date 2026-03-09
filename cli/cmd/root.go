@@ -8,6 +8,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/alecthomas/kong"
 
+	"github.com/tetratelabs/built-on-envoy/cli/internal"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
@@ -33,6 +35,7 @@ type CLI struct {
 	GenConfig GenConfig `cmd:"" help:"Generate Envoy configuration with extensions"`
 	Create    Create    `cmd:"" help:"Create a new extension template"`
 	Clean     Clean     `cmd:"" help:"Clean cache directories"`
+	Version   Version   `cmd:"" help:"Print version information"`
 
 	// Global XDG flags
 	ConfigHome  string `name:"config-home" env:"BOE_CONFIG_HOME" help:"Configuration files directory. Defaults to ~/.config/boe" type:"path" default:"~/.config/boe"`
@@ -68,6 +71,21 @@ func (c *CLI) BeforeApply(ctx *kong.Context) error {
 	}
 	ctx.Bind(logger)
 
+	return nil
+}
+
+// Version command
+type Version struct {
+	output io.Writer `kong:"-"` // Internal field for testing
+}
+
+// Run executes the version command, printing the version information to the output.
+func (v *Version) Run() error {
+	out := v.output
+	if out == nil {
+		out = os.Stdout
+	}
+	_, _ = fmt.Fprintf(out, "Built On Envoy CLI: %s\n", internal.ParseVersion())
 	return nil
 }
 

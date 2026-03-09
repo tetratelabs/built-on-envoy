@@ -12,6 +12,11 @@ OCI_REGISTRY ?= $(or $(BOE_REGISTRY),ghcr.io/tetratelabs/built-on-envoy)
 TAG          ?= latest
 COMMIT_SHA   := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
 
+# This is the package that contains the version information for the build.
+VERSION_STRING:=$(shell git describe --tags --long)
+VERSION_PACKAGE := github.com/tetratelabs/built-on-envoy/cli/internal
+GO_LDFLAGS += -X $(VERSION_PACKAGE).version=$(VERSION_STRING)
+
 # Arguments for go test. This can be used, for example, to run specific tests via
 # `GO_TEST_ARGS="-run TestName/foo/etc -v -race"`
 GO_TEST_ARGS ?=
@@ -53,7 +58,7 @@ build: gen-code  ## Build a binary for the given OS and architectures
 	@for goos in $(GOOS_LIST); do \
 		for goarch in $(GOARCH_LIST); do \
 			echo "-> Building for $$goos/$$goarch"; \
-			CGO_ENABLED=0 GOOS=$$goos GOARCH=$$goarch go build \
+			CGO_ENABLED=0 GOOS=$$goos GOARCH=$$goarch go build -ldflags "$(GO_LDFLAGS)" \
 				-o $(OUTPUT_DIR)/$(NAME)-$$goos-$$goarch .; \
 			echo "<- Built $(OUTPUT_DIR)/$(NAME)-$$goos-$$goarch"; \
 		done; \
