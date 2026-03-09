@@ -10,20 +10,6 @@
 [![Slack](https://img.shields.io/badge/Slack-Tetrate%20Community-purple)](https://tetrate-community.slack.com/archives/C0AG8GLT41E)
 
 
-> [!Note]
-> Site password: https://linkly.link/2cgfR
->
-> For **early access to Built On Envoy**, you'll have to configure the following
-> environment variables, and to a `docker login` as follows because the GitHub repository is still private:
-> ```
-> export BOE_REGISTRY_USERNAME=<your GitHub user>
-> export BOE_REGISTRY_PASSWORD=<GitHub Personal Access Token>
->
-> echo $BOE_REGISTRY_PASSWORD | docker login ghcr.io -u $BOE_REGISTRY_USERNAME --password-stdin
-> ```
-> The GitHub PAT needs to have the `read:packages` scope. You can find more information on how to create your PAT
-> [here](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens?versionId=free-pro-team%40latest&productId=apps&restPage=oauth-apps%2Cbuilding-oauth-apps%2Cscopes-for-oauth-apps#creating-a-personal-access-token-classic).
-
 A community-driven marketplace for Envoy Proxy extensions. Discover, run, and build custom filters with zero friction.
 
 ## Project Overview
