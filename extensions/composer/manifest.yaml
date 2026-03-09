@@ -4,8 +4,8 @@
 # the root of the repo.
 
 name: composer
-version: 0.3.0-dev
-composerVersion: 0.3.0-dev
+version: 0.3.0
+composerVersion: 0.3.0
 minEnvoyVersion: 1.37.0
 categories:
   - Misc
