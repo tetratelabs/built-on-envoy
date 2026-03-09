@@ -175,6 +175,8 @@ func TestParseCmdVersionHelp(t *testing.T) {
 
 Print version information
 
+Print the version information for the Built On Envoy CLI.
+
 Flags:
   -h, --help                     Show context-sensitive help.
       --config-home="~/.config/boe"

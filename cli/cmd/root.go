@@ -79,6 +79,11 @@ type Version struct {
 	output io.Writer `kong:"-"` // Internal field for testing
 }
 
+// Help provides detailed help for the version command.
+func (v *Version) Help() string {
+	return "Print the version information for the Built On Envoy CLI."
+}
+
 // Run executes the version command, printing the version information to the output.
 func (v *Version) Run() error {
 	out := v.output
