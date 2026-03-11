@@ -7,6 +7,7 @@
 [![Extensions](https://github.com/tetratelabs/built-on-envoy/actions/workflows/extensions.yaml/badge.svg)](https://github.com/tetratelabs/built-on-envoy/actions/workflows/extensions.yaml)
 [![Extensions Coverage](https://img.shields.io/codecov/c/github/tetratelabs/built-on-envoy?token=v4u6VpZSqZ&logo=codecov&logoColor=lightgray&flag=extensions&label=Extensions)](https://codecov.io/gh/tetratelabs/built-on-envoy)
 [![License](https://img.shields.io/badge/License-Apache%202.0-red)](LICENSE)
+[![Slack](https://img.shields.io/badge/Slack-Tetrate%20Community-purple)](https://join.slack.com/t/tetrate-community/shared_invite/zt-3rvq88b6s-siA~G2zGSF~sVoxwnl_krw)
 
 
 A community-driven marketplace for Envoy Proxy extensions. Discover, run, and build custom filters with zero friction.

@@ -8,4 +8,4 @@ export const EXTENSIONS_PATH = 'extensions';
 
 export const WEBSITE = 'https://builtonenvoy.io';
 
-export const SLACK = 'https://tetrate-community.slack.com/archives/C0AG8GLT41E';
+export const SLACK = 'https://join.slack.com/t/tetrate-community/shared_invite/zt-3rvq88b6s-siA~G2zGSF~sVoxwnl_krw';
