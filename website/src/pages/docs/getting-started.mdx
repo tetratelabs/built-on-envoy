@@ -18,6 +18,13 @@ Choose your preferred installation method:
 curl -sL https://builtonenvoy.io/install.sh | sh
 ```
 
+### Homebrew
+
+```bash
+brew tap tetratelabs/boe
+brew install boe
+```
+
 ### Build from source
 
 ```bash
@@ -45,7 +52,7 @@ system and architecture, and start it preconfigured with the requested extension
 upstream:
 
 ```shell
-boe run --extension example-lua --extension cache
+boe run --extension example-go --extension chat-completions-decoder
 ```
 
 Or run extensions directly from a local directory:
@@ -59,7 +66,7 @@ boe run --local ./my-extension
 Inspect the Envoy configuration so that you can replicate it in your environment:
 
 ```shell
-boe gen-config --extension example-lua --local ./my-extension >envoy.yaml
+boe gen-config --extension example-go --local ./my-extension --output /tmp/config-export
 ```
 
 ## Next steps

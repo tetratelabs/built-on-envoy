@@ -15,7 +15,7 @@ Local extensions use `file://` URLs pointing to the locally cached binaries.
 
 ## Examples
 
-Generate a complete Envoy configuration with the `example-lua` extension:
+Generate a complete Envoy configuration for the desired extensions:
 
     ```shell
     boe gen-config --extension ip-restriction
@@ -56,5 +56,5 @@ Generate configuration from a specific version hosted in a custom OCI registry:
     export BOE_REGISTRY_USERNAME=username
     export BOE_REGISTRY_PASSWORD=password
 
-    boe gen-config --extension example-lua:1.0.0
+    boe gen-config --extension example-go:0.3.0
     ```

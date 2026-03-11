@@ -8,7 +8,7 @@ const highlighter = await createHighlighter({
 });
 
 const installCmd = `curl -sL ${WEBSITE}/install.sh | sh`;
-const runCmd = `${CLI_NAME} run --extension example-go --extension example-lua`;
+const runCmd = `${CLI_NAME} run --extension example-go --local ./my-extension`;
 
 const installHtml = highlighter.codeToHtml(installCmd, { lang: 'bash', theme: 'github-dark' });
 const runHtml = highlighter.codeToHtml(runCmd, { lang: 'bash', theme: 'github-dark' });
