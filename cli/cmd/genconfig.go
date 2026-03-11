@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 
@@ -182,7 +183,8 @@ func (g *GenConfig) writeConfig(
 			// This way we can generate an exported Envoy configuration that works out-of-the-box with func-e and
 			// Docker, without requiring users to manually copy the extension files.
 			dstExtensionFile = filepath.Join(g.Output, m.Name+".so")
-			config = strings.ReplaceAll(config, srcExtensionFile, m.Name+".so")
+			re := regexp.MustCompile(`"url"\s*:\s*"[^"]*` + regexp.QuoteMeta(m.Name) + `[^"]*"`)
+			config = re.ReplaceAllString(config, `"url":"file://`+m.Name+`.so"`)
 		default:
 			dstExtensionFile = filepath.Join(g.Output, filepath.Base(srcExtensionFile))
 		}
