@@ -49,10 +49,11 @@ boe list
 
 Easily run any extension. The `boe` CLI will automatically download Envoy for your operating
 system and architecture, and start it preconfigured with the requested extensions and a test
-upstream:
+upstream. By default it will proxy traffic to https://httpbin.org unless a different test
+upstream host is set with the `--test-upstream-host` parameter:
 
 ```shell
-boe run --extension example-go --extension chat-completions-decoder
+boe run --extension example-go
 ```
 
 Or run extensions directly from a local directory:
@@ -61,24 +62,16 @@ Or run extensions directly from a local directory:
 boe run --local ./my-extension
 ```
 
-### Generate Envoy configuration
-
-Inspect the Envoy configuration so that you can replicate it in your environment:
-
-```shell
-boe gen-config --extension example-go --local ./my-extension --output /tmp/config-export
-```
-
 ## Next steps
 
 - Explore the CLI Commands:
   - [boe list](/docs/cli/list) - List available extensions.
   - [boe run](/docs/cli/run) - Run Envoy with extensions.
-  - [boe gen-config](/docs/cli/gen-config) - Generate Envoy configuration.
 - Read about the different [extension types](/docs/extension-types).
 - Create your own extensions:
   - [Create and run extensions locally](/docs/running-local-extensions).
   - [Create your first Go extension](/docs/writing-go-extensions).
   - [Create your first Rust extension](/docs/writing-rust-extensions).
+- [Export the configuration and compiled extensions](/docs/custom-envoy-config).
 - Browse the [Extensions Catalog](/extensions) to find extensions for your use case.
 - Check the [Extension Manifest Reference](/docs/reference/manifest) to create your own extensions.
