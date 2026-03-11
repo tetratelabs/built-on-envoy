@@ -28,7 +28,8 @@ A community-driven marketplace for Envoy Proxy extensions. Discover, run, and bu
 
 ## Get In Touch
 
-Slack: Join the [Tetrate Community workspace](https://join.slack.com/t/tetrate-community/shared_invite/zt-3rvq88b6s-siA~G2zGSF~sVoxwnl_krw) if you're not already a member
+* Share your feedback and ideas in [issues](https://github.com/tetratelabs/built-on-envoy/issues) or [discussions](https://github.com/tetratelabs/built-on-envoy/discussions).
+* Join the [Tetrate Community Slack](https://join.slack.com/t/tetrate-community/shared_invite/zt-3rvq88b6s-siA~G2zGSF~sVoxwnl_krw) if you're not already a member.
 Otherwise, use the [#built-on-envoy channel](https://tetrate-community.slack.com/archives/C0AG8GLT41E) to start collaborating with the community.
 
 ## Contributing Extensions
