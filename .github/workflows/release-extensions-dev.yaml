@@ -16,7 +16,7 @@ jobs:
       changed-extensions: ${{ steps.detect.outputs.extensions }}
       has-changes: ${{ steps.detect.outputs.has-changes }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
