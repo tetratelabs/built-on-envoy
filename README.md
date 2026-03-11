@@ -26,6 +26,11 @@ A community-driven marketplace for Envoy Proxy extensions. Discover, run, and bu
 * [CLI Reference](https://builtonenvoy.io/docs/cli/run)
 * [Security Considerations](https://builtonenvoy.io/docs/security-considerations)
 
+## Get In Touch
+
+Slack: Join the [Tetrate Community workspace](https://join.slack.com/t/tetrate-community/shared_invite/zt-3rvq88b6s-siA~G2zGSF~sVoxwnl_krw) if you're not already a member
+Otherwise, use the [#built-on-envoy channel](https://tetrate-community.slack.com/archives/C0AG8GLT41E) to start collaborating with the community.
+
 ## Contributing Extensions
 
 1. Fork this repository.
