@@ -18,44 +18,12 @@ A community-driven marketplace for Envoy Proxy extensions. Discover, run, and bu
 1. **Marketplace Repository**: A central place where the community can find and contribute extensions.
 2. **CLI Tool (`boe`)**: A command-line tool for discovering, running, and building extensions.
 
-## Quick Start
+## Documentation
 
-### Install the CLI
-
-```shell
-curl -sL https://builtonenvoy.io/install.sh | sh
-```
-
-Or build from source:
-
-```shell
-git clone https://github.com/tetratelabs/built-on-envoy
-cd built-on-envoy/cli
-make
-```
-
-### Run an Extension
-
-```bash
-# Run a marketplace extension
-boe run --extension example-go
-
-# Run a local extension
-boe run --local ./my-extension
-```
-
-For more examples, take a look at the [extension catalog](https://builtonenvoy.io/extensions/) and the
-[run command](https://builtonenvoy.io/docs/cli/run/).
-
-
-### Generate Envoy Configuration
-
-```bash
-boe gen-config --extension example-go > envoy.yaml
-```
-
-Read more about [exporting configuration and extensions](https://builtonenvoy.io/docs/custom-envoy-config/) and the
-[gen-config command](https://builtonenvoy.io/docs/cli/gen-config/).
+* [Installation and Quick Start](https://builtonenvoy.io/docs/getting-started/)
+* [Extension Catalog](https://builtonenvoy.io/extensions/)
+* [CLI Reference](https://builtonenvoy.io/docs/cli/run)
+* [Security Considerations](https://builtonenvoy.io/docs/security-considerations)
 
 ## Contributing Extensions
 

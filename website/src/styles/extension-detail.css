@@ -97,6 +97,10 @@
 	font-weight: 500;
 }
 
+.capitalize {
+	text-transform: capitalize;
+}
+
 /* Content Section */
 .extension-content {
 	padding: 80px 0;
