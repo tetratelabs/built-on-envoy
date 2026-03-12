@@ -1,6 +1,6 @@
 module github.com/tetratelabs/built-on-envoy/cli
 
-go 1.25.7
+go 1.26.1
 
 require (
 	github.com/alecthomas/kong v1.13.0
