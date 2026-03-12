@@ -22,7 +22,7 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dorny/paths-filter@v3
         id: changes
         with:
@@ -42,7 +42,7 @@ jobs:
       rust-extensions: ${{ steps.discover.outputs.rust-extensions }}
       has-composer: ${{ steps.discover.outputs.has-composer }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Discover extensions
         id: discover
         run: |
