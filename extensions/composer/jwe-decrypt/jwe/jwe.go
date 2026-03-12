@@ -14,7 +14,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/lestrrat-go/jwx/v3/jwa"
 	"github.com/lestrrat-go/jwx/v3/jwe"
 	"github.com/lestrrat-go/jwx/v3/jwk"
 )
@@ -72,20 +71,23 @@ func ParsePrivateKey(keyInput string) (*Keys, error) {
 	if keyInput == "" {
 		return nil, fmt.Errorf("no key input provided")
 	}
+
 	privPem, _ := pem.Decode([]byte(keyInput))
 	if privPem == nil {
-		return nil, fmt.Errorf("failed to parse PEM block containing the key")
-	}
-	parsedKey, err := x509.ParsePKCS8PrivateKey(privPem.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse PKCS8 private key: %w", err)
-	}
-	privateKey, ok := parsedKey.(*rsa.PrivateKey)
-	if !ok {
-		return nil, fmt.Errorf("unable to parse RSA private key: %w", err)
+		priv, err := jwk.Import([]byte(keyInput))
+		if err != nil {
+			return nil, fmt.Errorf("failed to import private key: %w", err)
+		}
+
+		if _, ok := priv.(jwk.SymmetricKey); !ok {
+			fmt.Printf("expected jwk.SymmetricKey, got %T\n", priv)
+			return nil, fmt.Errorf("failed to import private key: %w", err)
+		}
+
+		return &Keys{PrivateKey: priv}, nil
 	}
 
-	priv, err := jwk.Import(privateKey)
+	priv, err := jwk.ParseKey([]byte(keyInput), jwk.WithPEM(true))
 	if err != nil {
 		return nil, fmt.Errorf("failed to import private key: %w", err)
 	}
@@ -140,7 +142,8 @@ func ParsePublicKeyFromFile(keyFile string) (*Keys, error) {
 
 // Encrypt takes a plaintext payload, encrypts it using JWE with the public key, and returns the encrypted result.
 func (k *Keys) Encrypt(payload []byte) ([]byte, error) {
-	encrypted, err := jwe.Encrypt(payload, jwe.WithKey(jwa.RSA_OAEP(), k.PublicKey))
+	alg, _ := k.PublicKey.Algorithm()
+	encrypted, err := jwe.Encrypt(payload, jwe.WithKey(alg, k.PublicKey))
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt payload: %w", err)
 	}
@@ -149,7 +152,15 @@ func (k *Keys) Encrypt(payload []byte) ([]byte, error) {
 
 // Decrypt takes an encrypted JWE payload, decrypts it using the private key, and returns the decrypted result.
 func (k *Keys) Decrypt(encrypted []byte) ([]byte, error) {
-	decrypted, err := jwe.Decrypt(encrypted, jwe.WithKey(jwa.RSA_OAEP(), k.PrivateKey))
+	m, err := jwe.Parse(encrypted)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse payload: %w", err)
+	}
+
+	// TODO: consider the security implications of the passthrough alg if any in this case
+	// https://auth0.com/blog/critical-vulnerabilities-in-json-web-token-libraries/
+	alg, _ := m.ProtectedHeaders().Algorithm()
+	decrypted, err := jwe.Decrypt(encrypted, jwe.WithKey(alg, k.PrivateKey))
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt payload: %w", err)
 	}
