@@ -61,22 +61,27 @@ type RunnerFuncE struct {
 	// ClustersJSON specifies additional Envoy cluster JSON strings to include in the configuration.
 	ClustersJSON []string
 	// TestUpstreamHost specifies the hostname for the test upstream cluster. Defaults to "httpbin.org".
+	// Mutually exclusive with TestUpstreamCluster.
 	TestUpstreamHost string
+	// TestUpstreamCluster specifies the name of an existing configured cluster to use as the test upstream.
+	// Mutually exclusive with TestUpstreamHost.
+	TestUpstreamCluster string
 }
 
 // Run starts Envoy using func-e as a library.
 func (r *RunnerFuncE) Run(ctx context.Context) error {
 	params := &ConfigGenerationParams{
-		Logger:           r.Logger,
-		AdminPort:        r.AdminPort,
-		ListenerPort:     r.ListenPort,
-		Dirs:             r.Dirs,
-		Extensions:       r.Extensions,
-		Configs:          r.Configs,
-		Clusters:         r.Clusters,
-		ClustersInsecure: r.ClustersInsecure,
-		ClustersJSON:     r.ClustersJSON,
-		TestUpstreamHost: r.TestUpstreamHost,
+		Logger:              r.Logger,
+		AdminPort:           r.AdminPort,
+		ListenerPort:        r.ListenPort,
+		Dirs:                r.Dirs,
+		Extensions:          r.Extensions,
+		Configs:             r.Configs,
+		Clusters:            r.Clusters,
+		ClustersInsecure:    r.ClustersInsecure,
+		ClustersJSON:        r.ClustersJSON,
+		TestUpstreamHost:    r.TestUpstreamHost,
+		TestUpstreamCluster: r.TestUpstreamCluster,
 	}
 	config, err := RenderConfig(params, FullConfigRenderer)
 	if err != nil {
