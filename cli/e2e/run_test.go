@@ -86,7 +86,7 @@ func TestDockerRemoteExtension(t *testing.T) {
 		"--listen-port", "11000",
 		"--dev",
 		"--log-level", "dynamic_modules:debug",
-		"--extension", "example-go")
+		"--extension", "example-go:0.3.0")
 
 	t.Cleanup(func() {
 		_ = proc.Signal(syscall.SIGTERM)
