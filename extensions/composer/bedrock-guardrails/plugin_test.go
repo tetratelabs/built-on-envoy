@@ -14,6 +14,8 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 // testBodyBuffer is a correct implementation of shared.BodyBuffer for tests,
@@ -28,8 +30,10 @@ func newTestBodyBuffer(data []byte) *testBodyBuffer {
 	return &testBodyBuffer{body: b}
 }
 
-func (b *testBodyBuffer) GetChunks() [][]byte { return [][]byte{b.body} }
-func (b *testBodyBuffer) GetSize() uint64     { return uint64(len(b.body)) }
+func (b *testBodyBuffer) GetChunks() []shared.UnsafeEnvoyBuffer {
+	return []shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromBytes(b.body)}
+}
+func (b *testBodyBuffer) GetSize() uint64 { return uint64(len(b.body)) }
 func (b *testBodyBuffer) Drain(size uint64) {
 	if size >= uint64(len(b.body)) {
 		b.body = nil
@@ -532,7 +536,7 @@ func TestOnRequestBody_MultipleGuardrails_FirstTriggered(t *testing.T) {
 	fakeHeaders := fake.NewFakeHeaderMap(map[string][]string{})
 	mockHandle.EXPECT().RequestHeaders().Return(fakeHeaders).AnyTimes()
 
-	var capturedHeaders [][2]string
+	var capturedHeaders [][2]shared.UnsafeEnvoyBuffer
 	mockHandle.EXPECT().HttpCallout(
 		"bedrock-cluster",
 		gomock.Any(),
@@ -540,7 +544,7 @@ func TestOnRequestBody_MultipleGuardrails_FirstTriggered(t *testing.T) {
 		gomock.Any(),
 		gomock.Any(),
 	).DoAndReturn(func(_ string, headers [][2]string, _ []byte, _ uint64, _ shared.HttpCalloutCallback) (shared.HttpCalloutInitResult, uint64) {
-		capturedHeaders = headers
+		capturedHeaders = toUnsafeEnvoyBufferHeaders(headers)
 		return shared.HttpCalloutInitSuccess, uint64(1)
 	}).Times(1)
 
@@ -564,4 +568,13 @@ func TestOnRequestBody_MultipleGuardrails_FirstTriggered(t *testing.T) {
 
 	// Only the first guardrail should have been called
 	require.Equal(t, "/guardrail/first-guardrail/version/1/apply", headerValue(capturedHeaders, ":path"))
+}
+
+func toUnsafeEnvoyBufferHeaders(headers [][2]string) [][2]shared.UnsafeEnvoyBuffer {
+	unsafeHeaders := make([][2]shared.UnsafeEnvoyBuffer, len(headers))
+	for i, h := range headers {
+		unsafeHeaders[i][0] = pkg.UnsafeBufferFromBytes([]byte(h[0]))
+		unsafeHeaders[i][1] = pkg.UnsafeBufferFromBytes([]byte(h[1]))
+	}
+	return unsafeHeaders
 }

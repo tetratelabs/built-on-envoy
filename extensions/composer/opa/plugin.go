@@ -206,7 +206,7 @@ func (o *opaHttpFilter) evaluateBodyPolicy() bool {
 	headers := o.handle.RequestHeaders()
 
 	var parsedBody any
-	contentType := headers.GetOne("content-type")
+	contentType := headers.GetOne("content-type").ToUnsafeString()
 	// We may could support other content types in the future if needed, but for now we only parse
 	// JSON bodies since that's the most common and avoids the complexity of handling arbitrary
 	// body formats.

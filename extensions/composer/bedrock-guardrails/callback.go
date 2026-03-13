@@ -50,7 +50,7 @@ type applyGuardrailCallback struct {
 	index int
 }
 
-func (a *applyGuardrailCallback) OnHttpCalloutDone(_ uint64, result shared.HttpCalloutResult, headers [][2]string, body [][]byte) { //nolint:revive
+func (a *applyGuardrailCallback) OnHttpCalloutDone(_ uint64, result shared.HttpCalloutResult, headers [][2]shared.UnsafeEnvoyBuffer, body []shared.UnsafeEnvoyBuffer) { //nolint:revive
 	a.handle.Log(shared.LogLevelDebug, "bedrock-guardrails: Started Callout callback")
 
 	fullbody := joinBody(body)
@@ -205,11 +205,15 @@ func (a *applyGuardrailCallback) OnHttpCalloutDone(_ uint64, result shared.HttpC
 
 // joinBody returns the body as a single byte slice, avoiding to call bytes.Join
 // when there is only one chunk which always returns a copy.
-func joinBody(body [][]byte) []byte {
+func joinBody(body []shared.UnsafeEnvoyBuffer) []byte {
 	if len(body) == 1 {
-		return body[0]
+		return body[0].ToUnsafeBytes()
 	}
-	return bytes.Join(body, nil)
+	chunks := make([][]byte, len(body))
+	for i, b := range body {
+		chunks[i] = b.ToUnsafeBytes()
+	}
+	return bytes.Join(chunks, nil)
 }
 
 // sendLocalRespError logs the message (with optional raw body), sends
@@ -225,10 +229,10 @@ func sendLocalRespError(handle shared.HttpFilterHandle, level shared.LogLevel, s
 }
 
 // headerValue returns the first value for a key in a [][2]string header list.
-func headerValue(headers [][2]string, key string) string {
+func headerValue(headers [][2]shared.UnsafeEnvoyBuffer, key string) string {
 	for _, h := range headers {
-		if h[0] == key {
-			return h[1]
+		if h[0].ToUnsafeString() == key {
+			return h[1].ToUnsafeString()
 		}
 	}
 	return ""

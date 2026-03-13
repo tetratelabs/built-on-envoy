@@ -13,6 +13,8 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 // testBodyBuffer is a test implementation of shared.BodyBuffer.
@@ -26,8 +28,10 @@ func newTestBodyBuffer(data []byte) *testBodyBuffer {
 	return &testBodyBuffer{body: b}
 }
 
-func (b *testBodyBuffer) GetChunks() [][]byte { return [][]byte{b.body} }
-func (b *testBodyBuffer) GetSize() uint64     { return uint64(len(b.body)) }
+func (b *testBodyBuffer) GetChunks() []shared.UnsafeEnvoyBuffer {
+	return []shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromBytes(b.body)}
+}
+func (b *testBodyBuffer) GetSize() uint64 { return uint64(len(b.body)) }
 func (b *testBodyBuffer) Drain(size uint64) {
 	if size >= uint64(len(b.body)) {
 		b.body = nil

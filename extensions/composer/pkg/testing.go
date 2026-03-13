@@ -19,3 +19,17 @@ func UnsafeBufferFromString(s string) shared.UnsafeEnvoyBuffer {
 		Len: uint64(len(s)),
 	}
 }
+
+// UnsafeBufferFromBytes creates an UnsafeEnvoyBuffer from a Go byte slice without copying the underlying data.
+// This is only meant to be used for testing
+func UnsafeBufferFromBytes(b []byte) shared.UnsafeEnvoyBuffer {
+	var ptr *byte
+	l := len(b)
+	if l > 0 {
+		ptr = &b[0]
+	}
+	return shared.UnsafeEnvoyBuffer{
+		Ptr: ptr,
+		Len: uint64(l),
+	}
+}
