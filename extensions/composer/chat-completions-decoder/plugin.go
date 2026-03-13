@@ -122,7 +122,7 @@ func (d *decoderFilter) OnResponseBody(body shared.BodyBuffer, endOfStream bool)
 	if d.sseAcc != nil { // Streaming SSE: feed each chunk incrementally.
 		if body != nil {
 			for _, chunk := range body.GetChunks() {
-				d.sseAcc.feed(chunk.ToUnsafeBytes())
+				d.sseAcc.feed(chunk.ToBytes())
 			}
 		}
 		if endOfStream {
