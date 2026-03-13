@@ -1,7 +1,7 @@
 [
   {
     "name": "anthropic-messages-decoder",
-    "version": "0.3.0",
+    "version": "0.4.0-dev",
     "parent": "composer",
     "categories": [
       "AI",
@@ -46,7 +46,7 @@
       }
     ],
     "minEnvoyVersion": "1.37.0",
-    "composerVersion": "0.3.0",
+    "composerVersion": "0.4.0-dev",
     "sourcePath": "composer/anthropic-decoder"
   },
   {

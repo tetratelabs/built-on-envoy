@@ -266,7 +266,7 @@ func (d *decoderFilter) setResponseMetadata(namespace string, resp *anthropicRes
 
 	// Extract text content and tool calls from content blocks.
 	var textParts []string
-	var toolCalls []anthropicContentBlock
+	var toolCalls []*anthropicContentBlock
 	for _, block := range resp.Content {
 		if block.Type == "text" && block.Text != "" {
 			textParts = append(textParts, block.Text)

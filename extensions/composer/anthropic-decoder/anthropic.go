@@ -46,12 +46,12 @@ type (
 
 	// anthropicResponse represents an Anthropic Messages API response.
 	anthropicResponse struct {
-		ID      string                  `json:"id"`
-		Type    string                  `json:"type"` // "message"
-		Role    string                  `json:"role"` // "assistant"
-		Model   string                  `json:"model"`
-		Content []anthropicContentBlock `json:"content"`
-		Usage   *anthropicUsage         `json:"usage"`
+		ID      string                   `json:"id"`
+		Type    string                   `json:"type"` // "message"
+		Role    string                   `json:"role"` // "assistant"
+		Model   string                   `json:"model"`
+		Content []*anthropicContentBlock `json:"content"`
+		Usage   *anthropicUsage          `json:"usage"`
 	}
 
 	// anthropicUsage represents token usage information in an Anthropic response.
@@ -189,7 +189,7 @@ func extractAnthropicContent(raw json.RawMessage) string {
 
 // extractAnthropicToolCalls extracts tool_use content blocks from a message's
 // content field. Returns nil if content is a string or contains no tool_use blocks.
-func extractAnthropicToolCalls(raw json.RawMessage) []anthropicContentBlock {
+func extractAnthropicToolCalls(raw json.RawMessage) []*anthropicContentBlock {
 	if len(raw) == 0 {
 		return nil
 	}
@@ -199,10 +199,10 @@ func extractAnthropicToolCalls(raw json.RawMessage) []anthropicContentBlock {
 		return nil
 	}
 
-	var toolCalls []anthropicContentBlock
+	var toolCalls []*anthropicContentBlock
 	for i := range blocks {
 		if blocks[i].Type == "tool_use" {
-			toolCalls = append(toolCalls, blocks[i])
+			toolCalls = append(toolCalls, &blocks[i])
 		}
 	}
 	return toolCalls
@@ -218,9 +218,9 @@ type anthropicSSEAccumulator struct {
 	// Accumulated state from SSE events.
 	role          string
 	usage         *anthropicUsage
-	contentBlocks []anthropicContentBlock // indexed by content_block_start index
-	textByIndex   map[int]string          // accumulated text per content block index
-	jsonByIndex   map[int]string          // accumulated partial JSON per content block index (tool_use)
+	contentBlocks []*anthropicContentBlock // indexed by content_block_start index
+	textByIndex   map[int]string           // accumulated text per content block index
+	jsonByIndex   map[int]string           // accumulated partial JSON per content block index (tool_use)
 
 	// SSE parse state.
 	currentEvent string // the most recently seen "event:" value
@@ -293,9 +293,9 @@ func (a *anthropicSSEAccumulator) processEvent(eventType string, data []byte) {
 		}
 		// Grow the slice to accommodate the index.
 		for len(a.contentBlocks) <= cbs.Index {
-			a.contentBlocks = append(a.contentBlocks, anthropicContentBlock{})
+			a.contentBlocks = append(a.contentBlocks, &anthropicContentBlock{})
 		}
-		a.contentBlocks[cbs.Index] = cbs.ContentBlock
+		a.contentBlocks[cbs.Index] = &cbs.ContentBlock
 
 	case "content_block_delta":
 		var cbd anthropicContentBlockDelta
@@ -327,7 +327,7 @@ func (a *anthropicSSEAccumulator) processEvent(eventType string, data []byte) {
 
 // finish assembles the accumulated state into an anthropicResponse.
 func (a *anthropicSSEAccumulator) finish() *anthropicResponse {
-	content := make([]anthropicContentBlock, len(a.contentBlocks))
+	content := make([]*anthropicContentBlock, len(a.contentBlocks))
 	for i, block := range a.contentBlocks {
 		content[i] = block
 		switch block.Type {
