@@ -168,8 +168,16 @@ func TestRustLocalExtension(t *testing.T) {
 }
 
 func TestLocalGoExtension(t *testing.T) {
-	// Configure the test env vars, as composer src will be downloaded from the registry
-	internaltesting.SkipIfTestRegistryNotConfigured(t)
+	// Local builds for Go will pull libcomposer from the remote registry. However, when we're doing changes to versions, etc, we don't want it to
+	// pull an obsolete version, so we'll just push the current composer source to the local registry and use that for the test.
+	t.Setenv("BOE_REGISTRY", registryAddr)
+	t.Setenv("BOE_REGISTRY_INSECURE", "true")
+	makeCmd := exec.CommandContext(t.Context(), "make", "push_code")
+	makeCmd.Dir = "../../extensions/composer"
+	output, err := makeCmd.CombinedOutput()
+	t.Logf("make push_code output: %s", string(output))
+	require.NoError(t, err)
+
 	dataDir := t.TempDir()
 
 	// Create a brand new extension
