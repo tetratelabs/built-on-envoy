@@ -14,7 +14,7 @@ import (
 
 // reasons maps metrics results to human-readable strings for logging purposes.
 var reasons = map[shared.MetricsResult]string{
-	shared.MetricsFrozen:      "error",
+	shared.MetricsFrozen:      "frozen",
 	shared.MetricsNotFound:    "not_found",
 	shared.MetricsInvalidTags: "invalid_tags",
 }

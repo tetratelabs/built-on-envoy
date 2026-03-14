@@ -33,7 +33,7 @@ func TestNewMetric_Frozen(t *testing.T) {
 
 	configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	configHandle.EXPECT().DefineCounter("test_metric").Return(shared.MetricID(0), shared.MetricsFrozen)
-	configHandle.EXPECT().Log(shared.LogLevelError, "Failed to define total transactions counter: error")
+	configHandle.EXPECT().Log(shared.LogLevelError, `Failed to define metric "test_metric": frozen`)
 
 	m := NewMetric(configHandle, configHandle.DefineCounter, "test_metric")
 
@@ -46,7 +46,7 @@ func TestNewMetric_NotFound(t *testing.T) {
 
 	configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	configHandle.EXPECT().DefineCounter("test_metric").Return(shared.MetricID(0), shared.MetricsNotFound)
-	configHandle.EXPECT().Log(shared.LogLevelError, "Failed to define total transactions counter: not_found")
+	configHandle.EXPECT().Log(shared.LogLevelError, `Failed to define metric "test_metric": not_found`)
 
 	m := NewMetric(configHandle, configHandle.DefineCounter, "test_metric")
 
@@ -59,7 +59,7 @@ func TestNewMetric_InvalidTags(t *testing.T) {
 
 	configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	configHandle.EXPECT().DefineCounter("test_metric", "t1", "t2").Return(shared.MetricID(0), shared.MetricsInvalidTags)
-	configHandle.EXPECT().Log(shared.LogLevelError, "Failed to define total transactions counter: invalid_tags")
+	configHandle.EXPECT().Log(shared.LogLevelError, `Failed to define metric "test_metric": invalid_tags`)
 
 	m := NewMetric(configHandle, configHandle.DefineCounter, "test_metric", "t1", "t2")
 
@@ -72,7 +72,7 @@ func TestNewMetric_UnknownError(t *testing.T) {
 
 	configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	configHandle.EXPECT().DefineCounter("test_metric").Return(shared.MetricID(0), shared.MetricsResult(99))
-	configHandle.EXPECT().Log(shared.LogLevelError, "Failed to define total transactions counter: unknown_error")
+	configHandle.EXPECT().Log(shared.LogLevelError, `Failed to define metric "test_metric": unknown_error`)
 
 	m := NewMetric(configHandle, configHandle.DefineCounter, "test_metric")
 

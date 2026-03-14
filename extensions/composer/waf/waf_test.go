@@ -46,7 +46,7 @@ func Test_DisableWaf(t *testing.T) {
 	t.Run("WAF disabled should skip processing", func(t *testing.T) {
 		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
 		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return("HTTP/1.1", true)
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
@@ -106,7 +106,6 @@ func Test_DisableWaf(t *testing.T) {
 		// Get source address.
 		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
 		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 
@@ -151,7 +150,6 @@ func Test_DisableWaf(t *testing.T) {
 		// Get request protocol.
 		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
 		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 
@@ -334,6 +332,7 @@ func Test_RequestOnlyWaf(t *testing.T) {
 		})
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:8080"), true)
+
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
 		require.True(t, ok, "failed to cast plugin to wafPlugin")
@@ -434,6 +433,8 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
 		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
+			"HTTP/1.1", true)
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)

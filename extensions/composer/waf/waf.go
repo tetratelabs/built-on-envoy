@@ -145,6 +145,14 @@ func (p *wafPlugin) OnRequestHeaders(
 	headers shared.HeaderMap,
 	endOfStream bool,
 ) shared.HeadersStatus {
+	// Save for later use in response processing.
+	host := strings.Clone(headers.GetOne(":authority"))
+	p.protocol = p.getRequestProtocol()
+	if authority, _, err := net.SplitHostPort(host); err == nil {
+		p.authority = authority
+	} else {
+		p.authority = host
+	}
 	p.mayInitializeTransaction(headers)
 
 	if p.context.IsRuleEngineOff() || (p.mode == waf.ModeResponseOnly) {
@@ -163,13 +171,6 @@ func (p *wafPlugin) OnRequestHeaders(
 	path := headers.GetOne(":path").ToString()
 	method := headers.GetOne(":method").ToString()
 	uri := scheme + "://" + host + path
-	// Save for later use in response processing.
-	p.protocol = p.getRequestProtocol()
-	if authority, _, err := net.SplitHostPort(host); err == nil {
-		p.authority = authority
-	} else {
-		p.authority = host
-	}
 
 	// CRS rules tend to expect Host even with HTTP/2
 	p.context.AddRequestHeader("Host", host)
@@ -344,9 +345,9 @@ func (p *wafPlugin) OnResponseTrailers(_ shared.HeaderMap) shared.TrailersStatus
 
 func (p *wafPlugin) OnStreamComplete() {
 	if p.context != nil {
-	    if !p.context.IsRuleEngineOff(){
-			p.metrics.RecordTx(p.handle)	    
-	    }
+		if !p.context.IsRuleEngineOff() {
+			p.metrics.RecordTx(p.handle)
+		}
 		p.context.ProcessLogging()
 		err := p.context.Close()
 		if err != nil {
