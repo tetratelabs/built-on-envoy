@@ -35,7 +35,7 @@ func NewMetric(
 	metric, result := defineFunc(name, tagNames...)
 	if result != shared.MetricsSuccess {
 		reason := cmp.Or(reasons[result], "unknown_error")
-		handle.Log(shared.LogLevelError, fmt.Sprintf("Failed to define total transactions counter: %s", reason))
+		handle.Log(shared.LogLevelError, fmt.Sprintf("Failed to define metric %q: %s", name, reason))
 	}
 	return &Metric{
 		id:      metric,

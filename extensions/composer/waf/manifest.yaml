@@ -58,7 +58,7 @@ longDescription: |
 
   | Metric | Tags | Type | Description |
   |--------|------|------|-------------|
-  | `waf_tx_total` | - | Counter | Total amount of transactions processed by hte WAF. |
+  | `waf_tx_total` | - | Counter | Total amount of transactions processed by the WAF. |
   | `waf_tx_blocked` | `authority`, `phase`, `rule_id` | Counter | Total amount of transactions blocked by the WAF. The `rule_id` will not be set if the request is not blocked by a concrete rule but by a WAF internal error. |
 type: go
 tags:

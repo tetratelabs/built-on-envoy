@@ -46,7 +46,7 @@ func (m *metrics) RecordBlockedByRule(h shared.HttpFilterHandle, authority strin
 }
 
 // RecordBlockInternal increments the blocked transaction counter with the appropriate labels.
-// This should be called for every transaction that is blocked bu the WAF but not for a concrete
+// This should be called for every transaction that is blocked by the WAF but not for a concrete
 // rule execution.
 func (m *metrics) RecordBlockInternal(h shared.HttpFilterHandle, authority string, phase ctypes.RulePhase) {
 	m.txBlocked.Record(h, h.IncrementCounterValue, 1,

@@ -343,8 +343,10 @@ func (p *wafPlugin) OnResponseTrailers(_ shared.HeaderMap) shared.TrailersStatus
 }
 
 func (p *wafPlugin) OnStreamComplete() {
-	p.metrics.RecordTx(p.handle)
 	if p.context != nil {
+	    if !p.context.IsRuleEngineOff(){
+			p.metrics.RecordTx(p.handle)	    
+	    }
 		p.context.ProcessLogging()
 		err := p.context.Close()
 		if err != nil {
