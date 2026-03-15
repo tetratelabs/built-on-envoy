@@ -69,6 +69,7 @@ longDescription: |
         "address": "10.0.0.2:443"         // Server address (ip:port)
       },
       "connection": {
+        "mtls:": true,                    // Whether the connection is mTLS
         "tls_version": "TLSv1.3"          // TLS version
       }
     },

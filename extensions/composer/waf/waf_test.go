@@ -15,6 +15,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 func Test_DisableWaf(t *testing.T) {
@@ -110,28 +112,27 @@ func Test_DisableWaf(t *testing.T) {
 		var port int
 
 		// No attribute set, should return default.
-		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return("", false)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString(""), false)
 		address, port = wafPlugin.getSourceAddress()
 		assert.Equal(t, "127.0.0.1", address, "expected default address")
 		assert.Equal(t, 80, port, "expected default port")
 
 		// No port should return default.
-		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(
-			"127.0.0.1", true)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1"), true)
 		address, port = wafPlugin.getSourceAddress()
 		assert.Equal(t, "127.0.0.1", address, "expected default address")
 		assert.Equal(t, 80, port, "expected default port")
 
 		// Invalid port.
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(
-			"127.0.0.1:xyz", true)
+			pkg.UnsafeBufferFromString("127.0.0.1:xyz"), true)
 		address, port = wafPlugin.getSourceAddress()
 		assert.Equal(t, "127.0.0.1", address, "expected default address")
 		assert.Equal(t, 80, port, "expected default port")
 
 		// Valid address and port.
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(
-			"127.0.0.7:8080", true)
+			pkg.UnsafeBufferFromString("127.0.0.7:8080"), true)
 		address, port = wafPlugin.getSourceAddress()
 		assert.Equal(t, "127.0.0.7", address, "expected address 127.0.0.7")
 		assert.Equal(t, 8080, port, "expected port 8080")
@@ -154,13 +155,13 @@ func Test_DisableWaf(t *testing.T) {
 		var protocol string
 
 		// No attribute set, should return default.
-		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return("", false)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString(""), false)
 		protocol = wafPlugin.getRequestProtocol()
 		assert.Equal(t, "HTTP/1.1", protocol, "expected default protocol HTTP/1.1")
 
 		// Attribute set.
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
-			"HTTP/2", true)
+			pkg.UnsafeBufferFromString("HTTP/2"), true)
 		protocol = wafPlugin.getRequestProtocol()
 		assert.Equal(t, "HTTP/2", protocol, "expected protocol HTTP/2")
 
@@ -205,10 +206,9 @@ func Test_RequestOnlyWaf(t *testing.T) {
 			"user-agent":   {"ComposerTest/1.0"},
 			"accept":       {"*/*"},
 		})
-		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
-			"HTTP/1.1", true)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(
-			"127.0.0.1:8080", true)
+			pkg.UnsafeBufferFromString("127.0.0.1:8080"), true)
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
@@ -239,9 +239,9 @@ func Test_RequestOnlyWaf(t *testing.T) {
 			"accept":       {"*/*"},
 		})
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
-			"HTTP/1.1", true)
+			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(
-			"127.0.0.1:8080", true)
+			pkg.UnsafeBufferFromString("127.0.0.1:8080"), true)
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
@@ -279,10 +279,8 @@ func Test_RequestOnlyWaf(t *testing.T) {
 			"user-agent":   {"ComposerTest/1.0"},
 			"content-type": {"application/json"},
 		})
-		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
-			"HTTP/1.1", true)
-		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(
-			"127.0.0.1:8080", true)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:8080"), true)
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
@@ -321,10 +319,8 @@ func Test_RequestOnlyWaf(t *testing.T) {
 			"user-agent":   {"ComposerTest/1.0"},
 			"content-type": {"application/json"},
 		})
-		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
-			"HTTP/1.1", true)
-		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(
-			"127.0.0.1:8080", true)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:8080"), true)
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
 		require.True(t, ok, "failed to cast plugin to wafPlugin")
@@ -470,7 +466,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 		})
 		pluginHandle.EXPECT().RequestHeaders().Return(requestHeaders)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
-			"HTTP/1.1", true)
+			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
@@ -504,7 +500,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 		})
 		pluginHandle.EXPECT().RequestHeaders().Return(requestHeaders)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
-			"HTTP/1.1", true)
+			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
@@ -550,7 +546,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 		})
 		pluginHandle.EXPECT().RequestHeaders().Return(requestHeaders)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
-			"HTTP/1.1", true)
+			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
@@ -594,7 +590,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 		})
 		pluginHandle.EXPECT().RequestHeaders().Return(requestHeaders)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
-			"HTTP/1.1", true)
+			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
@@ -639,7 +635,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 		})
 		pluginHandle.EXPECT().RequestHeaders().Return(requestHeaders)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
-			"HTTP/1.1", true)
+			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
@@ -722,9 +718,9 @@ func Test_FullWaf(t *testing.T) {
 			"content-type": {"application/json"},
 		})
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
-			"HTTP/1.1", true)
+			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(
-			"127.0.0.1:8080", true)
+			pkg.UnsafeBufferFromString("127.0.0.1:8080"), true)
 
 		headerStatus := wafPlugin.OnRequestHeaders(fakeRequestHeaders, false)
 		require.Equal(t, shared.HeadersStatusStop, headerStatus,

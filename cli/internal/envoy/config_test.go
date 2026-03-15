@@ -174,6 +174,31 @@ func TestParseJSONCluster(t *testing.T) {
 	}
 }
 
+func TestRenderConfigWithTestUpstreamCluster(t *testing.T) {
+	want, err := os.ReadFile("testdata/output_config_with_test_upstream_cluster.yaml")
+	require.NoError(t, err)
+
+	cfg, err := RenderConfig(&ConfigGenerationParams{
+		Logger:              internaltesting.NewTLogger(t),
+		AdminPort:           9901,
+		ListenerPort:        10000,
+		Clusters:            []string{"example.com:443"},
+		TestUpstreamCluster: "example.com:443",
+	}, FullConfigRenderer)
+	require.NoError(t, err)
+	require.YAMLEq(t, string(want), cfg)
+}
+
+func TestRenderConfigWithTestUpstreamClusterNotFound(t *testing.T) {
+	_, err := RenderConfig(&ConfigGenerationParams{
+		Logger:              internaltesting.NewTLogger(t),
+		AdminPort:           9901,
+		ListenerPort:        10000,
+		TestUpstreamCluster: "nonexistent-cluster",
+	}, FullConfigRenderer)
+	require.ErrorContains(t, err, `cluster "nonexistent-cluster" specified via --test-upstream-cluster does not exist`)
+}
+
 func mustReadManifest(t *testing.T, path string) *extensions.Manifest {
 	manifest, err := extensions.LoadLocalManifest(path)
 	require.NoError(t, err)

@@ -160,7 +160,7 @@ func (c *cedarHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) sha
 func (c *cedarHttpFilter) buildRequest(headers shared.HeaderMap) (cedarlib.Request, error) {
 	principalID := ""
 	if c.config.PrincipalIDHeader != "" {
-		principalID = headers.GetOne(c.config.PrincipalIDHeader)
+		principalID = headers.GetOne(c.config.PrincipalIDHeader).ToUnsafeString()
 	}
 	if principalID == "" {
 		return cedarlib.Request{}, fmt.Errorf("principal header %q is empty or missing", c.config.PrincipalIDHeader)
@@ -171,14 +171,14 @@ func (c *cedarHttpFilter) buildRequest(headers shared.HeaderMap) (cedarlib.Reque
 		cedarlib.String(principalID),
 	)
 
-	method := headers.GetOne(":method")
+	method := headers.GetOne(":method").ToUnsafeString()
 	actionType := cmp.Or(c.config.ActionType, "Action")
 	action := cedarlib.NewEntityUID(
 		cedarlib.EntityType(actionType),
 		cedarlib.String(method),
 	)
 
-	fullPath := headers.GetOne(":path")
+	fullPath := headers.GetOne(":path").ToUnsafeString()
 	resourcePath := fullPath
 	if before, _, ok := strings.Cut(fullPath, "?"); ok {
 		resourcePath = before
@@ -202,20 +202,20 @@ func (c *cedarHttpFilter) buildRequest(headers shared.HeaderMap) (cedarlib.Reque
 // buildContext constructs the Cedar context record from request headers and Envoy attributes.
 func (c *cedarHttpFilter) buildContext(headers shared.HeaderMap) cedarlib.Record {
 	var (
-		method = headers.GetOne(":method")
-		path   = headers.GetOne(":path")
-		host   = headers.GetOne(":authority")
-		scheme = cmp.Or(headers.GetOne(":scheme"), "http")
+		method = headers.GetOne(":method").ToUnsafeString()
+		path   = headers.GetOne(":path").ToUnsafeString()
+		host   = headers.GetOne(":authority").ToUnsafeString()
+		scheme = cmp.Or(headers.GetOne(":scheme").ToUnsafeString(), "http")
 	)
 	parsedPath, parsedQuery := parsePath(path)
-	protocol, _ := c.handle.GetAttributeString(shared.AttributeIDRequestProtocol)
-	protocol = cmp.Or(protocol, "HTTP/1.1")
+	protocolAttr, _ := c.handle.GetAttributeString(shared.AttributeIDRequestProtocol)
+	protocol := cmp.Or(protocolAttr.ToUnsafeString(), "HTTP/1.1")
 
 	// Build headers record excluding pseudo-headers.
 	headerMap := cedarlib.RecordMap{}
 	for _, h := range headers.GetAll() {
-		key := h[0]
-		val := h[1]
+		key := h[0].ToUnsafeString()
+		val := h[1].ToUnsafeString()
 		if !strings.HasPrefix(key, ":") {
 			headerMap[cedarlib.String(key)] = cedarlib.String(val)
 		}
@@ -230,6 +230,7 @@ func (c *cedarHttpFilter) buildContext(headers shared.HeaderMap) cedarlib.Record
 		subjectPeer, _  = c.handle.GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate)
 		tlsVersion, _   = c.handle.GetAttributeString(shared.AttributeIDConnectionTlsVersion)
 		sha256Digest, _ = c.handle.GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest)
+		mtls, _         = c.handle.GetAttributeBool(shared.AttributeIDConnectionMtls)
 	)
 
 	// Build parsed_path as a Cedar Set of Strings.
@@ -258,19 +259,20 @@ func (c *cedarHttpFilter) buildContext(headers shared.HeaderMap) cedarlib.Record
 			"headers":  cedarlib.NewRecord(headerMap),
 		}),
 		"source": cedarlib.NewRecord(cedarlib.RecordMap{
-			"address": cedarlib.String(sourceAddr),
+			"address": cedarlib.String(sourceAddr.ToUnsafeString()),
 			"certificate": cedarlib.NewRecord(cedarlib.RecordMap{
-				"uri_san":       cedarlib.String(uriSanPeer),
-				"dns_san":       cedarlib.String(dnsSanPeer),
-				"subject":       cedarlib.String(subjectPeer),
-				"sha256_digest": cedarlib.String(sha256Digest),
+				"uri_san":       cedarlib.String(uriSanPeer.ToUnsafeString()),
+				"dns_san":       cedarlib.String(dnsSanPeer.ToUnsafeString()),
+				"subject":       cedarlib.String(subjectPeer.ToUnsafeString()),
+				"sha256_digest": cedarlib.String(sha256Digest.ToUnsafeString()),
 			}),
 		}),
 		"destination": cedarlib.NewRecord(cedarlib.RecordMap{
-			"address": cedarlib.String(destAddr),
+			"address": cedarlib.String(destAddr.ToUnsafeString()),
 		}),
 		"connection": cedarlib.NewRecord(cedarlib.RecordMap{
-			"tls_version": cedarlib.String(tlsVersion),
+			"mtls":        cedarlib.Boolean(mtls),
+			"tls_version": cedarlib.String(tlsVersion.ToUnsafeString()),
 		}),
 		"parsed_path":  cedarlib.NewSet(pathValues...),
 		"parsed_query": cedarlib.NewRecord(queryRecord),

@@ -66,8 +66,9 @@ func (p *Plugin) OnRequestHeaders(headers shared.HeaderMap,
 	p.handle.Log(shared.LogLevelInfo, "Request Headers: %v", headers.GetAll())
 
 	// Single header and attribute example
-	hostHeader := headers.GetOne("host")
-	hostAttribute, _ := p.handle.GetAttributeString(shared.AttributeIDRequestHost)
+	hostHeader := headers.GetOne("host").ToUnsafeString()
+	hostAttr, _ := p.handle.GetAttributeString(shared.AttributeIDRequestHost)
+	hostAttribute := hostAttr.ToUnsafeString()
 	if hostHeader != hostAttribute {
 		panic(fmt.Errorf("host header and attribute should be same but %s vs. %s",
 			hostHeader, hostAttribute))
@@ -76,8 +77,9 @@ func (p *Plugin) OnRequestHeaders(headers shared.HeaderMap,
 
 	// Metadata example
 	p.handle.SetMetadata("example-namespace", "example-key", "example-value")
-	metadataValue, _ := p.handle.GetMetadataString(shared.MetadataSourceTypeDynamic,
+	metadataValueAttr, _ := p.handle.GetMetadataString(shared.MetadataSourceTypeDynamic,
 		"example-namespace", "example-key")
+	metadataValue := metadataValueAttr.ToUnsafeString()
 	if metadataValue != "example-value" {
 		panic(fmt.Errorf("metadata value should be 'example-value' but %s", metadataValue))
 	}
@@ -92,13 +94,13 @@ func (p *Plugin) OnRequestHeaders(headers shared.HeaderMap,
 
 	// Set request header example
 	headers.Set("x-example-request-header", "example-value")
-	updatedHeader := headers.GetOne("x-example-request-header")
+	updatedHeader := headers.GetOne("x-example-request-header").ToUnsafeString()
 	if updatedHeader != "example-value" {
 		panic(fmt.Errorf("updated request header should be 'example-value' but %s", updatedHeader))
 	}
 	p.handle.Log(shared.LogLevelInfo, "Updated Request Header: %s", updatedHeader)
 
-	if headers.GetOne("x-send-local-response") == "true" {
+	if headers.GetOne("x-send-local-response").ToUnsafeString() == "true" {
 		p.handle.Log(shared.LogLevelInfo, "Sending local reply as x-send-local-response is true")
 		p.handle.SendLocalResponse(200, nil, []byte("Local Reply from ExamplePlugin"), "example-plugin")
 		return shared.HeadersStatusStop
@@ -159,7 +161,7 @@ func (p *Plugin) OnResponseHeaders(headers shared.HeaderMap,
 
 	// Set response header example
 	headers.Set("x-example-response-header", "example-value")
-	updatedHeader := headers.GetOne("x-example-response-header")
+	updatedHeader := headers.GetOne("x-example-response-header").ToUnsafeString()
 	if updatedHeader != "example-value" {
 		panic(fmt.Errorf("updated response header should be 'example-value' but %s", updatedHeader))
 	}
@@ -183,18 +185,18 @@ func (p *Plugin) rewriteResponseBody(receivedBody shared.BodyBuffer) {
 
 	originalBody := make([]byte, 0, bufferedBodySize+receivedBodySize)
 	for _, chunk := range p.handle.BufferedResponseBody().GetChunks() {
-		originalBody = append(originalBody, chunk...)
+		originalBody = append(originalBody, chunk.ToUnsafeBytes()...)
 	}
 	if receivedBody != nil {
 		for _, chunk := range receivedBody.GetChunks() {
-			originalBody = append(originalBody, chunk...)
+			originalBody = append(originalBody, chunk.ToUnsafeBytes()...)
 		}
 	}
 
 	var newBodyWithOriginal []byte
 
 	responseHeaders := p.handle.ResponseHeaders()
-	if strings.Contains(responseHeaders.GetOne("content-type"), "application/json") {
+	if strings.Contains(responseHeaders.GetOne("content-type").ToUnsafeString(), "application/json") {
 		newBodyWithOriginal = []byte(
 			fmt.Sprintf(`{"modified_by":"ExamplePlugin","original_body":%s}`,
 				string(originalBody)))

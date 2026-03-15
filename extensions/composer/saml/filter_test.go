@@ -14,6 +14,8 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 // newTestFilter creates a samlHttpFilter with a mock handle and test config.
@@ -33,10 +35,10 @@ func newTestFilter(t *testing.T) (*samlHTTPFilter, *mocks.MockHttpFilterHandle, 
 
 // expectGetAttribute sets up expectations for GetAttributeString calls.
 func expectGetAttribute(handle *mocks.MockHttpFilterHandle, path, method, scheme, host string) {
-	handle.EXPECT().GetAttributeString(shared.AttributeIDRequestPath).Return(path, true).AnyTimes()
-	handle.EXPECT().GetAttributeString(shared.AttributeIDRequestMethod).Return(method, true).AnyTimes()
-	handle.EXPECT().GetAttributeString(shared.AttributeIDRequestScheme).Return(scheme, true).AnyTimes()
-	handle.EXPECT().GetAttributeString(shared.AttributeIDRequestHost).Return(host, true).AnyTimes()
+	handle.EXPECT().GetAttributeString(shared.AttributeIDRequestPath).Return(pkg.UnsafeBufferFromString(path), true).AnyTimes()
+	handle.EXPECT().GetAttributeString(shared.AttributeIDRequestMethod).Return(pkg.UnsafeBufferFromString(method), true).AnyTimes()
+	handle.EXPECT().GetAttributeString(shared.AttributeIDRequestScheme).Return(pkg.UnsafeBufferFromString(scheme), true).AnyTimes()
+	handle.EXPECT().GetAttributeString(shared.AttributeIDRequestHost).Return(pkg.UnsafeBufferFromString(host), true).AnyTimes()
 }
 
 func TestOnRequestHeaders_BypassPath(t *testing.T) {
@@ -125,9 +127,9 @@ func TestOnRequestHeaders_ValidSession(t *testing.T) {
 	require.Equal(t, shared.HeadersStatusContinue, status)
 
 	// Verify upstream headers were set.
-	require.Equal(t, "user@example.com", headers.GetOne("x-saml-subject"))
-	require.Equal(t, "user@example.com", headers.GetOne("x-saml-email"))
-	require.Equal(t, "admin", headers.GetOne("x-saml-groups"))
+	require.Equal(t, "user@example.com", headers.GetOne("x-saml-subject").ToUnsafeString())
+	require.Equal(t, "user@example.com", headers.GetOne("x-saml-email").ToUnsafeString())
+	require.Equal(t, "admin", headers.GetOne("x-saml-groups").ToUnsafeString())
 }
 
 func TestOnRequestHeaders_ExpiredSession_Redirects(t *testing.T) {
@@ -293,7 +295,7 @@ func TestOnRequestHeaders_ValidSession_MultipleAttributes(t *testing.T) {
 	status := f.OnRequestHeaders(headers, true)
 	require.Equal(t, shared.HeadersStatusContinue, status)
 	// Multi-valued attributes are joined with comma.
-	require.Equal(t, "admins,developers", headers.GetOne("x-saml-groups"))
+	require.Equal(t, "admins,developers", headers.GetOne("x-saml-groups").ToUnsafeString())
 }
 
 func TestFilterFactory_Create(t *testing.T) {

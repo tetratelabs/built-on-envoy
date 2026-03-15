@@ -75,6 +75,7 @@ longDescription: |
       "address": "10.0.0.2:443"
     },
     "connection": {
+      "mtls": true,
       "tls_version": "TLSv1.3"
     },
     "parsed_path": ["api", "v1", "resource"],

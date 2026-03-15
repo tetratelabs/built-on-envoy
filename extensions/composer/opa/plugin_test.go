@@ -226,14 +226,15 @@ func createTestFilter(t *testing.T, cfg opaConfig) (*opaHttpFilter, *mocks.MockH
 
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return("HTTP/1.1", true).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return("127.0.0.1:5000", true).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDDestinationAddress).Return("127.0.0.1:80", true).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionUriSanPeerCertificate).Return("", false).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionDnsSanPeerCertificate).Return("", false).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate).Return("", false).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return("", false).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return("", false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:5000"), true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDDestinationAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:80"), true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionUriSanPeerCertificate).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionDnsSanPeerCertificate).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeBool(shared.AttributeIDConnectionMtls).Return(false, false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
 	mockHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), gomock.Any()).Return(shared.MetricsSuccess).AnyTimes()
 
 	filter := filterFactory.Create(mockHandle)
@@ -311,7 +312,7 @@ allow := {"allowed": true, "headers": {"x-user": "admin"}}
 
 	status := filter.OnRequestHeaders(headers, true)
 	require.Equal(t, shared.HeadersStatusContinue, status)
-	require.Equal(t, "admin", requestHeaders.GetOne("x-user"))
+	require.Equal(t, "admin", requestHeaders.GetOne("x-user").ToUnsafeString())
 }
 
 func TestOnRequestHeaders_DenyObjectWithCustomStatus(t *testing.T) {
@@ -403,14 +404,15 @@ func createTestFilterWithMetricExpectation(t *testing.T, cfg opaConfig, expected
 
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return("HTTP/1.1", true).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return("127.0.0.1:5000", true).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDDestinationAddress).Return("127.0.0.1:80", true).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionUriSanPeerCertificate).Return("", false).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionDnsSanPeerCertificate).Return("", false).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate).Return("", false).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return("", false).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return("", false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:5000"), true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDDestinationAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:80"), true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionUriSanPeerCertificate).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionDnsSanPeerCertificate).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeBool(shared.AttributeIDConnectionMtls).Return(false, false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
 	mockHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), expectedDecision).Return(shared.MetricsSuccess)
 
 	filter := filterFactory.Create(mockHandle)
@@ -537,7 +539,8 @@ allow := true
 
 	mockFilterHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	mockFilterHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockFilterHandle.EXPECT().GetAttributeString(gomock.Any()).Return("", false).AnyTimes()
+	mockFilterHandle.EXPECT().GetAttributeString(gomock.Any()).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
+	mockFilterHandle.EXPECT().GetAttributeBool(gomock.Any()).Return(false, false).AnyTimes()
 	mockFilterHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), "allowed").Return(shared.MetricsSuccess)
 
 	filter := filterFactory.Create(mockFilterHandle).(*opaHttpFilter)
@@ -572,7 +575,8 @@ allow := false
 
 	mockFilterHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	mockFilterHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockFilterHandle.EXPECT().GetAttributeString(gomock.Any()).Return("", false).AnyTimes()
+	mockFilterHandle.EXPECT().GetAttributeString(gomock.Any()).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
+	mockFilterHandle.EXPECT().GetAttributeBool(gomock.Any()).Return(false, false).AnyTimes()
 	mockFilterHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "opa_denied")
 	mockFilterHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), "denied").Return(shared.MetricsSuccess)
 
@@ -652,6 +656,7 @@ default allow := true
 	conn, ok := attrs["connection"].(map[string]any)
 	require.True(t, ok)
 	require.Empty(t, conn["tls_version"])
+	require.False(t, conn["mtls"].(bool))
 
 	// Check parsed_path.
 	parsedPath, ok := input["parsed_path"].([]string)
@@ -686,14 +691,15 @@ default allow := true
 
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return("HTTP/2", true).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return("10.0.0.1:5000", true).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDDestinationAddress).Return("10.0.0.2:443", true).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionUriSanPeerCertificate).Return("spiffe://cluster.local/ns/default/sa/client", true).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionDnsSanPeerCertificate).Return("client.default.svc.cluster.local", true).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate).Return("CN=client,O=example", true).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return("TLSv1.3", true).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return("abc123def456", true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/2"), true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:5000"), true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDDestinationAddress).Return(pkg.UnsafeBufferFromString("10.0.0.2:443"), true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionUriSanPeerCertificate).Return(pkg.UnsafeBufferFromString("spiffe://cluster.local/ns/default/sa/client"), true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionDnsSanPeerCertificate).Return(pkg.UnsafeBufferFromString("client.default.svc.cluster.local"), true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate).Return(pkg.UnsafeBufferFromString("CN=client,O=example"), true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeBool(shared.AttributeIDConnectionMtls).Return(false, false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return(pkg.UnsafeBufferFromString("TLSv1.3"), true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return(pkg.UnsafeBufferFromString("abc123def456"), true).AnyTimes()
 
 	filter := filterFactory.Create(mockHandle).(*opaHttpFilter)
 
@@ -753,14 +759,15 @@ allow if {
 	// Test with trusted SPIFFE identity - should allow.
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return("HTTP/2", true).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return("10.0.0.1:5000", true).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDDestinationAddress).Return("10.0.0.2:443", true).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionUriSanPeerCertificate).Return("spiffe://cluster.local/ns/default/sa/trusted", true).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionDnsSanPeerCertificate).Return("", false).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate).Return("", false).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return("TLSv1.3", true).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return("", false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/2"), true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:5000"), true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDDestinationAddress).Return(pkg.UnsafeBufferFromString("10.0.0.2:443"), true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionUriSanPeerCertificate).Return(pkg.UnsafeBufferFromString("spiffe://cluster.local/ns/default/sa/trusted"), true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionDnsSanPeerCertificate).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeBool(shared.AttributeIDConnectionMtls).Return(false, false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return(pkg.UnsafeBufferFromString("TLSv1.3"), true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
 	mockHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), "allowed").Return(shared.MetricsSuccess)
 
 	filter := filterFactory.Create(mockHandle).(*opaHttpFilter)
@@ -802,14 +809,16 @@ allow if {
 	// Test with untrusted SPIFFE identity - should deny.
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return("HTTP/2", true).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return("10.0.0.1:5000", true).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDDestinationAddress).Return("10.0.0.2:443", true).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionUriSanPeerCertificate).Return("spiffe://cluster.local/ns/default/sa/untrusted", true).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionDnsSanPeerCertificate).Return("", false).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate).Return("", false).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return("TLSv1.3", true).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return("", false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/2"), true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:5000"), true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDDestinationAddress).Return(pkg.UnsafeBufferFromString("10.0.0.2:443"), true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionUriSanPeerCertificate).Return(pkg.UnsafeBufferFromString("spiffe://cluster.local/ns/default/sa/untrusted"), true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionDnsSanPeerCertificate).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeBool(shared.AttributeIDConnectionMtls).Return(false, false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return(pkg.UnsafeBufferFromString("TLSv1.3"), true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeBool(shared.AttributeIDConnectionMtls).Return(false, false).AnyTimes()
 	mockHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "opa_denied")
 	mockHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), "denied").Return(shared.MetricsSuccess)
 
@@ -997,7 +1006,7 @@ allow := {"allowed": true, "headers": {"x-jwt-role": payload.role}} if {
 
 		status := filter.OnRequestHeaders(headers, true)
 		require.Equal(t, shared.HeadersStatusContinue, status)
-		require.Equal(t, "admin", requestHeaders.GetOne("x-jwt-role"))
+		require.Equal(t, "admin", requestHeaders.GetOne("x-jwt-role").ToUnsafeString())
 	})
 
 	t.Run("expired JWT is denied", func(t *testing.T) {
@@ -1106,14 +1115,15 @@ result := 1 / 0
 	ctrl := gomock.NewController(t)
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return("HTTP/1.1", true).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return("127.0.0.1:5000", true).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDDestinationAddress).Return("127.0.0.1:80", true).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionUriSanPeerCertificate).Return("", false).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionDnsSanPeerCertificate).Return("", false).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate).Return("", false).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return("", false).AnyTimes()
-	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return("", false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:5000"), true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDDestinationAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:80"), true).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionUriSanPeerCertificate).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionDnsSanPeerCertificate).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeBool(shared.AttributeIDConnectionMtls).Return(false, false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
 
 	filter := &opaHttpFilter{handle: mockHandle, config: parsed}
 	return filter, mockHandle

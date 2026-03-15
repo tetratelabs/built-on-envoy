@@ -81,7 +81,7 @@ func TestOnRequestHeaders_SuccessfulDecryption(t *testing.T) {
 	require.Equal(t, shared.HeadersStatusContinue, status)
 	decryptedValues := requestHeaders.Get("x-decrypted")
 	require.Len(t, decryptedValues, 1)
-	require.Equal(t, payload, decryptedValues[0])
+	require.Equal(t, payload, decryptedValues[0].ToUnsafeString())
 }
 
 func TestOnRequestHeaders_WithMetadataOutput(t *testing.T) {
@@ -174,7 +174,7 @@ func TestOnRequestHeaders_WithBothHeaderAndMetadata(t *testing.T) {
 	require.Equal(t, shared.HeadersStatusContinue, status)
 	decryptedValues := requestHeaders.Get("x-decrypted")
 	require.Len(t, decryptedValues, 1)
-	require.Equal(t, payload, decryptedValues[0])
+	require.Equal(t, payload, decryptedValues[0].ToUnsafeString())
 	require.Equal(t, []byte(payload), capturedMetadata)
 }
 
@@ -320,7 +320,7 @@ func TestOnRequestHeaders_OutputHeaderSingleValue(t *testing.T) {
 	// This test verifies that the output header contains only one value (the last one)
 	// when processing multiple input JWE tokens
 	require.Len(t, decryptedValues, 1, "output header should contain only one value when using Set()")
-	require.Equal(t, payload1, decryptedValues[0], "output header should contain the last decrypted payload")
+	require.Equal(t, payload1, decryptedValues[0].ToUnsafeString(), "output header should contain the last decrypted payload")
 }
 
 // Tests for prefix handling
@@ -366,7 +366,7 @@ func TestOnRequestHeaders_WithPrefix(t *testing.T) {
 	decryptedValues := requestHeaders.Get("x-decrypted")
 	require.Len(t, decryptedValues, 1)
 	// Should have prefix restored in the output
-	require.Equal(t, "Bearer "+payload, decryptedValues[0])
+	require.Equal(t, "Bearer "+payload, decryptedValues[0].ToUnsafeString())
 }
 
 func TestOnRequestHeaders_WithPrefixNotMatching(t *testing.T) {
@@ -410,7 +410,7 @@ func TestOnRequestHeaders_WithPrefixNotMatching(t *testing.T) {
 	decryptedValues := requestHeaders.Get("x-decrypted")
 	require.Len(t, decryptedValues, 1)
 	// Should have prefix added in the output even though input didn't have it
-	require.Equal(t, "Bearer "+payload, decryptedValues[0])
+	require.Equal(t, "Bearer "+payload, decryptedValues[0].ToUnsafeString())
 }
 
 func TestOnRequestHeaders_WithPrefixShorterThanValue(t *testing.T) {
@@ -540,7 +540,7 @@ func TestOnRequestHeaders_WithPrefixMultipleValues(t *testing.T) {
 	decryptedValues := requestHeaders.Get("x-decrypted")
 	// Using Set() means only the last value is retained
 	require.Len(t, decryptedValues, 1)
-	require.Equal(t, "Bearer "+payload2, decryptedValues[0], "should contain the last decrypted payload with prefix restored")
+	require.Equal(t, "Bearer "+payload2, decryptedValues[0].ToUnsafeString(), "should contain the last decrypted payload with prefix restored")
 }
 
 func TestOnRequestHeaders_WithEmptyPrefix(t *testing.T) {
@@ -583,7 +583,7 @@ func TestOnRequestHeaders_WithEmptyPrefix(t *testing.T) {
 	decryptedValues := requestHeaders.Get("x-decrypted")
 	require.Len(t, decryptedValues, 1)
 	// Should not have any prefix added
-	require.Equal(t, payload, decryptedValues[0])
+	require.Equal(t, payload, decryptedValues[0].ToUnsafeString())
 }
 
 // Tests for jweDecryptHttpFilterFactory

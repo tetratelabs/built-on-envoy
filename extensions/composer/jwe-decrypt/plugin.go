@@ -64,7 +64,8 @@ func (f *jweDecryptHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool
 		return shared.HeadersStatusContinue
 	}
 
-	for _, jweValue := range jweHeaderValues {
+	for _, jweValueBuffer := range jweHeaderValues {
+		jweValue := jweValueBuffer.ToUnsafeString()
 		f.handle.Log(shared.LogLevelInfo, "Decrypting: "+jweValue)
 
 		// Handle prefix if specified

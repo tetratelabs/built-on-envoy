@@ -17,6 +17,8 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 // mustParseConfig marshals cfg to JSON and runs it through parseConfig so that
@@ -86,7 +88,7 @@ func TestOnRequestHeaders(t *testing.T) {
 
 		var (
 			capturedCluster string
-			capturedHeaders [][2]string
+			capturedHeaders [][2]shared.UnsafeEnvoyBuffer
 			capturedBody    []byte
 			capturedTimeout uint64
 		)
@@ -95,7 +97,12 @@ func TestOnRequestHeaders(t *testing.T) {
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Do(func(cluster string, headers [][2]string, body []byte, timeout uint64, _ shared.HttpCalloutCallback) {
 			capturedCluster = cluster
-			capturedHeaders = headers
+			for _, h := range headers {
+				capturedHeaders = append(capturedHeaders, [2]shared.UnsafeEnvoyBuffer{
+					pkg.UnsafeBufferFromString(h[0]),
+					pkg.UnsafeBufferFromString(h[1]),
+				})
+			}
 			capturedBody = body
 			capturedTimeout = timeout
 		}).Return(shared.HttpCalloutInitSuccess, uint64(1))
@@ -201,17 +208,19 @@ func TestSTSCallback(t *testing.T) {
 	t.Run("successful exchange", func(t *testing.T) {
 		tests := []struct {
 			name string
-			body [][]byte
+			body []shared.UnsafeEnvoyBuffer
 		}{
 			{
 				"single chunk",
-				[][]byte{[]byte(`{"access_token":"new-token","token_type":"Bearer","issued_token_type":"urn:ietf:params:oauth:token-type:access_token"}`)},
+				[]shared.UnsafeEnvoyBuffer{
+					pkg.UnsafeBufferFromString(`{"access_token":"new-token","token_type":"Bearer","issued_token_type":"urn:ietf:params:oauth:token-type:access_token"}`),
+				},
 			},
 			{
 				"multi-chunk",
-				[][]byte{
-					[]byte(`{"access_token":"new-tok`),
-					[]byte(`en","token_type":"Bearer","issued_token_type":"urn:ietf:params:oauth:token-type:access_token"}`),
+				[]shared.UnsafeEnvoyBuffer{
+					pkg.UnsafeBufferFromString(`{"access_token":"new-tok`),
+					pkg.UnsafeBufferFromString(`en","token_type":"Bearer","issued_token_type":"urn:ietf:params:oauth:token-type:access_token"}`),
 				},
 			},
 		}
@@ -229,10 +238,10 @@ func TestSTSCallback(t *testing.T) {
 				mockHandle.EXPECT().ContinueRequest()
 				mockHandle.EXPECT().IncrementCounterValue(cb.metrics.exchangeResults, uint64(1), "success").Return(shared.MetricsSuccess)
 				cb.OnHttpCalloutDone(0, shared.HttpCalloutSuccess,
-					[][2]string{{":status", "200"}},
+					[][2]shared.UnsafeEnvoyBuffer{{pkg.UnsafeBufferFromString(":status"), pkg.UnsafeBufferFromString("200")}},
 					tt.body,
 				)
-				require.Equal(t, "Bearer new-token", reqHeaders.GetOne("authorization"))
+				require.Equal(t, "Bearer new-token", reqHeaders.GetOne("authorization").ToUnsafeString())
 			})
 		}
 	})
@@ -241,8 +250,8 @@ func TestSTSCallback(t *testing.T) {
 		tests := []struct {
 			name           string
 			result         shared.HttpCalloutResult
-			headers        [][2]string
-			body           [][]byte
+			headers        [][2]shared.UnsafeEnvoyBuffer
+			body           []shared.UnsafeEnvoyBuffer
 			expectedStatus uint32
 			metricResult   string
 		}{
@@ -257,7 +266,7 @@ func TestSTSCallback(t *testing.T) {
 			{
 				name:           "missing status header",
 				result:         shared.HttpCalloutSuccess,
-				headers:        [][2]string{},
+				headers:        [][2]shared.UnsafeEnvoyBuffer{},
 				body:           nil,
 				expectedStatus: http.StatusBadGateway,
 				metricResult:   metricResError,
@@ -265,64 +274,64 @@ func TestSTSCallback(t *testing.T) {
 			{
 				name:           "4xx with RFC error body",
 				result:         shared.HttpCalloutSuccess,
-				headers:        [][2]string{{":status", "403"}},
-				body:           [][]byte{[]byte(`{"error":"access_denied","error_description":"error description"}`)},
+				headers:        [][2]shared.UnsafeEnvoyBuffer{{pkg.UnsafeBufferFromString(":status"), pkg.UnsafeBufferFromString("403")}},
+				body:           []shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromString(`{"error":"access_denied","error_description":"error description"}`)},
 				expectedStatus: http.StatusUnauthorized,
 				metricResult:   metricResRejected,
 			},
 			{
 				name:           "4xx with non-JSON body",
 				result:         shared.HttpCalloutSuccess,
-				headers:        [][2]string{{":status", "400"}},
-				body:           [][]byte{[]byte("bad request")},
+				headers:        [][2]shared.UnsafeEnvoyBuffer{{pkg.UnsafeBufferFromString(":status"), pkg.UnsafeBufferFromString("400")}},
+				body:           []shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromString("bad request")},
 				expectedStatus: http.StatusUnauthorized,
 				metricResult:   metricResRejected,
 			},
 			{
 				name:           "5xx status",
 				result:         shared.HttpCalloutSuccess,
-				headers:        [][2]string{{":status", "500"}},
-				body:           [][]byte{[]byte("internal error")},
+				headers:        [][2]shared.UnsafeEnvoyBuffer{{pkg.UnsafeBufferFromString(":status"), pkg.UnsafeBufferFromString("500")}},
+				body:           []shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromString("internal error")},
 				expectedStatus: http.StatusBadGateway,
 				metricResult:   metricResError,
 			},
 			{
 				name:           "invalid JSON body",
 				result:         shared.HttpCalloutSuccess,
-				headers:        [][2]string{{":status", "200"}},
-				body:           [][]byte{[]byte("{bad")},
+				headers:        [][2]shared.UnsafeEnvoyBuffer{{pkg.UnsafeBufferFromString(":status"), pkg.UnsafeBufferFromString("200")}},
+				body:           []shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromString("{bad")},
 				expectedStatus: http.StatusBadGateway,
 				metricResult:   metricResError,
 			},
 			{
 				name:           "missing access_token",
 				result:         shared.HttpCalloutSuccess,
-				headers:        [][2]string{{":status", "200"}},
-				body:           [][]byte{[]byte(`{"token_type":"Bearer","issued_token_type":"urn:ietf:params:oauth:token-type:access_token"}`)},
+				headers:        [][2]shared.UnsafeEnvoyBuffer{{pkg.UnsafeBufferFromString(":status"), pkg.UnsafeBufferFromString("200")}},
+				body:           []shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromString(`{"token_type":"Bearer","issued_token_type":"urn:ietf:params:oauth:token-type:access_token"}`)},
 				expectedStatus: http.StatusBadGateway,
 				metricResult:   metricResError,
 			},
 			{
 				name:           "missing token_type",
 				result:         shared.HttpCalloutSuccess,
-				headers:        [][2]string{{":status", "200"}},
-				body:           [][]byte{[]byte(`{"access_token":"tok","issued_token_type":"urn:ietf:params:oauth:token-type:access_token"}`)},
+				headers:        [][2]shared.UnsafeEnvoyBuffer{{pkg.UnsafeBufferFromString(":status"), pkg.UnsafeBufferFromString("200")}},
+				body:           []shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromString(`{"access_token":"tok","issued_token_type":"urn:ietf:params:oauth:token-type:access_token"}`)},
 				expectedStatus: http.StatusBadGateway,
 				metricResult:   metricResError,
 			},
 			{
 				name:           "missing issued_token_type",
 				result:         shared.HttpCalloutSuccess,
-				headers:        [][2]string{{":status", "200"}},
-				body:           [][]byte{[]byte(`{"access_token":"tok","token_type":"Bearer"}`)},
+				headers:        [][2]shared.UnsafeEnvoyBuffer{{pkg.UnsafeBufferFromString(":status"), pkg.UnsafeBufferFromString("200")}},
+				body:           []shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromString(`{"access_token":"tok","token_type":"Bearer"}`)},
 				expectedStatus: http.StatusBadGateway,
 				metricResult:   metricResError,
 			},
 			{
 				name:           "token_type N_A",
 				result:         shared.HttpCalloutSuccess,
-				headers:        [][2]string{{":status", "200"}},
-				body:           [][]byte{[]byte(`{"access_token":"tok","token_type":"N_A","issued_token_type":"urn:ietf:params:oauth:token-type:access_token"}`)},
+				headers:        [][2]shared.UnsafeEnvoyBuffer{{pkg.UnsafeBufferFromString(":status"), pkg.UnsafeBufferFromString("200")}},
+				body:           []shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromString(`{"access_token":"tok","token_type":"N_A","issued_token_type":"urn:ietf:params:oauth:token-type:access_token"}`)},
 				expectedStatus: http.StatusBadGateway,
 				metricResult:   metricResError,
 			},
@@ -365,8 +374,8 @@ func TestFullExchange(t *testing.T) {
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 	).Do(func(_ string, _ [][2]string, _ []byte, _ uint64, cb shared.HttpCalloutCallback) {
 		cb.OnHttpCalloutDone(0, shared.HttpCalloutSuccess,
-			[][2]string{{":status", "200"}},
-			[][]byte{[]byte(`{"access_token":"new-token","token_type":"Bearer","issued_token_type":"urn:ietf:params:oauth:token-type:access_token"}`)},
+			[][2]shared.UnsafeEnvoyBuffer{{pkg.UnsafeBufferFromString(":status"), pkg.UnsafeBufferFromString("200")}},
+			[]shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromString(`{"access_token":"new-token","token_type":"Bearer","issued_token_type":"urn:ietf:params:oauth:token-type:access_token"}`)},
 		)
 	}).Return(shared.HttpCalloutInitSuccess, uint64(1))
 
@@ -377,5 +386,5 @@ func TestFullExchange(t *testing.T) {
 
 	status := f.OnRequestHeaders(reqHeaders, false)
 	require.Equal(t, shared.HeadersStatusStopAllAndBuffer, status)
-	require.Equal(t, "Bearer new-token", reqHeaders.GetOne("authorization"))
+	require.Equal(t, "Bearer new-token", reqHeaders.GetOne("authorization").ToUnsafeString())
 }

@@ -95,6 +95,7 @@ boe gen-config --help
 | `--insecure` | Allow connecting to an insecure (HTTP) registry. | `bool` | `false` | `BOE_REGISTRY_INSECURE` | No |
 | `--username` | Username for the OCI registry. | `string` | - | `BOE_REGISTRY_USERNAME` | No |
 | `--password` | Password for the OCI registry. | `string` | - | `BOE_REGISTRY_PASSWORD` | No |
-| `--test-upstream-host` | Hostname for the test upstream cluster. | `string` | `httpbin.org` | - | No |
+| `--test-upstream-host` | Hostname for the test upstream cluster. Mutually exclusive with --test-upstream-cluster. Defaults to "httpbin.org". | `string` | - | - | No |
+| `--test-upstream-cluster` | Name of an existing configured cluster to use as the test upstream. The cluster must be configured via --cluster, --cluster-insecure, or --cluster-json. Mutually exclusive with --test-upstream-host. | `string` | - | - | No |
 | `--output` | Directory to put the generated config into. Use "-" to print it to the standard output. | `string` | `-` | - | No |
 

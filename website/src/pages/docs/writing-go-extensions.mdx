@@ -172,6 +172,22 @@ used return values. For more details about the different return values, refer to
 
 ## Common Operations
 
+### Envoy Buffers
+
+Dynamic Modules have direct access to the Envoy memory buffers. While this allows a zero-copy model when invoking extension methods,
+buffers need to be accessed carefully. To this end, the SDK wraps the data in a `shared.UnsafeEnvoyBuffer` struct, and callers have to
+explicitly call the right methods with explicit intent on copying or directly accessing the data.
+
+```go
+// Get direct access to the Envoy memory buffers (zero-copy)
+buffer.ToUnsafeBytes()
+buffer.ToUnsafeString()
+
+// Get a copy of the data for safe access
+buffer.ToBytes()
+buffer.ToString()
+```
+
 ### Working with Headers
 
 ```go
@@ -213,9 +229,9 @@ func (f *customHttpFilter) OnRequestBody(body shared.BodyBuffer, endStream bool)
     bufferedBody := f.handle.BufferedRequestBody()
 
     // Read original content
-    var original []byte
+    var original []shared.UnsafeEnvoyBuffer
     for _, chunk := range bufferedBody.GetChunks() {
-        original = append(original, chunk...)
+        original = append(original, chunk.ToUnsafeBytes()...)
     }
 
     // Replace with new content
@@ -235,7 +251,7 @@ You can short-circuit the request and return a response directly:
 
 ```go
 func (f *customHttpFilter) OnRequestHeaders(headers shared.HeaderMap, endStream bool) shared.HeadersStatus {
-    if headers.GetOne("x-block") == "true" {
+    if headers.GetOne("x-block").ToUnsafeString() == "true" {
         f.handle.SendLocalResponse(
             403,                                    // Status code
             nil,                                    // Headers (optional)
@@ -253,7 +269,7 @@ func (f *customHttpFilter) OnRequestHeaders(headers shared.HeaderMap, endStream 
 ```go
 func (f *customHttpFilter) OnRequestHeaders(headers shared.HeaderMap, endStream bool) shared.HeadersStatus {
     host, _ := f.handle.GetAttributeString(shared.AttributeIDRequestHost)
-    f.handle.Log(shared.LogLevelInfo, "Request host: %s", host)
+    f.handle.Log(shared.LogLevelInfo, "Request host: %s", host.ToUnsafeString())
     return shared.HeadersStatusContinue
 }
 ```

@@ -34,11 +34,12 @@ type GenConfig struct {
 	// sep:"none" disables Kong's default comma-separated splitting for []string flags.
 	// JSON config values contain commas (e.g. {"a":"1","b":"2"}) which would otherwise
 	// be split into separate invalid fragments, causing protobuf unmarshal failures.
-	Configs          []string     `name:"config" sep:"none" help:"Optional JSON config string for extensions. Applied in order to combined --extension and --local flags."`
-	Clusters         ClusterFlags `embed:""`
-	OCI              OCIFlags     `embed:""`
-	TestUpstreamHost string       `name:"test-upstream-host" help:"Hostname for the test upstream cluster." default:"httpbin.org"`
-	Output           string       `name:"output" help:"Directory to put the generated config into. Use \"-\" to print it to the standard output." default:"-" type:"path"`
+	Configs             []string     `name:"config" sep:"none" help:"Optional JSON config string for extensions. Applied in order to combined --extension and --local flags."`
+	Clusters            ClusterFlags `embed:""`
+	OCI                 OCIFlags     `embed:""`
+	TestUpstreamHost    string       `name:"test-upstream-host" help:"Hostname for the test upstream cluster. Mutually exclusive with --test-upstream-cluster. Defaults to \"httpbin.org\"."`
+	TestUpstreamCluster string       `name:"test-upstream-cluster" help:"Name of an existing configured cluster to use as the test upstream. The cluster must be configured via --cluster, --cluster-insecure, or --cluster-json. Mutually exclusive with --test-upstream-host."`
+	Output              string       `name:"output" help:"Directory to put the generated config into. Use \"-\" to print it to the standard output." default:"-" type:"path"`
 
 	extensionPositions extensionPositions `kong:"-"` // Internal field: tracks the original position of extensions specified via both --extension and --local flags
 	stdout             io.Writer          `kong:"-"` // Internal field for testing
@@ -56,6 +57,14 @@ func (g *GenConfig) BeforeResolve() error {
 	var err error
 	g.extensionPositions, err = saveExtensionPositions(os.Args)
 	return err
+}
+
+// Validate is called by Kong after parsing to validate the command arguments.
+func (g *GenConfig) Validate() error {
+	if g.TestUpstreamHost != "" && g.TestUpstreamCluster != "" {
+		return fmt.Errorf("--test-upstream-host and --test-upstream-cluster are mutually exclusive")
+	}
+	return nil
 }
 
 // Run executes the GenConfig command.
@@ -124,16 +133,17 @@ func (g *GenConfig) Run(ctx context.Context, dirs *xdg.Directories, logger *slog
 	}
 
 	config, err := envoy.RenderConfig(&envoy.ConfigGenerationParams{
-		Logger:           logger,
-		AdminPort:        g.AdminPort,
-		ListenerPort:     g.ListenPort,
-		Dirs:             dirs,
-		Extensions:       resolvedExtensions,
-		Configs:          g.Configs,
-		Clusters:         g.Clusters.Secure,
-		ClustersInsecure: g.Clusters.Insecure,
-		ClustersJSON:     g.Clusters.JSONSpec,
-		TestUpstreamHost: g.TestUpstreamHost,
+		Logger:              logger,
+		AdminPort:           g.AdminPort,
+		ListenerPort:        g.ListenPort,
+		Dirs:                dirs,
+		Extensions:          resolvedExtensions,
+		Configs:             g.Configs,
+		Clusters:            g.Clusters.Secure,
+		ClustersInsecure:    g.Clusters.Insecure,
+		ClustersJSON:        g.Clusters.JSONSpec,
+		TestUpstreamHost:    g.TestUpstreamHost,
+		TestUpstreamCluster: g.TestUpstreamCluster,
 	}, renderer)
 	if err != nil {
 		return err
