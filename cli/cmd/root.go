@@ -34,6 +34,7 @@ type CLI struct {
 	Run       Run       `cmd:"" help:"Run Envoy with extensions"`
 	GenConfig GenConfig `cmd:"" help:"Generate Envoy configuration with extensions"`
 	Create    Create    `cmd:"" help:"Create a new extension template"`
+	Download  Download  `cmd:"" help:"Download extensions from the registry"`
 	Clean     Clean     `cmd:"" help:"Clean cache directories"`
 	Version   Version   `cmd:"" help:"Print version information"`
 

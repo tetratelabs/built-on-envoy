@@ -16,6 +16,15 @@ import (
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
+const (
+	// ComposerArtifact is the name of the embedded composer binary artifact in the OCI registry.
+	ComposerArtifact = "composer"
+	// ComposerArtifactLite is the name of composer (only go plugin) binary artifact in the OCI registry.
+	ComposerArtifactLite = "composer-lite"
+	// ComposerArtifactSource is the name of the composer source code artifact in the OCI registry.
+	ComposerArtifactSource = "composer-src"
+)
+
 // LibComposerVersion is the version of the composer extension used in the current build.
 // The value is automatically generated in the code-generation step from the build process
 // implemented in the `sync-manifests.sh` script.
@@ -26,17 +35,17 @@ var LibComposerVersion string
 
 // CheckOrDownloadLibComposer checks if the libcomposer.so exists in the local cache directory.
 // If not, it tries to download the pre-built libcomposer from OCI registry.
-func CheckOrDownloadLibComposer(ctx context.Context, downloader *Downloader, version string, sourceArtifact bool) error {
+func CheckOrDownloadLibComposer(ctx context.Context, downloader *Downloader, version string, artifact string) error {
 	if _, err := os.Stat(LocalCacheComposerLib(downloader.Dirs, version)); err == nil {
 		downloader.Logger.Debug("libcomposer already exists in local cache. skipping download", "version", version)
 		return nil
 	}
-	return DownloadLibComposerAndBuildIfNeeded(ctx, downloader, version, sourceArtifact)
+	return DownloadLibComposerAndBuildIfNeeded(ctx, downloader, version, artifact)
 }
 
 // DownloadLibComposerAndBuildIfNeeded is a helper function that combines downloading and building the libcomposer.
-func DownloadLibComposerAndBuildIfNeeded(ctx context.Context, downloader *Downloader, version string, sourceArtifact bool) error {
-	artifact, err := downloader.DownloadComposer(ctx, version, sourceArtifact)
+func DownloadLibComposerAndBuildIfNeeded(ctx context.Context, downloader *Downloader, version string, artifactName string) error {
+	artifact, err := downloader.DownloadComposer(ctx, version, artifactName)
 	if err != nil {
 		return fmt.Errorf("failed to download libcomposer: %w", err)
 	}

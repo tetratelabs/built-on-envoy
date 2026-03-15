@@ -70,7 +70,7 @@ Flags:
       --cluster-json=CLUSTER-JSON
                                    Optional additional Envoy cluster providing
                                    the complete cluster config in JSON format.
-      --registry="ghcr.io/tetratelabs/built-on-envoy"
+      --registry="%s"
                                    OCI registry URL for the extensions
                                    ($BOE_REGISTRY).
       --insecure                   Allow connecting to an insecure (HTTP)
@@ -92,7 +92,7 @@ Flags:
                                    --test-upstream-host.
       --output="-"                 Directory to put the generated config into.
                                    Use "-" to print it to the standard output.
-`, internaltesting.WrapHelp(genConfigHelp))
+`, internaltesting.WrapHelp(genConfigHelp), extensions.DefaultOCIRegistry)
 
 	require.Equal(t, expected, buf.String())
 }

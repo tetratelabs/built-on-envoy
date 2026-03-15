@@ -94,7 +94,7 @@ Flags:
       --pull="missing"             Pull policy for the BOE Docker image
                                    (missing, always, never). Only applicable
                                    when running with --docker.
-      --registry="ghcr.io/tetratelabs/built-on-envoy"
+      --registry="%s"
                                    OCI registry URL for the extensions
                                    ($BOE_REGISTRY).
       --insecure                   Allow connecting to an insecure (HTTP)
@@ -103,7 +103,7 @@ Flags:
                                    ($BOE_REGISTRY_USERNAME).
       --password=STRING            Password for the OCI registry
                                    ($BOE_REGISTRY_PASSWORD).
-`, internaltesting.WrapHelp(runHelp))
+`, internaltesting.WrapHelp(runHelp), extensions.DefaultOCIRegistry)
 
 	require.Equal(t, expected, buf.String())
 }

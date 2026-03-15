@@ -25,14 +25,15 @@ const devVersionTagSuffix = "-dev"
 type Downloader struct {
 	Logger *slog.Logger
 
-	Registry    string
-	Username    string
-	Password    string
-	Insecure    bool
-	Dirs        *xdg.Directories
-	OS          string
-	Arch        string
-	DevVersions bool // Whether to allow downloading dev versions (with -dev suffix). By default, only stable versions are allowed.
+	Registry              string
+	Username              string
+	Password              string
+	Insecure              bool
+	Dirs                  *xdg.Directories
+	OS                    string
+	Arch                  string
+	DevVersions           bool // Whether to allow downloading dev versions (with -dev suffix). By default, only stable versions are allowed.
+	DisableSourceFallback bool // Whether to disable fallback to download source artifact when platform-specific artifact is not found. By default, the fallback is enabled.
 
 	// client factory function to allow mocking in tests.
 	newClient func(logger *slog.Logger, repository, username, password string, insecure bool) (oci.RepositoryClient, error)
@@ -53,13 +54,7 @@ type DownloadedExtension struct {
 }
 
 // DownloadComposer downloads the composer from the specified repository and version into the downloadDir.
-func (d *Downloader) DownloadComposer(ctx context.Context, version string, sourceArtifact bool) (DownloadedExtension, error) {
-	var artifact string
-	if sourceArtifact {
-		artifact = "composer-src"
-	} else {
-		artifact = "composer-lite"
-	}
+func (d *Downloader) DownloadComposer(ctx context.Context, version string, artifact string) (DownloadedExtension, error) {
 	d.Logger.Info("downloading composer", "repository", d.Registry, "artifact", artifact, "version", version)
 	return d.download(ctx, d.Registry+"/"+artifact, version, func(manifest *ocispec.Manifest) string {
 		extensionManifest := ManifestFromOCI(manifest)
@@ -145,7 +140,7 @@ func (d *Downloader) download(
 
 	// Fetch the manifest first to read the annotations so that we can compute the right download directory
 	manifest, err := client.FetchManifest(ctx, version, platform)
-	if errors.Is(err, oci.ErrPlatformNotFound) {
+	if errors.Is(err, oci.ErrPlatformNotFound) && !d.DisableSourceFallback {
 		// If the manifest for the specific platform is not found, we can fallback to download
 		// the source artifact using the source repository.
 		extensionName := NameFromRepository(repository)

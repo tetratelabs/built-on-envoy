@@ -8,6 +8,8 @@ sections:
         href: /docs/cli/clean
       - title: create
         href: /docs/cli/create
+      - title: download
+        href: /docs/cli/download
       - title: gen-config
         href: /docs/cli/gen-config
       - title: list

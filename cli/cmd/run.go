@@ -205,7 +205,7 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 		case extensions.ArtifactBinary:
 			if artifact.Manifest.Type == extensions.TypeGo {
 				// Ensure the composer is downloaded before running any extensions that may depend on it.
-				if err = extensions.CheckOrDownloadLibComposer(ctx, downloader, artifact.Manifest.ComposerVersion, false); err != nil {
+				if err = extensions.CheckOrDownloadLibComposer(ctx, downloader, artifact.Manifest.ComposerVersion, extensions.ComposerArtifactLite); err != nil {
 					return nil, fmt.Errorf("failed to download libcomposer %s for extension %s: %w",
 						artifact.Manifest.ComposerVersion, name, err)
 				}
@@ -338,7 +338,7 @@ func loadLocalManifests(ctx context.Context, logger *slog.Logger, downloader *ex
 				if err := extensions.BuildExtensionFromPath(downloader.Logger, downloader.Dirs, manifest, path); err != nil {
 					return nil, err
 				}
-				if err := extensions.DownloadLibComposerAndBuildIfNeeded(ctx, downloader, manifest.ComposerVersion, true); err != nil {
+				if err := extensions.DownloadLibComposerAndBuildIfNeeded(ctx, downloader, manifest.ComposerVersion, extensions.ComposerArtifactSource); err != nil {
 					return nil, err
 				}
 			case extensions.TypeRust:
