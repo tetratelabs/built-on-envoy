@@ -15,7 +15,7 @@ import (
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
-func TestDownloadRustExtension(t *testing.T) {
+func TestDownloadExtension(t *testing.T) {
 	internaltesting.SkipIfTestRegistryNotConfigured(t)
 
 	for _, ext := range []*extensions.Manifest{
