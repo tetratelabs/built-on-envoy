@@ -79,8 +79,17 @@ Flags:
                                    ($BOE_REGISTRY_USERNAME).
       --password=STRING            Password for the OCI registry
                                    ($BOE_REGISTRY_PASSWORD).
-      --test-upstream-host="httpbin.org"
-                                   Hostname for the test upstream cluster.
+      --test-upstream-host=STRING
+                                   Hostname for the test upstream
+                                   cluster. Mutually exclusive with
+                                   --test-upstream-cluster. Defaults to
+                                   "httpbin.org".
+      --test-upstream-cluster=STRING
+                                   Name of an existing configured cluster to
+                                   use as the test upstream. The cluster must be
+                                   configured via --cluster, --cluster-insecure,
+                                   or --cluster-json. Mutually exclusive with
+                                   --test-upstream-host.
       --output="-"                 Directory to put the generated config into.
                                    Use "-" to print it to the standard output.
 `, internaltesting.WrapHelp(genConfigHelp))
@@ -94,13 +103,14 @@ func TestGenConfig(t *testing.T) {
 	clusterInsecureShort := `example.com:80`
 
 	tests := []struct {
-		name             string
-		minimal          bool
-		local            []string
-		clusters         []string
-		clustersInsecure []string
-		clustersJSON     []string
-		wantFile         string
+		name                string
+		minimal             bool
+		local               []string
+		clusters            []string
+		clustersInsecure    []string
+		clustersJSON        []string
+		testUpstreamCluster string
+		wantFile            string
 	}{
 		{
 			name:     "only filters",
@@ -172,6 +182,14 @@ func TestGenConfig(t *testing.T) {
 			clustersInsecure: []string{clusterInsecureShort},
 			wantFile:         "testdata/output_only_filters_with_shorthand_cluster_and_insecure_cluster.yaml",
 		},
+		{
+			name:                "full config with test upstream cluster",
+			minimal:             false,
+			local:               []string{"testdata/input_lua_inline"},
+			clusters:            []string{clusterShort},
+			testUpstreamCluster: clusterShort,
+			wantFile:            "testdata/output_full_config_with_test_upstream_cluster.yaml",
+		},
 	}
 
 	for _, tt := range tests {
@@ -187,8 +205,9 @@ func TestGenConfig(t *testing.T) {
 					Insecure: tt.clustersInsecure,
 					JSONSpec: tt.clustersJSON,
 				},
-				Output: "-",
-				stdout: &buf,
+				TestUpstreamCluster: tt.testUpstreamCluster,
+				Output:              "-",
+				stdout:              &buf,
 			}
 
 			var args []string
@@ -209,6 +228,14 @@ func TestGenConfig(t *testing.T) {
 			require.YAMLEq(t, string(want), buf.String())
 		})
 	}
+}
+
+func TestGenConfigValidateMutualExclusion(t *testing.T) {
+	cmd := &GenConfig{
+		TestUpstreamHost:    "example.com",
+		TestUpstreamCluster: "example.com:443",
+	}
+	require.ErrorContains(t, cmd.Validate(), "--test-upstream-host and --test-upstream-cluster are mutually exclusive")
 }
 
 func TestGenConfigMultipleArgsWithCommas(t *testing.T) {
