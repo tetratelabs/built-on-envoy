@@ -30,7 +30,7 @@ longDescription: |
 
   | Field | Type | Required | Default | Description |
   |-------|------|----------|---------|-------------|
-  | `metadata_namespace` | string | no | `openai` | The filter metadata namespace for the decoded fields |
+  | `metadata_namespace` | string | no | `io.builtonenvoy.openai` | The filter metadata namespace for the decoded fields |
 
 type: go
 tags:
@@ -47,9 +47,9 @@ examples:
   - title: Basic usage (default namespace)
     description: |
       Decode incoming OpenAI Chat Completion requests and expose metadata under the
-      default `openai` namespace using OpenInference semantic conventions.
-      Downstream filters can access `openai.llm.model_name`,
-      `openai.llm.input_messages.0.message.role`, etc.
+      default `io.builtonenvoy.openai` namespace using OpenInference semantic conventions.
+      Downstream filters can access `io.builtonenvoy.openai.llm.model_name`,
+      `io.builtonenvoy.openai.llm.input_messages.0.message.role`, etc.
     code: |
       boe run --extension chat-completions-decoder \
         --test-upstream-host api.openai.com
@@ -66,7 +66,7 @@ examples:
           ]
         }'
 
-      # Envoy filter metadata will contain (namespace: "openai"):
+      # Envoy filter metadata will contain (namespace: "io.builtonenvoy.openai"):
       # llm.model_name                         = "gpt-4o"
       # llm.system                             = "openai"
       # llm.input_messages.count               = 2
@@ -137,7 +137,7 @@ examples:
           ]
         }'
 
-      # Request metadata (namespace: "openai"):
+      # Request metadata (namespace: "io.builtonenvoy.openai"):
       # llm.model_name                                                         = "gpt-4o"
       # llm.system                                                             = "openai"
       # llm.input_messages.count                                               = 3
@@ -152,7 +152,7 @@ examples:
       # llm.input_messages.2.message.content                                   = "Sunny, 72F"
       # llm.tools.count                                                        = 0
 
-      # Response metadata (when the model sends its final reply):
+      # Response metadata (namespace: "io.builtonenvoy.openai", when the model sends its final reply):
       # llm.output_messages.count                                              = 1
       # llm.output_messages.0.message.role                                     = "assistant"
       # llm.output_messages.0.message.content                                  = "The weather in NYC is sunny and 72F."

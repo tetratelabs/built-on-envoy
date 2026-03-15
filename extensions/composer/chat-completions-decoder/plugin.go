@@ -15,12 +15,12 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/utility"
 )
 
-const defaultMetadataNamespace = "openai"
+const defaultMetadataNamespace = "io.builtonenvoy.openai"
 
 // chatCompletionsDecoderConfig holds the configuration for the decoder filter.
 type chatCompletionsDecoderConfig struct {
 	// MetadataNamespace is the filter metadata namespace under which the decoded
-	// fields are stored. Defaults to "openai".
+	// fields are stored. Defaults to "io.builtonenvoy.openai".
 	MetadataNamespace string `json:"metadata_namespace"`
 }
 
