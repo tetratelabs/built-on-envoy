@@ -12,6 +12,7 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/fake"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
 	"github.com/stretchr/testify/require"
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 	"go.uber.org/mock/gomock"
 )
 
@@ -26,8 +27,10 @@ func newTestBodyBuffer(data []byte) *testBodyBuffer {
 	return &testBodyBuffer{body: b}
 }
 
-func (b *testBodyBuffer) GetChunks() [][]byte { return [][]byte{b.body} }
-func (b *testBodyBuffer) GetSize() uint64     { return uint64(len(b.body)) }
+func (b *testBodyBuffer) GetChunks() []shared.UnsafeEnvoyBuffer {
+	return []shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromBytes(b.body)}
+}
+func (b *testBodyBuffer) GetSize() uint64 { return uint64(len(b.body)) }
 func (b *testBodyBuffer) Drain(size uint64) {
 	if size >= uint64(len(b.body)) {
 		b.body = nil
@@ -212,14 +215,14 @@ func TestOnRequestBody_ValidRequest_WithSystem_SetsMetadata(t *testing.T) {
 	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
 
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.model_name", "claude-sonnet-4-20250514").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.system", "anthropic").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.input_messages.count", 2).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.input_messages.0.message.role", "system").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.input_messages.0.message.content", "You are a helpful assistant.").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.input_messages.1.message.role", "user").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.input_messages.1.message.content", "What is the weather?").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.tools.count", 0).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.model_name", "claude-sonnet-4-20250514").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.system", "anthropic").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.input_messages.count", 2).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.input_messages.0.message.role", "system").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.input_messages.0.message.content", "You are a helpful assistant.").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.input_messages.1.message.role", "user").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.input_messages.1.message.content", "What is the weather?").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.tools.count", 0).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnRequestBody(newTestBodyBuffer(body), true)
@@ -240,12 +243,12 @@ func TestOnRequestBody_ValidRequest_NoSystem_SetsMetadata(t *testing.T) {
 	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
 
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.model_name", "claude-sonnet-4-20250514").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.system", "anthropic").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.input_messages.count", 1).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.input_messages.0.message.role", "user").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.input_messages.0.message.content", "Hello").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.tools.count", 0).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.model_name", "claude-sonnet-4-20250514").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.system", "anthropic").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.input_messages.count", 1).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.input_messages.0.message.role", "user").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.input_messages.0.message.content", "Hello").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.tools.count", 0).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnRequestBody(newTestBodyBuffer(body), true)
@@ -267,13 +270,13 @@ func TestOnRequestBody_WithTools_SetsMetadata(t *testing.T) {
 	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
 
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.model_name", "claude-sonnet-4-20250514").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.system", "anthropic").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.input_messages.count", 1).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.input_messages.0.message.role", "user").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.input_messages.0.message.content", "Call a tool").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.tools.count", 1).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.tools.0.tool.json_schema",
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.model_name", "claude-sonnet-4-20250514").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.system", "anthropic").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.input_messages.count", 1).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.input_messages.0.message.role", "user").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.input_messages.0.message.content", "Call a tool").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.tools.count", 1).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.tools.0.tool.json_schema",
 		`{"name":"my_func","description":"A function","input_schema":{"type":"object"}}`).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
@@ -298,18 +301,18 @@ func TestOnRequestBody_WithToolUse_SetsMetadata(t *testing.T) {
 	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
 
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.model_name", "claude-sonnet-4-20250514").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.system", "anthropic").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.input_messages.count", 2).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.input_messages.0.message.role", "user").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.input_messages.0.message.content", "What is the weather?").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.input_messages.1.message.role", "assistant").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.model_name", "claude-sonnet-4-20250514").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.system", "anthropic").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.input_messages.count", 2).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.input_messages.0.message.role", "user").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.input_messages.0.message.content", "What is the weather?").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.input_messages.1.message.role", "assistant").Times(1)
 	// assistant message has no text content, so no content key is set
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.input_messages.1.message.tool_calls.count", 1).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.input_messages.1.message.tool_calls.0.tool_call.id", "toolu_1").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.input_messages.1.message.tool_calls.0.tool_call.function.name", "get_weather").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.input_messages.1.message.tool_calls.0.tool_call.function.arguments", "{}").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.tools.count", 0).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.input_messages.1.message.tool_calls.count", 1).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.input_messages.1.message.tool_calls.0.tool_call.id", "toolu_1").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.input_messages.1.message.tool_calls.0.tool_call.function.name", "get_weather").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.input_messages.1.message.tool_calls.0.tool_call.function.arguments", "{}").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.tools.count", 0).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnRequestBody(newTestBodyBuffer(body), true)
@@ -357,12 +360,12 @@ func TestOnRequestTrailers_SetsMetadata(t *testing.T) {
 	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
 
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.model_name", "claude-sonnet-4-20250514").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.system", "anthropic").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.input_messages.count", 1).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.input_messages.0.message.role", "user").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.input_messages.0.message.content", "Hello").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.tools.count", 0).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.model_name", "claude-sonnet-4-20250514").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.system", "anthropic").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.input_messages.count", 1).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.input_messages.0.message.role", "user").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.input_messages.0.message.content", "Hello").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.tools.count", 0).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnRequestTrailers(fake.NewFakeHeaderMap(map[string][]string{}))
@@ -491,12 +494,12 @@ func TestOnResponseBody_ValidResponse_SetsMetadata(t *testing.T) {
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.count", 1).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.0.message.role", "assistant").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.0.message.content", "The weather is sunny.").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.token_count.prompt", 20).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.token_count.completion", 10).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.token_count.total", 30).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.count", 1).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.role", "assistant").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.content", "The weather is sunny.").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.token_count.prompt", 20).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.token_count.completion", 10).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.token_count.total", 30).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
@@ -519,9 +522,9 @@ func TestOnResponseBody_NoUsage_SetsMetadataWithoutTokenCounts(t *testing.T) {
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.count", 1).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.0.message.role", "assistant").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.0.message.content", "Hello!").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.count", 1).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.role", "assistant").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.content", "Hello!").Times(1)
 	// No token count calls expected when usage is absent
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
@@ -551,14 +554,14 @@ func TestOnResponseBody_WithCacheTokens_SetsMetadata(t *testing.T) {
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.count", 1).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.0.message.role", "assistant").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.0.message.content", "Done.").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.token_count.prompt", 100).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.token_count.completion", 50).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.token_count.total", 150).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.token_count.completion_details.cache_creation_input_tokens", 20).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.token_count.completion_details.cache_read_input_tokens", 30).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.count", 1).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.role", "assistant").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.content", "Done.").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.token_count.prompt", 100).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.token_count.completion", 50).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.token_count.total", 150).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.token_count.completion_details.cache_creation_input_tokens", 20).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.token_count.completion_details.cache_read_input_tokens", 30).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
@@ -581,13 +584,13 @@ func TestOnResponseBody_WithOutputToolCalls_SetsMetadata(t *testing.T) {
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.count", 1).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.0.message.role", "assistant").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.count", 1).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.role", "assistant").Times(1)
 	// no text content: no content key
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.0.message.tool_calls.count", 1).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.0.message.tool_calls.0.tool_call.id", "toolu_abc").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.0.message.tool_calls.0.tool_call.function.name", "get_weather").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.0.message.tool_calls.0.tool_call.function.arguments", `{"loc":"NYC"}`).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.tool_calls.count", 1).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.tool_calls.0.tool_call.id", "toolu_abc").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.tool_calls.0.tool_call.function.name", "get_weather").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.tool_calls.0.tool_call.function.arguments", `{"loc":"NYC"}`).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
@@ -641,12 +644,12 @@ func TestOnResponseTrailers_SetsMetadata(t *testing.T) {
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.count", 1).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.0.message.role", "assistant").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.0.message.content", "Done.").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.token_count.prompt", 5).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.token_count.completion", 3).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.token_count.total", 8).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.count", 1).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.role", "assistant").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.content", "Done.").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.token_count.prompt", 5).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.token_count.completion", 3).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.token_count.total", 8).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnResponseTrailers(fake.NewFakeHeaderMap(map[string][]string{}))
@@ -687,12 +690,12 @@ func TestOnResponseBody_StreamingResponse_SetsMetadata(t *testing.T) {
 			"data: {\"type\":\"message_stop\"}\n\n",
 	)
 
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.count", 1).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.0.message.role", "assistant").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.0.message.content", "Hello world").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.token_count.prompt", 10).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.token_count.completion", 5).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.token_count.total", 15).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.count", 1).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.role", "assistant").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.content", "Hello world").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.token_count.prompt", 10).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.token_count.completion", 5).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.token_count.total", 15).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	filter.OnResponseHeaders(sseHeaders(), false)
@@ -725,12 +728,12 @@ func TestOnResponseBody_StreamingResponse_SingleChunk(t *testing.T) {
 			"data: {\"type\":\"message_stop\"}\n\n",
 	)
 
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.count", 1).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.0.message.role", "assistant").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.0.message.content", "Hello world").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.token_count.prompt", 10).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.token_count.completion", 5).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.token_count.total", 15).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.count", 1).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.role", "assistant").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.content", "Hello world").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.token_count.prompt", 10).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.token_count.completion", 5).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.token_count.total", 15).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	filter.OnResponseHeaders(sseHeaders(), false)
@@ -760,15 +763,15 @@ func TestOnResponseBody_StreamingResponse_WithToolCalls(t *testing.T) {
 			"data: {\"type\":\"message_stop\"}\n\n",
 	)
 
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.count", 1).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.0.message.role", "assistant").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.0.message.tool_calls.count", 1).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.0.message.tool_calls.0.tool_call.id", "toolu_1").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.0.message.tool_calls.0.tool_call.function.name", "get_weather").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.0.message.tool_calls.0.tool_call.function.arguments", `{"loc":"NYC"}`).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.token_count.prompt", 20).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.token_count.completion", 10).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.token_count.total", 30).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.count", 1).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.role", "assistant").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.tool_calls.count", 1).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.tool_calls.0.tool_call.id", "toolu_1").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.tool_calls.0.tool_call.function.name", "get_weather").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.tool_calls.0.tool_call.function.arguments", `{"loc":"NYC"}`).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.token_count.prompt", 20).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.token_count.completion", 10).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.token_count.total", 30).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	filter.OnResponseHeaders(sseHeaders(), false)
@@ -798,9 +801,9 @@ func TestOnResponseBody_StreamingResponse_ChunkSplitMidLine(t *testing.T) {
 	chunk1 := []byte(fullStream[:30])
 	chunk2 := []byte(fullStream[30:])
 
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.count", 1).Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.0.message.role", "assistant").Times(1)
-	mockHandle.EXPECT().SetMetadata("anthropic", "llm.output_messages.0.message.content", "OK").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.count", 1).Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.role", "assistant").Times(1)
+	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.content", "OK").Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	filter.OnResponseHeaders(sseHeaders(), false)

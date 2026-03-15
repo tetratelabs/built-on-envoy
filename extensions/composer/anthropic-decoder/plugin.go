@@ -15,12 +15,12 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/utility"
 )
 
-const defaultMetadataNamespace = "anthropic"
+const defaultMetadataNamespace = "io.builtonenvoy.anthropic"
 
 // anthropicDecoderConfig holds the configuration for the decoder filter.
 type anthropicDecoderConfig struct {
 	// MetadataNamespace is the filter metadata namespace under which the decoded
-	// fields are stored. Defaults to "anthropic".
+	// fields are stored. Defaults to "io.builtonenvoy.anthropic".
 	MetadataNamespace string `json:"metadata_namespace"`
 }
 
@@ -104,7 +104,7 @@ func (d *decoderFilter) OnResponseHeaders(headers shared.HeaderMap, endOfStream 
 	}
 	// Detect streaming SSE responses by content-type so we can parse
 	// chunks incrementally without buffering the entire response.
-	if ct := headers.GetOne("content-type"); strings.HasPrefix(ct, "text/event-stream") {
+	if ct := headers.GetOne("content-type").ToUnsafeString(); strings.HasPrefix(ct, "text/event-stream") {
 		d.handle.Log(shared.LogLevelDebug, "anthropic-messages-decoder: handling SSE response")
 		d.sseAcc = newAnthropicSSEAccumulator(func(format string, args ...any) {
 			d.handle.Log(shared.LogLevelDebug, format, args...)
@@ -122,7 +122,7 @@ func (d *decoderFilter) OnResponseBody(body shared.BodyBuffer, endOfStream bool)
 	if d.sseAcc != nil { // Streaming SSE: feed each chunk incrementally.
 		if body != nil {
 			for _, chunk := range body.GetChunks() {
-				d.sseAcc.feed(chunk)
+				d.sseAcc.feed(chunk.ToBytes()) // copy the chunk
 			}
 		}
 		if endOfStream {

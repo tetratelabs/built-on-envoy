@@ -30,7 +30,7 @@ longDescription: |
 
   | Field | Type | Required | Default | Description |
   |-------|------|----------|---------|-------------|
-  | `metadata_namespace` | string | no | `anthropic` | The filter metadata namespace for the decoded fields |
+  | `metadata_namespace` | string | no | `io.builtonenvoy.anthropic` | The filter metadata namespace for the decoded fields |
 
 type: go
 tags:
@@ -47,9 +47,9 @@ examples:
   - title: Basic usage (default namespace)
     description: |
       Decode incoming Anthropic Messages API requests and expose metadata under the
-      default `anthropic` namespace using OpenInference semantic conventions.
-      Downstream filters can access `anthropic.llm.model_name`,
-      `anthropic.llm.input_messages.0.message.role`, etc.
+      default `io.builtonenvoy.anthropic` namespace using OpenInference semantic conventions.
+      Downstream filters can access `io.builtonenvoy.anthropic.llm.model_name`,
+      `io.builtonenvoy.anthropic.llm.input_messages.0.message.role`, etc.
     code: |
       boe run --extension anthropic-decoder \
         --test-upstream-host api.anthropic.com
@@ -68,7 +68,7 @@ examples:
           ]
         }'
 
-      # Envoy filter metadata will contain (namespace: "anthropic"):
+      # Envoy filter metadata will contain (namespace: "io.builtonenvoy.anthropic"):
       # llm.model_name                         = "claude-sonnet-4-20250514"
       # llm.system                             = "anthropic"
       # llm.input_messages.count               = 2
@@ -145,7 +145,7 @@ examples:
           ]
         }'
 
-      # Request metadata (namespace: "anthropic"):
+      # Request metadata (namespace: "io.builtonenvoy.anthropic"):
       # llm.model_name                                                         = "claude-sonnet-4-20250514"
       # llm.system                                                             = "anthropic"
       # llm.input_messages.count                                               = 3
