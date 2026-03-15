@@ -49,8 +49,8 @@ longDescription: |
 
   | Namespace | Key | Description |
   |-----------|-----|-------------|
-  | `waf` | `block_phase` | Phase in which the requests has been blocked. See the [execution flow](https://coraza.io/docs/seclang/execution-flow/) for details on the possible values. |
-  | `waf` | `block_rule` | ID of the rule that triggered the block. |
+  | `io.builtonenvoy.waf` | `block_phase` | Phase in which the requests has been blocked. See the [execution flow](https://coraza.io/docs/seclang/execution-flow/) for details on the possible values. |
+  | `io.builtonenvoy.waf` | `block_rule` | ID of the rule that triggered the block. |
 
   ## Metrics
 

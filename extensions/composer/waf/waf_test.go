@@ -46,7 +46,8 @@ func Test_DisableWaf(t *testing.T) {
 	t.Run("WAF disabled should skip processing", func(t *testing.T) {
 		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
 		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return("HTTP/1.1", true)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
+			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
@@ -434,7 +435,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
-			"HTTP/1.1", true)
+			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
@@ -791,7 +792,7 @@ func Test_FullWaf(t *testing.T) {
 	})
 }
 
-func Test_BlockRequest(t *testing.T) {
+func Test_BlockRequestWaf(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -827,8 +828,10 @@ func Test_BlockRequest(t *testing.T) {
 		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
 		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
-		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return("HTTP/1.1", true)
-		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return("10.0.0.1:12345", true)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
+			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(
+			pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
 
 		// Expect block metrics: rule 100001, phase 1 (request headers).
 		pluginHandle.EXPECT().IncrementCounterValue(
@@ -837,8 +840,8 @@ func Test_BlockRequest(t *testing.T) {
 			strconv.Itoa(int(ctypes.PhaseRequestHeaders)),
 			"100001",
 		).Return(shared.MetricsSuccess)
-		pluginHandle.EXPECT().SetMetadata("waf", metadataKeyBlockRule, 100001)
-		pluginHandle.EXPECT().SetMetadata("waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestHeaders))
+		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 100001)
+		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestHeaders))
 		pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_request_headers_blocked")
 
 		plugin := wafPluginFactory.Create(pluginHandle)
@@ -866,8 +869,10 @@ func Test_BlockRequest(t *testing.T) {
 		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
 		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
-		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return("HTTP/1.1", true)
-		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return("10.0.0.1:12345", true)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
+			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(
+			pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
 
 		// Expect block metrics: rule 100002, phase 2 (request body).
 		pluginHandle.EXPECT().IncrementCounterValue(
@@ -876,8 +881,8 @@ func Test_BlockRequest(t *testing.T) {
 			strconv.Itoa(int(ctypes.PhaseRequestBody)),
 			"100002",
 		).Return(shared.MetricsSuccess)
-		pluginHandle.EXPECT().SetMetadata("waf", metadataKeyBlockRule, 100002)
-		pluginHandle.EXPECT().SetMetadata("waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestBody))
+		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 100002)
+		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestBody))
 		pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_request_body_blocked")
 
 		plugin := wafPluginFactory.Create(pluginHandle)
@@ -909,8 +914,10 @@ func Test_BlockRequest(t *testing.T) {
 		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
 		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
-		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return("HTTP/1.1", true)
-		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return("10.0.0.1:12345", true)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
+			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(
+			pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
@@ -946,8 +953,8 @@ func Test_BlockRequest(t *testing.T) {
 			strconv.Itoa(int(ctypes.PhaseResponseBody)),
 			"100003",
 		).Return(shared.MetricsSuccess)
-		pluginHandle.EXPECT().SetMetadata("waf", metadataKeyBlockRule, 100003)
-		pluginHandle.EXPECT().SetMetadata("waf", metadataKeyBlockPhase, int(ctypes.PhaseResponseBody))
+		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 100003)
+		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseResponseBody))
 		pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_response_body_blocked")
 
 		responseBody := fake.NewFakeBodyBuffer([]byte(`{"secret":"leaked-secret"}`))
@@ -959,7 +966,7 @@ func Test_BlockRequest(t *testing.T) {
 	})
 }
 
-func Test_blockRequest(t *testing.T) {
+func Test_BlockRequest(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -988,7 +995,7 @@ func Test_blockRequest(t *testing.T) {
 			"",
 		).Return(shared.MetricsSuccess)
 		// Only block_phase metadata is set (no block_rule for internal errors).
-		pluginHandle.EXPECT().SetMetadata("waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestBody))
+		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestBody))
 		pluginHandle.EXPECT().SendLocalResponse(uint32(500), nil, []byte("Blocked by WAF"), "waf_internal_error")
 
 		p.blockRequest(nil, ctypes.PhaseRequestBody, "waf_internal_error")
@@ -1016,8 +1023,8 @@ func Test_blockRequest(t *testing.T) {
 			strconv.Itoa(int(ctypes.PhaseRequestHeaders)),
 			"12345",
 		).Return(shared.MetricsSuccess)
-		pluginHandle.EXPECT().SetMetadata("waf", metadataKeyBlockRule, 12345)
-		pluginHandle.EXPECT().SetMetadata("waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestHeaders))
+		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 12345)
+		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestHeaders))
 		pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_request_headers_blocked")
 
 		p.blockRequest(interruption, ctypes.PhaseRequestHeaders, "waf_request_headers_blocked")
@@ -1045,8 +1052,8 @@ func Test_blockRequest(t *testing.T) {
 			strconv.Itoa(int(ctypes.PhaseResponseBody)),
 			"99999",
 		).Return(shared.MetricsSuccess)
-		pluginHandle.EXPECT().SetMetadata("waf", metadataKeyBlockRule, 99999)
-		pluginHandle.EXPECT().SetMetadata("waf", metadataKeyBlockPhase, int(ctypes.PhaseResponseBody))
+		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 99999)
+		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseResponseBody))
 		pluginHandle.EXPECT().SendLocalResponse(uint32(429), nil, []byte("Blocked by WAF"), "waf_response_body_blocked")
 
 		p.blockRequest(interruption, ctypes.PhaseResponseBody, "waf_response_body_blocked")

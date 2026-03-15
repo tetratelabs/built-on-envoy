@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	defaultMetadataNamespace = "waf"
+	defaultMetadataNamespace = "io.builtonenvoy.waf"
 	metadataKeyBlockRule     = "block_rule"
 	metadataKeyBlockPhase    = "block_phase"
 )
@@ -146,7 +146,7 @@ func (p *wafPlugin) OnRequestHeaders(
 	endOfStream bool,
 ) shared.HeadersStatus {
 	// Save for later use in response processing.
-	host := strings.Clone(headers.GetOne(":authority"))
+	host := headers.GetOne(":authority").ToString()
 	p.protocol = p.getRequestProtocol()
 	if authority, _, err := net.SplitHostPort(host); err == nil {
 		p.authority = authority
@@ -167,7 +167,6 @@ func (p *wafPlugin) OnRequestHeaders(
 	if scheme == "" {
 		scheme = "http"
 	}
-	host := headers.GetOne(":authority").ToString()
 	path := headers.GetOne(":path").ToString()
 	method := headers.GetOne(":method").ToString()
 	uri := scheme + "://" + host + path
