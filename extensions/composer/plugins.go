@@ -7,6 +7,7 @@
 package composer
 
 import (
+	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/anthropic-decoder/embedded"        // Anthropic Decoder plugin.
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/azure-content-safety/embedded"     // Azure Content Safety plugin.
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/bedrock-guardrails/embedded"       // Bedrock Guardrails plugin.
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/cedar/embedded"                    // Cedar authorization plugin.

@@ -1,5 +1,55 @@
 [
   {
+    "name": "anthropic-messages-decoder",
+    "version": "0.4.0-dev",
+    "parent": "composer",
+    "categories": [
+      "AI",
+      "Decoder"
+    ],
+    "author": "Tetrate",
+    "featured": true,
+    "description": "Decodes Anthropic Messages API requests and responses and exposes structured metadata for downstream filters",
+    "longDescription": "An HTTP filter plugin that parses Anthropic Messages API requests and responses and\npopulates Envoy's dynamic filter metadata with structured information extracted from\nboth the request and response bodies.\n\nThis allows downstream filters and route configurations to make decisions based on\nthe contents of the LLM request and response without re-parsing the bodies themselves.\n\n## Attribute Naming\n\nMetadata keys follow the [OpenInference Semantic Conventions](https://github.com/Arize-ai/openinference/blob/main/spec/semantic_conventions.md).\nList attributes are flattened using indexed dot notation as described in the\n[LLM Spans attribute flattening spec](https://github.com/Arize-ai/openinference/blob/main/spec/llm_spans.md#attribute-flattening)\n(e.g. `llm.input_messages.0.message.role`).\n\n## Configuration Reference\n\n| Field | Type | Required | Default | Description |\n|-------|------|----------|---------|-------------|\n| `metadata_namespace` | string | no | `io.builtonenvoy.anthropic` | The filter metadata namespace for the decoded fields |\n",
+    "type": "go",
+    "tags": [
+      "go",
+      "http",
+      "ai",
+      "anthropic",
+      "messages",
+      "metadata",
+      "decoder",
+      "llm"
+    ],
+    "license": "Apache-2.0",
+    "examples": [
+      {
+        "title": "Basic usage (default namespace)",
+        "description": "Decode incoming Anthropic Messages API requests and expose metadata under the\ndefault `io.builtonenvoy.anthropic` namespace using OpenInference semantic conventions.\nDownstream filters can access `io.builtonenvoy.anthropic.llm.model_name`,\n`io.builtonenvoy.anthropic.llm.input_messages.0.message.role`, etc.\n",
+        "code": "boe run --extension anthropic-decoder \\\n  --test-upstream-host api.anthropic.com\n\n# Send a messages request\ncurl -X POST http://localhost:10000/v1/messages \\\n  -H \"x-api-key: $ANTHROPIC_API_KEY\" \\\n  -H \"anthropic-version: 2023-06-01\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"model\": \"claude-sonnet-4-20250514\",\n    \"max_tokens\": 1024,\n    \"system\": \"You are a helpful assistant.\",\n    \"messages\": [\n      {\"role\": \"user\", \"content\": \"What is the weather today?\"}\n    ]\n  }'\n\n# Envoy filter metadata will contain (namespace: \"io.builtonenvoy.anthropic\"):\n# llm.model_name                         = \"claude-sonnet-4-20250514\"\n# llm.system                             = \"anthropic\"\n# llm.input_messages.count               = 2\n# llm.input_messages.0.message.role      = \"system\"\n# llm.input_messages.0.message.content   = \"You are a helpful assistant.\"\n# llm.input_messages.1.message.role      = \"user\"\n# llm.input_messages.1.message.content   = \"What is the weather today?\"\n# llm.tools.count                        = 0\n"
+      },
+      {
+        "title": "Custom metadata namespace",
+        "description": "Use a custom namespace to avoid conflicts with other filters that also write\nto filter metadata.\n",
+        "code": "boe run --extension anthropic-decoder \\\n  --config '{\"metadata_namespace\": \"llm-request\"}' \\\n  --test-upstream-host api.anthropic.com\n\n# Metadata will now be under the \"llm-request\" namespace:\n# llm.model_name                       = \"claude-sonnet-4-20250514\"\n# llm.system                           = \"anthropic\"\n# llm.input_messages.count             = 1\n# llm.input_messages.0.message.role    = \"user\"\n# llm.input_messages.0.message.content = \"...\"\n# llm.tools.count                      = 0\n"
+      },
+      {
+        "title": "Request with tools",
+        "description": "When the request includes tool definitions, each tool is stored under\n`llm.tools.N.tool.json_schema` as a JSON string, following the OpenInference spec.\n",
+        "code": "boe run --extension anthropic-decoder \\\n  --test-upstream-host api.anthropic.com\n\ncurl -X POST http://localhost:10000/v1/messages \\\n  -H \"x-api-key: $ANTHROPIC_API_KEY\" \\\n  -H \"anthropic-version: 2023-06-01\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"model\": \"claude-sonnet-4-20250514\",\n    \"max_tokens\": 1024,\n    \"messages\": [{\"role\": \"user\", \"content\": \"Book a flight to NYC\"}],\n    \"tools\": [\n      {\"name\": \"book_flight\", \"description\": \"Book a flight\", \"input_schema\": {\"type\": \"object\"}},\n      {\"name\": \"cancel_flight\", \"description\": \"Cancel a flight\", \"input_schema\": {\"type\": \"object\"}}\n    ]\n  }'\n\n# llm.tools.count              = 2\n# llm.tools.0.tool.json_schema = '{\"name\":\"book_flight\",\"description\":\"Book a flight\",\"input_schema\":{\"type\":\"object\"}}'\n# llm.tools.1.tool.json_schema = '{\"name\":\"cancel_flight\",\"description\":\"Cancel a flight\",\"input_schema\":{\"type\":\"object\"}}'\n"
+      },
+      {
+        "title": "Tool use in conversation with response metadata",
+        "description": "When a multi-turn conversation includes an assistant message with a tool use, the filter\ncaptures the tool call details from the request. The response metadata includes the\nassistant reply and token usage.\n",
+        "code": "boe run --extension anthropic-decoder \\\n  --test-upstream-host api.anthropic.com\n\ncurl -X POST http://localhost:10000/v1/messages \\\n  -H \"x-api-key: $ANTHROPIC_API_KEY\" \\\n  -H \"anthropic-version: 2023-06-01\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"model\": \"claude-sonnet-4-20250514\",\n    \"max_tokens\": 1024,\n    \"messages\": [\n      {\"role\": \"user\", \"content\": \"What is the weather in NYC?\"},\n      {\"role\": \"assistant\", \"content\": [\n        {\"type\": \"tool_use\", \"id\": \"toolu_abc\", \"name\": \"get_weather\", \"input\": {\"location\": \"NYC\"}}\n      ]},\n      {\"role\": \"user\", \"content\": [\n        {\"type\": \"tool_result\", \"tool_use_id\": \"toolu_abc\", \"content\": \"Sunny, 72F\"}\n      ]}\n    ]\n  }'\n\n# Request metadata (namespace: \"io.builtonenvoy.anthropic\"):\n# llm.model_name                                                         = \"claude-sonnet-4-20250514\"\n# llm.system                                                             = \"anthropic\"\n# llm.input_messages.count                                               = 3\n# llm.input_messages.0.message.role                                      = \"user\"\n# llm.input_messages.0.message.content                                   = \"What is the weather in NYC?\"\n# llm.input_messages.1.message.role                                      = \"assistant\"\n# llm.input_messages.1.message.tool_calls.count                          = 1\n# llm.input_messages.1.message.tool_calls.0.tool_call.id                 = \"toolu_abc\"\n# llm.input_messages.1.message.tool_calls.0.tool_call.function.name      = \"get_weather\"\n# llm.input_messages.1.message.tool_calls.0.tool_call.function.arguments = '{\"location\":\"NYC\"}'\n# llm.input_messages.2.message.role                                      = \"user\"\n# llm.tools.count                                                        = 0\n\n# Response metadata (when the model sends its final reply):\n# llm.output_messages.count                                              = 1\n# llm.output_messages.0.message.role                                     = \"assistant\"\n# llm.output_messages.0.message.content                                  = \"The weather in NYC is sunny and 72F.\"\n# llm.token_count.prompt                                                 = 85\n# llm.token_count.completion                                             = 14\n# llm.token_count.total                                                  = 99\n"
+      }
+    ],
+    "minEnvoyVersion": "1.37.1",
+    "composerVersion": "0.4.0-dev",
+    "sourcePath": "composer/anthropic-decoder"
+  },
+  {
     "name": "azure-content-safety",
     "version": "0.4.0-dev",
     "parent": "composer",
