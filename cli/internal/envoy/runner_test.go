@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tetratelabs/built-on-envoy/cli/internal"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
@@ -222,4 +223,12 @@ func TestPassthroughEnvVars(t *testing.T) {
 			assert.ElementsMatch(t, tt.expected, result)
 		})
 	}
+}
+
+func TestImageVersion(t *testing.T) {
+	require.Equal(t, "0.6.6", imageVersion(internal.Version{ClosestTag: "v0.6.6", Sha: "123"}))
+	require.Equal(t, "latest", imageVersion(internal.CurrentVersion()))
+	require.Equal(t, "latest", imageVersion(internal.Version{ClosestTag: "v0.6.6", CommitsAhead: 2, Sha: "123"}))
+	require.Equal(t, "latest", imageVersion(internal.Version{Sha: "123"}))
+	require.Equal(t, "latest", imageVersion(internal.Version{ClosestTag: "v0.6.6", CommitsAhead: 0}))
 }
