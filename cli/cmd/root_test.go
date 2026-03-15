@@ -145,6 +145,9 @@ Commands:
   create <name> [flags]
     Create a new extension template
 
+  download <extension> [flags]
+    Download extensions from the registry
+
   clean [flags]
     Clean cache directories
 
