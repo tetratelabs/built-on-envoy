@@ -69,7 +69,8 @@ type wafPlugin struct {
 }
 
 func (p *wafPlugin) getSourceAddress() (string, int) {
-	address, _ := p.handle.GetAttributeString(shared.AttributeIDSourceAddress)
+	addressAttr, _ := p.handle.GetAttributeString(shared.AttributeIDSourceAddress)
+	address := addressAttr.ToUnsafeString()
 	if address == "" {
 		p.handle.Log(shared.LogLevelDebug, "No source.address attribute")
 		// Use a default value if the attribute is not set.
@@ -90,12 +91,13 @@ func (p *wafPlugin) getSourceAddress() (string, int) {
 }
 
 func (p *wafPlugin) getRequestProtocol() string {
-	protocol, _ := p.handle.GetAttributeString(shared.AttributeIDRequestProtocol)
+	protocolAttr, _ := p.handle.GetAttributeString(shared.AttributeIDRequestProtocol)
+	protocol := protocolAttr.ToString()
 	if protocol == "" {
 		p.handle.Log(shared.LogLevelDebug, "No request.protocol attribute")
 		return "HTTP/1.1"
 	}
-	return strings.Clone(protocol)
+	return protocol
 }
 
 func getServerName(host string) string {
@@ -106,20 +108,20 @@ func (p *wafPlugin) mayInitializeTransaction(headers shared.HeaderMap) {
 	if p.context != nil {
 		return
 	}
-	id := headers.GetOne("x-request-id")
-	p.context = p.config.NewTransactionWithID(strings.Clone(id))
+	id := headers.GetOne("x-request-id").ToString()
+	p.context = p.config.NewTransactionWithID(id)
 	p.isUpgrade = p.checkUpgrade(headers)
 }
 
 func (p *wafPlugin) checkUpgrade(headers shared.HeaderMap) bool {
-	connectionHeader := headers.GetOne("connection")
-	upgrade := headers.GetOne("upgrade")
+	connectionHeader := headers.GetOne("connection").ToUnsafeString()
+	upgrade := headers.GetOne("upgrade").ToUnsafeString()
 	return strings.Contains(strings.ToLower(connectionHeader), "upgrade") &&
 		upgrade != ""
 }
 
 func (p *wafPlugin) checkSSE(headers shared.HeaderMap) bool {
-	return strings.Contains(strings.ToLower(headers.GetOne("content-type")),
+	return strings.Contains(strings.ToLower(headers.GetOne("content-type").ToUnsafeString()),
 		"text/event-stream")
 }
 
@@ -137,13 +139,13 @@ func (p *wafPlugin) OnRequestHeaders(
 	// Destination is not known in this context. Use placeholders.
 	dstIP, dstPort := "127.0.0.1", 80
 
-	scheme := strings.Clone(headers.GetOne(":scheme"))
+	scheme := headers.GetOne(":scheme").ToString()
 	if scheme == "" {
 		scheme = "http"
 	}
-	host := strings.Clone(headers.GetOne(":authority"))
-	path := strings.Clone(headers.GetOne(":path"))
-	method := strings.Clone(headers.GetOne(":method"))
+	host := headers.GetOne(":authority").ToString()
+	path := headers.GetOne(":path").ToString()
+	method := headers.GetOne(":method").ToString()
 	uri := scheme + "://" + host + path
 	// Save for later use in response processing.
 	p.protocol = p.getRequestProtocol()
@@ -153,7 +155,7 @@ func (p *wafPlugin) OnRequestHeaders(
 	p.context.SetServerName(getServerName(host))
 	headerMap := headers.GetAll()
 	for _, header := range headerMap {
-		p.context.AddRequestHeader(strings.Clone(header[0]), strings.Clone(header[1]))
+		p.context.AddRequestHeader(header[0].ToString(), header[1].ToString())
 	}
 
 	p.context.ProcessConnection(srcIP, srcPort, dstIP, dstPort)
@@ -245,12 +247,12 @@ func (p *wafPlugin) OnResponseHeaders(
 	}
 
 	for _, header := range headers.GetAll() {
-		p.context.AddResponseHeader(strings.Clone(header[0]), strings.Clone(header[1]))
+		p.context.AddResponseHeader(header[0].ToString(), header[1].ToString())
 	}
 	if p.protocol == "" {
 		p.protocol = p.getRequestProtocol()
 	}
-	codeStr := headers.GetOne(":status")
+	codeStr := headers.GetOne(":status").ToUnsafeString()
 	if codeStr == "" {
 		codeStr = "500"
 	}
@@ -357,7 +359,7 @@ func (p *wafPlugin) writeRequestBody(body shared.BodyBuffer) bool {
 		return true
 	}
 	for _, chunk := range body.GetChunks() {
-		interruption, _, err := p.context.WriteRequestBody(chunk)
+		interruption, _, err := p.context.WriteRequestBody(chunk.ToUnsafeBytes())
 		if err != nil {
 			p.handle.Log(shared.LogLevelInfo,
 				"Failed to write partial request body to WAF: %v", err.Error())
@@ -422,7 +424,7 @@ func (p *wafPlugin) writeResponseBody(body shared.BodyBuffer) bool {
 		return true
 	}
 	for _, chunk := range body.GetChunks() {
-		interruption, _, err := p.context.WriteResponseBody(chunk)
+		interruption, _, err := p.context.WriteResponseBody(chunk.ToUnsafeBytes())
 		if err != nil {
 			p.handle.Log(shared.LogLevelInfo, "Failed to write partial response body to WAF: %v", err.Error())
 			p.handle.SendLocalResponse(

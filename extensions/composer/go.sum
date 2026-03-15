@@ -48,8 +48,8 @@ github.com/docker/docker-credential-helpers v0.9.3 h1:gAm/VtF9wgqJMoxzT3Gj5p4AqI
 github.com/docker/docker-credential-helpers v0.9.3/go.mod h1:x+4Gbw9aGmChi3qTLZj8Dfn0TD20M/fuWy0E5+WDeCo=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
-github.com/envoyproxy/envoy/source/extensions/dynamic_modules v0.0.0-20260224023207-910d516c7b4e h1:M84EqwcPhd/F1ldEml7dLZiSdLlyoP+pt/8J+xNLPXw=
-github.com/envoyproxy/envoy/source/extensions/dynamic_modules v0.0.0-20260224023207-910d516c7b4e/go.mod h1:NpQosaDAX20s0ak0o/4b5dLOdvkbk15XqoakhSNX1Gg=
+github.com/envoyproxy/envoy/source/extensions/dynamic_modules v0.0.0-20260311012303-5ef4e4cea57f h1:rpisTDZaajAZI42Mz+y0MvyG2b1MV1UWd4PZyu0VatY=
+github.com/envoyproxy/envoy/source/extensions/dynamic_modules v0.0.0-20260311012303-5ef4e4cea57f/go.mod h1:NpQosaDAX20s0ak0o/4b5dLOdvkbk15XqoakhSNX1Gg=
 github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2Wg=
 github.com/felixge/httpsnoop v1.0.4/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
 github.com/fortytw2/leaktest v1.3.0 h1:u8491cBMTQ8ft8aeV+adlcytMZylmA5nnwwkRZjI8vw=

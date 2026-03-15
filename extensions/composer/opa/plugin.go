@@ -206,7 +206,7 @@ func (o *opaHttpFilter) evaluateBodyPolicy() bool {
 	headers := o.handle.RequestHeaders()
 
 	var parsedBody any
-	contentType := headers.GetOne("content-type")
+	contentType := headers.GetOne("content-type").ToUnsafeString()
 	// We may could support other content types in the future if needed, but for now we only parse
 	// JSON bodies since that's the most common and avoids the complexity of handling arbitrary
 	// body formats.
@@ -226,20 +226,20 @@ func (o *opaHttpFilter) evaluateBodyPolicy() bool {
 // and an optional pre-parsed JSON body.
 func (o *opaHttpFilter) buildInput(headers shared.HeaderMap, parsedBody any) map[string]any {
 	var (
-		method = headers.GetOne(":method")
-		path   = headers.GetOne(":path")
-		host   = headers.GetOne(":authority")
-		scheme = cmp.Or(headers.GetOne(":scheme"), "http")
+		method = headers.GetOne(":method").ToUnsafeString()
+		path   = headers.GetOne(":path").ToUnsafeString()
+		host   = headers.GetOne(":authority").ToUnsafeString()
+		scheme = cmp.Or(headers.GetOne(":scheme").ToUnsafeString(), "http")
 	)
 	parsedPath, parsedQuery := parsePath(path)
-	protocol, _ := o.handle.GetAttributeString(shared.AttributeIDRequestProtocol)
-	protocol = cmp.Or(protocol, "HTTP/1.1")
+	protocolAttr, _ := o.handle.GetAttributeString(shared.AttributeIDRequestProtocol)
+	protocol := cmp.Or(protocolAttr.ToUnsafeString(), "HTTP/1.1")
 
 	// Build headers map excluding pseudo-headers.
 	headerMap := make(map[string]string)
 	for _, h := range headers.GetAll() {
-		key := h[0]
-		val := h[1]
+		key := h[0].ToUnsafeString()
+		val := h[1].ToUnsafeString()
 		if !strings.HasPrefix(key, ":") {
 			headerMap[key] = val
 		}
@@ -254,8 +254,7 @@ func (o *opaHttpFilter) buildInput(headers shared.HeaderMap, parsedBody any) map
 		subjectPeer, _  = o.handle.GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate)
 		tlsVersion, _   = o.handle.GetAttributeString(shared.AttributeIDConnectionTlsVersion)
 		sha256Digest, _ = o.handle.GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest)
-		// TODO(nacx): The ABI does not expose a method to get Boolean attributes
-		// mtls, _         = f.handle.GetAttributeBool(shared.AttributeIDConnectionMtls)
+		mtls, _         = o.handle.GetAttributeBool(shared.AttributeIDConnectionMtls)
 	)
 
 	result := map[string]any{
@@ -271,21 +270,20 @@ func (o *opaHttpFilter) buildInput(headers shared.HeaderMap, parsedBody any) map
 				},
 			},
 			"source": map[string]any{
-				"address": sourceAddr,
+				"address": sourceAddr.ToUnsafeString(),
 				"certificate": map[string]any{
-					"uri_san":       uriSanPeer,
-					"dns_san":       dnsSanPeer,
-					"subject":       subjectPeer,
-					"sha256_digest": sha256Digest,
+					"uri_san":       uriSanPeer.ToUnsafeString(),
+					"dns_san":       dnsSanPeer.ToUnsafeString(),
+					"subject":       subjectPeer.ToUnsafeString(),
+					"sha256_digest": sha256Digest.ToUnsafeString(),
 				},
 			},
 			"destination": map[string]any{
-				"address": destAddr,
+				"address": destAddr.ToUnsafeString(),
 			},
 			"connection": map[string]any{
-				// TODO(nacx): Add mTLS boolean when supported by the ABI.
-				// "mtls":        mtls,
-				"tls_version": tlsVersion,
+				"mtls":        mtls,
+				"tls_version": tlsVersion.ToUnsafeString(),
 			},
 		},
 		"parsed_path":  parsedPath,

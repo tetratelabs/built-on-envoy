@@ -189,7 +189,7 @@ type fileServerHttpFilter struct { //nolint:revive
 }
 
 func (f *fileServerHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) shared.HeadersStatus {
-	requestPath := headers.GetOne(":path")
+	requestPath := headers.GetOne(":path").ToUnsafeString()
 	if requestPath == "" {
 		return shared.HeadersStatusContinue
 	}
@@ -204,7 +204,7 @@ func (f *fileServerHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool
 		return shared.HeadersStatusContinue
 	}
 
-	method := headers.GetOne(":method")
+	method := headers.GetOne(":method").ToUnsafeString()
 	if method != "GET" && method != "HEAD" {
 		f.handle.SendLocalResponse(405, [][2]string{{"content-type", "text/plain"}},
 			[]byte("Method Not Allowed"), "file_server_rejected_method")
@@ -246,7 +246,7 @@ func (f *fileServerHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool
 	}
 
 	fileSize := uint64(info.Size()) //nolint:gosec // File size is always non-negative.
-	start, end := parseRangeHeader(headers.GetOne("range"))
+	start, end := parseRangeHeader(headers.GetOne("range").ToUnsafeString())
 	if start > fileSize || (end != 0 && end > fileSize) || (end != 0 && end < start) {
 		f.handle.SendLocalResponse(416, [][2]string{
 			{"content-type", "text/plain"},

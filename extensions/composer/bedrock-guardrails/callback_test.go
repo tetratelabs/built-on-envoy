@@ -15,38 +15,40 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 // --- Tests for joinBody ---
 
 func TestJoinBody_SingleChunk(t *testing.T) {
 	chunk := []byte("hello world")
-	result := joinBody([][]byte{chunk})
+	result := joinBody([]shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromBytes(chunk)})
 	require.Equal(t, chunk, result)
 }
 
 func TestJoinBody_MultipleChunks(t *testing.T) {
-	result := joinBody([][]byte{[]byte("foo"), []byte("bar"), []byte("baz")})
+	result := joinBody([]shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromBytes([]byte("foo")), pkg.UnsafeBufferFromBytes([]byte("bar")), pkg.UnsafeBufferFromBytes([]byte("baz"))})
 	require.Equal(t, []byte("foobarbaz"), result)
 }
 
 func TestJoinBody_EmptySlice(t *testing.T) {
-	result := joinBody([][]byte{})
+	result := joinBody([]shared.UnsafeEnvoyBuffer{})
 	require.Empty(t, result)
 }
 
 func TestJoinBody_EmptyChunks(t *testing.T) {
-	result := joinBody([][]byte{{}, []byte("data"), {}})
+	result := joinBody([]shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromBytes([]byte{}), pkg.UnsafeBufferFromBytes([]byte("data")), pkg.UnsafeBufferFromBytes([]byte{})})
 	require.Equal(t, []byte("data"), result)
 }
 
 // --- Tests for headerValue ---
 
 func TestHeaderValue_Found(t *testing.T) {
-	headers := [][2]string{
-		{":method", "POST"},
-		{":path", "/api/v1"},
-		{":status", "200"},
+	headers := [][2]shared.UnsafeEnvoyBuffer{
+		{pkg.UnsafeBufferFromBytes([]byte(":method")), pkg.UnsafeBufferFromBytes([]byte("POST"))},
+		{pkg.UnsafeBufferFromBytes([]byte(":path")), pkg.UnsafeBufferFromBytes([]byte("/api/v1"))},
+		{pkg.UnsafeBufferFromBytes([]byte(":status")), pkg.UnsafeBufferFromBytes([]byte("200"))},
 	}
 	require.Equal(t, "POST", headerValue(headers, ":method"))
 	require.Equal(t, "/api/v1", headerValue(headers, ":path"))
@@ -54,20 +56,20 @@ func TestHeaderValue_Found(t *testing.T) {
 }
 
 func TestHeaderValue_NotFound(t *testing.T) {
-	headers := [][2]string{
-		{":method", "POST"},
+	headers := [][2]shared.UnsafeEnvoyBuffer{
+		{pkg.UnsafeBufferFromBytes([]byte(":method")), pkg.UnsafeBufferFromBytes([]byte("POST"))},
 	}
 	require.Empty(t, headerValue(headers, ":status"))
 }
 
 func TestHeaderValue_EmptyHeaders(t *testing.T) {
-	require.Empty(t, headerValue([][2]string{}, ":method"))
+	require.Empty(t, headerValue([][2]shared.UnsafeEnvoyBuffer{}, ":method"))
 }
 
 func TestHeaderValue_ReturnsFirstMatch(t *testing.T) {
-	headers := [][2]string{
-		{"x-header", "first"},
-		{"x-header", "second"},
+	headers := [][2]shared.UnsafeEnvoyBuffer{
+		{pkg.UnsafeBufferFromBytes([]byte("x-header")), pkg.UnsafeBufferFromBytes([]byte("first"))},
+		{pkg.UnsafeBufferFromBytes([]byte("x-header")), pkg.UnsafeBufferFromBytes([]byte("second"))},
 	}
 	require.Equal(t, "first", headerValue(headers, "x-header"))
 }
@@ -123,10 +125,12 @@ func TestGetCalloutHeaders_ValidBody(t *testing.T) {
 		APIKey:              "my-secret-key",
 	}
 
-	headers, calloutBody, err := getCalloutHeaders(args)
+	rawHeaders, calloutBody, err := getCalloutHeaders(args)
 	require.NoError(t, err)
-	require.NotNil(t, headers)
+	require.NotNil(t, rawHeaders)
 	require.NotNil(t, calloutBody)
+
+	headers := toUnsafeEnvoyBufferHeaders(rawHeaders)
 
 	// Verify path contains guardrail ID and version
 	require.Equal(t, "/guardrail/my-guardrail/version/DRAFT/apply", headerValue(headers, ":path"))
@@ -158,7 +162,7 @@ func TestGetCalloutHeaders_MultipleUserMessages(t *testing.T) {
 
 	headers, calloutBody, err := getCalloutHeaders(args)
 	require.NoError(t, err)
-	require.Equal(t, "/guardrail/g1/version/1/apply", headerValue(headers, ":path"))
+	require.Equal(t, "/guardrail/g1/version/1/apply", headerValue(toUnsafeEnvoyBufferHeaders(headers), ":path"))
 
 	var req ApplyGuardrailRequest
 	require.NoError(t, json.Unmarshal(calloutBody, &req))
@@ -382,7 +386,7 @@ func TestOnHttpCalloutDone_CalloutFailure(t *testing.T) {
 		},
 	}
 
-	a.OnHttpCalloutDone(1, shared.HttpCalloutReset, [][2]string{}, [][]byte{})
+	a.OnHttpCalloutDone(1, shared.HttpCalloutReset, [][2]shared.UnsafeEnvoyBuffer{}, []shared.UnsafeEnvoyBuffer{})
 }
 
 func TestOnHttpCalloutDone_NonSuccessHTTPStatus(t *testing.T) {
@@ -402,8 +406,8 @@ func TestOnHttpCalloutDone_NonSuccessHTTPStatus(t *testing.T) {
 	}
 
 	a.OnHttpCalloutDone(1, shared.HttpCalloutSuccess,
-		[][2]string{{":status", "503"}},
-		[][]byte{[]byte(`{"error":"service unavailable"}`)},
+		[][2]shared.UnsafeEnvoyBuffer{{pkg.UnsafeBufferFromBytes([]byte(":status")), pkg.UnsafeBufferFromBytes([]byte("503"))}},
+		[]shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromBytes([]byte(`{"error":"service unavailable"}`))},
 	)
 }
 
@@ -431,8 +435,8 @@ func TestOnHttpCalloutDone_NoInterventionLastGuardrail(t *testing.T) {
 	}
 
 	a.OnHttpCalloutDone(1, shared.HttpCalloutSuccess,
-		[][2]string{{":status", "200"}},
-		[][]byte{respBody},
+		[][2]shared.UnsafeEnvoyBuffer{{pkg.UnsafeBufferFromBytes([]byte(":status")), pkg.UnsafeBufferFromBytes([]byte("200"))}},
+		[]shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromBytes(respBody)},
 	)
 
 	// The original body should have been appended to the buffered body
@@ -456,8 +460,8 @@ func TestOnHttpCalloutDone_BlockedByContentPolicy(t *testing.T) {
 	}
 
 	a.OnHttpCalloutDone(1, shared.HttpCalloutSuccess,
-		[][2]string{{":status", "200"}},
-		[][]byte{blockedContentPolicyResponse("g1", "1")},
+		[][2]shared.UnsafeEnvoyBuffer{{pkg.UnsafeBufferFromBytes([]byte(":status")), pkg.UnsafeBufferFromBytes([]byte("200"))}},
+		[]shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromBytes(blockedContentPolicyResponse("g1", "1"))},
 	)
 }
 
@@ -478,8 +482,8 @@ func TestOnHttpCalloutDone_BlockedByTopicPolicy(t *testing.T) {
 	}
 
 	a.OnHttpCalloutDone(1, shared.HttpCalloutSuccess,
-		[][2]string{{":status", "200"}},
-		[][]byte{blockedTopicPolicyResponse("g1", "1")},
+		[][2]shared.UnsafeEnvoyBuffer{{pkg.UnsafeBufferFromBytes([]byte(":status")), pkg.UnsafeBufferFromBytes([]byte("200"))}},
+		[]shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromBytes(blockedTopicPolicyResponse("g1", "1"))},
 	)
 }
 
@@ -500,8 +504,8 @@ func TestOnHttpCalloutDone_BlockedByPIIPolicy(t *testing.T) {
 	}
 
 	a.OnHttpCalloutDone(1, shared.HttpCalloutSuccess,
-		[][2]string{{":status", "200"}},
-		[][]byte{blockedPIIResponse("g1", "1")},
+		[][2]shared.UnsafeEnvoyBuffer{{pkg.UnsafeBufferFromBytes([]byte(":status")), pkg.UnsafeBufferFromBytes([]byte("200"))}},
+		[]shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromBytes(blockedPIIResponse("g1", "1"))},
 	)
 }
 
@@ -530,8 +534,8 @@ func TestOnHttpCalloutDone_MaskedLastGuardrail(t *testing.T) {
 	}
 
 	a.OnHttpCalloutDone(1, shared.HttpCalloutSuccess,
-		[][2]string{{":status", "200"}},
-		[][]byte{respBody},
+		[][2]shared.UnsafeEnvoyBuffer{{pkg.UnsafeBufferFromBytes([]byte(":status")), pkg.UnsafeBufferFromBytes([]byte("200"))}},
+		[]shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromBytes(respBody)},
 	)
 
 	// The masked body should have been appended (not the original)
@@ -577,8 +581,8 @@ func TestOnHttpCalloutDone_NoInterventionTriggersNextGuardrail(t *testing.T) {
 	}
 
 	a.OnHttpCalloutDone(1, shared.HttpCalloutSuccess,
-		[][2]string{{":status", "200"}},
-		[][]byte{respBody},
+		[][2]shared.UnsafeEnvoyBuffer{{pkg.UnsafeBufferFromBytes([]byte(":status")), pkg.UnsafeBufferFromBytes([]byte("200"))}},
+		[]shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromBytes(respBody)},
 	)
 }
 
@@ -616,8 +620,8 @@ func TestOnHttpCalloutDone_MaskedTriggersNextGuardrail(t *testing.T) {
 	}
 
 	a.OnHttpCalloutDone(1, shared.HttpCalloutSuccess,
-		[][2]string{{":status", "200"}},
-		[][]byte{respBody},
+		[][2]shared.UnsafeEnvoyBuffer{{pkg.UnsafeBufferFromBytes([]byte(":status")), pkg.UnsafeBufferFromBytes([]byte("200"))}},
+		[]shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromBytes(respBody)},
 	)
 }
 
@@ -657,8 +661,8 @@ func TestOnHttpCalloutDone_NextGuardrailCalloutFailure(t *testing.T) {
 	}
 
 	a.OnHttpCalloutDone(1, shared.HttpCalloutSuccess,
-		[][2]string{{":status", "200"}},
-		[][]byte{respBody},
+		[][2]shared.UnsafeEnvoyBuffer{{pkg.UnsafeBufferFromBytes([]byte(":status")), pkg.UnsafeBufferFromBytes([]byte("200"))}},
+		[]shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromBytes(respBody)},
 	)
 }
 
@@ -689,8 +693,8 @@ func TestOnHttpCalloutDone_BodyMultipleChunks(t *testing.T) {
 	}
 
 	a.OnHttpCalloutDone(1, shared.HttpCalloutSuccess,
-		[][2]string{{":status", "200"}},
-		[][]byte{chunk1, chunk2},
+		[][2]shared.UnsafeEnvoyBuffer{{pkg.UnsafeBufferFromBytes([]byte(":status")), pkg.UnsafeBufferFromBytes([]byte("200"))}},
+		[]shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromBytes(chunk1), pkg.UnsafeBufferFromBytes(chunk2)},
 	)
 
 	require.Equal(t, originalBody, fakeBuffer.Body)

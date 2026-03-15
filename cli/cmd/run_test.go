@@ -78,8 +78,17 @@ Flags:
       --cluster-json=CLUSTER-JSON
                                    Optional additional Envoy cluster providing
                                    the complete cluster config in JSON format.
-      --test-upstream-host="httpbin.org"
-                                   Hostname for the test upstream cluster.
+      --test-upstream-host=STRING
+                                   Hostname for the test upstream
+                                   cluster. Mutually exclusive with
+                                   --test-upstream-cluster. Defaults to
+                                   "httpbin.org".
+      --test-upstream-cluster=STRING
+                                   Name of an existing configured cluster to
+                                   use as the test upstream. The cluster must be
+                                   configured via --cluster, --cluster-insecure,
+                                   or --cluster-json. Mutually exclusive with
+                                   --test-upstream-host.
       --docker                     Run Envoy as a Docker container instead of
                                    using func-e ($BOE_RUN_DOCKER).
       --pull="missing"             Pull policy for the BOE Docker image
@@ -167,6 +176,15 @@ func TestParseCmdRunCustomValues(t *testing.T) {
 	require.Equal(t, []string{"cors:1.0.0", "rate-limiter", "auth-jwt"}, cli.Run.Extensions)
 	require.Equal(t, "localhost:5000", cli.Run.OCI.Registry)
 	require.True(t, cli.Run.OCI.Insecure)
+}
+
+func TestRunValidateMutualExclusion(t *testing.T) {
+	r := &Run{
+		LogLevel:            "all:error",
+		TestUpstreamHost:    "example.com",
+		TestUpstreamCluster: "example.com:443",
+	}
+	require.ErrorContains(t, r.Validate(), "--test-upstream-host and --test-upstream-cluster are mutually exclusive")
 }
 
 func TestValidateLogLevel(t *testing.T) {

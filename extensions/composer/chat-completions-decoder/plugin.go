@@ -104,7 +104,7 @@ func (d *decoderFilter) OnResponseHeaders(headers shared.HeaderMap, endOfStream 
 	}
 	// Detect streaming SSE responses by content-type so we can parse
 	// chunks incrementally without buffering the entire response.
-	if ct := headers.GetOne("content-type"); strings.HasPrefix(ct, "text/event-stream") {
+	if ct := headers.GetOne("content-type").ToUnsafeString(); strings.HasPrefix(ct, "text/event-stream") {
 		d.handle.Log(shared.LogLevelDebug, "chat-completions-decoder: handling SSE response")
 		d.sseAcc = newSSEAccumulator(func(format string, args ...any) {
 			d.handle.Log(shared.LogLevelDebug, format, args...)
@@ -122,7 +122,7 @@ func (d *decoderFilter) OnResponseBody(body shared.BodyBuffer, endOfStream bool)
 	if d.sseAcc != nil { // Streaming SSE: feed each chunk incrementally.
 		if body != nil {
 			for _, chunk := range body.GetChunks() {
-				d.sseAcc.feed(chunk)
+				d.sseAcc.feed(chunk.ToBytes()) // copy the chunk
 			}
 		}
 		if endOfStream {

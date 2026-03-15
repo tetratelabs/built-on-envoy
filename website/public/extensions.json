@@ -58,7 +58,7 @@
         "code": "boe run --extension azure-content-safety --config '{\n  \"endpoint\": \"https://my-resource.cognitiveservices.azure.com\",\n  \"api_key\": {\"inline\": \"your-api-key-here\"},\n  \"fail_open\": true\n}'\n"
       }
     ],
-    "minEnvoyVersion": "1.37.0",
+    "minEnvoyVersion": "1.37.1",
     "composerVersion": "0.4.0-dev",
     "sourcePath": "composer/azure-content-safety"
   },
@@ -104,7 +104,7 @@
         "code": "boe run --extension bedrock-guardrails \\\n  --cluster bedrock.us-east-1.amazonaws.com:443 \\\n  --config '{\n  \"bedrock_timeoutms\": 20000,\n  \"bedrock_endpoint\": \"bedrock.us-east-1.amazonaws.com\",\n  \"bedrock_api_key\": \"YOUR_BEDROCK_API_KEY\",\n  \"bedrock_guardrails\": [\n    {\n      \"identifier\": \"xxxxxxx\",\n      \"version\": \"1\"\n    }\n  ]\n}'\n"
       }
     ],
-    "minEnvoyVersion": "1.37.0",
+    "minEnvoyVersion": "1.37.1",
     "composerVersion": "0.4.0-dev",
     "sourcePath": "composer/bedrock-guardrails"
   },
@@ -118,7 +118,7 @@
     "author": "Tetrate",
     "featured": true,
     "description": "Inline Cedar policy evaluation for HTTP request authorization",
-    "longDescription": "This extension implements [Cedar](https://www.cedarpolicy.com/) policy evaluation\nas an inline Envoy HTTP filter. It uses the [Cedar-Go](https://github.com/cedar-policy/cedar-go)\nlibrary to make authorization decisions on each request without a separate authorization server.\n\n## Key Features\n\n- **Inline Cedar evaluation**: Load and evaluate Cedar policy files directly in the Envoy\n  data path using the Cedar-Go library. No separate authorization server required.\n- **Structured authorization model**: Maps HTTP requests to Cedar's Principal/Action/Resource\n  model with rich context for fine-grained `when` clause conditions.\n- **Entity hierarchies**: Optionally load Cedar entity data to enable group membership and\n  hierarchical authorization checks (e.g., `principal in Group::\"admins\"`).\n- **Dry-run mode**: Log authorization decisions without enforcing them, useful for testing\n  policies in production.\n- **Fail-open mode**: Allow requests through when policy evaluation encounters an error,\n  instead of returning a 500 response.\n- **mTLS and SPIFFE identity**: Access client certificate attributes including SPIFFE IDs\n  (URI SANs), DNS SANs, and certificate subject in policy context.\n- **Configurable deny responses**: Customize the HTTP status code, body, and headers\n  returned when a request is denied.\n\n## Authorization Model\n\nHTTP requests are mapped to Cedar authorization concepts:\n\n- **Principal**: Derived from a configurable request header (e.g., `User::\"alice\"` from\n  the `x-user-id` header). The entity type is set via `principal_type` and the ID is\n  extracted from the header specified by `principal_id_header`.\n- **Action**: Derived from the HTTP method (e.g., `Action::\"GET\"`, `Action::\"POST\"`).\n  The entity type defaults to `Action` and can be customized via `action_type`.\n- **Resource**: Derived from the request path without query string (e.g.,\n  `Resource::\"/api/users\"`). The entity type defaults to `Resource` and can be\n  customized via `resource_type`.\n- **Context**: Rich request attributes available in Cedar `when` clauses.\n\n## Context Record Structure\n\nThe `context` record passed to Cedar policies contains the following structure:\n\n```json\n{\n  \"request\": {\n    \"method\": \"GET\",\n    \"path\": \"/api/v1/resource?key=value\",\n    \"host\": \"example.com\",\n    \"scheme\": \"https\",\n    \"protocol\": \"HTTP/1.1\",\n    \"headers\": {\n      \"authorization\": \"Bearer ...\",\n      \"content-type\": \"application/json\"\n    }\n  },\n  \"source\": {\n    \"address\": \"10.0.0.1:5000\",\n    \"certificate\": {\n      \"uri_san\": \"spiffe://cluster.local/ns/default/sa/client\",\n      \"dns_san\": \"client.default.svc.cluster.local\",\n      \"subject\": \"CN=client,O=example\",\n      \"sha256_digest\": \"abc123...\"\n    }\n  },\n  \"destination\": {\n    \"address\": \"10.0.0.2:443\"\n  },\n  \"connection\": {\n    \"tls_version\": \"TLSv1.3\"\n  },\n  \"parsed_path\": [\"api\", \"v1\", \"resource\"],\n  \"parsed_query\": {\"key\": [\"value\"]}\n}\n```\n\n## Metrics\n\nThe extension exposes the `cedar_requests_total` counter metric with a `decision` tag that\ntracks authorization outcomes. The possible tag values are:\n\n| Decision | Description |\n|--------|------|\n| `allowed` | The policy allowed the request. |\n| `denied` | The policy denied the request (or an error occurred with fail-open disabled). |\n| `failopen` | An error occurred during policy evaluation and the request was allowed because fail-open mode is enabled. |\n| `dryrun_allow` | The policy denied the request but it was allowed because dry-run mode is enabled. |\n",
+    "longDescription": "This extension implements [Cedar](https://www.cedarpolicy.com/) policy evaluation\nas an inline Envoy HTTP filter. It uses the [Cedar-Go](https://github.com/cedar-policy/cedar-go)\nlibrary to make authorization decisions on each request without a separate authorization server.\n\n## Key Features\n\n- **Inline Cedar evaluation**: Load and evaluate Cedar policy files directly in the Envoy\n  data path using the Cedar-Go library. No separate authorization server required.\n- **Structured authorization model**: Maps HTTP requests to Cedar's Principal/Action/Resource\n  model with rich context for fine-grained `when` clause conditions.\n- **Entity hierarchies**: Optionally load Cedar entity data to enable group membership and\n  hierarchical authorization checks (e.g., `principal in Group::\"admins\"`).\n- **Dry-run mode**: Log authorization decisions without enforcing them, useful for testing\n  policies in production.\n- **Fail-open mode**: Allow requests through when policy evaluation encounters an error,\n  instead of returning a 500 response.\n- **mTLS and SPIFFE identity**: Access client certificate attributes including SPIFFE IDs\n  (URI SANs), DNS SANs, and certificate subject in policy context.\n- **Configurable deny responses**: Customize the HTTP status code, body, and headers\n  returned when a request is denied.\n\n## Authorization Model\n\nHTTP requests are mapped to Cedar authorization concepts:\n\n- **Principal**: Derived from a configurable request header (e.g., `User::\"alice\"` from\n  the `x-user-id` header). The entity type is set via `principal_type` and the ID is\n  extracted from the header specified by `principal_id_header`.\n- **Action**: Derived from the HTTP method (e.g., `Action::\"GET\"`, `Action::\"POST\"`).\n  The entity type defaults to `Action` and can be customized via `action_type`.\n- **Resource**: Derived from the request path without query string (e.g.,\n  `Resource::\"/api/users\"`). The entity type defaults to `Resource` and can be\n  customized via `resource_type`.\n- **Context**: Rich request attributes available in Cedar `when` clauses.\n\n## Context Record Structure\n\nThe `context` record passed to Cedar policies contains the following structure:\n\n```json\n{\n  \"request\": {\n    \"method\": \"GET\",\n    \"path\": \"/api/v1/resource?key=value\",\n    \"host\": \"example.com\",\n    \"scheme\": \"https\",\n    \"protocol\": \"HTTP/1.1\",\n    \"headers\": {\n      \"authorization\": \"Bearer ...\",\n      \"content-type\": \"application/json\"\n    }\n  },\n  \"source\": {\n    \"address\": \"10.0.0.1:5000\",\n    \"certificate\": {\n      \"uri_san\": \"spiffe://cluster.local/ns/default/sa/client\",\n      \"dns_san\": \"client.default.svc.cluster.local\",\n      \"subject\": \"CN=client,O=example\",\n      \"sha256_digest\": \"abc123...\"\n    }\n  },\n  \"destination\": {\n    \"address\": \"10.0.0.2:443\"\n  },\n  \"connection\": {\n    \"mtls\": true,\n    \"tls_version\": \"TLSv1.3\"\n  },\n  \"parsed_path\": [\"api\", \"v1\", \"resource\"],\n  \"parsed_query\": {\"key\": [\"value\"]}\n}\n```\n\n## Metrics\n\nThe extension exposes the `cedar_requests_total` counter metric with a `decision` tag that\ntracks authorization outcomes. The possible tag values are:\n\n| Decision | Description |\n|--------|------|\n| `allowed` | The policy allowed the request. |\n| `denied` | The policy denied the request (or an error occurred with fail-open disabled). |\n| `failopen` | An error occurred during policy evaluation and the request was allowed because fail-open mode is enabled. |\n| `dryrun_allow` | The policy denied the request but it was allowed because dry-run mode is enabled. |\n",
     "type": "go",
     "tags": [
       "go",
@@ -174,7 +174,7 @@
         "code": "boe run --extension cedar-auth --config '{\n  \"policy\": {\"file\": \"/tmp/policy.cedar\"},\n  \"principal_type\": \"User\",\n  \"principal_id_header\": \"x-user-id\",\n  \"fail_open\": true\n}'\n"
       }
     ],
-    "minEnvoyVersion": "1.37.0",
+    "minEnvoyVersion": "1.37.1",
     "composerVersion": "0.4.0-dev",
     "sourcePath": "composer/cedar"
   },
@@ -224,7 +224,7 @@
         "code": "boe run --extension chat-completions-decoder \\\n  --test-upstream-host api.openai.com\n\ncurl -X POST http://localhost:10000/v1/chat/completions \\\n  -H \"Authorization: Bearer $OPENAI_APIKEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"model\": \"gpt-4o\",\n    \"messages\": [\n      {\"role\": \"user\", \"content\": \"What is the weather in NYC?\"},\n      {\"role\": \"assistant\", \"content\": null, \"tool_calls\": [\n        {\"id\": \"call_abc\", \"type\": \"function\", \"function\": {\"name\": \"get_weather\", \"arguments\": \"{\\\"location\\\":\\\"NYC\\\"}\"}}\n      ]},\n      {\"role\": \"tool\", \"content\": \"Sunny, 72F\"}\n    ]\n  }'\n\n# Request metadata (namespace: \"openai\"):\n# llm.model_name                                                         = \"gpt-4o\"\n# llm.system                                                             = \"openai\"\n# llm.input_messages.count                                               = 3\n# llm.input_messages.0.message.role                                      = \"user\"\n# llm.input_messages.0.message.content                                   = \"What is the weather in NYC?\"\n# llm.input_messages.1.message.role                                      = \"assistant\"\n# llm.input_messages.1.message.tool_calls.count                          = 1\n# llm.input_messages.1.message.tool_calls.0.tool_call.id                 = \"call_abc\"\n# llm.input_messages.1.message.tool_calls.0.tool_call.function.name      = \"get_weather\"\n# llm.input_messages.1.message.tool_calls.0.tool_call.function.arguments = '{\"location\":\"NYC\"}'\n# llm.input_messages.2.message.role                                      = \"tool\"\n# llm.input_messages.2.message.content                                   = \"Sunny, 72F\"\n# llm.tools.count                                                        = 0\n\n# Response metadata (when the model sends its final reply):\n# llm.output_messages.count                                              = 1\n# llm.output_messages.0.message.role                                     = \"assistant\"\n# llm.output_messages.0.message.content                                  = \"The weather in NYC is sunny and 72F.\"\n# llm.token_count.prompt                                                 = 85\n# llm.token_count.completion                                             = 14\n# llm.token_count.total                                                  = 99\n"
       }
     ],
-    "minEnvoyVersion": "1.37.0",
+    "minEnvoyVersion": "1.37.1",
     "composerVersion": "0.4.0-dev",
     "sourcePath": "composer/chat-completions-decoder"
   },
@@ -257,7 +257,7 @@
         "code": "# Start WAF with recommended OWASP CRS rules and enforcement enabled\nboe run --extension coraza-waf --config '\n  {\n    \"directives\": [\n      \"Include @recommended.conf\",\n      \"SecRuleEngine On\",\n      \"SecResponseBodyAccess Off\",\n      \"Include @crs-setup.conf\",\n      \"Include @owasp_crs/*.conf\"\n    ]\n  }'\n\n# Try sending a SQL injection payload and see the request rejected\ncurl -v http://localhost:10000/post -X POST --data \"1%27%20ORDER%20BY%203--%2B\"\n\n\u003c HTTP/1.1 403 Forbidden\n\u003c content-length: 22\n\u003c content-type: text/plain\n\u003c date: Thu, 12 Feb 2026 10:28:16 GMT\n\u003c server: envoy\n\u003c\nRequest blocked by WAF\n"
       }
     ],
-    "minEnvoyVersion": "1.37.0",
+    "minEnvoyVersion": "1.37.1",
     "composerVersion": "0.4.0-dev",
     "sourcePath": "composer/waf"
   },
@@ -285,7 +285,7 @@
         "code": "boe run --extension example\n"
       }
     ],
-    "minEnvoyVersion": "1.37.0",
+    "minEnvoyVersion": "1.37.1",
     "composerVersion": "0.4.0-dev",
     "sourcePath": "composer/example"
   },
@@ -357,13 +357,13 @@
         "code": "boe run --extension file-server --config '{\n  \"path_mappings\": [\n    {\n      \"request_path_prefix\": \"/\",\n      \"file_path_prefix\": \"/var/www/default\"\n    },\n    {\n      \"request_path_prefix\": \"/docs\",\n      \"file_path_prefix\": \"/var/www/docs\"\n    }\n  ],\n  \"content_types\": {\n    \"html\": \"text/html\",\n    \"txt\": \"text/plain\"\n  },\n  \"directory_index_files\": [\"index.html\", \"index.txt\"]\n}'\n"
       }
     ],
-    "minEnvoyVersion": "1.37.0",
+    "minEnvoyVersion": "1.37.1",
     "composerVersion": "0.4.0-dev",
     "sourcePath": "composer/file-server"
   },
   {
     "name": "ip-restriction",
-    "version": "0.1.1",
+    "version": "0.2.0",
     "categories": [
       "Security"
     ],
@@ -403,7 +403,7 @@
         "code": "boe run --extension ip-restriction --config '\n  {\n    \"allow_addresses\": [\n      \"127.0.0.1\",\n      \"::1\",\n      \"2001:db8::1\"\n    ]\n  }'\n"
       }
     ],
-    "minEnvoyVersion": "1.37.0",
+    "minEnvoyVersion": "1.37.1",
     "sourcePath": "ip-restriction"
   },
   {
@@ -454,7 +454,7 @@
         "code": "# Store the decrypted payload in the default \"jwe-decrypt\" namespace\nboe run --extension jwe-decrypt --config '{\n  \"private_key\": { \"file\": \"/path/to/private-key.pem\" },\n  \"input_header\": \"X-JWE-Token\",\n  \"output_metadata\": { \"key\": \"jwe_decrypted_payload\" }\n}'\n\n# Store the decrypted payload in a custom namespace\nboe run --extension jwe-decrypt --config '{\n  \"private_key\": { \"file\": \"/path/to/private-key.pem\" },\n  \"input_header\": \"X-JWE-Token\",\n  \"output_metadata\": { \"namespace\": \"my-namespace\", \"key\": \"jwe_decrypted_payload\" }\n}'\n"
       }
     ],
-    "minEnvoyVersion": "1.37.0",
+    "minEnvoyVersion": "1.37.1",
     "composerVersion": "0.4.0-dev",
     "sourcePath": "composer/jwe-decrypt"
   },
@@ -468,7 +468,7 @@
     "author": "Tetrate",
     "featured": true,
     "description": "Inline OPA policy evaluation for HTTP request authorization",
-    "longDescription": "This extension implements [Open Policy Agent (OPA)](https://www.openpolicyagent.org/)\npolicy evaluation as an inline Envoy HTTP filter. It replaces the traditional ext_authz\npattern by running the OPA Go library directly within the filter, making authorization\ndecisions on each request without a separate OPA sidecar or server.\n\n## Key Features\n\n- **Inline Rego evaluation**: Load and evaluate Rego policy files directly in the Envoy\n  data path using OPA's Go library. No separate OPA server required.\n- **ext_authz inspired input**: Constructs an OPA input document from request attributes\n  (method, path, headers, source/destination addresses) inspired by the\n  [OPA-Envoy plugin](https://github.com/open-policy-agent/opa-envoy-plugin).\n  Supports both boolean (allow/deny) and structured object responses with custom HTTP status\n  codes, headers, and response bodies.\n- **Dry-run mode**: Log authorization decisions without enforcing them, useful for testing\n  policies in production.\n- **Fail-open mode**: Allow requests through when policy evaluation encounters an error,\n  instead of returning a 500 response.\n- **mTLS and SPIFFE identity**: Access client certificate attributes including SPIFFE IDs\n  (URI SANs), DNS SANs, and certificate subject for identity-based authorization.\n- **Configurable decision path**: Query any rule path in the policy (default: `envoy.authz.allow`).\n- **Request body inspection**: Optionally buffer the request body and expose it as parsed JSON\n  in the OPA input document under `input.body`. Only JSON bodies are supported.\n\n## Input Document Structure\n\nRequests are parsed and transformed into a structured `input` document that is passed to the OPA\npolicy for evaluation. The following `input` document shows an example of the structure that is\npassed to the OPA policy on each request:\n\n```json\n{\n  \"attributes\": {\n    \"request\": {\n      \"http\": {\n        \"method\":   \"GET\",               // HTTP method\n        \"path\":     \"/api/v1/resource\",  // Full path including query string\n        \"host\":     \"example.com\",       // Host header (:authority)\n        \"scheme\":   \"https\",             // URL scheme (default: \"http\")\n        \"protocol\": \"HTTP/1.1\",          // Request protocol (default: \"HTTP/1.1\")\n        \"headers\": {                     // Request headers (excluding pseudo-headers)\n          \"authorization\": \"Bearer ...\",\n          \"content-type\": \"application/json\"\n        }\n      }\n    },\n    \"source\": {\n      \"address\": \"10.0.0.1:5000\",       // Client address (ip:port)\n      \"certificate\": {                   // Peer certificate (mTLS connections)\n        \"uri_san\":       \"spiffe://cluster.local/ns/default/sa/client\",\n        \"dns_san\":       \"client.default.svc.cluster.local\",\n        \"subject\":       \"CN=client,O=example\",\n        \"sha256_digest\": \"abc123...\"\n      }\n    },\n    \"destination\": {\n      \"address\": \"10.0.0.2:443\"         // Server address (ip:port)\n    },\n    \"connection\": {\n      \"tls_version\": \"TLSv1.3\"          // TLS version\n    }\n  },\n  \"parsed_path\":  [\"api\", \"v1\", \"resource\"],  // Path segments\n  \"parsed_query\": {\"key\": [\"value\"]},         // Parsed query parameters\n  \"body\":  {\"field\": \"value\"}          // Parsed JSON body (only when with_body: true)\n}\n```\n\nThe `body` field is only present when `with_body` is enabled in the configuration\nand the request body is valid JSON. Non-JSON bodies result in `body` being absent.\n\n## Metrics\n\nThe extension exposes the `opa_requests_total` counter metric with a `decision` tag that\ntracks authorization outcomes. The possible tag values are:\n\n| Decision | Description |\n|--------|------|\n| `allowed` | The policy allowed the request. |\n| `denied` | The policy denied the request (or an error occurred with fail-open disabled). |\n| `failopen` | An error occurred during policy evaluation and the request was allowed because fail-open mode is enabled. |\n| `dryrun_allow` | The policy denied the request but it was allowed because dry-run mode is enabled. |\n",
+    "longDescription": "This extension implements [Open Policy Agent (OPA)](https://www.openpolicyagent.org/)\npolicy evaluation as an inline Envoy HTTP filter. It replaces the traditional ext_authz\npattern by running the OPA Go library directly within the filter, making authorization\ndecisions on each request without a separate OPA sidecar or server.\n\n## Key Features\n\n- **Inline Rego evaluation**: Load and evaluate Rego policy files directly in the Envoy\n  data path using OPA's Go library. No separate OPA server required.\n- **ext_authz inspired input**: Constructs an OPA input document from request attributes\n  (method, path, headers, source/destination addresses) inspired by the\n  [OPA-Envoy plugin](https://github.com/open-policy-agent/opa-envoy-plugin).\n  Supports both boolean (allow/deny) and structured object responses with custom HTTP status\n  codes, headers, and response bodies.\n- **Dry-run mode**: Log authorization decisions without enforcing them, useful for testing\n  policies in production.\n- **Fail-open mode**: Allow requests through when policy evaluation encounters an error,\n  instead of returning a 500 response.\n- **mTLS and SPIFFE identity**: Access client certificate attributes including SPIFFE IDs\n  (URI SANs), DNS SANs, and certificate subject for identity-based authorization.\n- **Configurable decision path**: Query any rule path in the policy (default: `envoy.authz.allow`).\n- **Request body inspection**: Optionally buffer the request body and expose it as parsed JSON\n  in the OPA input document under `input.body`. Only JSON bodies are supported.\n\n## Input Document Structure\n\nRequests are parsed and transformed into a structured `input` document that is passed to the OPA\npolicy for evaluation. The following `input` document shows an example of the structure that is\npassed to the OPA policy on each request:\n\n```json\n{\n  \"attributes\": {\n    \"request\": {\n      \"http\": {\n        \"method\":   \"GET\",               // HTTP method\n        \"path\":     \"/api/v1/resource\",  // Full path including query string\n        \"host\":     \"example.com\",       // Host header (:authority)\n        \"scheme\":   \"https\",             // URL scheme (default: \"http\")\n        \"protocol\": \"HTTP/1.1\",          // Request protocol (default: \"HTTP/1.1\")\n        \"headers\": {                     // Request headers (excluding pseudo-headers)\n          \"authorization\": \"Bearer ...\",\n          \"content-type\": \"application/json\"\n        }\n      }\n    },\n    \"source\": {\n      \"address\": \"10.0.0.1:5000\",       // Client address (ip:port)\n      \"certificate\": {                   // Peer certificate (mTLS connections)\n        \"uri_san\":       \"spiffe://cluster.local/ns/default/sa/client\",\n        \"dns_san\":       \"client.default.svc.cluster.local\",\n        \"subject\":       \"CN=client,O=example\",\n        \"sha256_digest\": \"abc123...\"\n      }\n    },\n    \"destination\": {\n      \"address\": \"10.0.0.2:443\"         // Server address (ip:port)\n    },\n    \"connection\": {\n      \"mtls:\": true,                    // Whether the connection is mTLS\n      \"tls_version\": \"TLSv1.3\"          // TLS version\n    }\n  },\n  \"parsed_path\":  [\"api\", \"v1\", \"resource\"],  // Path segments\n  \"parsed_query\": {\"key\": [\"value\"]},         // Parsed query parameters\n  \"body\":  {\"field\": \"value\"}          // Parsed JSON body (only when with_body: true)\n}\n```\n\nThe `body` field is only present when `with_body` is enabled in the configuration\nand the request body is valid JSON. Non-JSON bodies result in `body` being absent.\n\n## Metrics\n\nThe extension exposes the `opa_requests_total` counter metric with a `decision` tag that\ntracks authorization outcomes. The possible tag values are:\n\n| Decision | Description |\n|--------|------|\n| `allowed` | The policy allowed the request. |\n| `denied` | The policy denied the request (or an error occurred with fail-open disabled). |\n| `failopen` | An error occurred during policy evaluation and the request was allowed because fail-open mode is enabled. |\n| `dryrun_allow` | The policy denied the request but it was allowed because dry-run mode is enabled. |\n",
     "type": "go",
     "tags": [
       "go",
@@ -524,7 +524,7 @@
         "code": "cat \u003e /tmp/policy.rego \u003c\u003c 'EOF'\npackage envoy.authz\n\nimport rego.v1\n\ndefault allow := false\n\n# Allow only requests where the body contains a valid \"role\" field.\nallow if {\n  input.body.role == \"admin\"\n}\nEOF\n\nboe run --extension opa --config '{\n  \"policies\": [{\"file\": \"/tmp/policy.rego\"}],\n  \"with_body\": true\n}'\n\n# Test with allowed body\ncurl -X POST -H \"Content-Type: application/json\" \\\n  -d '{\"role\": \"admin\"}' http://localhost:10000/api/resource\n# =\u003e 200 OK\n\n# Test with denied body\ncurl -X POST -H \"Content-Type: application/json\" \\\n  -d '{\"role\": \"guest\"}' http://localhost:10000/api/resource\n# =\u003e 403 Forbidden\n"
       }
     ],
-    "minEnvoyVersion": "1.37.0",
+    "minEnvoyVersion": "1.37.1",
     "composerVersion": "0.4.0-dev",
     "sourcePath": "composer/opa"
   },
@@ -572,7 +572,7 @@
         "code": "boe run --extension openapi-validator --config '{\n  \"spec\": {\"file\": \"/path/to/openapi.yaml\"},\n  \"deny_response\": {\n    \"status\": 422,\n    \"body\": \"Request does not conform to API specification\",\n    \"headers\": {\"content-type\": \"text/plain\"}\n  }\n}'\n"
       }
     ],
-    "minEnvoyVersion": "1.37.0",
+    "minEnvoyVersion": "1.37.1",
     "composerVersion": "0.4.0-dev",
     "sourcePath": "composer/openapi-validator"
   },
@@ -621,7 +621,7 @@
         "code": "# Start keycloack\ncurl -o docker-compose.yaml https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yaml\ndocker compose -f docker-compose.yaml up --wait\n\n# Download the IdP metadata\ncurl http://localhost:8080/realms/saml-demo/protocol/saml/descriptor -o idp-metadata.xml\n\n# Run the plugin\nboe run --extension saml --config '\n  {\n    \"entity_id\": \"http://localhost:10000\",\n    \"acs_path\": \"/saml/acs\",\n    \"idp_metadata_xml\": {\"file\": \"idp-metadata.xml\"},\n    \"attribute_headers\": {\n      \"email\": \"x-saml-email\",\n      \"Role\": \"x-saml-role\"\n    },\n    \"bypass_paths\": [\"/health\", \"/ready\", \"/status/409\"],\n  }'\n\n# Test the plugin in the browser and login as testuser/testpass and check how the headers are set\nopen http://localhost:10000/headers\n\n# Clear the session cookies and then open again the browser and check how authentication is bypassed\nopen http://localhost:10000/status/409\n\n# Cleanup keycloak\ndocker compose -f docker-compose.yaml down -v\n"
       }
     ],
-    "minEnvoyVersion": "1.37.0",
+    "minEnvoyVersion": "1.37.1",
     "composerVersion": "0.4.0-dev",
     "sourcePath": "composer/saml"
   },
@@ -654,7 +654,7 @@
         "code": "# Start Keycloak\ncurl -o docker-compose.yaml https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/token-exchange/demo/docker-compose.yaml\ncurl -o keycloak-realm.json https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/token-exchange/demo/keycloak-realm.json\ncurl -o setup.sh https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/token-exchange/demo/setup.sh\nchmod +x ./setup.sh\ndocker compose up --wait\n\n# Configure Keycloak for token exchange\n./setup.sh\n\n# Run the extension\nboe run --extension token-exchange \\\n  --config '{\n    \"cluster\": \"127.0.0.1:8080\",\n    \"token_exchange_url\": \"localhost:8080/realms/demo/protocol/openid-connect/token\",\n    \"client_id\": \"gateway\",\n    \"client_secret\": \"gateway-secret\",\n    \"audience\": \"httpbin\"\n  }' \\\n  --cluster-insecure 127.0.0.1:8080\n\n# Get a token as testuser and send it through Envoy\nTOKEN=$(curl -s http://localhost:8080/realms/demo/protocol/openid-connect/token \\\n  -d grant_type=password -d client_id=my-app -d client_secret=my-app-secret \\\n  -d username=testuser -d password=password | jq -r .access_token)\ncurl -s http://localhost:10000/headers -H \"Authorization: Bearer $TOKEN\" | jq .\n\n# Or use the automated script\ncurl -o run.sh https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/token-exchange/demo/run.sh\nchmod +x ./run.sh\n./run.sh\n"
       }
     ],
-    "minEnvoyVersion": "1.37.0",
+    "minEnvoyVersion": "1.37.1",
     "composerVersion": "0.4.0-dev",
     "sourcePath": "composer/token-exchange"
   }

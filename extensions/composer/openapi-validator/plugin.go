@@ -71,10 +71,10 @@ type openAPIValidatorHttpFilter struct { //nolint:revive
 func (o *openAPIValidatorHttpFilter) buildHTTPRequest(body []byte) (*http.Request, error) {
 	headers := o.handle.RequestHeaders()
 
-	method := headers.GetOne(":method")
-	path := headers.GetOne(":path")
-	host := headers.GetOne(":authority")
-	scheme := headers.GetOne(":scheme")
+	method := headers.GetOne(":method").ToUnsafeString()
+	path := headers.GetOne(":path").ToUnsafeString()
+	host := headers.GetOne(":authority").ToUnsafeString()
+	scheme := headers.GetOne(":scheme").ToUnsafeString()
 	if scheme == "" {
 		scheme = "http"
 	}
@@ -91,8 +91,8 @@ func (o *openAPIValidatorHttpFilter) buildHTTPRequest(body []byte) (*http.Reques
 
 	// Copy non-pseudo headers.
 	for _, h := range headers.GetAll() {
-		if !strings.HasPrefix(h[0], ":") {
-			httpReq.Header.Add(h[0], h[1])
+		if !strings.HasPrefix(h[0].ToUnsafeString(), ":") {
+			httpReq.Header.Add(h[0].ToUnsafeString(), h[1].ToUnsafeString())
 		}
 	}
 	httpReq.Host = host
@@ -104,10 +104,10 @@ func (o *openAPIValidatorHttpFilter) buildHTTPRequest(body []byte) (*http.Reques
 }
 
 func (o *openAPIValidatorHttpFilter) OnRequestHeaders(headers shared.HeaderMap, endOfStream bool) shared.HeadersStatus {
-	method := headers.GetOne(":method")
-	path := headers.GetOne(":path")
-	host := headers.GetOne(":authority")
-	scheme := headers.GetOne(":scheme")
+	method := headers.GetOne(":method").ToUnsafeString()
+	path := headers.GetOne(":path").ToUnsafeString()
+	host := headers.GetOne(":authority").ToUnsafeString()
+	scheme := headers.GetOne(":scheme").ToUnsafeString()
 	if scheme == "" {
 		scheme = "http"
 	}

@@ -49,11 +49,11 @@ func (f *samlHTTPFilter) OnRequestHeaders(headers shared.HeaderMap, endStream bo
 	method := getRequestMethod(f.handle)
 	// Create a copy if we store this value because the underlying memory of the header value are managed
 	// by Envoy.
-	f.requestID = strings.Clone(headers.GetOne("x-request-id"))
+	f.requestID = headers.GetOne("x-request-id").ToString()
 	scheme, _ := f.handle.GetAttributeString(shared.AttributeIDRequestScheme)
-	f.requestScheme = strings.Clone(scheme)
+	f.requestScheme = scheme.ToString()
 	host, _ := f.handle.GetAttributeString(shared.AttributeIDRequestHost)
-	f.requestHost = strings.Clone(host)
+	f.requestHost = host.ToString()
 	f.handle.Log(shared.LogLevelDebug, "saml: [%s] handling %s %s", f.requestID, method, path)
 
 	cfg := f.cfg.config
@@ -89,13 +89,13 @@ func (f *samlHTTPFilter) OnRequestHeaders(headers shared.HeaderMap, endStream bo
 	}
 
 	// 4. Check for valid session cookie.
-	cookieHeader := headers.GetOne("cookie")
+	cookieHeader := headers.GetOne("cookie").ToUnsafeString()
 	if cookieHeader != "" {
 		token := extractSessionCookie(cookieHeader, cfg.CookieName)
 		if token != "" {
 			session, err := validateSessionToken(cfg.CookieSigningKey, token)
 			if err == nil {
-				// Valid session — set upstream headers and continue.
+				// Valid session - set upstream headers and continue.
 				f.setUpstreamHeaders(headers, session)
 				f.handle.Log(shared.LogLevelDebug, "saml: [%s] valid session for %s", f.requestID, session.NameID)
 				f.incrementSessionsValidated("valid")
@@ -247,7 +247,8 @@ func (f *samlHTTPFilter) serveMetadata() {
 
 // getRequestPath extracts the request path from attributes.
 func getRequestPath(handle shared.HttpFilterHandle) string {
-	path, _ := handle.GetAttributeString(shared.AttributeIDRequestPath)
+	pathAttr, _ := handle.GetAttributeString(shared.AttributeIDRequestPath)
+	path := pathAttr.ToUnsafeString()
 	// Strip query string if present.
 	if idx := strings.IndexByte(path, '?'); idx >= 0 {
 		path = path[:idx]
@@ -258,7 +259,7 @@ func getRequestPath(handle shared.HttpFilterHandle) string {
 // getRequestMethod extracts the HTTP method from attributes.
 func getRequestMethod(handle shared.HttpFilterHandle) string {
 	method, _ := handle.GetAttributeString(shared.AttributeIDRequestMethod)
-	return method
+	return method.ToUnsafeString()
 }
 
 // incrementAuthnRequests increments the authn requests counter.
@@ -302,7 +303,7 @@ func (f *samlHTTPFilter) buildOriginalURL() string {
 	u := url.URL{
 		Scheme: scheme,
 		Host:   host,
-		Path:   path,
+		Path:   path.ToUnsafeString(),
 	}
 	return u.String()
 }
