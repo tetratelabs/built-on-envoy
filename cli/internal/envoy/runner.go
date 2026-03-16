@@ -253,7 +253,10 @@ type RunnerDocker struct {
 
 // Run starts Envoy in a Docker container.
 func (r *RunnerDocker) Run(ctx context.Context) error {
-	image := fmt.Sprintf("%s/%s", r.Registry, dockerImage)
+	var (
+		version = imageVersion(internal.CurrentVersion())
+		image   = fmt.Sprintf("%s/%s:%s", r.Registry, dockerImage, version)
+	)
 
 	// Process local extensions to mount them in the container and get the corresponding container paths.
 	localExtArgs, err := r.processLocalExtensions(r.LocalExtensions)
@@ -296,6 +299,15 @@ func (r *RunnerDocker) Run(ctx context.Context) error {
 	}
 
 	return cmd.Run()
+}
+
+// imageVersion returns the image version to use for the Docker runner. For dev versions, it returns "latest"
+// to pull the most recent image. For release versions, it returns the specific version tag to pull the corresponding image.
+func imageVersion(version internal.Version) string {
+	if version.CommitsAhead != 0 || version.ClosestTag == "" || version.Sha == "" {
+		return "latest"
+	}
+	return strings.TrimPrefix(version.ClosestTag, "v")
 }
 
 // passthroughEnvVars returns environment variables with BOE_ prefix to the Docker run arguments.

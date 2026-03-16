@@ -3,7 +3,7 @@
 // The full text of the Apache license is available in the LICENSE file at
 // the root of the repo.
 
-// Package impl contains the implementation of the chat-completions-decoder filter.
+// Package impl contains the implementation of the anthropic-decoder filter.
 package impl
 
 import (
@@ -15,12 +15,12 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/utility"
 )
 
-const defaultMetadataNamespace = "io.builtonenvoy.openai"
+const defaultMetadataNamespace = "io.builtonenvoy.anthropic"
 
-// chatCompletionsDecoderConfig holds the configuration for the decoder filter.
-type chatCompletionsDecoderConfig struct {
+// anthropicDecoderConfig holds the configuration for the decoder filter.
+type anthropicDecoderConfig struct {
 	// MetadataNamespace is the filter metadata namespace under which the decoded
-	// fields are stored. Defaults to "io.builtonenvoy.openai".
+	// fields are stored. Defaults to "io.builtonenvoy.anthropic".
 	MetadataNamespace string `json:"metadata_namespace"`
 }
 
@@ -30,10 +30,10 @@ type decoderConfigFactory struct {
 }
 
 func (d *decoderConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
-	var cfg chatCompletionsDecoderConfig
+	var cfg anthropicDecoderConfig
 	if len(config) > 0 {
 		if err := json.Unmarshal(config, &cfg); err != nil {
-			handle.Log(shared.LogLevelError, "chat-completions-decoder: failed to parse config: %s", err.Error())
+			handle.Log(shared.LogLevelError, "anthropic-messages-decoder: failed to parse config: %s", err.Error())
 			return nil, err
 		}
 	}
@@ -41,7 +41,7 @@ func (d *decoderConfigFactory) Create(handle shared.HttpFilterConfigHandle, conf
 		cfg.MetadataNamespace = defaultMetadataNamespace
 	}
 
-	handle.Log(shared.LogLevelInfo, "chat-completions-decder: using metadata namespace %q", cfg.MetadataNamespace)
+	handle.Log(shared.LogLevelInfo, "anthropic-messages-decoder: using metadata namespace %q", cfg.MetadataNamespace)
 
 	return &decoderFilterFactory{config: &cfg}, nil
 }
@@ -49,7 +49,7 @@ func (d *decoderConfigFactory) Create(handle shared.HttpFilterConfigHandle, conf
 // decoderFilterFactory implements shared.HttpFilterFactory.
 type decoderFilterFactory struct {
 	shared.EmptyHttpFilterFactory
-	config *chatCompletionsDecoderConfig
+	config *anthropicDecoderConfig
 }
 
 func (d *decoderFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
@@ -60,13 +60,13 @@ func (d *decoderFilterFactory) Create(handle shared.HttpFilterHandle) shared.Htt
 type decoderFilter struct {
 	shared.EmptyHttpFilter
 	handle shared.HttpFilterHandle
-	config *chatCompletionsDecoderConfig
+	config *anthropicDecoderConfig
 
-	requestProcessed  bool // Guard to avoid processing the response body again in the request trailers.
+	requestProcessed  bool // Guard to avoid processing the request body again in the request trailers.
 	responseProcessed bool // Guard to avoid processing the response body again in the response trailers.
 	// sseAcc is non-nil when the response is a streaming SSE response.
 	// It accumulates parsed SSE events incrementally as body chunks arrive.
-	sseAcc *sseAccumulator
+	sseAcc *anthropicSSEAccumulator
 }
 
 func (d *decoderFilter) OnRequestHeaders(_ shared.HeaderMap, endOfStream bool) shared.HeadersStatus {
@@ -105,8 +105,8 @@ func (d *decoderFilter) OnResponseHeaders(headers shared.HeaderMap, endOfStream 
 	// Detect streaming SSE responses by content-type so we can parse
 	// chunks incrementally without buffering the entire response.
 	if ct := headers.GetOne("content-type").ToUnsafeString(); strings.HasPrefix(ct, "text/event-stream") {
-		d.handle.Log(shared.LogLevelDebug, "chat-completions-decoder: handling SSE response")
-		d.sseAcc = newSSEAccumulator(func(format string, args ...any) {
+		d.handle.Log(shared.LogLevelDebug, "anthropic-messages-decoder: handling SSE response")
+		d.sseAcc = newAnthropicSSEAccumulator(func(format string, args ...any) {
 			d.handle.Log(shared.LogLevelDebug, format, args...)
 		})
 		// Continue processing the response headers to leverage the response streaming
@@ -159,7 +159,7 @@ func (d *decoderFilter) OnResponseTrailers(shared.HeaderMap) shared.TrailersStat
 	return shared.TrailersStatusContinue
 }
 
-// decodeRequestBody reads the request body, parses the OpenAI ChatCompletion request,
+// decodeRequestBody reads the request body, parses the Anthropic Messages request,
 // and sets the structured information in filter metadata.
 func (d *decoderFilter) decodeRequestBody() {
 	d.requestProcessed = true
@@ -168,16 +168,16 @@ func (d *decoderFilter) decodeRequestBody() {
 	if len(bodyBytes) == 0 {
 		return
 	}
-	decoded, err := decodeChatRequest(bodyBytes)
+	decoded, err := decodeAnthropicRequest(bodyBytes)
 	if err != nil {
-		d.handle.Log(shared.LogLevelDebug, "chat-completions-decoder: failed to parse request: %s", err.Error())
+		d.handle.Log(shared.LogLevelDebug, "anthropic-messages-decoder: failed to parse request: %s", err.Error())
 		return
 	}
 
 	d.setRequestMetadata(d.config.MetadataNamespace, decoded)
 }
 
-// decodeResponseBody reads the response body, parses the OpenAI ChatCompletion response,
+// decodeResponseBody reads the response body, parses the Anthropic Messages response,
 // and sets the structured information in filter metadata.
 func (d *decoderFilter) decodeResponseBody() {
 	d.responseProcessed = true
@@ -186,9 +186,9 @@ func (d *decoderFilter) decodeResponseBody() {
 	if len(bodyBytes) == 0 {
 		return
 	}
-	decoded, err := decodeChatResponse(bodyBytes)
+	decoded, err := decodeAnthropicResponse(bodyBytes)
 	if err != nil {
-		d.handle.Log(shared.LogLevelDebug, "chat-completions-decoder: failed to parse response: %s", err.Error())
+		d.handle.Log(shared.LogLevelDebug, "anthropic-messages-decoder: failed to parse response: %s", err.Error())
 		return
 	}
 
@@ -205,25 +205,43 @@ func (d *decoderFilter) decodeStreamingResponse() {
 
 // setRequestMetadata writes the decoded request fields into Envoy's dynamic filter metadata
 // following the OpenInference Semantic Conventions.
-func (d *decoderFilter) setRequestMetadata(namespace string, req *chatCompletionRequest) {
+func (d *decoderFilter) setRequestMetadata(namespace string, req *anthropicRequest) {
 	d.handle.SetMetadata(namespace, "llm.model_name", req.Model)
-	d.handle.SetMetadata(namespace, "llm.system", "openai")
-	d.handle.SetMetadata(namespace, "llm.input_messages.count", len(req.Messages))
+	d.handle.SetMetadata(namespace, "llm.system", "anthropic")
+
+	// System prompt is a top-level field in Anthropic; map it as message index 0.
+	hasSystem := extractAnthropicSystem(req.System) != ""
+	messageCount := len(req.Messages)
+	if hasSystem {
+		messageCount++
+	}
+	d.handle.SetMetadata(namespace, "llm.input_messages.count", messageCount)
+
+	offset := 0
+	if hasSystem {
+		d.handle.SetMetadata(namespace, "llm.input_messages.0.message.role", "system")
+		d.handle.SetMetadata(namespace, "llm.input_messages.0.message.content", extractAnthropicSystem(req.System))
+		offset = 1
+	}
 
 	for i, msg := range req.Messages {
-		d.handle.SetMetadata(namespace, fmt.Sprintf("llm.input_messages.%d.message.role", i), msg.Role)
-		if content := extractContent(msg.Content); content != "" {
-			d.handle.SetMetadata(namespace, fmt.Sprintf("llm.input_messages.%d.message.content", i), content)
+		idx := i + offset
+		d.handle.SetMetadata(namespace, fmt.Sprintf("llm.input_messages.%d.message.role", idx), msg.Role)
+		if content := extractAnthropicContent(msg.Content); content != "" {
+			d.handle.SetMetadata(namespace, fmt.Sprintf("llm.input_messages.%d.message.content", idx), content)
 		}
-		if len(msg.ToolCalls) > 0 {
-			d.handle.SetMetadata(namespace, fmt.Sprintf("llm.input_messages.%d.message.tool_calls.count", i), len(msg.ToolCalls))
-			for j, tc := range msg.ToolCalls {
+
+		// Extract tool_use blocks from content (Anthropic puts these inline in the content array).
+		toolCalls := extractAnthropicToolCalls(msg.Content)
+		if len(toolCalls) > 0 {
+			d.handle.SetMetadata(namespace, fmt.Sprintf("llm.input_messages.%d.message.tool_calls.count", idx), len(toolCalls))
+			for j, tc := range toolCalls {
 				d.handle.SetMetadata(namespace,
-					fmt.Sprintf("llm.input_messages.%d.message.tool_calls.%d.tool_call.id", i, j), tc.ID)
+					fmt.Sprintf("llm.input_messages.%d.message.tool_calls.%d.tool_call.id", idx, j), tc.ID)
 				d.handle.SetMetadata(namespace,
-					fmt.Sprintf("llm.input_messages.%d.message.tool_calls.%d.tool_call.function.name", i, j), tc.Function.Name)
+					fmt.Sprintf("llm.input_messages.%d.message.tool_calls.%d.tool_call.function.name", idx, j), tc.Name)
 				d.handle.SetMetadata(namespace,
-					fmt.Sprintf("llm.input_messages.%d.message.tool_calls.%d.tool_call.function.arguments", i, j), tc.Function.Arguments)
+					fmt.Sprintf("llm.input_messages.%d.message.tool_calls.%d.tool_call.function.arguments", idx, j), string(tc.Input))
 			}
 		}
 	}
@@ -232,7 +250,7 @@ func (d *decoderFilter) setRequestMetadata(namespace string, req *chatCompletion
 	for i, tool := range req.Tools {
 		toolJSON, err := json.Marshal(tool)
 		if err != nil {
-			d.handle.Log(shared.LogLevelDebug, "chat-completions-decoder: failed to marshal tool %d: %s", i, err.Error())
+			d.handle.Log(shared.LogLevelDebug, "anthropic-messages-decoder: failed to marshal tool %d: %s", i, err.Error())
 			continue
 		}
 		d.handle.SetMetadata(namespace, fmt.Sprintf("llm.tools.%d.tool.json_schema", i), string(toolJSON))
@@ -241,38 +259,54 @@ func (d *decoderFilter) setRequestMetadata(namespace string, req *chatCompletion
 
 // setResponseMetadata writes the decoded response fields into Envoy's dynamic filter metadata
 // following the OpenInference Semantic Conventions.
-func (d *decoderFilter) setResponseMetadata(namespace string, resp *chatCompletionResponse) {
-	d.handle.SetMetadata(namespace, "llm.output_messages.count", len(resp.Choices))
-	for i, choice := range resp.Choices {
-		d.handle.SetMetadata(namespace, fmt.Sprintf("llm.output_messages.%d.message.role", i), choice.Message.Role)
-		if content := extractContent(choice.Message.Content); content != "" {
-			d.handle.SetMetadata(namespace, fmt.Sprintf("llm.output_messages.%d.message.content", i), content)
+func (d *decoderFilter) setResponseMetadata(namespace string, resp *anthropicResponse) {
+	// Anthropic always returns a single message (no choices array).
+	d.handle.SetMetadata(namespace, "llm.output_messages.count", 1)
+	d.handle.SetMetadata(namespace, "llm.output_messages.0.message.role", resp.Role)
+
+	// Extract text content and tool calls from content blocks.
+	var textParts []string
+	var toolCalls []*anthropicContentBlock
+	for _, block := range resp.Content {
+		if block.Type == "text" && block.Text != "" {
+			textParts = append(textParts, block.Text)
 		}
-		if len(choice.Message.ToolCalls) > 0 {
-			d.handle.SetMetadata(namespace, fmt.Sprintf("llm.output_messages.%d.message.tool_calls.count", i), len(choice.Message.ToolCalls))
-			for j, tc := range choice.Message.ToolCalls {
-				d.handle.SetMetadata(namespace,
-					fmt.Sprintf("llm.output_messages.%d.message.tool_calls.%d.tool_call.id", i, j), tc.ID)
-				d.handle.SetMetadata(namespace,
-					fmt.Sprintf("llm.output_messages.%d.message.tool_calls.%d.tool_call.function.name", i, j), tc.Function.Name)
-				d.handle.SetMetadata(namespace,
-					fmt.Sprintf("llm.output_messages.%d.message.tool_calls.%d.tool_call.function.arguments", i, j), tc.Function.Arguments)
-			}
+		if block.Type == "tool_use" {
+			toolCalls = append(toolCalls, block)
 		}
 	}
+
+	if content := strings.Join(textParts, "\n"); content != "" {
+		d.handle.SetMetadata(namespace, "llm.output_messages.0.message.content", content)
+	}
+
+	if len(toolCalls) > 0 {
+		d.handle.SetMetadata(namespace, "llm.output_messages.0.message.tool_calls.count", len(toolCalls))
+		for j, tc := range toolCalls {
+			d.handle.SetMetadata(namespace,
+				fmt.Sprintf("llm.output_messages.0.message.tool_calls.%d.tool_call.id", j), tc.ID)
+			d.handle.SetMetadata(namespace,
+				fmt.Sprintf("llm.output_messages.0.message.tool_calls.%d.tool_call.function.name", j), tc.Name)
+			d.handle.SetMetadata(namespace,
+				fmt.Sprintf("llm.output_messages.0.message.tool_calls.%d.tool_call.function.arguments", j), string(tc.Input))
+		}
+	}
+
 	if resp.Usage != nil {
-		d.handle.SetMetadata(namespace, "llm.token_count.prompt", resp.Usage.PromptTokens)
-		d.handle.SetMetadata(namespace, "llm.token_count.completion", resp.Usage.CompletionTokens)
-		d.handle.SetMetadata(namespace, "llm.token_count.total", resp.Usage.TotalTokens)
-		if resp.Usage.CompletionTokensDetails != nil {
-			d.handle.SetMetadata(namespace, "llm.token_count.completion_details.reasoning", resp.Usage.CompletionTokensDetails.ReasoningTokens)
-			d.handle.SetMetadata(namespace, "llm.token_count.completion_details.audio", resp.Usage.CompletionTokensDetails.AudioTokens)
+		d.handle.SetMetadata(namespace, "llm.token_count.prompt", resp.Usage.InputTokens)
+		d.handle.SetMetadata(namespace, "llm.token_count.completion", resp.Usage.OutputTokens)
+		d.handle.SetMetadata(namespace, "llm.token_count.total", resp.Usage.InputTokens+resp.Usage.OutputTokens)
+		if resp.Usage.CacheCreationInputTokens > 0 {
+			d.handle.SetMetadata(namespace, "llm.token_count.completion_details.cache_creation_input_tokens", resp.Usage.CacheCreationInputTokens)
+		}
+		if resp.Usage.CacheReadInputTokens > 0 {
+			d.handle.SetMetadata(namespace, "llm.token_count.completion_details.cache_read_input_tokens", resp.Usage.CacheReadInputTokens)
 		}
 	}
 }
 
 // ExtensionName is the name used to refer to this plugin.
-const ExtensionName = "chat-completions-decoder"
+const ExtensionName = "anthropic-messages-decoder"
 
 var wellKnownHTTPFilterConfigFactories = map[string]shared.HttpFilterConfigFactory{
 	ExtensionName: &decoderConfigFactory{},
