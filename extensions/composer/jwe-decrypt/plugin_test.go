@@ -100,7 +100,7 @@ func TestOnRequestHeaders_SuccessfulDecryption(t *testing.T) {
 	require.Equal(t, shared.HeadersStatusContinue, status)
 	decryptedValues := requestHeaders.Get("x-decrypted")
 	require.Len(t, decryptedValues, 1)
-	require.Equal(t, payload, decryptedValues[0])
+	require.Equal(t, payload, decryptedValues[0].ToUnsafeString())
 }
 
 func TestOnRequestHeaders_SuccessfulDecryptionSymmetricKey(t *testing.T) {
