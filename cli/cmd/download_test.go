@@ -54,7 +54,7 @@ Flags:
       --dev                Whether to allow downloading dev versions of
                            extensions (with -dev suffix). By default, only
                            stable versions are allowed.
-      --path="."           Directory to put the downloaded extension config
+      --path="."           Directory to put the downloaded extension artifact
                            into. Defaults to the current directory.
       --registry="%s"
                            OCI registry URL for the extensions ($BOE_REGISTRY).
