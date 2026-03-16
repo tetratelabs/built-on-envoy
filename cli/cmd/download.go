@@ -26,7 +26,7 @@ type Download struct {
 	Extension string   `arg:"" help:"The name of the extension to download. For example, 'example-go'."`
 	Platform  string   `name:"platform" help:"The target platform for the extension in the format os/arch. For example, 'linux/amd64'. If not specified, it defaults to the current platform."`
 	Dev       bool     `help:"Whether to allow downloading dev versions of extensions (with -dev suffix). By default, only stable versions are allowed." default:"false"`
-	Path      string   `name:"path" help:"Directory to put the downloaded extension config into. Defaults to the current directory." default:"." type:"path"`
+	Path      string   `name:"path" help:"Directory to put the downloaded extension artifact into. Defaults to the current directory." default:"." type:"path"`
 	OCI       OCIFlags `embed:""`
 
 	downloader *extensions.Downloader `kong:"-"` // Internal field for the downloader

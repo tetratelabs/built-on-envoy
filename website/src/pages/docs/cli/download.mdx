@@ -49,7 +49,7 @@ boe download --help
 |------|-------------|------|---------|-----|----------|
 | `--platform` | The target platform for the extension in the format os/arch. For example, 'linux/amd64'. If not specified, it defaults to the current platform. | `string` | - | - | No |
 | `--dev` | Whether to allow downloading dev versions of extensions (with -dev suffix). By default, only stable versions are allowed. | `bool` | `false` | - | No |
-| `--path` | Directory to put the downloaded extension config into. Defaults to the current directory. | `string` | `.` | - | No |
+| `--path` | Directory to put the downloaded extension artifact into. Defaults to the current directory. | `string` | `.` | - | No |
 | `--registry` | OCI registry URL for the extensions. | `string` | `ghcr.io/tetratelabs/built-on-envoy` | `BOE_REGISTRY` | No |
 | `--insecure` | Allow connecting to an insecure (HTTP) registry. | `bool` | `false` | `BOE_REGISTRY_INSECURE` | No |
 | `--username` | Username for the OCI registry. | `string` | - | `BOE_REGISTRY_USERNAME` | No |
