@@ -22,6 +22,8 @@ type jweDecryptConfig struct {
 	// PrivateKey is the PKCS8 private key used for decryption, provided either via a file path or inline.
 	// When using inline, the value must be the base64-encoded PEM content.
 	PrivateKey pkg.DataSource `json:"private_key"`
+	// Algorithm is the JWE algorithm to use for decryption.
+	Algorithm string `json:"algorithm"`
 	// InputHeader is the name of the header that contains the JWE string to be decrypted. Defaults to Authorization if not specified.
 	InputHeader string `json:"input_header"`
 	// Prefix is an optional prefix to remove from the input header value before decryption (e.g., "Bearer ").
@@ -47,7 +49,7 @@ func (f *jweDecryptConfig) getKey() (*boeJwe.Keys, error) {
 			return nil, fmt.Errorf("failed to base64 decode inline private key: %w", err)
 		}
 	}
-	return boeJwe.ParsePrivateKey(string(content))
+	return boeJwe.ParsePrivateKey(string(content), f.Algorithm)
 }
 
 // This is the implementation of the HTTP filter.
@@ -127,6 +129,11 @@ func (f *JWEDecryptHttpFilterConfigFactory) Create(handle shared.HttpFilterConfi
 	if err := cfg.PrivateKey.Validate(); err != nil {
 		handle.Log(shared.LogLevelError, "jwe-decrypt: invalid key config: "+err.Error())
 		return nil, err
+	}
+
+	if cfg.Algorithm == "" {
+		handle.Log(shared.LogLevelError, "jwe-decrypt: missing algorithm in key config")
+		return nil, fmt.Errorf("missing algorithm in key config")
 	}
 
 	// Parse private key from config (either from file or inline)

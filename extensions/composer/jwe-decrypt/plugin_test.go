@@ -6,6 +6,7 @@
 package impl
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"path/filepath"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/fake"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
+	"github.com/lestrrat-go/jwx/v3/jwa"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
@@ -30,9 +32,25 @@ func getTestPublicKeyPath() string {
 	return filepath.Join("jwe", "testdata", "public_key.pem")
 }
 
+func getTestSymmetricKey() string {
+	// Symmetric shared key (must be 32 bytes for A256KW)
+	return "0123456789abcdef0123456789abcdef"
+}
+
 func createTestJWE(t *testing.T, payload string) string {
 	pubKeyPath := getTestPublicKeyPath()
-	keyInput, err := boeJwe.ParsePublicKeyFromFile(pubKeyPath)
+	keyInput, err := boeJwe.ParsePublicKeyFromFile(pubKeyPath, jwa.RSA_OAEP().String())
+	require.NoError(t, err)
+
+	encrypted, err := keyInput.Encrypt([]byte(payload))
+	require.NoError(t, err)
+
+	return string(encrypted)
+}
+
+func createTestJWEWithSymmetricKey(t *testing.T, payload string) string {
+	keyStr := getTestSymmetricKey()
+	keyInput, err := boeJwe.ParsePrivateKey(keyStr, jwa.A256KW().String())
 	require.NoError(t, err)
 
 	encrypted, err := keyInput.Encrypt([]byte(payload))
@@ -49,6 +67,50 @@ func TestOnRequestHeaders_SuccessfulDecryption(t *testing.T) {
 
 	config := &jweDecryptConfig{
 		PrivateKey:   pkg.DataSource{File: getTestKeyPath()},
+		Algorithm:    "RSA-OAEP",
+		InputHeader:  "x-jwe-token",
+		OutputHeader: "x-decrypted",
+	}
+
+	// Populate the privateJwks field
+	keySet, err := config.getKey()
+	require.NoError(t, err)
+	config.privateKey = keySet
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	requestHeaders := fake.NewFakeHeaderMap(map[string][]string{})
+	mockHandle.EXPECT().RequestHeaders().Return(requestHeaders).AnyTimes()
+	mockHandle.EXPECT().SetMetadata(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	filter := &jweDecryptHttpFilter{
+		config: config,
+		handle: mockHandle,
+	}
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		"x-jwe-token": {jweToken},
+	})
+
+	status := filter.OnRequestHeaders(headers, false)
+
+	require.Equal(t, shared.HeadersStatusContinue, status)
+	decryptedValues := requestHeaders.Get("x-decrypted")
+	require.Len(t, decryptedValues, 1)
+	require.Equal(t, payload, decryptedValues[0])
+}
+
+func TestOnRequestHeaders_SuccessfulDecryptionSymmetricKey(t *testing.T) {
+	payload := "test-payload-123"
+	jweToken := createTestJWEWithSymmetricKey(t, payload)
+	inlineKey := base64.StdEncoding.EncodeToString([]byte(getTestSymmetricKey()))
+
+	config := &jweDecryptConfig{
+		PrivateKey:   pkg.DataSource{Inline: inlineKey},
+		Algorithm:    "A256KW",
 		InputHeader:  "x-jwe-token",
 		OutputHeader: "x-decrypted",
 	}
@@ -90,6 +152,7 @@ func TestOnRequestHeaders_WithMetadataOutput(t *testing.T) {
 
 	config := &jweDecryptConfig{
 		PrivateKey:  pkg.DataSource{File: getTestKeyPath()},
+		Algorithm:   "RSA-OAEP",
 		InputHeader: "x-jwe-token",
 		OutputMetadata: &pkg.MetadataKey{
 			Namespace: "jwe-decrypt",
@@ -134,6 +197,7 @@ func TestOnRequestHeaders_WithBothHeaderAndMetadata(t *testing.T) {
 
 	config := &jweDecryptConfig{
 		PrivateKey:   pkg.DataSource{File: getTestKeyPath()},
+		Algorithm:    "RSA-OAEP",
 		InputHeader:  "x-jwe-token",
 		OutputHeader: "x-decrypted",
 		OutputMetadata: &pkg.MetadataKey{
@@ -184,6 +248,7 @@ func TestOnRequestHeaders_WithCustomMetadataNamespace(t *testing.T) {
 
 	config := &jweDecryptConfig{
 		PrivateKey:  pkg.DataSource{File: getTestKeyPath()},
+		Algorithm:   "RSA-OAEP",
 		InputHeader: "x-jwe-token",
 		OutputMetadata: &pkg.MetadataKey{
 			Namespace: "my-custom-namespace",
@@ -224,6 +289,7 @@ func TestOnRequestHeaders_WithCustomMetadataNamespace(t *testing.T) {
 func TestOnRequestHeaders_NoJWEHeader(t *testing.T) {
 	config := &jweDecryptConfig{
 		PrivateKey:   pkg.DataSource{File: getTestKeyPath()},
+		Algorithm:    "RSA-OAEP",
 		InputHeader:  "x-jwe-token",
 		OutputHeader: "x-decrypted",
 	}
@@ -249,6 +315,7 @@ func TestOnRequestHeaders_NoJWEHeader(t *testing.T) {
 func TestOnRequestHeaders_InvalidJWE(t *testing.T) {
 	config := &jweDecryptConfig{
 		PrivateKey:   pkg.DataSource{File: getTestKeyPath()},
+		Algorithm:    "RSA-OAEP",
 		InputHeader:  "x-jwe-token",
 		OutputHeader: "x-decrypted",
 	}
@@ -284,6 +351,7 @@ func TestOnRequestHeaders_OutputHeaderSingleValue(t *testing.T) {
 
 	config := &jweDecryptConfig{
 		PrivateKey:   pkg.DataSource{File: getTestKeyPath()},
+		Algorithm:    "RSA-OAEP",
 		InputHeader:  "authorization",
 		OutputHeader: "authorization",
 	}
@@ -331,6 +399,7 @@ func TestOnRequestHeaders_WithPrefix(t *testing.T) {
 
 	config := &jweDecryptConfig{
 		PrivateKey:   pkg.DataSource{File: getTestKeyPath()},
+		Algorithm:    "RSA-OAEP",
 		InputHeader:  "Authorization",
 		OutputHeader: "x-decrypted",
 		Prefix:       "Bearer ",
@@ -375,6 +444,7 @@ func TestOnRequestHeaders_WithPrefixNotMatching(t *testing.T) {
 
 	config := &jweDecryptConfig{
 		PrivateKey:   pkg.DataSource{File: getTestKeyPath()},
+		Algorithm:    "RSA-OAEP",
 		InputHeader:  "Authorization",
 		OutputHeader: "x-decrypted",
 		Prefix:       "Bearer ",
@@ -416,6 +486,7 @@ func TestOnRequestHeaders_WithPrefixNotMatching(t *testing.T) {
 func TestOnRequestHeaders_WithPrefixShorterThanValue(t *testing.T) {
 	config := &jweDecryptConfig{
 		PrivateKey:   pkg.DataSource{File: getTestKeyPath()},
+		Algorithm:    "RSA-OAEP",
 		InputHeader:  "Authorization",
 		OutputHeader: "x-decrypted",
 		Prefix:       "Bearer ",
@@ -458,6 +529,7 @@ func TestOnRequestHeaders_WithPrefixAndMetadata(t *testing.T) {
 
 	config := &jweDecryptConfig{
 		PrivateKey:  pkg.DataSource{File: getTestKeyPath()},
+		Algorithm:   "RSA-OAEP",
 		InputHeader: "Authorization",
 		OutputMetadata: &pkg.MetadataKey{
 			Namespace: "jwe-decrypt",
@@ -506,6 +578,7 @@ func TestOnRequestHeaders_WithPrefixMultipleValues(t *testing.T) {
 
 	config := &jweDecryptConfig{
 		PrivateKey:   pkg.DataSource{File: getTestKeyPath()},
+		Algorithm:    "RSA-OAEP",
 		InputHeader:  "Authorization",
 		OutputHeader: "x-decrypted",
 		Prefix:       "Bearer ",
@@ -549,6 +622,7 @@ func TestOnRequestHeaders_WithEmptyPrefix(t *testing.T) {
 
 	config := &jweDecryptConfig{
 		PrivateKey:   pkg.DataSource{File: getTestKeyPath()},
+		Algorithm:    "RSA-OAEP",
 		InputHeader:  "x-jwe-token",
 		OutputHeader: "x-decrypted",
 		Prefix:       "", // Empty prefix should be ignored
@@ -615,6 +689,7 @@ func TestJweDecryptHttpFilterFactory_Create(t *testing.T) {
 func TestJWEDecryptHttpFilterConfigFactory_Create_ValidConfig(t *testing.T) {
 	config := jweDecryptConfig{
 		PrivateKey:   pkg.DataSource{File: getTestKeyPath()},
+		Algorithm:    "RSA-OAEP",
 		InputHeader:  "x-jwe-token",
 		OutputHeader: "x-decrypted",
 	}
@@ -644,6 +719,7 @@ func TestJWEDecryptHttpFilterConfigFactory_Create_DefaultMetadataNamespace(t *te
 	// When output_metadata is set without a namespace, it should default to "jwe-decrypt".
 	config := jweDecryptConfig{
 		PrivateKey:     pkg.DataSource{File: getTestKeyPath()},
+		Algorithm:      "RSA-OAEP",
 		InputHeader:    "x-jwe-token",
 		OutputMetadata: &pkg.MetadataKey{Key: "decrypted-payload"},
 	}
@@ -668,6 +744,7 @@ func TestJWEDecryptHttpFilterConfigFactory_Create_DefaultMetadataNamespace(t *te
 func TestJWEDecryptHttpFilterConfigFactory_Create_CustomMetadataNamespace(t *testing.T) {
 	config := jweDecryptConfig{
 		PrivateKey:  pkg.DataSource{File: getTestKeyPath()},
+		Algorithm:   "RSA-OAEP",
 		InputHeader: "x-jwe-token",
 		OutputMetadata: &pkg.MetadataKey{
 			Namespace: "my-namespace",

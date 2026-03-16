@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/lestrrat-go/jwx/v3/jwa"
 	"github.com/lestrrat-go/jwx/v3/jwe"
 	"github.com/lestrrat-go/jwx/v3/jwk"
 )
@@ -26,17 +27,17 @@ type Keys struct {
 
 // ParseKeys takes PEM-encoded RSA private and public key strings, parses them,
 // and returns a Keys struct containing the corresponding jwk.Key objects.
-func ParseKeys(priv string, pub string) (*Keys, error) {
+func ParseKeys(priv, pub, privAlg, pubAlg string) (*Keys, error) {
 	keys := &Keys{}
 	if priv != "" {
-		privKey, err := ParsePrivateKey(priv)
+		privKey, err := ParsePrivateKey(priv, privAlg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse private key: %w", err)
 		}
 		keys.PrivateKey = privKey.PrivateKey
 	}
 	if pub != "" {
-		pubKey, err := ParsePublicKey(pub)
+		pubKey, err := ParsePublicKey(pub, pubAlg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse public key: %w", err)
 		}
@@ -46,17 +47,17 @@ func ParseKeys(priv string, pub string) (*Keys, error) {
 }
 
 // ParseKeysFromFile reads PEM-encoded RSA private and public keys from the specified files,
-func ParseKeysFromFile(privFile string, pubFile string) (*Keys, error) {
+func ParseKeysFromFile(privFile string, pubFile string, privAlg string, pubAlg string) (*Keys, error) {
 	keys := &Keys{}
 	if privFile != "" {
-		privKey, err := ParsePrivateKeyFromFile(privFile)
+		privKey, err := ParsePrivateKeyFromFile(privFile, privAlg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse private key from file: %w", err)
 		}
 		keys.PrivateKey = privKey.PrivateKey
 	}
 	if pubFile != "" {
-		pubKey, err := ParsePublicKeyFromFile(pubFile)
+		pubKey, err := ParsePublicKeyFromFile(pubFile, pubAlg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse public key from file: %w", err)
 		}
@@ -67,49 +68,72 @@ func ParseKeysFromFile(privFile string, pubFile string) (*Keys, error) {
 
 // ParsePrivateKey takes a PEM-encoded RSA private key string, parses it,
 // and returns a Keys struct containing the corresponding jwk.Key object.
-func ParsePrivateKey(keyInput string) (*Keys, error) {
+func ParsePrivateKey(keyInput, algorithm string) (*Keys, error) {
 	if keyInput == "" {
 		return nil, fmt.Errorf("no key input provided")
 	}
 
-	privPem, _ := pem.Decode([]byte(keyInput))
-	if privPem == nil {
-		priv, err := jwk.Import([]byte(keyInput))
+	alg, err := jwa.KeyAlgorithmFrom(algorithm)
+	if err != nil {
+		return nil, fmt.Errorf("invalid algorithm specified: %w", err)
+	}
+	encAlg, ok := alg.(jwa.KeyEncryptionAlgorithm)
+	if !ok {
+		return nil, fmt.Errorf("algorithm is not a valid key encryption algorithm: %w", err)
+	}
+
+	var priv jwk.Key
+	if encAlg.IsSymmetric() {
+		priv, err = jwk.Import([]byte(keyInput))
 		if err != nil {
 			return nil, fmt.Errorf("failed to import private key: %w", err)
 		}
-
 		if _, ok := priv.(jwk.SymmetricKey); !ok {
-			fmt.Printf("expected jwk.SymmetricKey, got %T\n", priv)
+			return nil, fmt.Errorf("failed to import symmetric private key: %w", err)
+		}
+	} else {
+		priv, err = jwk.ParseKey([]byte(keyInput), jwk.WithPEM(true))
+		if err != nil {
 			return nil, fmt.Errorf("failed to import private key: %w", err)
 		}
-
-		return &Keys{PrivateKey: priv}, nil
 	}
 
-	priv, err := jwk.ParseKey([]byte(keyInput), jwk.WithPEM(true))
-	if err != nil {
-		return nil, fmt.Errorf("failed to import private key: %w", err)
+	if err = priv.Set(jwk.AlgorithmKey, alg); err != nil {
+		return nil, fmt.Errorf("failed to set algorithm on private key: %w", err)
 	}
+
 	return &Keys{PrivateKey: priv}, nil
 }
 
 // ParsePrivateKeyFromFile reads a PEM-encoded RSA private key from the specified file,
 // parses it, and returns a Keys struct containing the corresponding jwk.Key object.
-func ParsePrivateKeyFromFile(keyFile string) (*Keys, error) {
+func ParsePrivateKeyFromFile(keyFile string, algorithm string) (*Keys, error) {
 	keyBytes, err := os.ReadFile(filepath.Clean(keyFile))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read key file: %w", err)
 	}
-	return ParsePrivateKey(string(keyBytes))
+	return ParsePrivateKey(string(keyBytes), algorithm)
 }
 
 // ParsePublicKey takes a PEM-encoded RSA public key string, parses it,
 // and returns a Keys struct containing the corresponding jwk.Key object.
-func ParsePublicKey(keyInput string) (*Keys, error) {
+func ParsePublicKey(keyInput, algorithm string) (*Keys, error) {
 	if keyInput == "" {
 		return nil, fmt.Errorf("no key input provided")
 	}
+
+	alg, err := jwa.KeyAlgorithmFrom(algorithm)
+	if err != nil {
+		return nil, fmt.Errorf("invalid algorithm specified: %w", err)
+	}
+	encAlg, ok := alg.(jwa.KeyEncryptionAlgorithm)
+	if !ok {
+		return nil, fmt.Errorf("algorithm is not a valid key encryption algorithm: %w", err)
+	}
+	if encAlg.IsSymmetric() {
+		return nil, fmt.Errorf("algorithm is not an asymmetric key encryption algorithm: %w", err)
+	}
+
 	pubPem, _ := pem.Decode([]byte(keyInput))
 	if pubPem == nil {
 		return nil, fmt.Errorf("failed to parse PEM block containing the key")
@@ -122,28 +146,48 @@ func ParsePublicKey(keyInput string) (*Keys, error) {
 	if !ok {
 		return nil, fmt.Errorf("unable to parse RSA public key: %w", err)
 	}
-
-	priv, err := jwk.Import(publicKey)
+	pub, err := jwk.Import(publicKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to import public key: %w", err)
 	}
-	return &Keys{PublicKey: priv}, nil
+
+	if err = pub.Set(jwk.AlgorithmKey, alg); err != nil {
+		return nil, fmt.Errorf("failed to set algorithm on public key: %w", err)
+	}
+
+	return &Keys{PublicKey: pub}, nil
 }
 
 // ParsePublicKeyFromFile reads a PEM-encoded RSA public key from the specified file,
 // parses it, and returns a Keys struct containing the corresponding jwk.Key object.
-func ParsePublicKeyFromFile(keyFile string) (*Keys, error) {
+func ParsePublicKeyFromFile(keyFile string, algorithm string) (*Keys, error) {
 	keyBytes, err := os.ReadFile(filepath.Clean(keyFile))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read key file: %w", err)
 	}
-	return ParsePublicKey(string(keyBytes))
+	return ParsePublicKey(string(keyBytes), algorithm)
 }
 
 // Encrypt takes a plaintext payload, encrypts it using JWE with the public key, and returns the encrypted result.
 func (k *Keys) Encrypt(payload []byte) ([]byte, error) {
-	alg, _ := k.PublicKey.Algorithm()
-	encrypted, err := jwe.Encrypt(payload, jwe.WithKey(alg, k.PublicKey))
+	var encryptionKey jwk.Key
+	if k.PublicKey == nil && k.PrivateKey != nil {
+		if symmetric, ok := k.PrivateKey.(jwk.SymmetricKey); ok {
+			encryptionKey = symmetric
+		}
+	} else {
+		encryptionKey = k.PublicKey
+	}
+
+	if encryptionKey == nil {
+		return nil, fmt.Errorf("no public or symmetric key available for encryption")
+	}
+	alg, ok := encryptionKey.Algorithm()
+	if !ok {
+		return nil, fmt.Errorf("algorithm not specified")
+	}
+
+	encrypted, err := jwe.Encrypt(payload, jwe.WithKey(alg, encryptionKey))
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt payload: %w", err)
 	}
@@ -157,9 +201,11 @@ func (k *Keys) Decrypt(encrypted []byte) ([]byte, error) {
 		return nil, fmt.Errorf("failed to parse payload: %w", err)
 	}
 
-	// TODO: consider the security implications of the passthrough alg if any in this case
-	// https://auth0.com/blog/critical-vulnerabilities-in-json-web-token-libraries/
-	alg, _ := m.ProtectedHeaders().Algorithm()
+	alg, ok := m.ProtectedHeaders().Algorithm()
+	if !ok {
+		return nil, fmt.Errorf("algorithm not specified in JWE headers")
+	}
+
 	decrypted, err := jwe.Decrypt(encrypted, jwe.WithKey(alg, k.PrivateKey))
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt payload: %w", err)

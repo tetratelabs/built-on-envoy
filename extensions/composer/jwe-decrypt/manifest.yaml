@@ -48,6 +48,7 @@ examples:
       # Run the extension reading the token from the `Authorization` header
       boe run --extension jwe-decrypt --config '{
         "private_key": { "file": "/path/to/private-key.pem" },
+        "algorithm": "RSA-OAEP",
         "input_header": "Authorization",
         "prefix": "Bearer ",
         "output_header": "Authorization"
@@ -74,6 +75,7 @@ examples:
     code: |
       boe run --extension jwe-decrypt --config '{
         "private_key": { "file": "/path/to/private-key.pem" },
+        "algorithm": "RSA-OAEP",
         "input_header": "Authorization",
         "prefix": "Bearer ",
         "output_header": "Authorization"
@@ -87,6 +89,7 @@ examples:
     code: |
       boe run --extension jwe-decrypt --config '{
         "private_key": { "inline": "LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0t...base64-encoded-PEM..." },
+        "algorithm": "RSA-OAEP",
         "input_header": "X-JWE-Token",
         "output_header": "X-Decrypted-JWE-Token"
       }'
@@ -98,6 +101,20 @@ examples:
     code: |
       boe run --extension jwe-decrypt --config '{
         "private_key": { "file": "/path/to/private-key.pem" },
+        "algorithm": "RSA-OAEP",
+        "input_header": "X-JWE-Token",
+        "output_header": "X-Decrypted-JWE-Token"
+      }'
+  - title: Using a symmetric key
+    description: |
+      You can use symmetric keys by setting the algorithm accordingly. For example, to use a symmetric key with
+      the AES key wrap (256) algorithm, set `algorithm` to `A256KW`.
+      You will also need to specify the header that contains the JWE token, and the header or metadata key where
+      the decrypted payload should be stored.
+    code: |
+      boe run --extension jwe-decrypt --config '{
+        "private_key": { "file": "/path/to/private.key" },
+        "algorithm": "A256KW",
         "input_header": "X-JWE-Token",
         "output_header": "X-Decrypted-JWE-Token"
       }'
@@ -110,6 +127,7 @@ examples:
       # Store the decrypted payload in the default "jwe-decrypt" namespace
       boe run --extension jwe-decrypt --config '{
         "private_key": { "file": "/path/to/private-key.pem" },
+        "algorithm": "RSA-OAEP",
         "input_header": "X-JWE-Token",
         "output_metadata": { "key": "jwe_decrypted_payload" }
       }'

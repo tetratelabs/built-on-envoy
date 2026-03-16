@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lestrrat-go/jwx/v3/jwa"
+	"github.com/lestrrat-go/jwx/v3/jwk"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,7 +42,7 @@ func readTestPublicKey(t *testing.T) string {
 func TestParsePrivateKey_Success(t *testing.T) {
 	privateKeyPEM := readTestPrivateKey(t)
 
-	keyInput, err := ParsePrivateKey(privateKeyPEM)
+	keyInput, err := ParsePrivateKey(privateKeyPEM, jwa.RSA_OAEP().String())
 
 	require.NoError(t, err)
 	require.NotNil(t, keyInput)
@@ -49,21 +51,22 @@ func TestParsePrivateKey_Success(t *testing.T) {
 }
 
 func TestParsePrivateKey_EmptyInput(t *testing.T) {
-	keyInput, err := ParsePrivateKey("")
+	keyInput, err := ParsePrivateKey("", jwa.RSA_OAEP().String())
 
 	require.Error(t, err)
 	require.Nil(t, keyInput)
 	require.Contains(t, err.Error(), "no key input provided")
 }
 
-func TestParsePrivateKey_InvalidPEM(t *testing.T) {
-	invalidPEM := "not a valid PEM"
+func TestParsePrivateKey_Symmetric(t *testing.T) {
+	// Symmetric shared key (must be 32 bytes for A256KW)
+	key := "0123456789abcdef0123456789abcdef"
+	keyInput, err := ParsePrivateKey(key, jwa.A256KW().String())
 
-	keyInput, err := ParsePrivateKey(invalidPEM)
-
-	require.Error(t, err)
-	require.Nil(t, keyInput)
-	require.Contains(t, err.Error(), "failed to parse PEM block")
+	require.NoError(t, err)
+	require.NotNil(t, keyInput)
+	require.NotNil(t, keyInput.PrivateKey)
+	require.Implements(t, (*jwk.SymmetricKey)(nil), keyInput.PrivateKey)
 }
 
 func TestParsePrivateKey_InvalidPKCS8(t *testing.T) {
@@ -72,7 +75,7 @@ func TestParsePrivateKey_InvalidPKCS8(t *testing.T) {
 aW52YWxpZCBjb250ZW50
 -----END PRIVATE KEY-----`
 
-	keyInput, err := ParsePrivateKey(invalidKey)
+	keyInput, err := ParsePrivateKey(invalidKey, jwa.RSA_OAEP().String())
 
 	require.Error(t, err)
 	require.Nil(t, keyInput)
@@ -84,7 +87,7 @@ aW52YWxpZCBjb250ZW50
 func TestParsePrivateKeyFromFile_Success(t *testing.T) {
 	keyPath := getTestPrivateKeyPath()
 
-	keyInput, err := ParsePrivateKeyFromFile(keyPath)
+	keyInput, err := ParsePrivateKeyFromFile(keyPath, jwa.RSA_OAEP().String())
 
 	require.NoError(t, err)
 	require.NotNil(t, keyInput)
@@ -93,7 +96,7 @@ func TestParsePrivateKeyFromFile_Success(t *testing.T) {
 }
 
 func TestParsePrivateKeyFromFile_FileNotFound(t *testing.T) {
-	keyInput, err := ParsePrivateKeyFromFile("/nonexistent/key.pem")
+	keyInput, err := ParsePrivateKeyFromFile("/nonexistent/key.pem", jwa.RSA_OAEP().String())
 
 	require.Error(t, err)
 	require.Nil(t, keyInput)
@@ -105,7 +108,7 @@ func TestParsePrivateKeyFromFile_FileNotFound(t *testing.T) {
 func TestParsePublicKey_Success(t *testing.T) {
 	publicKeyPEM := readTestPublicKey(t)
 
-	keyInput, err := ParsePublicKey(publicKeyPEM)
+	keyInput, err := ParsePublicKey(publicKeyPEM, jwa.RSA_OAEP().String())
 
 	require.NoError(t, err)
 	require.NotNil(t, keyInput)
@@ -114,7 +117,7 @@ func TestParsePublicKey_Success(t *testing.T) {
 }
 
 func TestParsePublicKey_EmptyInput(t *testing.T) {
-	keyInput, err := ParsePublicKey("")
+	keyInput, err := ParsePublicKey("", jwa.RSA_OAEP().String())
 
 	require.Error(t, err)
 	require.Nil(t, keyInput)
@@ -124,7 +127,7 @@ func TestParsePublicKey_EmptyInput(t *testing.T) {
 func TestParsePublicKey_InvalidPEM(t *testing.T) {
 	invalidPEM := "not a valid PEM"
 
-	keyInput, err := ParsePublicKey(invalidPEM)
+	keyInput, err := ParsePublicKey(invalidPEM, jwa.RSA_OAEP().String())
 
 	require.Error(t, err)
 	require.Nil(t, keyInput)
@@ -137,7 +140,7 @@ func TestParsePublicKey_InvalidPKIX(t *testing.T) {
 aW52YWxpZCBjb250ZW50
 -----END PUBLIC KEY-----`
 
-	keyInput, err := ParsePublicKey(invalidKey)
+	keyInput, err := ParsePublicKey(invalidKey, jwa.RSA_OAEP().String())
 
 	require.Error(t, err)
 	require.Nil(t, keyInput)
@@ -149,7 +152,7 @@ aW52YWxpZCBjb250ZW50
 func TestParsePublicKeyFromFile_Success(t *testing.T) {
 	keyPath := getTestPublicKeyPath()
 
-	keyInput, err := ParsePublicKeyFromFile(keyPath)
+	keyInput, err := ParsePublicKeyFromFile(keyPath, jwa.RSA_OAEP().String())
 
 	require.NoError(t, err)
 	require.NotNil(t, keyInput)
@@ -158,7 +161,7 @@ func TestParsePublicKeyFromFile_Success(t *testing.T) {
 }
 
 func TestParsePublicKeyFromFile_FileNotFound(t *testing.T) {
-	keyInput, err := ParsePublicKeyFromFile("/nonexistent/public_key.pem")
+	keyInput, err := ParsePublicKeyFromFile("/nonexistent/public_key.pem", jwa.RSA_OAEP().String())
 
 	require.Error(t, err)
 	require.Nil(t, keyInput)
@@ -171,7 +174,8 @@ func TestParseKeys_BothKeys(t *testing.T) {
 	privateKeyPEM := readTestPrivateKey(t)
 	publicKeyPEM := readTestPublicKey(t)
 
-	keyInput, err := ParseKeys(privateKeyPEM, publicKeyPEM)
+	keyInput, err := ParseKeys(privateKeyPEM, publicKeyPEM,
+		jwa.RSA_OAEP().String(), jwa.RSA_OAEP().String())
 
 	require.NoError(t, err)
 	require.NotNil(t, keyInput)
@@ -182,7 +186,8 @@ func TestParseKeys_BothKeys(t *testing.T) {
 func TestParseKeys_PrivateKeyOnly(t *testing.T) {
 	privateKeyPEM := readTestPrivateKey(t)
 
-	keyInput, err := ParseKeys(privateKeyPEM, "")
+	keyInput, err := ParseKeys(privateKeyPEM, "",
+		jwa.RSA_OAEP().String(), jwa.RSA_OAEP().String())
 
 	require.NoError(t, err)
 	require.NotNil(t, keyInput)
@@ -193,7 +198,8 @@ func TestParseKeys_PrivateKeyOnly(t *testing.T) {
 func TestParseKeys_PublicKeyOnly(t *testing.T) {
 	publicKeyPEM := readTestPublicKey(t)
 
-	keyInput, err := ParseKeys("", publicKeyPEM)
+	keyInput, err := ParseKeys("", publicKeyPEM,
+		jwa.RSA_OAEP().String(), jwa.RSA_OAEP().String())
 
 	require.NoError(t, err)
 	require.NotNil(t, keyInput)
@@ -202,7 +208,7 @@ func TestParseKeys_PublicKeyOnly(t *testing.T) {
 }
 
 func TestParseKeys_EmptyKeys(t *testing.T) {
-	keyInput, err := ParseKeys("", "")
+	keyInput, err := ParseKeys("", "", jwa.RSA_OAEP().String(), jwa.RSA_OAEP().String())
 
 	require.NoError(t, err)
 	require.NotNil(t, keyInput)
@@ -210,20 +216,26 @@ func TestParseKeys_EmptyKeys(t *testing.T) {
 	require.Nil(t, keyInput.PublicKey)
 }
 
-func TestParseKeys_InvalidPrivateKey(t *testing.T) {
+func TestParseKeys_SymmetricPrivateKey(t *testing.T) {
 	publicKeyPEM := readTestPublicKey(t)
 
-	keyInput, err := ParseKeys("invalid", publicKeyPEM)
+	// Symmetric shared key (must be 32 bytes for A256KW)
+	key := "0123456789abcdef0123456789abcdef"
+	keyInput, err := ParseKeys(key, publicKeyPEM,
+		jwa.A256KW().String(), jwa.RSA_OAEP().String())
 
-	require.Error(t, err)
-	require.Nil(t, keyInput)
-	require.Contains(t, err.Error(), "failed to parse private key")
+	require.NoError(t, err)
+	require.NotNil(t, keyInput)
+	require.NotNil(t, keyInput.PublicKey)
+	require.NotNil(t, keyInput.PrivateKey)
+	require.Implements(t, (*jwk.SymmetricKey)(nil), keyInput.PrivateKey)
 }
 
 func TestParseKeys_InvalidPublicKey(t *testing.T) {
 	privateKeyPEM := readTestPrivateKey(t)
 
-	keyInput, err := ParseKeys(privateKeyPEM, "invalid")
+	keyInput, err := ParseKeys(privateKeyPEM, "invalid",
+		jwa.RSA_OAEP().String(), jwa.RSA_OAEP().String())
 
 	require.Error(t, err)
 	require.Nil(t, keyInput)
@@ -236,7 +248,8 @@ func TestParseKeysFromFile_BothKeys(t *testing.T) {
 	privateKeyPath := getTestPrivateKeyPath()
 	publicKeyPath := getTestPublicKeyPath()
 
-	keyInput, err := ParseKeysFromFile(privateKeyPath, publicKeyPath)
+	keyInput, err := ParseKeysFromFile(privateKeyPath, publicKeyPath,
+		jwa.RSA_OAEP().String(), jwa.RSA_OAEP().String())
 
 	require.NoError(t, err)
 	require.NotNil(t, keyInput)
@@ -247,7 +260,7 @@ func TestParseKeysFromFile_BothKeys(t *testing.T) {
 func TestParseKeysFromFile_PrivateKeyOnly(t *testing.T) {
 	privateKeyPath := getTestPrivateKeyPath()
 
-	keyInput, err := ParseKeysFromFile(privateKeyPath, "")
+	keyInput, err := ParseKeysFromFile(privateKeyPath, "", jwa.RSA_OAEP().String(), jwa.RSA_OAEP().String())
 
 	require.NoError(t, err)
 	require.NotNil(t, keyInput)
@@ -258,7 +271,8 @@ func TestParseKeysFromFile_PrivateKeyOnly(t *testing.T) {
 func TestParseKeysFromFile_PublicKeyOnly(t *testing.T) {
 	publicKeyPath := getTestPublicKeyPath()
 
-	keyInput, err := ParseKeysFromFile("", publicKeyPath)
+	keyInput, err := ParseKeysFromFile("", publicKeyPath,
+		jwa.RSA_OAEP().String(), jwa.RSA_OAEP().String())
 
 	require.NoError(t, err)
 	require.NotNil(t, keyInput)
@@ -267,7 +281,7 @@ func TestParseKeysFromFile_PublicKeyOnly(t *testing.T) {
 }
 
 func TestParseKeysFromFile_EmptyPaths(t *testing.T) {
-	keyInput, err := ParseKeysFromFile("", "")
+	keyInput, err := ParseKeysFromFile("", "", jwa.RSA_OAEP().String(), jwa.RSA_OAEP().String())
 
 	require.NoError(t, err)
 	require.NotNil(t, keyInput)
@@ -278,7 +292,8 @@ func TestParseKeysFromFile_EmptyPaths(t *testing.T) {
 func TestParseKeysFromFile_PrivateKeyNotFound(t *testing.T) {
 	publicKeyPath := getTestPublicKeyPath()
 
-	keyInput, err := ParseKeysFromFile("/nonexistent/private.pem", publicKeyPath)
+	keyInput, err := ParseKeysFromFile("/nonexistent/private.pem", publicKeyPath,
+		jwa.RSA_OAEP().String(), jwa.RSA_OAEP().String())
 
 	require.Error(t, err)
 	require.Nil(t, keyInput)
@@ -288,7 +303,8 @@ func TestParseKeysFromFile_PrivateKeyNotFound(t *testing.T) {
 func TestParseKeysFromFile_PublicKeyNotFound(t *testing.T) {
 	privateKeyPath := getTestPrivateKeyPath()
 
-	keyInput, err := ParseKeysFromFile(privateKeyPath, "/nonexistent/public.pem")
+	keyInput, err := ParseKeysFromFile(privateKeyPath, "/nonexistent/public.pem",
+		jwa.RSA_OAEP().String(), jwa.RSA_OAEP().String())
 
 	require.Error(t, err)
 	require.Nil(t, keyInput)
@@ -299,7 +315,7 @@ func TestParseKeysFromFile_PublicKeyNotFound(t *testing.T) {
 
 func TestEncrypt_Success(t *testing.T) {
 	publicKeyPath := getTestPublicKeyPath()
-	keyInput, err := ParsePublicKeyFromFile(publicKeyPath)
+	keyInput, err := ParsePublicKeyFromFile(publicKeyPath, jwa.RSA_OAEP().String())
 	require.NoError(t, err)
 
 	payload := []byte("test payload for encryption")
@@ -313,7 +329,7 @@ func TestEncrypt_Success(t *testing.T) {
 
 func TestEncrypt_EmptyPayload(t *testing.T) {
 	publicKeyPath := getTestPublicKeyPath()
-	keyInput, err := ParsePublicKeyFromFile(publicKeyPath)
+	keyInput, err := ParsePublicKeyFromFile(publicKeyPath, jwa.RSA_OAEP().String())
 	require.NoError(t, err)
 
 	payload := []byte("")
@@ -326,7 +342,7 @@ func TestEncrypt_EmptyPayload(t *testing.T) {
 
 func TestEncrypt_WithoutPublicKey(t *testing.T) {
 	privateKeyPath := getTestPrivateKeyPath()
-	keyInput, err := ParsePrivateKeyFromFile(privateKeyPath)
+	keyInput, err := ParsePrivateKeyFromFile(privateKeyPath, jwa.RSA_OAEP().String())
 	require.NoError(t, err)
 
 	// KeyInput only has private key, no public key
@@ -343,7 +359,7 @@ func TestDecrypt_Success(t *testing.T) {
 	publicKeyPath := getTestPublicKeyPath()
 
 	// First encrypt with public key
-	pubKeyInput, err := ParsePublicKeyFromFile(publicKeyPath)
+	pubKeyInput, err := ParsePublicKeyFromFile(publicKeyPath, jwa.RSA_OAEP().String())
 	require.NoError(t, err)
 
 	originalPayload := []byte("test payload for round-trip encryption")
@@ -351,7 +367,7 @@ func TestDecrypt_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	// Then decrypt with private key
-	privKeyInput, err := ParsePrivateKeyFromFile(privateKeyPath)
+	privKeyInput, err := ParsePrivateKeyFromFile(privateKeyPath, jwa.RSA_OAEP().String())
 	require.NoError(t, err)
 
 	decrypted, err := privKeyInput.Decrypt(encrypted)
@@ -361,9 +377,25 @@ func TestDecrypt_Success(t *testing.T) {
 	require.Equal(t, originalPayload, decrypted)
 }
 
+func TestDecrypt_SymmetricKey(t *testing.T) {
+	// Symmetric shared key (must be 32 bytes for A256KW)
+	keyStr := "0123456789abcdef0123456789abcdef"
+	key, err := ParsePrivateKey(keyStr, jwa.A256KW().String())
+	require.NoError(t, err)
+
+	originalPayload := []byte("test payload for round-trip encryption")
+	encrypted, err := key.Encrypt(originalPayload)
+	require.NoError(t, err)
+
+	decrypted, err := key.Decrypt(encrypted)
+	require.NoError(t, err)
+	require.NotNil(t, decrypted)
+	require.Equal(t, originalPayload, decrypted)
+}
+
 func TestDecrypt_InvalidData(t *testing.T) {
 	privateKeyPath := getTestPrivateKeyPath()
-	keyInput, err := ParsePrivateKeyFromFile(privateKeyPath)
+	keyInput, err := ParsePrivateKeyFromFile(privateKeyPath, jwa.RSA_OAEP().String())
 	require.NoError(t, err)
 
 	invalidEncrypted := []byte("not valid encrypted data")
@@ -376,7 +408,7 @@ func TestDecrypt_InvalidData(t *testing.T) {
 
 func TestDecrypt_WithoutPrivateKey(t *testing.T) {
 	publicKeyPath := getTestPublicKeyPath()
-	keyInput, err := ParsePublicKeyFromFile(publicKeyPath)
+	keyInput, err := ParsePublicKeyFromFile(publicKeyPath, jwa.RSA_OAEP().String())
 	require.NoError(t, err)
 
 	// Create some encrypted data first
@@ -397,7 +429,8 @@ func TestEncryptDecrypt_RoundTrip(t *testing.T) {
 	privateKeyPath := getTestPrivateKeyPath()
 	publicKeyPath := getTestPublicKeyPath()
 
-	keys, err := ParseKeysFromFile(privateKeyPath, publicKeyPath)
+	keys, err := ParseKeysFromFile(privateKeyPath, publicKeyPath,
+		jwa.RSA_OAEP().String(), jwa.RSA_OAEP().String())
 	require.NoError(t, err)
 
 	testCases := []struct {
@@ -453,7 +486,7 @@ func TestEncryptDecrypt_RoundTrip(t *testing.T) {
 
 func TestEncrypt_NonDeterministic(t *testing.T) {
 	publicKeyPath := getTestPublicKeyPath()
-	keyInput, err := ParsePublicKeyFromFile(publicKeyPath)
+	keyInput, err := ParsePublicKeyFromFile(publicKeyPath, jwa.RSA_OAEP().String())
 	require.NoError(t, err)
 
 	payload := []byte("same payload for multiple encryptions")
@@ -472,7 +505,7 @@ func TestEncrypt_NonDeterministic(t *testing.T) {
 
 func TestEncrypt_DifferentPayloads(t *testing.T) {
 	publicKeyPath := getTestPublicKeyPath()
-	keyInput, err := ParsePublicKeyFromFile(publicKeyPath)
+	keyInput, err := ParsePublicKeyFromFile(publicKeyPath, jwa.RSA_OAEP().String())
 	require.NoError(t, err)
 
 	payload1 := []byte("first payload")
