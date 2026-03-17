@@ -18,7 +18,7 @@ longDescription: |
 
   This plugin provides comprehensive web application security:
 
-  - **OWASP ModSecurity [Core Rule Set (CRS)](https://coreruleset.org/)**: Built-in protection against common web attacks
+  - **[OWASP CRS (Core Rule Set)](https://coreruleset.org/)**: Built-in protection against common web attacks
   - **Request inspection**: Analyzes HTTP requests for malicious patterns and anomalies
   - **Response inspection**: Examines HTTP responses to prevent data leakage
   - **Flexible rule engine**: Supports custom security rules and policies
@@ -27,9 +27,9 @@ longDescription: |
 
   ## Security Rules
 
-  The WAF comes with support for OWASP ModSecurity Core Rule Set (CRS) as well as some recommended
-  configurations and allows custom rule configuration for specific security requirements. To use the
-  bundled rules, you can include them with the following special inclusion directives:
+  The WAF comes with support for OWASP CRS, formerly known as ModSecurity Core Rule Set (CRS), as well as
+  some recommended configurations and allows custom rule configuration for specific security requirements.
+  To use the bundled rules, you can include them with the following special inclusion directives:
   
   ```json
   {
@@ -68,6 +68,7 @@ tags:
   - waf
   - coraza
   - owasp
+  - crs
   - modsecurity
 license: Apache-2.0
 examples:
@@ -78,7 +79,7 @@ examples:
 
       By default WAF is configured in `DetectionOnly` mode, which means it will only log detected attacks without
       blocking them. To enable active blocking, this example sets `SecRuleEngine On` in the configuration. It also
-      sets `SecResponseBodyAccess Off` to disable response body inspection as it's not needed for hte example.
+      sets `SecResponseBodyAccess Off` to disable response body inspection as it's not needed for the example.
     code: |
       # Start WAF with recommended OWASP CRS rules and enforcement enabled
       boe run --extension coraza-waf --config '
