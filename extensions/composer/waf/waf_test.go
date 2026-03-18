@@ -7,6 +7,7 @@ package waf
 
 import (
 	"encoding/json"
+	"io"
 	"strconv"
 	"testing"
 
@@ -318,7 +319,6 @@ func Test_RequestOnlyWaf(t *testing.T) {
 	})
 
 	t.Run("Handle request with body and trailers", func(t *testing.T) {
-		// Handle request with body and trailers.
 		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
 		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
@@ -553,7 +553,6 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 	})
 
 	t.Run("Handle response with body", func(t *testing.T) {
-		// Handle response with body.
 		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
 		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
@@ -598,7 +597,6 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 	})
 
 	t.Run("Handle response with body and trailers", func(t *testing.T) {
-		// Handle response with body and trailers.
 		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
 		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
@@ -644,7 +642,6 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 	})
 
 	t.Run("Handle response with SSE", func(t *testing.T) {
-		// Handle response with SSE.
 		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
 		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
@@ -1060,67 +1057,341 @@ func Test_BlockRequest(t *testing.T) {
 	})
 }
 
+// A rule matching request body is expected to be blocked when SecRequestBodyAccess is On, but not inspected when it is Off.
 func Test_SecRequestBodyAccessOff(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	// Configure WAF with SecRequestBodyAccess Off and a rule that would block
-	// requests containing "malicious-payload" in the body. Since body access is
-	// disabled, the rule must not trigger even when such a payload is sent.
-	config := map[string]interface{}{
-		"directives": []string{
-			"SecRuleEngine On",
-			"SecRequestBodyAccess Off",
-			`SecAction "id:100010,phase:1,pass,nolog,ctl:forceRequestBodyVariable=on"`,
-			`SecRule REQUEST_BODY "@contains malicious-payload" "id:100002,phase:2,deny,status:403,msg:'Blocked request body'"`,
+	for _, tc := range []struct {
+		name            string
+		reqBodyAccessOn bool
+		expectedStatus  shared.BodyStatus
+	}{
+		{
+			name:            "SecRequestBodyAccess On: body is blocked",
+			reqBodyAccessOn: true,
+			expectedStatus:  shared.BodyStatusStopNoBuffer,
 		},
-		"mode": "FULL",
-	}
+		{
+			name:            "SecRequestBodyAccess Off: body is not inspected",
+			reqBodyAccessOn: false,
+			expectedStatus:  shared.BodyStatusContinue,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reqBodyAccessDir := "SecRequestBodyAccess Off"
+			if tc.reqBodyAccessOn {
+				reqBodyAccessDir = "SecRequestBodyAccess On"
+			}
+			config := map[string]any{
+				"directives": []string{
+					"SecRuleEngine On",
+					reqBodyAccessDir,
+					`SecAction "id:100010,phase:1,pass,nolog,ctl:forceRequestBodyVariable=on"`,
+					`SecRule REQUEST_BODY "@contains malicious-payload" "id:100002,phase:2,deny,status:403,msg:'Blocked request body'"`,
+				},
+				"mode": "FULL",
+			}
+			configBytes, err := json.Marshal(config)
+			require.NoError(t, err, "failed to marshal config")
 
-	configBytes, err := json.Marshal(config)
-	require.NoError(t, err, "failed to marshal config")
+			configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+			configHandle.EXPECT().DefineCounter("waf_tx_total").Return(shared.MetricID(1), shared.MetricsSuccess)
+			configHandle.EXPECT().DefineCounter("waf_tx_blocked", "authority", "phase", "rule_id").Return(shared.MetricID(2), shared.MetricsSuccess)
+			wafPluginFactory, err := (&wafPluginConfigFactory{}).Create(configHandle, configBytes)
+			require.NoError(t, err, "failed to create WAF plugin factory")
 
-	configFactory := wafPluginConfigFactory{}
-	configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
-	configHandle.EXPECT().DefineCounter("waf_tx_total").Return(shared.MetricID(1), shared.MetricsSuccess)
-	configHandle.EXPECT().DefineCounter("waf_tx_blocked", "authority", "phase", "rule_id").Return(shared.MetricID(2), shared.MetricsSuccess)
-	wafPluginFactory, err := configFactory.Create(configHandle, configBytes)
-	require.NoError(t, err, "failed to create WAF plugin factory")
+			pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+			pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
 
-	t.Run("body with malicious payload is not inspected when SecRequestBodyAccess Off", func(t *testing.T) {
-		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
-		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
-		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
-			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
-		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(
-			pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
+			if tc.reqBodyAccessOn {
+				pluginHandle.EXPECT().IncrementCounterValue(
+					shared.MetricID(2), uint64(1), "example.com", strconv.Itoa(int(ctypes.PhaseRequestBody)), "100002",
+				).Return(shared.MetricsSuccess)
+				pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 100002)
+				pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestBody))
+				pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_request_body_blocked")
+			}
 
-		plugin := wafPluginFactory.Create(pluginHandle)
-		wafPlugin, ok := plugin.(*wafPlugin)
-		require.True(t, ok, "failed to cast plugin to wafPlugin")
+			wafPlugin, ok := wafPluginFactory.Create(pluginHandle).(*wafPlugin)
+			require.True(t, ok, "failed to cast plugin to wafPlugin")
 
-		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
-			":authority":   {"example.com:8080"},
-			":method":      {"POST"},
-			":path":        {"/submit"},
-			"x-request-id": {"req-body-access-off"},
-			"user-agent":   {"ComposerTest/1.0"},
-			"content-type": {"application/json"},
+			fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
+				":authority":   {"example.com:8080"},
+				":method":      {"POST"},
+				":path":        {"/submit"},
+				"content-type": {"application/json"},
+			})
+			require.Equal(t, shared.HeadersStatusStop, wafPlugin.OnRequestHeaders(fakeHeaderMap, false))
+
+			bodyStatus := wafPlugin.OnRequestBody(fake.NewFakeBodyBuffer([]byte(`{"data":"malicious-payload"}`)), true)
+			require.Equal(t, tc.expectedStatus, bodyStatus)
+
+			if tc.expectedStatus == shared.BodyStatusContinue {
+				// Ensure the body was not buffered at all when SecRequestBodyAccess is Off.
+				// This ensures that it is not the WAF logic skipping the inspection, but we optimize the filter behavior to not buffer the body at all when access is off or MIME type does not match.
+				reqBodyReader, err := wafPlugin.txContext.RequestBodyReader()
+				require.NoError(t, err)
+				bodyBytes, err := io.ReadAll(reqBodyReader)
+				require.NoError(t, err)
+				require.Empty(t, bodyBytes, "expected request body to not be buffered when SecRequestBodyAccess is Off")
+			}
+
+			wafPlugin.OnStreamComplete()
 		})
+	}
+}
 
-		headerStatus := wafPlugin.OnRequestHeaders(fakeHeaderMap, false)
-		require.Equal(t, shared.HeadersStatusStop, headerStatus,
-			"expected header status to stop while waiting for body")
+// Even when SecRequestBodyAccess is Off, phase 2 rules needs to be evaluated.
+// This is needed because some rules can match arguments that are populated in phase 1 (e.g., ARGS from the query string) and do not require request body access.
+// This is a common pattern in CRS rules.
+func Test_Phase2ArgsRuleWithSecRequestBodyAccessOff(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-		// Even though the body contains "malicious-payload", it must not be
-		// inspected because SecRequestBodyAccess is Off. The body should pass
-		// through immediately without buffering.
-		bodyBuffer := fake.NewFakeBodyBuffer([]byte(`{"data":"malicious-payload"}`))
-		bodyStatus := wafPlugin.OnRequestBody(bodyBuffer, true)
-		assert.Equal(t, shared.BodyStatusContinue, bodyStatus,
-			"expected body to pass through without inspection when SecRequestBodyAccess is Off")
+	for _, tc := range []struct {
+		name            string
+		reqBodyAccessOn bool
+	}{
+		{
+			name:            "SecRequestBodyAccess On: phase 2 ARGS rule is executed",
+			reqBodyAccessOn: true,
+		},
+		{
+			name:            "SecRequestBodyAccess Off: phase 2 ARGS rule is still executed",
+			reqBodyAccessOn: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reqBodyAccessDir := "SecRequestBodyAccess Off"
+			if tc.reqBodyAccessOn {
+				reqBodyAccessDir = "SecRequestBodyAccess On"
+			}
+			config := map[string]any{
+				"directives": []string{
+					"SecRuleEngine On",
+					reqBodyAccessDir,
+					`SecRule ARGS "@contains malicious-payload" "id:100002,phase:2,deny,status:403,msg:'Blocked ARGS'"`,
+				},
+				"mode": "FULL",
+			}
+			configBytes, err := json.Marshal(config)
+			require.NoError(t, err, "failed to marshal config")
 
-		wafPlugin.OnStreamComplete()
-	})
+			configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+			configHandle.EXPECT().DefineCounter("waf_tx_total").Return(shared.MetricID(1), shared.MetricsSuccess)
+			configHandle.EXPECT().DefineCounter("waf_tx_blocked", "authority", "phase", "rule_id").Return(shared.MetricID(2), shared.MetricsSuccess)
+			wafPluginFactory, err := (&wafPluginConfigFactory{}).Create(configHandle, configBytes)
+			require.NoError(t, err, "failed to create WAF plugin factory")
+
+			pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+			pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
+
+			// ARGS rule fires regardless of SecRequestBodyAccess: both cases block.
+			pluginHandle.EXPECT().IncrementCounterValue(
+				shared.MetricID(2), uint64(1), "example.com", strconv.Itoa(int(ctypes.PhaseRequestBody)), "100002",
+			).Return(shared.MetricsSuccess)
+			pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 100002)
+			pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestBody))
+			pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_request_body_blocked")
+
+			wafPlugin, ok := wafPluginFactory.Create(pluginHandle).(*wafPlugin)
+			require.True(t, ok, "failed to cast plugin to wafPlugin")
+
+			fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
+				":authority": {"example.com:8080"},
+				":method":    {"GET"},
+				":path":      {"/submit?payload=malicious-payload"},
+			})
+			require.Equal(t, shared.HeadersStatusStop, wafPlugin.OnRequestHeaders(fakeHeaderMap, false))
+
+			bodyStatus := wafPlugin.OnRequestBody(fake.NewFakeBodyBuffer(nil), true)
+			require.Equal(t, shared.BodyStatusStopNoBuffer, bodyStatus, "expected ARGS rule to fire in phase 2 regardless of SecRequestBodyAccess")
+
+			wafPlugin.OnStreamComplete()
+		})
+	}
+}
+
+func Test_SecResponseBodyAccessOff(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	for _, tc := range []struct {
+		name             string
+		respBodyAccessOn bool
+		mimeType         string
+		expectedStatus   shared.BodyStatus
+	}{
+		{
+			name:             "SecResponseBodyAccess On, matching MIME type: body is blocked",
+			respBodyAccessOn: true,
+			mimeType:         "application/json",
+			expectedStatus:   shared.BodyStatusStopNoBuffer,
+		},
+		{
+			name:             "SecResponseBodyAccess On, non-matching MIME type: body is NOT stored NOR inspected",
+			respBodyAccessOn: true,
+			mimeType:         "text/plain",
+			expectedStatus:   shared.BodyStatusContinue,
+		},
+		{
+			name:             "SecResponseBodyAccess Off: body is not inspected",
+			respBodyAccessOn: false,
+			mimeType:         "application/json",
+			expectedStatus:   shared.BodyStatusContinue,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			respBodyAccessDir := "SecResponseBodyAccess Off"
+			if tc.respBodyAccessOn {
+				respBodyAccessDir = "SecResponseBodyAccess On"
+			}
+			config := map[string]any{
+				"directives": []string{
+					"SecRuleEngine On",
+					respBodyAccessDir,
+					"SecResponseBodyMimeType " + tc.mimeType,
+					`SecRule RESPONSE_BODY "@contains leaked-secret" "id:100003,phase:4,deny,status:403,msg:'Blocked response body'"`,
+				},
+				"mode": "FULL",
+			}
+			configBytes, err := json.Marshal(config)
+			require.NoError(t, err, "failed to marshal config")
+
+			configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+			configHandle.EXPECT().DefineCounter("waf_tx_total").Return(shared.MetricID(1), shared.MetricsSuccess)
+			configHandle.EXPECT().DefineCounter("waf_tx_blocked", "authority", "phase", "rule_id").Return(shared.MetricID(2), shared.MetricsSuccess)
+			wafPluginFactory, err := (&wafPluginConfigFactory{}).Create(configHandle, configBytes)
+			require.NoError(t, err, "failed to create WAF plugin factory")
+
+			pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+			pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
+
+			if tc.expectedStatus == shared.BodyStatusStopNoBuffer {
+				pluginHandle.EXPECT().IncrementCounterValue(
+					shared.MetricID(2), uint64(1), "example.com", strconv.Itoa(int(ctypes.PhaseResponseBody)), "100003",
+				).Return(shared.MetricsSuccess)
+				pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 100003)
+				pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseResponseBody))
+				pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_response_body_blocked")
+			}
+
+			wafPlugin, ok := wafPluginFactory.Create(pluginHandle).(*wafPlugin)
+			require.True(t, ok, "failed to cast plugin to wafPlugin")
+
+			requestHeaders := fake.NewFakeHeaderMap(map[string][]string{
+				":authority": {"example.com:8080"},
+				":method":    {"GET"},
+				":path":      {"/"},
+			})
+			require.Equal(t, shared.HeadersStatusContinue, wafPlugin.OnRequestHeaders(requestHeaders, true))
+
+			pluginHandle.EXPECT().RequestHeaders().Return(requestHeaders)
+			require.Equal(t, shared.HeadersStatusStop, wafPlugin.OnResponseHeaders(fake.NewFakeHeaderMap(map[string][]string{
+				":status":      {"200"},
+				"content-type": {"application/json"},
+			}), false))
+
+			bodyStatus := wafPlugin.OnResponseBody(fake.NewFakeBodyBuffer([]byte(`{"secret":"leaked-secret"}`)), true)
+			require.Equal(t, tc.expectedStatus, bodyStatus)
+
+			if tc.expectedStatus == shared.BodyStatusContinue {
+				// Ensure the body was not buffered at all when SecResponseBodyAccess is Off or MIME type does not match.
+				respBodyReader, err := wafPlugin.txContext.ResponseBodyReader()
+				require.NoError(t, err)
+				bodyBytes, err := io.ReadAll(respBodyReader)
+				require.NoError(t, err)
+				require.Empty(t, string(bodyBytes), "expected response body to not be buffered when SecResponseBodyAccess is Off or MIME type does not match")
+			}
+			wafPlugin.OnStreamComplete()
+		})
+	}
+}
+
+// Even when SecResponseBodyAccess is Off, phase 4 rules needs to be evaluated.
+func Test_Phase4ResponseHeadersRuleWithSecResponseBodyAccessOff(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	for _, tc := range []struct {
+		name             string
+		respBodyAccessOn bool
+	}{
+		{
+			name:             "SecResponseBodyAccess On: phase 4 RESPONSE_HEADERS rule is executed",
+			respBodyAccessOn: true,
+		},
+		{
+			name:             "SecResponseBodyAccess Off: phase 4 RESPONSE_HEADERS rule is still executed",
+			respBodyAccessOn: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			respBodyAccessDir := "SecResponseBodyAccess Off"
+			if tc.respBodyAccessOn {
+				respBodyAccessDir = "SecResponseBodyAccess On"
+			}
+			config := map[string]any{
+				"directives": []string{
+					"SecRuleEngine On",
+					respBodyAccessDir,
+					`SecRule RESPONSE_HEADERS:content-type "@contains application/json" "id:100003,phase:4,deny,status:403,msg:'Blocked response header'"`,
+				},
+				"mode": "FULL",
+			}
+			configBytes, err := json.Marshal(config)
+			require.NoError(t, err, "failed to marshal config")
+
+			configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+			configHandle.EXPECT().DefineCounter("waf_tx_total").Return(shared.MetricID(1), shared.MetricsSuccess)
+			configHandle.EXPECT().DefineCounter("waf_tx_blocked", "authority", "phase", "rule_id").Return(shared.MetricID(2), shared.MetricsSuccess)
+			wafPluginFactory, err := (&wafPluginConfigFactory{}).Create(configHandle, configBytes)
+			require.NoError(t, err, "failed to create WAF plugin factory")
+
+			pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+			pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
+
+			// RESPONSE_HEADERS rule fires regardless of SecResponseBodyAccess: both cases block.
+			pluginHandle.EXPECT().IncrementCounterValue(
+				shared.MetricID(2), uint64(1), "example.com", strconv.Itoa(int(ctypes.PhaseResponseBody)), "100003",
+			).Return(shared.MetricsSuccess)
+			pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 100003)
+			pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseResponseBody))
+			pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_response_body_blocked")
+
+			wafPlugin, ok := wafPluginFactory.Create(pluginHandle).(*wafPlugin)
+			require.True(t, ok, "failed to cast plugin to wafPlugin")
+
+			requestHeaders := fake.NewFakeHeaderMap(map[string][]string{
+				":authority": {"example.com:8080"},
+				":method":    {"GET"},
+				":path":      {"/"},
+			})
+			require.Equal(t, shared.HeadersStatusContinue, wafPlugin.OnRequestHeaders(requestHeaders, true))
+
+			pluginHandle.EXPECT().RequestHeaders().Return(requestHeaders)
+			require.Equal(t, shared.HeadersStatusStop, wafPlugin.OnResponseHeaders(fake.NewFakeHeaderMap(map[string][]string{
+				":status":      {"200"},
+				"content-type": {"application/json"},
+			}), false))
+
+			bodyStatus := wafPlugin.OnResponseBody(fake.NewFakeBodyBuffer(nil), true)
+			require.Equal(t, shared.BodyStatusStopNoBuffer, bodyStatus, "expected RESPONSE_HEADERS rule to fire in phase 4 regardless of SecResponseBodyAccess")
+
+			wafPlugin.OnStreamComplete()
+		})
+	}
 }
