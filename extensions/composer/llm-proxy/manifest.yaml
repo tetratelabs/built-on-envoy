@@ -1,0 +1,132 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: llm-proxy
+parent: composer
+categories:
+  - AI
+author: Tetrate
+featured: true
+description: Routes LLM API requests by the module name and monitors token usage and latency via Envoy metadata and metrics.
+longDescription: |
+  An HTTP filter plugin that inspects incoming requests against a set of configured
+  path-matcher rules to identify the LLM provider API in use (OpenAI Chat Completions,
+  Anthropic Messages, or a custom OpenAI-compatible API). Once a rule matches, the filter:
+
+  1. Parses the request body to extract the model name and streaming flag, then
+     writes them to Envoy's dynamic filter metadata.
+  2. Parses the response body (JSON for non-streaming, SSE for streaming) to extract
+     token-usage information and writes it to filter metadata.
+  3. Records Envoy metrics (counters and histograms) for request counts, token usage,
+     time-to-first-token (TTFT), and time-per-output-token (TPOT).
+
+  Requests whose path does not match any rule are passed through without modification.
+
+  If no rule is explicitly configured for OpenAI or Anthropic, the filter automatically
+  adds default suffix-matcher rules for `/v1/chat/completions` (OpenAI) and
+  `/v1/messages` (Anthropic), so it works out of the box with no configuration.
+
+  ## Metadata Keys
+
+  All keys are written under the configured `metadata_namespace`
+  (default: `io.builtonenvoy.llm-proxy`).
+
+  | Key | Type | Description |
+  |-----|------|-------------|
+  | `kind` | string | API kind: `"openai"`, `"anthropic"`, or `"custom"` |
+  | `model` | string | Model name extracted from the request body |
+  | `is_stream` | bool | Whether the request asks for a streaming (SSE) response |
+  | `input_tokens` | uint32 | Input / prompt token count from the response |
+  | `output_tokens` | uint32 | Output / completion token count from the response |
+  | `total_tokens` | uint32 | Total token count from the response |
+  | `request_ttft` | int64 | Time to first token in milliseconds |
+  | `request_tpot` | int64 | Average time per output token in milliseconds |
+
+  ## Metrics
+
+  All metrics are tagged with `kind` and `model` labels.
+
+  | Metric | Type | Description |
+  |--------|------|-------------|
+  | `llm_proxy_request_total` | counter | Successfully parsed LLM requests |
+  | `llm_proxy_request_error` | counter | Requests that failed to parse |
+  | `llm_proxy_input_tokens` | counter | Accumulated input token counts |
+  | `llm_proxy_output_tokens` | counter | Accumulated output token counts |
+  | `llm_proxy_total_tokens` | counter | Accumulated total token counts |
+  | `llm_proxy_request_ttft` | histogram | Time to first token in milliseconds |
+  | `llm_proxy_request_tpot` | histogram | Average time per output token in milliseconds |
+
+  ## Configuration Reference
+
+  | Field | Type | Required | Default | Description |
+  |-------|------|----------|---------|-------------|
+  | `llm_configs` | array | no | auto | Ordered list of path-matcher rules; first match wins |
+  | `llm_configs[].matcher` | object | yes | — | Path matcher: set exactly one of `prefix`, `suffix`, or `regex` |
+  | `llm_configs[].kind` | string | yes | — | `"openai"`, `"anthropic"`, or `"custom"` |
+  | `metadata_namespace` | string | no | `io.builtonenvoy.llm-proxy` | Filter metadata namespace |
+  | `llm_model_header` | string | no | `""` | If set, the extracted model name is written to this request header |
+  | `clear_route_cache` | bool | no | `false` | Clear the route cache after request parsing so Envoy can re-select the route based on updated metadata |
+
+type: go
+tags:
+  - go
+  - http
+  - ai
+  - openai
+  - anthropic
+  - llm
+  - proxy
+  - metadata
+license: Apache-2.0
+examples:
+  - title: Zero-config default rules
+    description: |
+      With no configuration the filter automatically matches `/v1/chat/completions`
+      (OpenAI) and `/v1/messages` (Anthropic) and writes metadata under the default
+      namespace.
+    code: |
+      boe run --extension llm-proxy
+
+      # After an OpenAI request the following metadata will be set
+      # (namespace: "io.builtonenvoy.llm-proxy"):
+      # kind          = "openai"
+      # model         = "gpt-4o"
+      # is_stream     = false
+      # input_tokens  = 42
+      # output_tokens = 18
+      # total_tokens  = 60
+  - title: Explicit rules for OpenAI and Anthropic
+    description: |
+      Configure explicit prefix rules for both providers. The first matching rule wins.
+    code: |
+      boe run --extension llm-proxy \
+        --config '{
+          "llm_configs": [
+            {"matcher": {"prefix": "/v1/chat/completions"}, "kind": "openai"},
+            {"matcher": {"prefix": "/v1/messages"},          "kind": "anthropic"}
+          ]
+        }'
+  - title: Custom metadata namespace
+    description: |
+      Write metadata under a custom namespace to avoid conflicts with other filters.
+    code: |
+      boe run --extension llm-proxy \
+        --config '{
+          "metadata_namespace": "my-llm-ns",
+          "llm_configs": [
+            {"matcher": {"prefix": "/v1/chat/completions"}, "kind": "openai"}
+          ]
+        }'
+  - title: Route to different clusters based on model name
+    description: |
+      Use `llm_model_header` to inject the extracted model name as a request header,
+      then configure an Envoy route to select a cluster based on that header.
+      Enable `clear_route_cache` so Envoy re-evaluates the route after the header is set.
+    code: |
+      boe run --extension llm-proxy \
+        --config '{
+          "llm_model_header": "x-llm-model",
+          "clear_route_cache": true
+        }'
