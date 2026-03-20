@@ -84,4 +84,6 @@ jobs:
     uses: ./.github/workflows/release-extensions-impl.yaml
     with:
       extensions: ${{ needs.detect-dev-changes.outputs.changed-extensions }}
+      composer_image_name_suffix: -dev
+      composer_image_tag: latest
     secrets: inherit

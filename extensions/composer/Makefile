@@ -13,7 +13,7 @@ GO_TEST_ARGS ?=
 # files do not get in the way
 GO_FILES=$(shell git ls-files --cached --others --exclude-standard | grep '\.go$$')
 .PHONY: format
-format: 
+format:
 	@echo "format => *.go"
 	@$(GO_TOOL) golangci-lint fmt $(GO_FILES)
 	@echo "licenses => **"
@@ -54,24 +54,28 @@ endif
 BOE_DATA_HOME ?= $(HOME)/.local/share/boe
 
 # Labels for this plugin image.
-NAME             := $(shell grep "^name:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-VERSION          := $(shell grep "^version:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-DESCRIPTION      := $(shell grep "^description:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-TIMESTAMP        := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
-COMMIT_SHA       := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
-AUTHOR           := $(shell grep "^author:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-COMPOSER_VERSION := $(VERSION)
-LICENSE          := Apache-2.0
+NAME              := $(shell grep "^name:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+VERSION           := $(shell grep "^version:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+DESCRIPTION       := $(shell grep "^description:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+TIMESTAMP         := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+COMMIT_SHA        := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
+AUTHOR            := $(shell grep "^author:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+COMPOSER_VERSION  := $(VERSION)
+LICENSE           := Apache-2.0
+IMAGE_TAG         ?= $(VERSION)
+IMAGE_NAME_SUFFIX ?=
 
 HUB    := $(or $(BOE_REGISTRY),$(OCI_REGISTRY)/built-on-envoy)
-IMAGE  := $(HUB)/$(NAME):$(VERSION)$(IMAGE_NONCE)
+IMAGE_NAME := $(NAME)$(IMAGE_NAME_SUFFIX)
+IMAGE  := $(HUB)/$(IMAGE_NAME):$(IMAGE_TAG)$(IMAGE_NONCE)
 SOURCE := https://$(subst ghcr.io,github.com,$(HUB))
 
 # Option to build lite version of the loader.
 ifeq ($(strip $(COMPOSER_LITE)),true)
 	DESCRIPTION := Go plugin loader.
 	COMPOSER_BUILD_TAG := -tags lite
-	IMAGE := $(HUB)/$(NAME)-lite:$(VERSION)$(IMAGE_NONCE)
+	IMAGE_NAME := $(NAME)-lite$(IMAGE_NAME_SUFFIX)
+	IMAGE := $(HUB)/$(IMAGE_NAME):$(IMAGE_TAG)$(IMAGE_NONCE)
 endif
 
 OS := linux
