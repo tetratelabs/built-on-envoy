@@ -16,73 +16,15 @@ package llmproxy
 import (
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/utility"
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 const defaultMetadataNamespace = "io.builtonenvoy.llm-proxy"
-
-// StringMatcher holds a path-matching rule expressed as one of three strategies.
-// Exactly one of Prefix, Suffix, or Regex must be set.
-//
-// JSON representation:
-//
-//	{"prefix": "/v1/chat/completions"}
-//	{"suffix": "/completions"}
-//	{"regex":  "^/v1/(chat/completions|custom)$"}
-type StringMatcher struct {
-	// Prefix matches paths that start with the given string.
-	Prefix string `json:"prefix,omitempty"`
-	// Suffix matches paths that end with the given string.
-	Suffix string `json:"suffix,omitempty"`
-	// Regex matches paths that satisfy the compiled regular expression.
-	Regex string `json:"regex,omitempty"`
-
-	// compiled form of Regex; set during UnmarshalJSON
-	re *regexp.Regexp `json:"-"`
-}
-
-// ValidateAndParse checks that exactly one of Prefix, Suffix, or Regex is set and that any provided Regex
-// is valid. It also compiles the Regex if provided.
-func (m *StringMatcher) ValidateAndParse() error {
-	var count int
-	if m.Prefix != "" {
-		count++
-	}
-	if m.Suffix != "" {
-		count++
-	}
-	if m.Regex != "" {
-		count++
-		re, err := regexp.Compile(m.Regex)
-		if err != nil {
-			return fmt.Errorf("invalid regex %q: %w", m.Regex, err)
-		}
-		m.re = re
-	}
-	if count != 1 {
-		return fmt.Errorf("exactly one of prefix/suffix/regex must be set, got %d", count)
-	}
-	return nil
-}
-
-// matches reports whether path satisfies this matcher.
-func (m *StringMatcher) matches(path string) bool {
-	if m.Prefix != "" {
-		return strings.HasPrefix(path, m.Prefix)
-	}
-	if m.Suffix != "" {
-		return strings.HasSuffix(path, m.Suffix)
-	}
-	if m.re != nil {
-		return m.re.MatchString(path)
-	}
-	return false
-}
 
 var supportedAPIKinds = map[string]bool{
 	KindOpenAI:    true,
@@ -94,7 +36,7 @@ var supportedAPIKinds = map[string]bool{
 type llmConfig struct {
 	// Matcher describes how to test the incoming request path.
 	// Exactly one of Prefix, Suffix, or Regex must be set.
-	Matcher StringMatcher `json:"matcher"`
+	Matcher pkg.StringMatcher `json:"matcher"`
 	// Kind is the well-known LLM API kind for requests matching this rule.
 	// Accepted values: "openai", "anthropic", "custom".
 	Kind string `json:"kind"`
@@ -171,13 +113,13 @@ func (c *llmProxyConfig) ValidateAndParse() error {
 	// for the most common case.
 	if !hasOpenAI {
 		c.LLMConfigs = append([]llmConfig{{
-			Matcher: StringMatcher{Suffix: "/v1/chat/completions"},
+			Matcher: pkg.StringMatcher{Suffix: "/v1/chat/completions"},
 			Kind:    KindOpenAI,
 		}}, c.LLMConfigs...)
 	}
 	if !hasAnthropic {
 		c.LLMConfigs = append([]llmConfig{{
-			Matcher: StringMatcher{Suffix: "/v1/messages"},
+			Matcher: pkg.StringMatcher{Suffix: "/v1/messages"},
 			Kind:    KindAnthropic,
 		}}, c.LLMConfigs...)
 	}
@@ -272,7 +214,7 @@ type llmProxyFilter struct {
 // matchRule returns the first rule whose Matcher matches path, or nil.
 func (f *llmProxyFilter) matchRule(path string) *llmConfig {
 	for i := range f.config.LLMConfigs {
-		if f.config.LLMConfigs[i].Matcher.matches(path) {
+		if f.config.LLMConfigs[i].Matcher.Matches(path) {
 			return &f.config.LLMConfigs[i]
 		}
 	}

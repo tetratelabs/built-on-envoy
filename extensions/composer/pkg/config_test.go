@@ -113,3 +113,61 @@ func TestDataSource_Content(t *testing.T) {
 		require.Equal(t, []byte("inline data"), content)
 	})
 }
+
+// --- StringMatcher ---
+
+func TestMatcher_Prefix(t *testing.T) {
+	m := StringMatcher{Prefix: "/v1/chat"}
+	require.True(t, m.Matches("/v1/chat/completions"))
+	require.True(t, m.Matches("/v1/chat"))
+	require.False(t, m.Matches("/v1/other"))
+}
+
+func TestMatcher_Suffix(t *testing.T) {
+	m := StringMatcher{Suffix: "/completions"}
+	require.True(t, m.Matches("/v1/chat/completions"))
+	require.True(t, m.Matches("/completions"))
+	require.False(t, m.Matches("/v1/messages"))
+}
+
+func TestMatcher_Regex(t *testing.T) {
+	m := StringMatcher{Regex: "^/v1/(chat/completions|custom)$"}
+	require.NoError(t, m.ValidateAndParse())
+	require.True(t, m.Matches("/v1/chat/completions"))
+	require.True(t, m.Matches("/v1/custom"))
+	require.False(t, m.Matches("/v1/messages"))
+	require.False(t, m.Matches("/v1/chat/completions/extra"))
+}
+
+func TestMatcher_ValidateAndParse_Prefix(t *testing.T) {
+	m := StringMatcher{Prefix: "/v1/chat"}
+	require.NoError(t, m.ValidateAndParse())
+	require.Equal(t, "/v1/chat", m.Prefix)
+	require.Empty(t, m.Suffix)
+	require.Empty(t, m.Regex)
+}
+
+func TestMatcher_ValidateAndParse_Suffix(t *testing.T) {
+	m := StringMatcher{Suffix: "/completions"}
+	require.NoError(t, m.ValidateAndParse())
+	require.Equal(t, "/completions", m.Suffix)
+	require.Empty(t, m.Prefix)
+	require.Empty(t, m.Regex)
+}
+
+func TestMatcher_ValidateAndParse_InvalidRegex(t *testing.T) {
+	m := StringMatcher{Regex: "[invalid"}
+	err := m.ValidateAndParse()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid regex")
+}
+
+func TestMatcher_ValidateAndParse_NoFields(t *testing.T) {
+	m := StringMatcher{}
+	require.Error(t, m.ValidateAndParse())
+}
+
+func TestMatcher_ValidateAndParse_MultipleFields(t *testing.T) {
+	m := StringMatcher{Prefix: "/v1/chat", Suffix: "/completions"}
+	require.Error(t, m.ValidateAndParse())
+}

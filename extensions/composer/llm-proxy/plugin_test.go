@@ -30,9 +30,9 @@ func defaultCfg() *llmProxyConfig {
 	}
 }
 
-// prefixMatcher returns a StringMatcher that matches by path prefix.
-func prefixMatcher(prefix string) StringMatcher {
-	return StringMatcher{Prefix: prefix}
+// prefixMatcher returns a StringMatcher that Matches by path prefix.
+func prefixMatcher(prefix string) pkg.StringMatcher {
+	return pkg.StringMatcher{Prefix: prefix}
 }
 
 // expectStatsDefinitions registers AnyTimes expectations for the 5 counter and 2 histogram
@@ -664,64 +664,6 @@ func TestOnResponseTrailers_NonStreaming_ParsesBody(t *testing.T) {
 	require.Equal(t, shared.TrailersStatusContinue, result)
 }
 
-// --- StringMatcher ---
-
-func TestMatcher_Prefix(t *testing.T) {
-	m := StringMatcher{Prefix: "/v1/chat"}
-	require.True(t, m.matches("/v1/chat/completions"))
-	require.True(t, m.matches("/v1/chat"))
-	require.False(t, m.matches("/v1/other"))
-}
-
-func TestMatcher_Suffix(t *testing.T) {
-	m := StringMatcher{Suffix: "/completions"}
-	require.True(t, m.matches("/v1/chat/completions"))
-	require.True(t, m.matches("/completions"))
-	require.False(t, m.matches("/v1/messages"))
-}
-
-func TestMatcher_Regex(t *testing.T) {
-	m := StringMatcher{Regex: "^/v1/(chat/completions|custom)$"}
-	require.NoError(t, m.ValidateAndParse())
-	require.True(t, m.matches("/v1/chat/completions"))
-	require.True(t, m.matches("/v1/custom"))
-	require.False(t, m.matches("/v1/messages"))
-	require.False(t, m.matches("/v1/chat/completions/extra"))
-}
-
-func TestMatcher_ValidateAndParse_Prefix(t *testing.T) {
-	m := StringMatcher{Prefix: "/v1/chat"}
-	require.NoError(t, m.ValidateAndParse())
-	require.Equal(t, "/v1/chat", m.Prefix)
-	require.Empty(t, m.Suffix)
-	require.Empty(t, m.Regex)
-}
-
-func TestMatcher_ValidateAndParse_Suffix(t *testing.T) {
-	m := StringMatcher{Suffix: "/completions"}
-	require.NoError(t, m.ValidateAndParse())
-	require.Equal(t, "/completions", m.Suffix)
-	require.Empty(t, m.Prefix)
-	require.Empty(t, m.Regex)
-}
-
-func TestMatcher_ValidateAndParse_InvalidRegex(t *testing.T) {
-	m := StringMatcher{Regex: "[invalid"}
-	err := m.ValidateAndParse()
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "invalid regex")
-}
-
-func TestMatcher_ValidateAndParse_NoFields(t *testing.T) {
-	m := StringMatcher{}
-	require.Error(t, m.ValidateAndParse())
-}
-
-func TestMatcher_ValidateAndParse_MultipleFields(t *testing.T) {
-	m := StringMatcher{Prefix: "/v1/chat", Suffix: "/completions"}
-	require.Error(t, m.ValidateAndParse())
-}
-
 // --- custom API type ---
 
 func TestCustomAPIType_RequestParsedLikeOpenAI(t *testing.T) {
@@ -756,7 +698,7 @@ func TestCustomAPIType_RequestParsedLikeOpenAI(t *testing.T) {
 
 func TestMatchRule_SuffixMatcher(t *testing.T) {
 	cfg := &llmProxyConfig{
-		LLMConfigs: []llmConfig{{Matcher: StringMatcher{Suffix: "/completions"}, Kind: KindOpenAI}},
+		LLMConfigs: []llmConfig{{Matcher: pkg.StringMatcher{Suffix: "/completions"}, Kind: KindOpenAI}},
 	}
 	f := &llmProxyFilter{config: cfg}
 	require.NotNil(t, f.matchRule("/v1/chat/completions"))
@@ -764,7 +706,7 @@ func TestMatchRule_SuffixMatcher(t *testing.T) {
 }
 
 func TestMatchRule_RegexMatcher(t *testing.T) {
-	m := StringMatcher{Regex: "^/v1/(chat/completions|messages)$"}
+	m := pkg.StringMatcher{Regex: "^/v1/(chat/completions|messages)$"}
 	require.NoError(t, m.ValidateAndParse())
 	cfg := &llmProxyConfig{
 		LLMConfigs: []llmConfig{{Matcher: m, Kind: KindOpenAI}},
@@ -780,8 +722,8 @@ func TestMatchRule_RegexMatcher(t *testing.T) {
 func TestValidateAndParse_DuplicateOpenAIKind_Error(t *testing.T) {
 	cfg := &llmProxyConfig{
 		LLMConfigs: []llmConfig{
-			{Matcher: StringMatcher{Prefix: "/a"}, Kind: KindOpenAI},
-			{Matcher: StringMatcher{Prefix: "/b"}, Kind: KindOpenAI},
+			{Matcher: pkg.StringMatcher{Prefix: "/a"}, Kind: KindOpenAI},
+			{Matcher: pkg.StringMatcher{Prefix: "/b"}, Kind: KindOpenAI},
 		},
 		MetadataNamespace: defaultMetadataNamespace,
 	}
@@ -793,8 +735,8 @@ func TestValidateAndParse_DuplicateOpenAIKind_Error(t *testing.T) {
 func TestValidateAndParse_DuplicateAnthropicKind_Error(t *testing.T) {
 	cfg := &llmProxyConfig{
 		LLMConfigs: []llmConfig{
-			{Matcher: StringMatcher{Prefix: "/a"}, Kind: KindAnthropic},
-			{Matcher: StringMatcher{Prefix: "/b"}, Kind: KindAnthropic},
+			{Matcher: pkg.StringMatcher{Prefix: "/a"}, Kind: KindAnthropic},
+			{Matcher: pkg.StringMatcher{Prefix: "/b"}, Kind: KindAnthropic},
 		},
 		MetadataNamespace: defaultMetadataNamespace,
 	}
@@ -806,7 +748,7 @@ func TestValidateAndParse_DuplicateAnthropicKind_Error(t *testing.T) {
 func TestValidateAndParse_UnsupportedKind_Error(t *testing.T) {
 	cfg := &llmProxyConfig{
 		LLMConfigs: []llmConfig{
-			{Matcher: StringMatcher{Prefix: "/v1"}, Kind: "gemini"},
+			{Matcher: pkg.StringMatcher{Prefix: "/v1"}, Kind: "gemini"},
 		},
 		MetadataNamespace: defaultMetadataNamespace,
 	}
