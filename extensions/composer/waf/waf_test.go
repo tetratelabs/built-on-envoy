@@ -22,27 +22,31 @@ import (
 	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
+// newWAFFactory creates a wafPluginFactory from raw directives, encapsulating the
+// JSON marshalling.
+func newWAFFactory(t *testing.T, ctrl *gomock.Controller, directives []string, mode string) shared.HttpFilterFactory {
+	t.Helper()
+	config := map[string]interface{}{
+		"directives": directives,
+		"mode":       mode,
+	}
+	configBytes, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	configHandle.EXPECT().DefineCounter("waf_tx_total").Return(shared.MetricID(1), shared.MetricsSuccess)
+	configHandle.EXPECT().DefineCounter("waf_tx_blocked", "authority", "phase", "rule_id").Return(shared.MetricID(2), shared.MetricsSuccess)
+
+	factory, err := (&wafPluginConfigFactory{}).Create(configHandle, configBytes)
+	require.NoError(t, err)
+	return factory
+}
+
 func Test_DisableWaf(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	config := map[string]interface{}{
-		"directives": []string{
-			"SecRuleEngine Off",
-		},
-		"mode": "FULL",
-	}
-
-	// convert config to bytes
-	configBytes, err := json.Marshal(config)
-	require.NoError(t, err, "failed to marshal config")
-
-	configFactory := wafPluginConfigFactory{}
-	configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
-	configHandle.EXPECT().DefineCounter("waf_tx_total").Return(shared.MetricID(1), shared.MetricsSuccess)
-	configHandle.EXPECT().DefineCounter("waf_tx_blocked", "authority", "phase", "rule_id").Return(shared.MetricID(2), shared.MetricsSuccess)
-	wafPluginFactory, err := configFactory.Create(configHandle, configBytes)
-	require.NoError(t, err, "failed to create WAF plugin factory")
+	wafPluginFactory := newWAFFactory(t, ctrl, []string{"SecRuleEngine Off"}, "FULL")
 
 	t.Run("WAF disabled should skip processing", func(t *testing.T) {
 		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
@@ -181,26 +185,12 @@ func Test_RequestOnlyWaf(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	config := map[string]interface{}{
-		"directives": []string{
-			"Include @recommended.conf",
-			"Include @ftw.conf",
-			"Include @crs-setup.conf",
-			"Include @owasp_crs/*.conf",
-		},
-		"mode": "REQUEST_ONLY",
-	}
-
-	// convert config to bytes
-	configBytes, err := json.Marshal(config)
-	require.NoError(t, err, "failed to marshal config")
-
-	configFactory := wafPluginConfigFactory{}
-	configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
-	configHandle.EXPECT().DefineCounter("waf_tx_total").Return(shared.MetricID(1), shared.MetricsSuccess)
-	configHandle.EXPECT().DefineCounter("waf_tx_blocked", "authority", "phase", "rule_id").Return(shared.MetricID(2), shared.MetricsSuccess)
-	wafPluginFactory, err := configFactory.Create(configHandle, configBytes)
-	require.NoError(t, err, "failed to create WAF plugin factory")
+	wafPluginFactory := newWAFFactory(t, ctrl, []string{
+		"Include @recommended.conf",
+		"Include @ftw.conf",
+		"Include @crs-setup.conf",
+		"Include @owasp_crs/*.conf",
+	}, "REQUEST_ONLY")
 
 	t.Run("Header only request", func(t *testing.T) {
 		// Header only request.
@@ -408,26 +398,12 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	config := map[string]interface{}{
-		"directives": []string{
-			"Include @recommended.conf",
-			"Include @ftw.conf",
-			"Include @crs-setup.conf",
-			"Include @owasp_crs/*.conf",
-		},
-		"mode": "RESPONSE_ONLY",
-	}
-
-	// convert config to bytes
-	configBytes, err := json.Marshal(config)
-	require.NoError(t, err, "failed to marshal config")
-
-	configFactory := wafPluginConfigFactory{}
-	configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
-	configHandle.EXPECT().DefineCounter("waf_tx_total").Return(shared.MetricID(1), shared.MetricsSuccess)
-	configHandle.EXPECT().DefineCounter("waf_tx_blocked", "authority", "phase", "rule_id").Return(shared.MetricID(2), shared.MetricsSuccess)
-	wafPluginFactory, err := configFactory.Create(configHandle, configBytes)
-	require.NoError(t, err, "failed to create WAF plugin factory")
+	wafPluginFactory := newWAFFactory(t, ctrl, []string{
+		"Include @recommended.conf",
+		"Include @ftw.conf",
+		"Include @crs-setup.conf",
+		"Include @owasp_crs/*.conf",
+	}, "RESPONSE_ONLY")
 
 	t.Run("Request should be no-op in response only mode", func(t *testing.T) {
 		// Request should be no-op in response only mode.
@@ -701,26 +677,12 @@ func Test_FullWaf(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	config := map[string]interface{}{
-		"directives": []string{
-			"Include @recommended.conf",
-			"Include @ftw.conf",
-			"Include @crs-setup.conf",
-			"Include @owasp_crs/*.conf",
-		},
-		"mode": "FULL",
-	}
-
-	// convert config to bytes
-	configBytes, err := json.Marshal(config)
-	require.NoError(t, err, "failed to marshal config")
-
-	configFactory := wafPluginConfigFactory{}
-	configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
-	configHandle.EXPECT().DefineCounter("waf_tx_total").Return(shared.MetricID(1), shared.MetricsSuccess)
-	configHandle.EXPECT().DefineCounter("waf_tx_blocked", "authority", "phase", "rule_id").Return(shared.MetricID(2), shared.MetricsSuccess)
-	wafPluginFactory, err := configFactory.Create(configHandle, configBytes)
-	require.NoError(t, err, "failed to create WAF plugin factory")
+	wafPluginFactory := newWAFFactory(t, ctrl, []string{
+		"Include @recommended.conf",
+		"Include @ftw.conf",
+		"Include @crs-setup.conf",
+		"Include @owasp_crs/*.conf",
+	}, "FULL")
 
 	t.Run("Full WAF request and response processing", func(t *testing.T) {
 		// Full WAF request and response processing.
@@ -797,29 +759,16 @@ func Test_BlockRequestWaf(t *testing.T) {
 	// Rule 100001: block request headers if X-Block-Test header is "block-me" (status 403).
 	// Rule 100002: block request body if it contains "malicious-payload" (status 403).
 	// Rule 100003: block response body if it contains "leaked-secret" (status 403).
-	config := map[string]interface{}{
-		"directives": []string{
-			"SecRuleEngine On",
-			"SecRequestBodyAccess On",
-			"SecResponseBodyAccess On",
-			`SecResponseBodyMimeType text/plain application/json`,
-			`SecRule REQUEST_HEADERS:X-Block-Test "@streq block-me" "id:100001,phase:1,deny,status:403,msg:'Blocked by test rule'"`,
-			`SecAction "id:100010,phase:1,pass,nolog,ctl:forceRequestBodyVariable=on"`,
-			`SecRule REQUEST_BODY "@contains malicious-payload" "id:100002,phase:2,deny,status:403,msg:'Blocked request body'"`,
-			`SecRule RESPONSE_BODY "@contains leaked-secret" "id:100003,phase:4,deny,status:403,msg:'Blocked response body'"`,
-		},
-		"mode": "FULL",
-	}
-
-	configBytes, err := json.Marshal(config)
-	require.NoError(t, err, "failed to marshal config")
-
-	configFactory := wafPluginConfigFactory{}
-	configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
-	configHandle.EXPECT().DefineCounter("waf_tx_total").Return(shared.MetricID(1), shared.MetricsSuccess)
-	configHandle.EXPECT().DefineCounter("waf_tx_blocked", "authority", "phase", "rule_id").Return(shared.MetricID(2), shared.MetricsSuccess)
-	wafPluginFactory, err := configFactory.Create(configHandle, configBytes)
-	require.NoError(t, err, "failed to create WAF plugin factory")
+	wafPluginFactory := newWAFFactory(t, ctrl, []string{
+		"SecRuleEngine On",
+		"SecRequestBodyAccess On",
+		"SecResponseBodyAccess On",
+		`SecResponseBodyMimeType text/plain application/json`,
+		`SecRule REQUEST_HEADERS:X-Block-Test "@streq block-me" "id:100001,phase:1,deny,status:403,msg:'Blocked by test rule'"`,
+		`SecAction "id:100010,phase:1,pass,nolog,ctl:forceRequestBodyVariable=on"`,
+		`SecRule REQUEST_BODY "@contains malicious-payload" "id:100002,phase:2,deny,status:403,msg:'Blocked request body'"`,
+		`SecRule RESPONSE_BODY "@contains leaked-secret" "id:100003,phase:4,deny,status:403,msg:'Blocked response body'"`,
+	}, "FULL")
 
 	t.Run("Block request on headers", func(t *testing.T) {
 		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
@@ -1083,23 +1032,12 @@ func Test_SecRequestBodyAccessOff(t *testing.T) {
 			if tc.reqBodyAccessOn {
 				reqBodyAccessDir = "SecRequestBodyAccess On"
 			}
-			config := map[string]any{
-				"directives": []string{
-					"SecRuleEngine On",
-					reqBodyAccessDir,
-					`SecAction "id:100010,phase:1,pass,nolog,ctl:forceRequestBodyVariable=on"`,
-					`SecRule REQUEST_BODY "@contains malicious-payload" "id:100002,phase:2,deny,status:403,msg:'Blocked request body'"`,
-				},
-				"mode": "FULL",
-			}
-			configBytes, err := json.Marshal(config)
-			require.NoError(t, err, "failed to marshal config")
-
-			configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
-			configHandle.EXPECT().DefineCounter("waf_tx_total").Return(shared.MetricID(1), shared.MetricsSuccess)
-			configHandle.EXPECT().DefineCounter("waf_tx_blocked", "authority", "phase", "rule_id").Return(shared.MetricID(2), shared.MetricsSuccess)
-			wafPluginFactory, err := (&wafPluginConfigFactory{}).Create(configHandle, configBytes)
-			require.NoError(t, err, "failed to create WAF plugin factory")
+			wafPluginFactory := newWAFFactory(t, ctrl, []string{
+				"SecRuleEngine On",
+				reqBodyAccessDir,
+				`SecAction "id:100010,phase:1,pass,nolog,ctl:forceRequestBodyVariable=on"`,
+				`SecRule REQUEST_BODY "@contains malicious-payload" "id:100002,phase:2,deny,status:403,msg:'Blocked request body'"`,
+			}, "FULL")
 
 			pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
 			pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
@@ -1170,22 +1108,11 @@ func Test_Phase2ArgsRuleWithSecRequestBodyAccessOff(t *testing.T) {
 			if tc.reqBodyAccessOn {
 				reqBodyAccessDir = "SecRequestBodyAccess On"
 			}
-			config := map[string]any{
-				"directives": []string{
-					"SecRuleEngine On",
-					reqBodyAccessDir,
-					`SecRule ARGS "@contains malicious-payload" "id:100002,phase:2,deny,status:403,msg:'Blocked ARGS'"`,
-				},
-				"mode": "FULL",
-			}
-			configBytes, err := json.Marshal(config)
-			require.NoError(t, err, "failed to marshal config")
-
-			configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
-			configHandle.EXPECT().DefineCounter("waf_tx_total").Return(shared.MetricID(1), shared.MetricsSuccess)
-			configHandle.EXPECT().DefineCounter("waf_tx_blocked", "authority", "phase", "rule_id").Return(shared.MetricID(2), shared.MetricsSuccess)
-			wafPluginFactory, err := (&wafPluginConfigFactory{}).Create(configHandle, configBytes)
-			require.NoError(t, err, "failed to create WAF plugin factory")
+			wafPluginFactory := newWAFFactory(t, ctrl, []string{
+				"SecRuleEngine On",
+				reqBodyAccessDir,
+				`SecRule ARGS "@contains malicious-payload" "id:100002,phase:2,deny,status:403,msg:'Blocked ARGS'"`,
+			}, "FULL")
 
 			pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
 			pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
@@ -1253,23 +1180,12 @@ func Test_SecResponseBodyAccessOff(t *testing.T) {
 			if tc.respBodyAccessOn {
 				respBodyAccessDir = "SecResponseBodyAccess On"
 			}
-			config := map[string]any{
-				"directives": []string{
-					"SecRuleEngine On",
-					respBodyAccessDir,
-					"SecResponseBodyMimeType " + tc.mimeType,
-					`SecRule RESPONSE_BODY "@contains leaked-secret" "id:100003,phase:4,deny,status:403,msg:'Blocked response body'"`,
-				},
-				"mode": "FULL",
-			}
-			configBytes, err := json.Marshal(config)
-			require.NoError(t, err, "failed to marshal config")
-
-			configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
-			configHandle.EXPECT().DefineCounter("waf_tx_total").Return(shared.MetricID(1), shared.MetricsSuccess)
-			configHandle.EXPECT().DefineCounter("waf_tx_blocked", "authority", "phase", "rule_id").Return(shared.MetricID(2), shared.MetricsSuccess)
-			wafPluginFactory, err := (&wafPluginConfigFactory{}).Create(configHandle, configBytes)
-			require.NoError(t, err, "failed to create WAF plugin factory")
+			wafPluginFactory := newWAFFactory(t, ctrl, []string{
+				"SecRuleEngine On",
+				respBodyAccessDir,
+				"SecResponseBodyMimeType " + tc.mimeType,
+				`SecRule RESPONSE_BODY "@contains leaked-secret" "id:100003,phase:4,deny,status:403,msg:'Blocked response body'"`,
+			}, "FULL")
 
 			pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
 			pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
@@ -1341,22 +1257,11 @@ func Test_Phase4ResponseHeadersRuleWithSecResponseBodyAccessOff(t *testing.T) {
 			if tc.respBodyAccessOn {
 				respBodyAccessDir = "SecResponseBodyAccess On"
 			}
-			config := map[string]any{
-				"directives": []string{
-					"SecRuleEngine On",
-					respBodyAccessDir,
-					`SecRule RESPONSE_HEADERS:content-type "@contains application/json" "id:100003,phase:4,deny,status:403,msg:'Blocked response header'"`,
-				},
-				"mode": "FULL",
-			}
-			configBytes, err := json.Marshal(config)
-			require.NoError(t, err, "failed to marshal config")
-
-			configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
-			configHandle.EXPECT().DefineCounter("waf_tx_total").Return(shared.MetricID(1), shared.MetricsSuccess)
-			configHandle.EXPECT().DefineCounter("waf_tx_blocked", "authority", "phase", "rule_id").Return(shared.MetricID(2), shared.MetricsSuccess)
-			wafPluginFactory, err := (&wafPluginConfigFactory{}).Create(configHandle, configBytes)
-			require.NoError(t, err, "failed to create WAF plugin factory")
+			wafPluginFactory := newWAFFactory(t, ctrl, []string{
+				"SecRuleEngine On",
+				respBodyAccessDir,
+				`SecRule RESPONSE_HEADERS:content-type "@contains application/json" "id:100003,phase:4,deny,status:403,msg:'Blocked response header'"`,
+			}, "FULL")
 
 			pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
 			pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()

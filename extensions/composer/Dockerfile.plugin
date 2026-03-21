@@ -17,8 +17,10 @@ COPY . .
 
 RUN go mod download all
 
+# BUILD_TAG is used to to include coraza waf build tags, populated by Makefile.plugin via --build-arg
+ARG BUILD_TAG=""
 # Build go plugin
-RUN CGO_ENABLED=1 go build -buildmode=plugin -o plugin.so ./$EXTENSION_PATH/standalone
+RUN CGO_ENABLED=1 go build -buildmode=plugin ${BUILD_TAG} -o plugin.so ./$EXTENSION_PATH/standalone
 
 FROM scratch AS final
 

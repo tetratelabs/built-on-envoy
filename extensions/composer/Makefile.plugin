@@ -72,6 +72,11 @@ MULTI_OCI_ANNOTATIONS := \
 	$(subst --annotation ",--annotation "index$(comma)manifest:,$(BASE_OCI_ANNOTATIONS)) \
 	--annotation "index,manifest:io.tetratelabs.built-on-envoy.extension.artifact=binary"
 
+# Shared variables used by both this Makefile and the main Makefile.
+include Makefile.common
+
+PLUGIN_BUILD_TAG := -tags $(CORAZA_BUILD_TAGS)
+
 BUILDER_NAME := boe-builder
 .PHONY: create_builder
 create_builder:
@@ -82,7 +87,7 @@ create_builder:
 
 .PHONY: build
 build:
-	CGO_ENABLED=1 go build -buildmode=plugin -o $(NAME).so ./$(EXTENSION_PATH)/standalone
+	CGO_ENABLED=1 go build -buildmode=plugin $(PLUGIN_BUILD_TAG) -o $(NAME).so ./$(EXTENSION_PATH)/standalone
 
 .PHONY: install
 install: build
@@ -99,6 +104,7 @@ build_image:
 		--output type=docker,oci-mediatypes=true \
 		--provenance=false \
 		--build-arg EXTENSION_PATH=$(EXTENSION_PATH) \
+		--build-arg BUILD_TAG="$(PLUGIN_BUILD_TAG)" \
 		$(BASE_OCI_ANNOTATIONS) \
 		$(BINARY_ARTIFACT) \
 		-t $(IMAGE)-linux-$(ARCH) \
@@ -116,6 +122,7 @@ push_image: create_builder ## Build and push docker image for the plugin for cro
 		--output type=registry,oci-mediatypes=true$(registry_output) \
 		--provenance=false \
 		--build-arg EXTENSION_PATH=$(EXTENSION_PATH) \
+		--build-arg BUILD_TAG="$(PLUGIN_BUILD_TAG)" \
 		$(MULTI_OCI_ANNOTATIONS) \
 		--tag $(IMAGE) \
 		-f ./Dockerfile.plugin .

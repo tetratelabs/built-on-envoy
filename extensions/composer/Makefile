@@ -27,7 +27,7 @@ lint:
 .PHONY: test
 test:
 	@echo "Running tests..."
-	@go test $(GO_TEST_ARGS) ./...
+	@go test -tags $(CORAZA_BUILD_TAGS) $(GO_TEST_ARGS) ./...
 
 .PHONY: test-coverage
 test-coverage:
@@ -70,13 +70,22 @@ IMAGE_NAME := $(NAME)$(IMAGE_NAME_SUFFIX)
 IMAGE  := $(HUB)/$(IMAGE_NAME):$(IMAGE_TAG)$(IMAGE_NONCE)
 SOURCE := https://$(subst ghcr.io,github.com,$(HUB))
 
+# Shared variables used by both this Makefile and the main Makefile.
+include Makefile.common
+
 # Option to build lite version of the loader.
 ifeq ($(strip $(COMPOSER_LITE)),true)
 	DESCRIPTION := Go plugin loader.
-	COMPOSER_BUILD_TAG := -tags lite
 	IMAGE_NAME := $(NAME)-lite$(IMAGE_NAME_SUFFIX)
 	IMAGE := $(HUB)/$(IMAGE_NAME):$(IMAGE_TAG)$(IMAGE_NONCE)
 endif
+
+# Build tags: coraza (always) + lite (if set).
+_BUILD_TAGS := $(CORAZA_BUILD_TAGS)
+ifeq ($(strip $(COMPOSER_LITE)),true)
+  _BUILD_TAGS := $(_BUILD_TAGS),lite
+endif
+COMPOSER_BUILD_TAG := -tags $(_BUILD_TAGS)
 
 OS := linux
 ARCH := $(shell uname -m)
