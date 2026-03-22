@@ -24,6 +24,17 @@ lint:
 	@echo "golangci-lint => ./..."
 	@$(GO_TOOL) golangci-lint run
 
+# Shared variables used by both this Makefile and the main Makefile.
+include Makefile.common
+# Option to build lite version of the loader.
+ifeq ($(strip $(COMPOSER_LITE)),true)
+	DESCRIPTION := Go plugin loader.
+	IMAGE_NAME := $(NAME)-lite$(IMAGE_NAME_SUFFIX)
+	IMAGE := $(HUB)/$(IMAGE_NAME):$(IMAGE_TAG)$(IMAGE_NONCE)
+	BUILD_TAGS := $(BUILD_TAGS),lite
+endif
+COMPOSER_BUILD_TAG := $(if $(BUILD_TAGS),-tags $(BUILD_TAGS))
+
 .PHONY: test
 test:
 	@echo "Running tests..."
@@ -69,21 +80,6 @@ HUB    := $(or $(BOE_REGISTRY),$(OCI_REGISTRY)/built-on-envoy)
 IMAGE_NAME := $(NAME)$(IMAGE_NAME_SUFFIX)
 IMAGE  := $(HUB)/$(IMAGE_NAME):$(IMAGE_TAG)$(IMAGE_NONCE)
 SOURCE := https://$(subst ghcr.io,github.com,$(HUB))
-
-# Shared variables used by both this Makefile and the main Makefile.
-include Makefile.common
-
-# Option to build lite version of the loader.
-ifeq ($(strip $(COMPOSER_LITE)),true)
-	DESCRIPTION := Go plugin loader.
-	IMAGE_NAME := $(NAME)-lite$(IMAGE_NAME_SUFFIX)
-	IMAGE := $(HUB)/$(IMAGE_NAME):$(IMAGE_TAG)$(IMAGE_NONCE)
-endif
-
-ifeq ($(strip $(COMPOSER_LITE)),true)
-  BUILD_TAGS := $(BUILD_TAGS),lite
-endif
-COMPOSER_BUILD_TAG := -tags $(BUILD_TAGS)
 
 OS := linux
 ARCH := $(shell uname -m)
