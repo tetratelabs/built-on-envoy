@@ -27,7 +27,7 @@ lint:
 .PHONY: test
 test:
 	@echo "Running tests..."
-	@go test -tags $(CORAZA_BUILD_TAGS) $(GO_TEST_ARGS) ./...
+	@go test $(COMPOSER_BUILD_TAG) $(GO_TEST_ARGS) ./...
 
 .PHONY: test-coverage
 test-coverage:
@@ -80,12 +80,10 @@ ifeq ($(strip $(COMPOSER_LITE)),true)
 	IMAGE := $(HUB)/$(IMAGE_NAME):$(IMAGE_TAG)$(IMAGE_NONCE)
 endif
 
-# Build tags: coraza (always) + lite (if set).
-_BUILD_TAGS := $(CORAZA_BUILD_TAGS)
 ifeq ($(strip $(COMPOSER_LITE)),true)
-  _BUILD_TAGS := $(_BUILD_TAGS),lite
+  BUILD_TAGS := $(BUILD_TAGS),lite
 endif
-COMPOSER_BUILD_TAG := -tags $(_BUILD_TAGS)
+COMPOSER_BUILD_TAG := -tags $(BUILD_TAGS)
 
 OS := linux
 ARCH := $(shell uname -m)

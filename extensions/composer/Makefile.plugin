@@ -75,7 +75,7 @@ MULTI_OCI_ANNOTATIONS := \
 # Shared variables used by both this Makefile and the main Makefile.
 include Makefile.common
 
-PLUGIN_BUILD_TAG := -tags $(CORAZA_BUILD_TAGS)
+PLUGIN_BUILD_TAG := -tags $(BUILD_TAGS)
 
 BUILDER_NAME := boe-builder
 .PHONY: create_builder
