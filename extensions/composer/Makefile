@@ -7,6 +7,73 @@ ROOT    := $(shell git rev-parse --show-toplevel)
 GO_TOOL := go tool -modfile=$(ROOT)/cli/tools/go.mod
 
 GO_TEST_ARGS ?=
+ENVOY_VERSION ?= distroless-dev
+ENVOY_IMAGE ?= docker.io/envoyproxy/envoy:$(ENVOY_VERSION)
+COMPOSER_LIB_PATH ?= $(CURDIR)/libcomposer.so
+CRS_REPO ?= https://github.com/coreruleset/coreruleset.git
+WAF_CRS_VERSION ?= $(shell sed -n 's/^# OWASP CRS ver\.//p' $(CURDIR)/waf/coraza/rules/crs-setup.conf | head -n 1)
+CRS_REF ?= v$(WAF_CRS_VERSION)
+CRS_DIR ?= $(CURDIR)/integration/coreruleset/tests/regression/tests
+
+# Some IDEs like Goland place `.go` files in the `.idea` directory when using code templates. Using a
+# git command to find the files ensures that only relevant files are formatted and that git-ignored
+# files do not get in the way
+GO_FILES=$(shell git ls-files --cached --others --exclude-standard | grep '\.go$$')
+.PHONY: format
+format:
+	@echo "format => *.go"
+	@$(GO_TOOL) golangci-lint fmt $(GO_FILES)
+	@echo "licenses => **"
+	@$(GO_TOOL) license-eye -c $(ROOT)/.licenserc.yaml header fix
+
+.PHONY: lint
+lint:
+	@echo "golangci-lint => ./..."
+	@$(GO_TOOL) golangci-lint run
+
+.PHONY: test
+test:
+	@echo "Running tests..."
+	@go test $(GO_TEST_ARGS) ./...
+
+.PHONY: integration-setup
+integration-setup:
+	@if [ -z "$(WAF_CRS_VERSION)" ]; then \
+		echo "Could not determine WAF CRS version from waf/coraza/rules/crs-setup.conf"; \
+		exit 1; \
+	fi
+	@if [ ! -d "$(CURDIR)/integration/coreruleset/.git" ]; then \
+		echo "Cloning Core Rule Set $(CRS_REF) into integration/coreruleset"; \
+		git clone --depth 1 --branch $(CRS_REF) --single-branch $(CRS_REPO) $(CURDIR)/integration/coreruleset; \
+	else \
+		echo "Syncing integration/coreruleset to $(CRS_REF)"; \
+		git -C $(CURDIR)/integration/coreruleset fetch --depth 1 origin refs/tags/$(CRS_REF):refs/tags/$(CRS_REF); \
+		git -C $(CURDIR)/integration/coreruleset checkout --detach tags/$(CRS_REF); \
+	fi
+	@if [ ! -d "$(CRS_DIR)" ]; then \
+		echo "Core Rule Set checkout exists but $(CRS_DIR) is missing at $(CRS_REF)"; \
+		exit 1; \
+	fi
+	@echo "Ensuring integration tools are available..."
+	@go tool albedo --help >/dev/null
+	@go tool go-ftw help >/dev/null
+
+.PHONY: test-integration
+test-integration: build integration-setup
+	@echo "Running WAF integration tests..."
+	@COMPOSER_LIB_PATH=$(COMPOSER_LIB_PATH) CRS_DIR=$(CRS_DIR) ENVOY_VERSION=$(ENVOY_VERSION) \
+		ENVOY_IMAGE=$(ENVOY_IMAGE) DOCKER_PLATFORM=$(FDOCKER_PLATFORM) FTW_INCLUDE=$(FTW_INCLUDE) \
+		go test -tags integration -count=1 -timeout 30m $(GO_TEST_ARGS) ./integration
+
+.PHONY: test-coverage
+test-coverage:
+	@mkdir -p ./out
+	@$(MAKE) test GO_TEST_ARGS="-coverprofile=./out/go-test-coverage.out \
+		-covermode=atomic \
+		-coverpkg=github.com/tetratelabs/built-on-envoy/extensions/composer/... \
+		-count=1 \
+		$(GO_TEST_ARGS)"
+	@$(GO_TOOL) go-test-coverage --config=.testcoverage.yml
 
 # This IMAGE_NONCE will be appended to the final image tag if set.
 # It is intended to be used in CI environments to ensure that each image
@@ -67,7 +134,7 @@ endif
 # files do not get in the way
 GO_FILES=$(shell git ls-files --cached --others --exclude-standard | grep '\.go$$')
 .PHONY: format
-format: 
+format:
 	@echo "format => *.go"
 	@$(GO_TOOL) golangci-lint fmt $(GO_FILES)
 	@echo "licenses => **"

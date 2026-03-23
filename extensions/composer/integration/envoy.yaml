@@ -1,0 +1,137 @@
+admin:
+  address:
+    socket_address:
+      address: 127.0.0.1
+      port_value: 9901
+
+static_resources:
+  listeners:
+    - name: coraza_smoke
+      address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 1063
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: smoke_http
+                access_log:
+                  - name: envoy.access_loggers.stderr
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
+                route_config:
+                  virtual_hosts:
+                    - name: smoke_route
+                      domains:
+                        - "*"
+                      routes:
+                        - match:
+                            prefix: "/"
+                          route:
+                            cluster: smoke_upstream
+                http_filters:
+                  - name: coraza-waf
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.dynamic_modules.v3.DynamicModuleFilter
+                      dynamic_module_config:
+                        name: composer
+                        do_not_close: true
+                      filter_name: coraza-waf
+                      filter_config:
+                        "@type": type.googleapis.com/google.protobuf.StringValue
+                        value: |
+                          {
+                            "directives": [
+                              "SecRuleEngine On",
+                              "SecRequestBodyAccess On",
+                              "SecResponseBodyAccess On",
+                              "SecResponseBodyMimeType application/json",
+                              "SecRule &REQUEST_HEADERS:coraza-e2e \"@eq 0\" \"id:100,phase:1,deny,status:424,log,msg:'Coraza E2E - Missing header'\"",
+                              "SecRule REQUEST_URI \"@streq /admin\" \"id:101,phase:1,t:lowercase,log,deny,status:403\"",
+                              "SecRule REQUEST_BODY \"@rx maliciouspayload\" \"id:102,phase:2,t:lowercase,log,deny,status:403\"",
+                              "SecRule RESPONSE_HEADERS:pass \"@rx leak\" \"id:103,phase:3,t:lowercase,log,deny,status:403\"",
+                              "SecRule RESPONSE_BODY \"@contains responsebodycode\" \"id:104,phase:4,t:lowercase,log,deny,status:403\"",
+                              "SecRule ARGS_NAMES|ARGS \"@detectXSS\" \"id:9411,phase:2,t:none,t:utf8toUnicode,t:urlDecodeUni,t:htmlEntityDecode,t:jsDecode,t:cssDecode,t:removeNulls,log,deny,status:403\"",
+                              "SecRule ARGS_NAMES|ARGS \"@detectSQLi\" \"id:9421,phase:2,t:none,t:utf8toUnicode,t:urlDecodeUni,t:removeNulls,multiMatch,log,deny,status:403\"",
+                              "SecRule REQUEST_HEADERS:User-Agent \"@pm grabber masscan\" \"id:9131,phase:1,t:none,log,deny,status:403\""
+                            ]
+                          }
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+    - name: coraza_ftw
+      address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 1064
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: ftw_http
+                codec_type: auto
+                http_protocol_options:
+                  accept_http_10: true
+                route_config:
+                  virtual_hosts:
+                    - name: ftw_route
+                      domains:
+                        - "*"
+                      routes:
+                        - match:
+                            prefix: "/"
+                          route:
+                            cluster: albedo
+                http_filters:
+                  - name: coraza-waf
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.dynamic_modules.v3.DynamicModuleFilter
+                      dynamic_module_config:
+                        name: composer
+                        do_not_close: true
+                      filter_name: coraza-waf
+                      filter_config:
+                        "@type": type.googleapis.com/google.protobuf.StringValue
+                        value: |
+                          {
+                            "directives": [
+                              "Include @recommended.conf",
+                              "Include @ftw.conf",
+                              "Include @crs-setup.conf",
+                              "Include @owasp_crs/*.conf"
+                            ]
+                          }
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
+  clusters:
+    - name: smoke_upstream
+      connect_timeout: 5s
+      type: strict_dns
+      lb_policy: round_robin
+      load_assignment:
+        cluster_name: smoke_upstream
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: 127.0.0.1
+                      port_value: 1234
+    - name: albedo
+      connect_timeout: 5s
+      type: strict_dns
+      lb_policy: round_robin
+      load_assignment:
+        cluster_name: albedo
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: 127.0.0.1
+                      port_value: 1235
