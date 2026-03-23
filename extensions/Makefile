@@ -37,6 +37,14 @@ HUB    := $(or $(BOE_REGISTRY),$(OCI_REGISTRY)/built-on-envoy)
 IMAGE  := $(HUB)/extension-$(NAME):$(VERSION)$(IMAGE_NONCE)
 SOURCE := https://$(subst ghcr.io,github.com,$(HUB))
 
+# If the version of the image is a development one (ends with '-dev'), we will
+# add an additional 'dev' tag (without the version number) to make it easier to reference the
+# last development version.
+# We still keep the versioned development tag because the `boe run` command relies on those when
+# using the `--dev` flag.
+DEV_LATEST := $(firstword $(subst :, ,$(IMAGE))):dev
+DEV_TAG    := $(if $(filter %-dev,$(VERSION)),--tag $(DEV_LATEST))
+
 # Base OCI image annotations (shared by all image types)
 BASE_OCI_ANNOTATIONS := \
 	--annotation "org.opencontainers.image.source=$(SOURCE)" \
@@ -77,7 +85,7 @@ push_lua: create_builder
 		--provenance=false \
 		$(BASE_OCI_ANNOTATIONS) \
 		$(SOURCE_ARTIFACT) \
-		--tag $(IMAGE) \
+		--tag $(IMAGE) $(DEV_TAG) \
 		--file Dockerfile.code ./$(EXTENSION_PATH)
 
 PLATFORMS ?= linux/arm64,linux/amd64
@@ -90,7 +98,7 @@ push_rust: create_builder
 		--output type=registry,oci-mediatypes=true$(registry_output) \
 		--provenance=false \
 		$(MULTI_OCI_ANNOTATIONS) \
-		--tag $(IMAGE) \
+		--tag $(IMAGE) $(DEV_TAG) \
 		--file Dockerfile.rust ./$(EXTENSION_PATH)
 
 CODE_IMAGE := $(HUB)/extension-src-$(NAME):$(VERSION)$(IMAGE_NONCE)
