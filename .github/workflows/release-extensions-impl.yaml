@@ -18,16 +18,6 @@ on:
             [{"name":"composer","type":"go","path":"composer"}]
         required: true
         type: string
-      composer_image_name_suffix:
-        description: Optional suffix appended to the Composer image name.
-        required: false
-        default: ''
-        type: string
-      composer_image_tag:
-        description: Optional override for the Composer image tag.
-        required: false
-        default: ''
-        type: string
 
 env:
   OCI_REGISTRY: ghcr.io/tetratelabs
@@ -72,29 +62,15 @@ jobs:
 
       - name: Release Composer
         if: matrix.extension.name == 'composer'
-        env:
-          IMAGE_NAME_SUFFIX: ${{ inputs.composer_image_name_suffix }}
-          IMAGE_TAG: ${{ inputs.composer_image_tag }}
         run: |
           echo "Releasing Composer extension"
-          image_tag="${IMAGE_TAG}"
-          if [ -z "${image_tag}" ]; then
-            image_tag=$(grep '^version:' extensions/composer/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-          fi
-          make -C extensions/composer push_image IMAGE_NAME_SUFFIX="${IMAGE_NAME_SUFFIX}" IMAGE_TAG="${image_tag}"
+          make -C extensions/composer push_image
 
       - name: Release Composer Lite
         if: matrix.extension.name == 'composer'
         env:
           COMPOSER_LITE: true
-          IMAGE_NAME_SUFFIX: ${{ inputs.composer_image_name_suffix }}
-          IMAGE_TAG: ${{ inputs.composer_image_tag }}
-        run: |
-          image_tag="${IMAGE_TAG}"
-          if [ -z "${image_tag}" ]; then
-            image_tag=$(grep '^version:' extensions/composer/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-          fi
-          make -C extensions/composer push_image IMAGE_NAME_SUFFIX="${IMAGE_NAME_SUFFIX}" IMAGE_TAG="${image_tag}"
+        run: make -C extensions/composer push_image
 
       - name: Push Composer source code
         if: matrix.extension.name == 'composer'
