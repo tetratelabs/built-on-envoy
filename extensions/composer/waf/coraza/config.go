@@ -79,6 +79,18 @@ func NewWAFFromDirectives(directives string, l *zap.Logger) (coraza.WAF, error) 
 func newSlogError(l *zap.Logger) func(err ctypes.MatchedRule) {
 	return func(err ctypes.MatchedRule) {
 		msg := err.ErrorLog()
-		l.Error(msg, zap.String("severity", err.Rule().Severity().String()))
+		severity := strings.ToLower(err.Rule().Severity().String())
+		severityField := zap.String("severity", severity)
+
+		switch severity {
+		case "emergency", "alert", "critical", "error":
+			l.Error(msg, severityField)
+		case "warning":
+			l.Warn(msg, severityField)
+		case "notice", "info":
+			l.Info(msg, severityField)
+		default:
+			l.Debug(msg, severityField)
+		}
 	}
 }
