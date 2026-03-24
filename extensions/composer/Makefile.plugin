@@ -42,6 +42,14 @@ HUB    := $(OCI_REGISTRY)/built-on-envoy
 IMAGE  := $(HUB)/extension-$(NAME):$(VERSION)$(IMAGE_NONCE)
 SOURCE := https://$(subst ghcr.io,github.com,$(HUB))
 
+# If the version of the image is a development one (ends with '-dev'), we will
+# add an additional 'dev' tag (without the version number) to make it easier to reference the
+# last development version.
+# We still keep the versioned development tag because the `boe run` command relies on those when
+# using the `--dev` flag.
+DEV_LATEST := $(firstword $(subst :, ,$(IMAGE))):dev
+DEV_TAG    := $(if $(filter %-dev,$(VERSION)),--tag $(DEV_LATEST))
+
 ARCH := $(shell uname -m)
 ifeq ($(ARCH),x86_64)
   ARCH := amd64
@@ -75,7 +83,7 @@ MULTI_OCI_ANNOTATIONS := \
 # Shared variables used by both this Makefile and the main Makefile.
 include Makefile.common
 
-PLUGIN_BUILD_TAG := -tags $(BUILD_TAGS)
+PLUGIN_BUILD_TAG := $(if $(BUILD_TAGS),-tags $(BUILD_TAGS))
 
 BUILDER_NAME := boe-builder
 .PHONY: create_builder
@@ -124,5 +132,5 @@ push_image: create_builder ## Build and push docker image for the plugin for cro
 		--build-arg EXTENSION_PATH=$(EXTENSION_PATH) \
 		--build-arg BUILD_TAG="$(PLUGIN_BUILD_TAG)" \
 		$(MULTI_OCI_ANNOTATIONS) \
-		--tag $(IMAGE) \
+		--tag $(IMAGE) $(DEV_TAG) \
 		-f ./Dockerfile.plugin .
