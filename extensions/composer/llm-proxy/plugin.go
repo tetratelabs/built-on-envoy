@@ -21,6 +21,7 @@ import (
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/utility"
+
 	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 

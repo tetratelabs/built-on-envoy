@@ -57,7 +57,7 @@ longDescription: |
         }
       },
       "source": {
-        "address": "10.0.0.1:5000",       // Client address (ip:port)
+        "address": "10.0.0.1:5000",        // Client address (ip:port)
         "certificate": {                   // Peer certificate (mTLS connections)
           "uri_san":       "spiffe://cluster.local/ns/default/sa/client",
           "dns_san":       "client.default.svc.cluster.local",
@@ -69,13 +69,19 @@ longDescription: |
         "address": "10.0.0.2:443"         // Server address (ip:port)
       },
       "connection": {
-        "mtls:": true,                    // Whether the connection is mTLS
+        "mtls": true,                     // Whether the connection is mTLS
         "tls_version": "TLSv1.3"          // TLS version
       }
     },
+    "dynamic_metadata": {                 // Dynamic metadata from other filters
+      "envoy.filters.http.jwt_authn": {
+        "sub": "user-123",
+        "iss": "https://issuer.example.com"
+      },
+    },
     "parsed_path":  ["api", "v1", "resource"],  // Path segments
     "parsed_query": {"key": ["value"]},         // Parsed query parameters
-    "body":  {"field": "value"}          // Parsed JSON body (only when with_body: true)
+    "body":  {"field": "value"}                 // Parsed JSON body (only when with_body: true)
   }
   ```
 

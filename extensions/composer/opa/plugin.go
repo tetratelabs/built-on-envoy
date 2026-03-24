@@ -231,6 +231,7 @@ func (o *opaHttpFilter) buildInput(headers shared.HeaderMap, parsedBody any) map
 		host   = headers.GetOne(":authority").ToUnsafeString()
 		scheme = cmp.Or(headers.GetOne(":scheme").ToUnsafeString(), "http")
 	)
+
 	parsedPath, parsedQuery := parsePath(path)
 	protocolAttr, _ := o.handle.GetAttributeString(shared.AttributeIDRequestProtocol)
 	protocol := cmp.Or(protocolAttr.ToUnsafeString(), "HTTP/1.1")
@@ -286,13 +287,38 @@ func (o *opaHttpFilter) buildInput(headers shared.HeaderMap, parsedBody any) map
 				"tls_version": tlsVersion.ToUnsafeString(),
 			},
 		},
-		"parsed_path":  parsedPath,
-		"parsed_query": parsedQuery,
+		"dynamic_metadata": dynamicMetadataMap(o.handle),
+		"parsed_path":      parsedPath,
+		"parsed_query":     parsedQuery,
 	}
 	if parsedBody != nil {
 		result["body"] = parsedBody
 	}
 	return result
+}
+
+// dynamicMetadataMap extracts dynamic metadata from the filter handle and returns it as a
+// nested map keyed by namespace and then by key.
+func dynamicMetadataMap(handle shared.HttpFilterHandle) map[string]any {
+	dm := make(map[string]any)
+	namespaces := handle.GetMetadataNamespaces(shared.MetadataSourceTypeDynamic)
+	for _, ns := range namespaces {
+		nsStr := ns.ToUnsafeString()
+		nsMap := make(map[string]any)
+		keys := handle.GetMetadataKeys(shared.MetadataSourceTypeDynamic, nsStr)
+		for _, key := range keys {
+			keyStr := key.ToUnsafeString()
+			if value, ok := handle.GetMetadataString(shared.MetadataSourceTypeDynamic, nsStr, keyStr); ok {
+				nsMap[keyStr] = value.ToUnsafeString()
+			} else if numValue, ok := handle.GetMetadataNumber(shared.MetadataSourceTypeDynamic, nsStr, keyStr); ok {
+				nsMap[keyStr] = numValue
+			}
+		}
+		if len(nsMap) > 0 {
+			dm[nsStr] = nsMap
+		}
+	}
+	return dm
 }
 
 // parsePath splits the path into segments and parses query parameters into a map.
