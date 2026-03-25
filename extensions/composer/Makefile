@@ -11,7 +11,7 @@ ENVOY_VERSION ?= distroless-dev
 ENVOY_IMAGE ?= docker.io/envoyproxy/envoy:$(ENVOY_VERSION)
 COMPOSER_LIB_PATH ?= $(CURDIR)/libcomposer.so
 CRS_REPO ?= https://github.com/coreruleset/coreruleset.git
-WAF_CRS_VERSION ?= $(shell sed -n 's/^# OWASP CRS ver\.//p' $(CURDIR)/waf/coraza/rules/crs-setup.conf | head -n 1)
+WAF_CRS_VERSION ?= $(shell sed -n 's/^\# OWASP CRS ver\.//p' $(CURDIR)/waf/coraza/rules/crs-setup.conf | head -n 1)
 CRS_REF ?= v$(WAF_CRS_VERSION)
 CRS_DIR ?= $(CURDIR)/integration/coreruleset/tests/regression/tests
 
@@ -35,35 +35,6 @@ lint:
 test:
 	@echo "Running tests..."
 	@go test $(GO_TEST_ARGS) ./...
-
-.PHONY: integration-setup
-integration-setup:
-	@if [ -z "$(WAF_CRS_VERSION)" ]; then \
-		echo "Could not determine WAF CRS version from waf/coraza/rules/crs-setup.conf"; \
-		exit 1; \
-	fi
-	@if [ ! -d "$(CURDIR)/integration/coreruleset/.git" ]; then \
-		echo "Cloning Core Rule Set $(CRS_REF) into integration/coreruleset"; \
-		git clone --depth 1 --branch $(CRS_REF) --single-branch $(CRS_REPO) $(CURDIR)/integration/coreruleset; \
-	else \
-		echo "Syncing integration/coreruleset to $(CRS_REF)"; \
-		git -C $(CURDIR)/integration/coreruleset fetch --depth 1 origin refs/tags/$(CRS_REF):refs/tags/$(CRS_REF); \
-		git -C $(CURDIR)/integration/coreruleset checkout --detach tags/$(CRS_REF); \
-	fi
-	@if [ ! -d "$(CRS_DIR)" ]; then \
-		echo "Core Rule Set checkout exists but $(CRS_DIR) is missing at $(CRS_REF)"; \
-		exit 1; \
-	fi
-	@echo "Ensuring integration tools are available..."
-	@go tool albedo --help >/dev/null
-	@go tool go-ftw help >/dev/null
-
-.PHONY: test-integration
-test-integration: build integration-setup
-	@echo "Running WAF integration tests..."
-	@COMPOSER_LIB_PATH=$(COMPOSER_LIB_PATH) CRS_DIR=$(CRS_DIR) ENVOY_VERSION=$(ENVOY_VERSION) \
-		ENVOY_IMAGE=$(ENVOY_IMAGE) DOCKER_PLATFORM=$(FDOCKER_PLATFORM) FTW_INCLUDE=$(FTW_INCLUDE) \
-		go test -tags integration -count=1 -timeout 30m $(GO_TEST_ARGS) ./integration
 
 .PHONY: test-coverage
 test-coverage:
@@ -90,36 +61,29 @@ endif
 BOE_DATA_HOME ?= $(HOME)/.local/share/boe
 
 # Labels for this plugin image.
-NAME             := $(shell grep "^name:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-VERSION          := $(shell grep "^version:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-DESCRIPTION      := $(shell grep "^description:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-TIMESTAMP        := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
-COMMIT_SHA       := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
-AUTHOR           := $(shell grep "^author:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-COMPOSER_VERSION := $(VERSION)
-LICENSE          := Apache-2.0
+NAME              := $(shell grep "^name:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+VERSION           := $(shell grep "^version:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+DESCRIPTION       := $(shell grep "^description:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+TIMESTAMP         := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+COMMIT_SHA        := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
+AUTHOR            := $(shell grep "^author:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+COMPOSER_VERSION  := $(VERSION)
+LICENSE           := Apache-2.0
+IMAGE_TAG         ?= $(VERSION)
+IMAGE_NAME_SUFFIX ?=
 
-HUB        := $(or $(BOE_REGISTRY),$(OCI_REGISTRY)/built-on-envoy)
-IMAGE      := $(HUB)/$(NAME):$(VERSION)$(IMAGE_NONCE)
-SOURCE     := https://$(subst ghcr.io,github.com,$(HUB))
+HUB    := $(or $(BOE_REGISTRY),$(OCI_REGISTRY)/built-on-envoy)
+IMAGE_NAME := $(NAME)$(IMAGE_NAME_SUFFIX)
+IMAGE  := $(HUB)/$(IMAGE_NAME):$(IMAGE_TAG)$(IMAGE_NONCE)
+SOURCE := https://$(subst ghcr.io,github.com,$(HUB))
 
-# Shared variables used by both this Makefile and the main Makefile.
-include Makefile.common
 # Option to build lite version of the loader.
 ifeq ($(strip $(COMPOSER_LITE)),true)
 	DESCRIPTION := Go plugin loader.
-	IMAGE := $(HUB)/$(NAME)-lite:$(VERSION)$(IMAGE_NONCE)
-	BUILD_TAGS := $(if $(BUILD_TAGS),$(BUILD_TAGS)$(comma))lite
+	COMPOSER_BUILD_TAG := -tags lite
+	IMAGE_NAME := $(NAME)-lite$(IMAGE_NAME_SUFFIX)
+	IMAGE := $(HUB)/$(IMAGE_NAME):$(IMAGE_TAG)$(IMAGE_NONCE)
 endif
-COMPOSER_BUILD_TAG := $(if $(BUILD_TAGS),-tags $(BUILD_TAGS))
-
-# If the version of the image is a development one (ends with '-dev'), we will
-# add an additional 'dev' tag (without the version number) to make it easier to reference the
-# last development version.
-# We still keep the versioned development tag because the `boe run` command relies on those when
-# using the `--dev` flag.
-DEV_LATEST := $(firstword $(subst :, ,$(IMAGE))):dev
-DEV_TAG    := $(if $(filter %-dev,$(VERSION)),--tag $(DEV_LATEST))
 
 OS := linux
 ARCH := $(shell uname -m)
@@ -128,37 +92,6 @@ ifeq ($(ARCH),x86_64)
 else ifeq ($(ARCH),aarch64)
   ARCH := arm64
 endif
-
-# Some IDEs like Goland place `.go` files in the `.idea` directory when using code templates. Using a
-# git command to find the files ensures that only relevant files are formatted and that git-ignored
-# files do not get in the way
-GO_FILES=$(shell git ls-files --cached --others --exclude-standard | grep '\.go$$')
-.PHONY: format
-format:
-	@echo "format => *.go"
-	@$(GO_TOOL) golangci-lint fmt $(GO_FILES)
-	@echo "licenses => **"
-	@$(GO_TOOL) license-eye -c $(ROOT)/.licenserc.yaml header fix
-
-.PHONY: lint
-lint:
-	@echo "golangci-lint => ./..."
-	@$(GO_TOOL) golangci-lint run
-
-.PHONY: test
-test:
-	@echo "Running tests..."
-	@go test $(COMPOSER_BUILD_TAG) $(GO_TEST_ARGS) ./...
-
-.PHONY: test-coverage
-test-coverage:
-	@mkdir -p ./out
-	@$(MAKE) test GO_TEST_ARGS="-coverprofile=./out/go-test-coverage.out \
-		-covermode=atomic \
-		-coverpkg=github.com/tetratelabs/built-on-envoy/extensions/composer/... \
-		-count=1 \
-		$(GO_TEST_ARGS)"
-	@$(GO_TOOL) go-test-coverage --config=.testcoverage.yml
 
 # Base OCI image annotations (shared by all image types)
 BASE_OCI_ANNOTATIONS := \
@@ -227,7 +160,7 @@ push_image: create_builder  ## Build and push docker image for the plugin for cr
 		--provenance=false \
 		$(MULTI_OCI_ANNOTATIONS) \
 		--build-arg BUILD_TAG="$(COMPOSER_BUILD_TAG)" \
-		--tag $(IMAGE) $(DEV_TAG) \
+		--tag $(IMAGE) \
 		-f ./Dockerfile .
 
 # Package source code into an image and push it to the registry.
@@ -263,3 +196,32 @@ install_plugins: ## Install all plugins locally
 	@for dir in $(PLUGIN_CLEAN_DIRS); do \
 		$(MAKE) -f Makefile.plugin install EXTENSION_PATH=$$dir; \
 	done
+
+.PHONY: integration-setup
+integration-setup:
+	@if [ -z "$(WAF_CRS_VERSION)" ]; then \
+		echo "Could not determine WAF CRS version from waf/coraza/rules/crs-setup.conf"; \
+		exit 1; \
+	fi
+	@if [ ! -d "$(CURDIR)/integration/coreruleset/.git" ]; then \
+		echo "Cloning Core Rule Set $(CRS_REF) into integration/coreruleset"; \
+		git clone --depth 1 --branch $(CRS_REF) --single-branch $(CRS_REPO) $(CURDIR)/integration/coreruleset; \
+	else \
+		echo "Syncing integration/coreruleset to $(CRS_REF)"; \
+		git -C $(CURDIR)/integration/coreruleset fetch --depth 1 origin refs/tags/$(CRS_REF):refs/tags/$(CRS_REF); \
+		git -C $(CURDIR)/integration/coreruleset checkout --detach tags/$(CRS_REF); \
+	fi
+	@if [ ! -d "$(CRS_DIR)" ]; then \
+		echo "Core Rule Set checkout exists but $(CRS_DIR) is missing at $(CRS_REF)"; \
+		exit 1; \
+	fi
+	@echo "Ensuring integration tools are available..."
+	@go tool albedo --help >/dev/null
+	@go tool go-ftw help >/dev/null
+
+.PHONY: test-integration
+test-integration: build integration-setup
+	@echo "Running WAF integration tests..."
+	@COMPOSER_LIB_PATH=$(COMPOSER_LIB_PATH) CRS_DIR=$(CRS_DIR) ENVOY_VERSION=$(ENVOY_VERSION) \
+		ENVOY_IMAGE=$(ENVOY_IMAGE) DOCKER_PLATFORM=$(FDOCKER_PLATFORM) FTW_INCLUDE=$(FTW_INCLUDE) \
+		go test -tags integration -count=1 -timeout 30m $(GO_TEST_ARGS) ./integration

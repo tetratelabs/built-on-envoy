@@ -47,13 +47,16 @@ func TestIntegration(t *testing.T) {
 	requireEnvoyReady(t)
 
 	t.Run("smoke", func(t *testing.T) {
+		t.Log("waf smoke test")
 		t.Run("allow_request", func(t *testing.T) {
+			t.Log("test allow request")
 			requireStatus(t, http.MethodGet, "http://localhost:1063/status/200", "", map[string]string{
 				"coraza-e2e": "ok",
 			}, http.StatusOK)
 		})
 
 		t.Run("block_request_headers", func(t *testing.T) {
+			t.Log("test block request headers")
 			requireStatus(t, http.MethodGet, "http://localhost:1063/status/200", "", nil, 424)
 			requireStatus(t, http.MethodGet, "http://localhost:1063/admin", "", map[string]string{
 				"coraza-e2e": "ok",
@@ -61,6 +64,7 @@ func TestIntegration(t *testing.T) {
 		})
 
 		t.Run("block_request_body", func(t *testing.T) {
+			t.Log("test block request body")
 			requireStatus(t, http.MethodPost, "http://localhost:1063/anything", "payload=maliciouspayload", map[string]string{
 				"content-type": "application/x-www-form-urlencoded",
 				"coraza-e2e":   "ok",
@@ -68,12 +72,14 @@ func TestIntegration(t *testing.T) {
 		})
 
 		t.Run("block_response_headers", func(t *testing.T) {
+			t.Log("test block response headers")
 			requireStatus(t, http.MethodGet, "http://localhost:1063/response-header-leak", "", map[string]string{
 				"coraza-e2e": "ok",
 			}, http.StatusForbidden)
 		})
 
 		t.Run("block_response_body", func(t *testing.T) {
+			t.Log("test block response body")
 			requireStatus(t, http.MethodGet, "http://localhost:1063/response-body-leak", "", map[string]string{
 				"coraza-e2e": "ok",
 			}, http.StatusForbidden)
@@ -81,6 +87,7 @@ func TestIntegration(t *testing.T) {
 	})
 
 	t.Run("ftw", func(t *testing.T) {
+		t.Log("test waf aginst the OWASP CRS using ftw")
 		crsDir := os.Getenv("CRS_DIR")
 		if crsDir == "" {
 			crsDir = defaultCRSDir
