@@ -61,8 +61,8 @@ func TestIntegration(t *testing.T) {
 		})
 
 		t.Run("block_request_body", func(t *testing.T) {
-			requireStatus(t, http.MethodPost, "http://localhost:1063/anything", "maliciouspayload", map[string]string{
-				"content-type": "text/plain",
+			requireStatus(t, http.MethodPost, "http://localhost:1063/anything", "payload=maliciouspayload", map[string]string{
+				"content-type": "application/x-www-form-urlencoded",
 				"coraza-e2e":   "ok",
 			}, http.StatusForbidden)
 		})
@@ -238,7 +238,7 @@ func requireRunEnvoy(t *testing.T, integrationDir, composerLibPath string) {
 		// #nosec G204
 		cmd := exec.Command("docker", dockerArgs...)
 		cmd.Stdout = logFile
-		cmd.Stderr = os.Stderr
+		cmd.Stderr = logFile
 		require.NoError(t, cmd.Start())
 		t.Cleanup(func() {
 			_ = cmd.Process.Signal(os.Interrupt)
@@ -264,7 +264,7 @@ func requireRunEnvoy(t *testing.T, integrationDir, composerLibPath string) {
 		"--concurrency", strconv.Itoa(max(runtime.NumCPU(), 2)),
 	)
 	cmd.Stdout = logFile
-	cmd.Stderr = os.Stderr
+	cmd.Stderr = logFile
 	cmd.Env = append(os.Environ(), "ENVOY_DYNAMIC_MODULES_SEARCH_PATH="+composerDir)
 	require.NoError(t, cmd.Start())
 	t.Cleanup(func() {
