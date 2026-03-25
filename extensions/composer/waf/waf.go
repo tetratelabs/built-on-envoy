@@ -181,9 +181,18 @@ func (p *wafPlugin) OnRequestHeaders(headers shared.HeaderMap, endOfStream bool)
 		return shared.HeadersStatusStop
 	}
 
-	// If endOfStream is true or it's an upgrade request, continue the filter chain
-	// because we won't buffer the body anyway.
-	if endOfStream || p.isUpgrade {
+	// If endOfStream is true, there will be no body callback.
+	// We still need to call handleRequestBody even when no request body is expected.
+	// This allows rules in the request body phase to run, even if there is no actual body to process.
+	if endOfStream {
+		if !p.handleRequestBody() {
+			return shared.HeadersStatusStop
+		}
+		return shared.HeadersStatusContinue
+	}
+
+	// For upgrades, continue the filter chain because we won't buffer the body.
+	if p.isUpgrade {
 		return shared.HeadersStatusContinue
 	}
 	return shared.HeadersStatusStop
