@@ -232,4 +232,4 @@ test-integration: build integration-setup
 	@echo "Running WAF integration tests..."
 	@COMPOSER_LIB_PATH=$(COMPOSER_LIB_PATH) CRS_DIR=$(CRS_DIR) ENVOY_VERSION=$(ENVOY_VERSION) \
 		ENVOY_IMAGE=$(ENVOY_IMAGE) DOCKER_PLATFORM=$(FDOCKER_PLATFORM) FTW_INCLUDE=$(FTW_INCLUDE) \
-		go test -tags integration -count=1 -timeout 30m $(GO_TEST_ARGS) ./integration
+		go test -tags integration -count=1 -timeout 30m -v $(GO_TEST_ARGS) ./integration
