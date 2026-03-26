@@ -7,13 +7,60 @@ ROOT    := $(shell git rev-parse --show-toplevel)
 GO_TOOL := go tool -modfile=$(ROOT)/cli/tools/go.mod
 
 GO_TEST_ARGS ?=
-ENVOY_VERSION ?= distroless-dev
-ENVOY_IMAGE ?= docker.io/envoyproxy/envoy:$(ENVOY_VERSION)
-COMPOSER_LIB_PATH ?= $(CURDIR)/libcomposer.so
-CRS_REPO ?= https://github.com/coreruleset/coreruleset.git
-WAF_CRS_VERSION ?= $(shell sed -n 's/^\# OWASP CRS ver\.//p' $(CURDIR)/waf/coraza/rules/crs-setup.conf | head -n 1)
-CRS_REF ?= v$(WAF_CRS_VERSION)
-CRS_DIR ?= $(CURDIR)/integration/coreruleset/tests/regression/tests
+
+# This IMAGE_NONCE will be appended to the final image tag if set.
+# It is intended to be used in CI environments to ensure that each image
+# built gets a unique tag.
+IMAGE_NONCE  ?=
+OCI_REGISTRY ?= ghcr.io/tetratelabs
+
+registry_output :=
+ifeq ($(BOE_REGISTRY_INSECURE),true)
+  registry_output := ",registry.insecure=true"
+endif
+
+# Default data home layout for boe
+BOE_DATA_HOME ?= $(HOME)/.local/share/boe
+
+# Labels for this plugin image.
+NAME             := $(shell grep "^name:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+VERSION          := $(shell grep "^version:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+DESCRIPTION      := $(shell grep "^description:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+TIMESTAMP        := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+COMMIT_SHA       := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
+AUTHOR           := $(shell grep "^author:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+COMPOSER_VERSION := $(VERSION)
+LICENSE          := Apache-2.0
+
+HUB        := $(or $(BOE_REGISTRY),$(OCI_REGISTRY)/built-on-envoy)
+IMAGE      := $(HUB)/$(NAME):$(VERSION)$(IMAGE_NONCE)
+SOURCE     := https://$(subst ghcr.io,github.com,$(HUB))
+
+# Shared variables used by both this Makefile and the main Makefile.
+include Makefile.common
+# Option to build lite version of the loader.
+ifeq ($(strip $(COMPOSER_LITE)),true)
+	DESCRIPTION := Go plugin loader.
+	IMAGE := $(HUB)/$(NAME)-lite:$(VERSION)$(IMAGE_NONCE)
+	BUILD_TAGS := $(if $(BUILD_TAGS),$(BUILD_TAGS)$(comma))lite
+endif
+COMPOSER_BUILD_TAG := $(if $(BUILD_TAGS),-tags $(BUILD_TAGS))
+
+# If the version of the image is a development one (ends with '-dev'), we will
+# add an additional 'dev' tag (without the version number) to make it easier to reference the
+# last development version.
+# We still keep the versioned development tag because the `boe run` command relies on those when
+# using the `--dev` flag.
+DEV_LATEST := $(firstword $(subst :, ,$(IMAGE))):dev
+DEV_TAG    := $(if $(filter %-dev,$(VERSION)),--tag $(DEV_LATEST))
+
+OS := linux
+ARCH := $(shell uname -m)
+ifeq ($(ARCH),x86_64)
+  ARCH := amd64
+else ifeq ($(ARCH),aarch64)
+  ARCH := arm64
+endif
 
 # Some IDEs like Goland place `.go` files in the `.idea` directory when using code templates. Using a
 # git command to find the files ensures that only relevant files are formatted and that git-ignored
@@ -34,7 +81,7 @@ lint:
 .PHONY: test
 test:
 	@echo "Running tests..."
-	@go test $(GO_TEST_ARGS) ./...
+	@go test $(COMPOSER_BUILD_TAG) $(GO_TEST_ARGS) ./...
 
 .PHONY: test-coverage
 test-coverage:
@@ -45,53 +92,6 @@ test-coverage:
 		-count=1 \
 		$(GO_TEST_ARGS)"
 	@$(GO_TOOL) go-test-coverage --config=.testcoverage.yml
-
-# This IMAGE_NONCE will be appended to the final image tag if set.
-# It is intended to be used in CI environments to ensure that each image
-# built gets a unique tag.
-IMAGE_NONCE  ?=
-OCI_REGISTRY ?= ghcr.io/tetratelabs
-
-registry_output :=
-ifeq ($(BOE_REGISTRY_INSECURE),true)
-  registry_output := ",registry.insecure=true"
-endif
-
-# Default data home layout for boe
-BOE_DATA_HOME ?= $(HOME)/.local/share/boe
-
-# Labels for this plugin image.
-NAME              := $(shell grep "^name:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-VERSION           := $(shell grep "^version:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-DESCRIPTION       := $(shell grep "^description:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-TIMESTAMP         := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
-COMMIT_SHA        := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
-AUTHOR            := $(shell grep "^author:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-COMPOSER_VERSION  := $(VERSION)
-LICENSE           := Apache-2.0
-IMAGE_TAG         ?= $(VERSION)
-IMAGE_NAME_SUFFIX ?=
-
-HUB    := $(or $(BOE_REGISTRY),$(OCI_REGISTRY)/built-on-envoy)
-IMAGE_NAME := $(NAME)$(IMAGE_NAME_SUFFIX)
-IMAGE  := $(HUB)/$(IMAGE_NAME):$(IMAGE_TAG)$(IMAGE_NONCE)
-SOURCE := https://$(subst ghcr.io,github.com,$(HUB))
-
-# Option to build lite version of the loader.
-ifeq ($(strip $(COMPOSER_LITE)),true)
-	DESCRIPTION := Go plugin loader.
-	COMPOSER_BUILD_TAG := -tags lite
-	IMAGE_NAME := $(NAME)-lite$(IMAGE_NAME_SUFFIX)
-	IMAGE := $(HUB)/$(IMAGE_NAME):$(IMAGE_TAG)$(IMAGE_NONCE)
-endif
-
-OS := linux
-ARCH := $(shell uname -m)
-ifeq ($(ARCH),x86_64)
-  ARCH := amd64
-else ifeq ($(ARCH),aarch64)
-  ARCH := arm64
-endif
 
 # Base OCI image annotations (shared by all image types)
 BASE_OCI_ANNOTATIONS := \
@@ -160,7 +160,7 @@ push_image: create_builder  ## Build and push docker image for the plugin for cr
 		--provenance=false \
 		$(MULTI_OCI_ANNOTATIONS) \
 		--build-arg BUILD_TAG="$(COMPOSER_BUILD_TAG)" \
-		--tag $(IMAGE) \
+		--tag $(IMAGE) $(DEV_TAG) \
 		-f ./Dockerfile .
 
 # Package source code into an image and push it to the registry.
@@ -196,6 +196,14 @@ install_plugins: ## Install all plugins locally
 	@for dir in $(PLUGIN_CLEAN_DIRS); do \
 		$(MAKE) -f Makefile.plugin install EXTENSION_PATH=$$dir; \
 	done
+
+ENVOY_VERSION ?= distroless-dev
+ENVOY_IMAGE ?= docker.io/envoyproxy/envoy:$(ENVOY_VERSION)
+COMPOSER_LIB_PATH ?= $(CURDIR)/libcomposer.so
+CRS_REPO ?= https://github.com/coreruleset/coreruleset.git
+WAF_CRS_VERSION ?= $(shell sed -n 's/^\# OWASP CRS ver\.//p' $(CURDIR)/waf/coraza/rules/crs-setup.conf | head -n 1)
+CRS_REF ?= v$(WAF_CRS_VERSION)
+CRS_DIR ?= $(CURDIR)/integration/coreruleset/tests/regression/tests
 
 .PHONY: integration-setup
 integration-setup:
