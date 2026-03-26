@@ -27,6 +27,7 @@ import (
 
 const (
 	envoyLogFile = "envoy.log"
+	albedoLogFile = "albedo.log"
 
 	envoyAdminPort = 9901
 	smokePort      = 1063
@@ -42,7 +43,7 @@ func TestIntegration(t *testing.T) {
 	integrationDir := requireIntegrationDir(t)
 
 	startSmokeUpstream(t)
-	startAlbedo(t)
+	startAlbedo(t, integrationDir)
 	requireRunEnvoy(t, integrationDir, composerLibPath)
 	requireEnvoyReady(t)
 
@@ -183,13 +184,20 @@ func startSmokeUpstream(t *testing.T) {
 	})
 }
 
-func startAlbedo(t *testing.T) {
+func startAlbedo(t *testing.T, integrationDir string) {
 	t.Helper()
+
+	logPath := filepath.Join(integrationDir, albedoLogFile)
+	_ = os.Remove(logPath)
+
+	logFile, err := os.Create(logPath)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = logFile.Close() })
 
 	// #nosec G204
 	cmd := exec.Command("go", "tool", "albedo", "--port", strconv.Itoa(albedoPort))
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
 	require.NoError(t, cmd.Start())
 
 	// `go tool albedo` may take time on first run (toolchain/module setup). Make

@@ -39,6 +39,7 @@ testoverride:
     "932239-29": "Referer header is sanitized by Envoy and removed from the request"
     "941101-1": "Referer header is sanitized by Envoy and removed from the request"
     "941110-4": "Referer header is sanitized by Envoy and removed from the request"
+    "941120-50": "Referer header is sanitized by Envoy and removed from the request"
     "942280-3": "Referer header is sanitized by Envoy and removed from the request"
     "949110-4": "Related to 920100. Invalid HTTP method. Rejected by Envoy with Error 400"
 
@@ -54,11 +55,13 @@ testoverride:
     # Coraza related issues
     "920171-2": "Rule 920171 not detected. GET or HEAD with body. Coraza side"
     "920171-3": "Rule 920171 not detected. GET or HEAD with body. Coraza side"
+    "920180-4": "HTTP/2 POST without Content-Length still triggers 920180 with Envoy and Coraza"
     "934120-23": "Rule 934120 partially detected. With HTTP/1.1 Envoy returns 400. With HTTP/2 enclosed alphanumerics are not detected"
     "934120-24": "Rule 934120 partially detected. With HTTP/1.1 Envoy returns 400. With HTTP/2 enclosed alphanumerics are not detected"
     "934120-25": "Rule 934120 partially detected. With HTTP/1.1 Envoy returns 400. With HTTP/2 enclosed alphanumerics are not detected"
     "934120-26": "Rule 934120 partially detected. With HTTP/1.1 Envoy returns 400. With HTTP/2 enclosed alphanumerics are not detected"
     "934120-39": "Rule 934120 partially detected. With HTTP/1.1 Envoy returns 400. With HTTP/2 enclosed alphanumerics are not detected"
+    "941120-8": "Coraza or CRS side. 51-character on* token still matches 941120"
     "930110-7": "Coraza or CRS side. See https://github.com/corazawaf/coraza/pull/1081"
     "920274-1": "Failing on Coraza upstream as well"
     "920290-4": "Failing on Coraza upstream as well"
@@ -66,6 +69,8 @@ testoverride:
     # Excluding individual failing tests probably not compatible with Envoy
     "920180-1": ""
     "920180-3": ""
+    "932237-4": ""
+    "932237-12": ""
     "941120-4": ""
     "921140-1": ""
     "921250-1": ""
