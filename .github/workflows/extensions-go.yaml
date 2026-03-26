@@ -53,7 +53,7 @@ jobs:
           TEST_BOE_REGISTRY: ghcr.io/tetratelabs/built-on-envoy
         run: go test -tags e2e -timeout 5m -v ./...
 
-  waf-integration:
+  integration:
     runs-on: ubuntu-latest
     needs: go-checks
     strategy:
