@@ -45,14 +45,30 @@ longDescription: |
 
   ## Mode
 
-  The optional `mode` setting controls which HTTP phases the WAF evaluates:
+  The optional `mode` setting controls which parts of the HTTP exchange are evaluated by the WAF.
+  Use the narrowest mode that matches your policy to avoid unnecessary processing.
 
-  - `REQUEST_ONLY`  (default): Inspect request only. Recommended when response inspection is not needed for better performance.
-  - `RESPONSE_ONLY`: Inspect response only.
-  - `FULL`: Inspect both request and response phases.
+  - `REQUEST_ONLY` (default): Inspect request headers, body, and trailers only. This is the best choice for
+    typical OWASP CRS deployments that focus on inbound attack detection.
+  - `RESPONSE_ONLY`: Inspect response headers, body, and trailers only. Use this when you only need
+    outbound inspection, such as detecting sensitive data in responses.
+  - `FULL`: Inspect both request and response phases. Use this when your rules need visibility into both
+    directions of traffic.
 
-  Note: `mode` is independent of the WAF directives. For example, even when `mode` is set to `FULL`,
-  response body inspection is only enabled if directives such as `SecResponseBodyAccess On` are configured.
+  ```json
+  {
+    "mode": "FULL",
+    "directives": [
+      "Include @recommended.conf",
+      "Include @crs-setup.conf",
+      "Include @owasp_crs/*.conf"
+    ]
+  }
+  ```
+
+  Note: `mode` only decides which request and response phases are passed to Coraza. It does not enable body access
+  by itself. For example, `FULL` allows response-phase evaluation, but response body inspection still requires
+  directives such as `SecResponseBodyAccess On`.
 
   ## Metadata
 
