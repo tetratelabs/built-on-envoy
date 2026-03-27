@@ -30,7 +30,7 @@ longDescription: |
   The WAF comes with support for OWASP CRS, formerly known as ModSecurity Core Rule Set (CRS), as well as
   some recommended configurations and allows custom rule configuration for specific security requirements.
   To use the bundled rules, you can include them with the following special inclusion directives:
-  
+
   ```json
   {
     "directives": [
@@ -42,6 +42,33 @@ longDescription: |
   ```
 
   To create custom rules, refer to the [SecLang reference docs](https://coraza.io/docs/seclang/).
+
+  ## Mode
+
+  The optional `mode` setting controls which parts of the HTTP exchange are evaluated by the WAF.
+  Use the narrowest mode that matches your policy to avoid unnecessary processing.
+
+  - `REQUEST_ONLY` (default): Inspect request headers, body, and trailers only. This is the best choice for
+    typical OWASP CRS deployments that focus on inbound attack detection.
+  - `RESPONSE_ONLY`: Inspect response headers, body, and trailers only. Use this when you only need
+    outbound inspection, such as detecting sensitive data in responses.
+  - `FULL`: Inspect both request and response phases. Use this when your rules need visibility into both
+    directions of traffic.
+
+  ```json
+  {
+    "mode": "FULL",
+    "directives": [
+      "Include @recommended.conf",
+      "Include @crs-setup.conf",
+      "Include @owasp_crs/*.conf"
+    ]
+  }
+  ```
+
+  Note: `mode` only decides which request and response phases are passed to Coraza. It does not enable body access
+  by itself. For example, `FULL` allows response-phase evaluation, but response body inspection still requires
+  directives such as `SecResponseBodyAccess On`.
 
   ## Metadata
 
