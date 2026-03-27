@@ -30,7 +30,7 @@ longDescription: |
   The WAF comes with support for OWASP CRS, formerly known as ModSecurity Core Rule Set (CRS), as well as
   some recommended configurations and allows custom rule configuration for specific security requirements.
   To use the bundled rules, you can include them with the following special inclusion directives:
-  
+
   ```json
   {
     "directives": [
@@ -42,6 +42,17 @@ longDescription: |
   ```
 
   To create custom rules, refer to the [SecLang reference docs](https://coraza.io/docs/seclang/).
+
+  ## Mode
+
+  The optional `mode` setting controls which HTTP phases the WAF evaluates:
+
+  - `REQUEST_ONLY`  (default): Inspect request only. Recommended when response inspection is not needed for better performance.
+  - `RESPONSE_ONLY`: Inspect response only.
+  - `FULL`: Inspect both request and response phases.
+
+  Note: `mode` is independent of the WAF directives. For example, even when `mode` is set to `FULL`,
+  response body inspection is only enabled if directives such as `SecResponseBodyAccess On` are configured.
 
   ## Metadata
 
