@@ -661,4 +661,64 @@ mod tests {
             abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::StopIteration
         );
     }
+
+    #[test]
+    fn test_config_schema_valid_full() {
+        let schema_str = include_str!("../config.schema.json");
+        let schema: serde_json::Value = serde_json::from_str(schema_str).unwrap();
+        let compiled = jsonschema::validator_for(&schema).unwrap();
+
+        let valid_allow: serde_json::Value = serde_json::from_str(
+            r#"{
+                "allow_addresses": ["127.0.0.1", "::1", "10.0.0.0/8", "2001:db8::/32"]
+            }"#,
+        )
+        .unwrap();
+        assert!(compiled.is_valid(&valid_allow));
+
+        let valid_deny: serde_json::Value = serde_json::from_str(
+            r#"{
+                "deny_addresses": ["192.168.1.50", "10.0.0.100"]
+            }"#,
+        )
+        .unwrap();
+        assert!(compiled.is_valid(&valid_deny));
+    }
+
+    #[test]
+    fn test_config_schema_empty() {
+        let schema_str = include_str!("../config.schema.json");
+        let schema: serde_json::Value = serde_json::from_str(schema_str).unwrap();
+        let compiled = jsonschema::validator_for(&schema).unwrap();
+
+        let empty: serde_json::Value = serde_json::from_str(r#"{}"#).unwrap();
+        assert!(!compiled.is_valid(&empty));
+    }
+
+    #[test]
+    fn test_config_schema_invalid() {
+        let schema_str = include_str!("../config.schema.json");
+        let schema: serde_json::Value = serde_json::from_str(schema_str).unwrap();
+        let compiled = jsonschema::validator_for(&schema).unwrap();
+
+        // Both set is invalid.
+        let both: serde_json::Value = serde_json::from_str(
+            r#"{
+                "allow_addresses": ["127.0.0.1"],
+                "deny_addresses": ["192.168.1.1"]
+            }"#,
+        )
+        .unwrap();
+        assert!(!compiled.is_valid(&both));
+
+        // Unknown field is invalid.
+        let unknown: serde_json::Value = serde_json::from_str(
+            r#"{
+                "allow_addresses": ["127.0.0.1"],
+                "unknown": true
+            }"#,
+        )
+        .unwrap();
+        assert!(!compiled.is_valid(&unknown));
+    }
 }
