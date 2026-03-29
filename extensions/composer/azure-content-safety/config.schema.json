@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/composer/azure-content-safety/config.schema.json",
+  "title": "Azure Content Safety Configuration",
+  "description": "Configuration for the Azure AI Content Safety extension. Integrates with Azure Content Safety to analyze LLM prompts and responses for harmful content.",
+  "type": "object",
+  "required": ["endpoint", "api_key"],
+  "additionalProperties": false,
+  "properties": {
+    "endpoint": {
+      "type": "string",
+      "description": "Azure Content Safety resource endpoint URL (e.g. \"https://my-resource.cognitiveservices.azure.com\")."
+    },
+    "api_key": {
+      "$ref": "#/$defs/DataSource",
+      "description": "API subscription key for the Azure Content Safety resource."
+    },
+    "mode": {
+      "type": "string",
+      "description": "Operating mode. \"block\" rejects harmful content, \"monitor\" logs but allows it. Defaults to \"block\".",
+      "enum": ["block", "monitor"]
+    },
+    "fail_open": {
+      "type": "boolean",
+      "description": "If true, allow traffic when the Azure API returns an error. Defaults to false."
+    },
+    "api_version": {
+      "type": "string",
+      "description": "Azure API version string. Defaults to \"2024-09-01\"."
+    },
+    "hate_threshold": {
+      "type": "integer",
+      "description": "Severity threshold for hate content (0-6). Content at or above this level is flagged. Defaults to 2.",
+      "minimum": 0,
+      "maximum": 6
+    },
+    "self_harm_threshold": {
+      "type": "integer",
+      "description": "Severity threshold for self-harm content (0-6). Content at or above this level is flagged. Defaults to 2.",
+      "minimum": 0,
+      "maximum": 6
+    },
+    "sexual_threshold": {
+      "type": "integer",
+      "description": "Severity threshold for sexual content (0-6). Content at or above this level is flagged. Defaults to 2.",
+      "minimum": 0,
+      "maximum": 6
+    },
+    "violence_threshold": {
+      "type": "integer",
+      "description": "Severity threshold for violence content (0-6). Content at or above this level is flagged. Defaults to 2.",
+      "minimum": 0,
+      "maximum": 6
+    },
+    "categories": {
+      "type": "array",
+      "description": "Content categories to analyze. Defaults to [\"Hate\", \"SelfHarm\", \"Sexual\", \"Violence\"].",
+      "items": {
+        "type": "string"
+      }
+    },
+    "enable_protected_material": {
+      "type": "boolean",
+      "description": "Enable protected material detection on responses. Defaults to false."
+    },
+    "enable_task_adherence": {
+      "type": "boolean",
+      "description": "Enable task adherence detection on requests. Defaults to false."
+    },
+    "task_adherence_api_version": {
+      "type": "string",
+      "description": "Azure API version for the task adherence endpoint. Defaults to \"2025-09-15-preview\"."
+    }
+  },
+  "$defs": {
+    "DataSource": {
+      "type": "object",
+      "description": "A data source provided either inline or as a file path. Exactly one must be set.",
+      "additionalProperties": false,
+      "properties": {
+        "inline": {
+          "type": "string",
+          "description": "Data provided directly as a string."
+        },
+        "file": {
+          "type": "string",
+          "description": "Path to a file containing the data."
+        }
+      },
+      "oneOf": [
+        { "required": ["inline"] },
+        { "required": ["file"] }
+      ]
+    }
+  }
+}

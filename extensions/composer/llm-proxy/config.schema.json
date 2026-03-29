@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/composer/llm-proxy/config.schema.json",
+  "title": "LLM Proxy Configuration",
+  "description": "Configuration for the LLM Proxy extension. Routes LLM API requests by model name and monitors token usage via Envoy metadata.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "llm_configs": {
+      "type": "array",
+      "description": "Path-matcher rules mapping request paths to LLM API kinds. If empty, default rules for OpenAI and Anthropic are auto-configured.",
+      "items": {
+        "type": "object",
+        "required": ["matcher", "kind"],
+        "additionalProperties": false,
+        "properties": {
+          "matcher": {
+            "$ref": "#/$defs/StringMatcher",
+            "description": "Path matcher for this rule."
+          },
+          "kind": {
+            "type": "string",
+            "description": "LLM API kind for matched requests.",
+            "enum": ["openai", "anthropic", "custom"]
+          }
+        }
+      }
+    },
+    "metadata_namespace": {
+      "type": "string",
+      "description": "Filter metadata namespace for LLM proxy data. Defaults to \"io.builtonenvoy.llm-proxy\"."
+    },
+    "llm_model_header": {
+      "type": "string",
+      "description": "Request header to set with the extracted model name."
+    },
+    "clear_route_cache": {
+      "type": "boolean",
+      "description": "Clear Envoy route cache after setting metadata, enabling route re-selection. Defaults to false."
+    }
+  },
+  "$defs": {
+    "StringMatcher": {
+      "type": "object",
+      "description": "Matches a string by prefix, suffix, or regex. Exactly one must be set.",
+      "additionalProperties": false,
+      "properties": {
+        "prefix": {
+          "type": "string",
+          "description": "Match strings starting with this value."
+        },
+        "suffix": {
+          "type": "string",
+          "description": "Match strings ending with this value."
+        },
+        "regex": {
+          "type": "string",
+          "description": "Match strings satisfying this regular expression."
+        }
+      },
+      "oneOf": [
+        { "required": ["prefix"] },
+        { "required": ["suffix"] },
+        { "required": ["regex"] }
+      ]
+    }
+  }
+}

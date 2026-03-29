@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/composer/saml/config.schema.json",
+  "title": "SAML Configuration",
+  "description": "Configuration for the SAML 2.0 Service Provider authentication extension.",
+  "type": "object",
+  "required": ["entity_id", "acs_path", "idp_metadata_xml"],
+  "additionalProperties": false,
+  "dependentRequired": {
+    "sp_cert_pem": ["sp_key_pem"],
+    "sp_key_pem": ["sp_cert_pem"]
+  },
+  "properties": {
+    "entity_id": {
+      "type": "string",
+      "description": "Service Provider entity ID (audience URI)."
+    },
+    "acs_path": {
+      "type": "string",
+      "description": "Assertion Consumer Service endpoint path (e.g. \"/saml/acs\")."
+    },
+    "idp_metadata_xml": {
+      "$ref": "#/$defs/DataSource",
+      "description": "Identity Provider SAML metadata XML."
+    },
+    "sp_cert_pem": {
+      "$ref": "#/$defs/DataSource",
+      "description": "SP certificate in PEM format. If omitted, a self-signed certificate is auto-generated. Must be provided together with sp_key_pem."
+    },
+    "sp_key_pem": {
+      "$ref": "#/$defs/DataSource",
+      "description": "SP private key in PEM format. Must be provided together with sp_cert_pem."
+    },
+    "session": {
+      "type": "object",
+      "description": "Session and cookie configuration.",
+      "additionalProperties": false,
+      "properties": {
+        "cookie_name": {
+          "type": "string",
+          "description": "Session cookie name. Defaults to \"_saml_session\"."
+        },
+        "duration": {
+          "type": "string",
+          "description": "Session duration as a Go duration string (e.g. \"8h\", \"30m\"). Defaults to \"8h\"."
+        },
+        "cookie_domain": {
+          "type": "string",
+          "description": "Cookie domain attribute. If empty, the cookie is scoped to the request host."
+        },
+        "cookie_secure": {
+          "type": "boolean",
+          "description": "Set the Secure flag on the session cookie. Defaults to true."
+        },
+        "cookie_signing_key": {
+          "type": "string",
+          "description": "64 hex characters (32 bytes) used as HMAC key for cookie signing. Auto-generated if not set.",
+          "pattern": "^[0-9a-fA-F]{64}$"
+        }
+      }
+    },
+    "bypass_paths": {
+      "type": "array",
+      "description": "URL paths that bypass SAML authentication.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "subject_header": {
+      "type": "string",
+      "description": "Request header for the authenticated user's NameID. Defaults to \"x-saml-subject\"."
+    },
+    "attribute_headers": {
+      "type": "object",
+      "description": "Map of SAML attribute names to request header names for forwarding assertions.",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "sign_authn_requests": {
+      "type": "boolean",
+      "description": "Sign AuthnRequests sent to the IdP. Defaults to true."
+    },
+    "allowed_clock_skew": {
+      "type": "string",
+      "description": "Allowed clock skew for time validation as a Go duration string. Defaults to \"5s\"."
+    },
+    "name_id_format": {
+      "type": "string",
+      "description": "NameID format to request from the IdP. Defaults to \"urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified\"."
+    },
+    "default_redirect_path": {
+      "type": "string",
+      "description": "Post-login redirect path when RelayState is empty. Defaults to \"/\"."
+    },
+    "slo_path": {
+      "type": "string",
+      "description": "Single Logout endpoint path. Defaults to \"/saml/slo\"."
+    },
+    "metadata_path": {
+      "type": "string",
+      "description": "SP metadata endpoint path. Defaults to \"/saml/metadata\"."
+    }
+  },
+  "$defs": {
+    "DataSource": {
+      "type": "object",
+      "description": "A data source provided either inline or as a file path. Exactly one must be set.",
+      "additionalProperties": false,
+      "properties": {
+        "inline": {
+          "type": "string",
+          "description": "Data provided directly as a string."
+        },
+        "file": {
+          "type": "string",
+          "description": "Path to a file containing the data."
+        }
+      },
+      "oneOf": [
+        { "required": ["inline"] },
+        { "required": ["file"] }
+      ]
+    }
+  }
+}

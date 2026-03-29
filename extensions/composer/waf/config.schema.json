@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/composer/waf/config.schema.json",
+  "title": "Coraza WAF Configuration",
+  "description": "Configuration for the Coraza WAF extension. Provides Web Application Firewall protection using SecLang directives.",
+  "type": "object",
+  "required": ["directives"],
+  "additionalProperties": false,
+  "properties": {
+    "directives": {
+      "type": "array",
+      "description": "List of Coraza SecLang directives. Each entry is a single directive string. Special includes are supported: \"Include @recommended.conf\", \"Include @crs-setup.conf\", \"Include @owasp_crs/*.conf\".",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "mode": {
+      "type": "string",
+      "description": "WAF inspection mode. Defaults to \"REQUEST_ONLY\" if not set.",
+      "enum": ["REQUEST_ONLY", "RESPONSE_ONLY", "FULL"]
+    }
+  }
+}
