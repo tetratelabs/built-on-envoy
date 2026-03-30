@@ -8,12 +8,12 @@ package opa
 import (
 	"testing"
 
-	pkg "github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
+	internaltesting "github.com/tetratelabs/built-on-envoy/extensions/composer/internal/testing"
 )
 
 func TestConfigSchema(t *testing.T) {
 	t.Run("valid full config", func(t *testing.T) {
-		pkg.AssertSchemaValid(t, "config.schema.json", `{
+		internaltesting.AssertSchemaValid(t, "config.schema.json", `{
 			"policies": [
 				{"inline": "package envoy.authz\ndefault allow = false"},
 				{"file": "/path/to/policy.rego"}
@@ -25,10 +25,10 @@ func TestConfigSchema(t *testing.T) {
 		}`)
 	})
 	t.Run("empty config", func(t *testing.T) {
-		pkg.AssertSchemaInvalid(t, "config.schema.json", `{}`)
+		internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{}`)
 	})
 	t.Run("invalid empty policies", func(t *testing.T) {
-		pkg.AssertSchemaInvalid(t, "config.schema.json", `{
+		internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{
 			"policies": []
 		}`)
 	})

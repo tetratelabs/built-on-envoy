@@ -8,12 +8,12 @@ package impl
 import (
 	"testing"
 
-	pkg "github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
+	internaltesting "github.com/tetratelabs/built-on-envoy/extensions/composer/internal/testing"
 )
 
 func TestConfigSchema(t *testing.T) {
 	t.Run("valid full config", func(t *testing.T) {
-		pkg.AssertSchemaValid(t, "config.schema.json", `{
+		internaltesting.AssertSchemaValid(t, "config.schema.json", `{
 			"bedrock_endpoint": "https://bedrock-runtime.us-east-1.amazonaws.com",
 			"bedrock_cluster": "bedrock",
 			"bedrock_api_key": "my-api-key",
@@ -25,10 +25,10 @@ func TestConfigSchema(t *testing.T) {
 		}`)
 	})
 	t.Run("empty config", func(t *testing.T) {
-		pkg.AssertSchemaInvalid(t, "config.schema.json", `{}`)
+		internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{}`)
 	})
 	t.Run("invalid empty guardrails", func(t *testing.T) {
-		pkg.AssertSchemaInvalid(t, "config.schema.json", `{
+		internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{
 			"bedrock_endpoint": "https://example.com",
 			"bedrock_cluster": "bedrock",
 			"bedrock_api_key": "key",

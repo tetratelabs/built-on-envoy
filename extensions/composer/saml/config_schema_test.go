@@ -8,12 +8,12 @@ package saml
 import (
 	"testing"
 
-	pkg "github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
+	internaltesting "github.com/tetratelabs/built-on-envoy/extensions/composer/internal/testing"
 )
 
 func TestConfigSchema(t *testing.T) {
 	t.Run("valid full config", func(t *testing.T) {
-		pkg.AssertSchemaValid(t, "config.schema.json", `{
+		internaltesting.AssertSchemaValid(t, "config.schema.json", `{
 			"entity_id": "https://sp.example.com",
 			"acs_path": "/saml/acs",
 			"idp_metadata_xml": {"file": "/path/to/idp-metadata.xml"},
@@ -38,10 +38,10 @@ func TestConfigSchema(t *testing.T) {
 		}`)
 	})
 	t.Run("empty config", func(t *testing.T) {
-		pkg.AssertSchemaInvalid(t, "config.schema.json", `{}`)
+		internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{}`)
 	})
 	t.Run("invalid sp cert without key", func(t *testing.T) {
-		pkg.AssertSchemaInvalid(t, "config.schema.json", `{
+		internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{
 			"entity_id": "https://sp.example.com",
 			"acs_path": "/saml/acs",
 			"idp_metadata_xml": {"inline": "<xml/>"},

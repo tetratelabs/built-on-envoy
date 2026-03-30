@@ -8,12 +8,12 @@ package impl
 import (
 	"testing"
 
-	pkg "github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
+	internaltesting "github.com/tetratelabs/built-on-envoy/extensions/composer/internal/testing"
 )
 
 func TestConfigSchema(t *testing.T) {
 	t.Run("valid full config", func(t *testing.T) {
-		pkg.AssertSchemaValid(t, "config.schema.json", `{
+		internaltesting.AssertSchemaValid(t, "config.schema.json", `{
 			"endpoint": "https://my-resource.cognitiveservices.azure.com",
 			"api_key": {"inline": "my-api-key"},
 			"mode": "monitor",
@@ -30,10 +30,10 @@ func TestConfigSchema(t *testing.T) {
 		}`)
 	})
 	t.Run("empty config", func(t *testing.T) {
-		pkg.AssertSchemaInvalid(t, "config.schema.json", `{}`)
+		internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{}`)
 	})
 	t.Run("invalid threshold out of range", func(t *testing.T) {
-		pkg.AssertSchemaInvalid(t, "config.schema.json", `{
+		internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{
 			"endpoint": "https://example.com",
 			"api_key": {"inline": "key"},
 			"hate_threshold": 10

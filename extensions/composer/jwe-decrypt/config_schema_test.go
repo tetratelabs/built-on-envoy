@@ -8,12 +8,12 @@ package impl
 import (
 	"testing"
 
-	pkg "github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
+	internaltesting "github.com/tetratelabs/built-on-envoy/extensions/composer/internal/testing"
 )
 
 func TestConfigSchema(t *testing.T) {
 	t.Run("valid full config", func(t *testing.T) {
-		pkg.AssertSchemaValid(t, "config.schema.json", `{
+		internaltesting.AssertSchemaValid(t, "config.schema.json", `{
 			"private_key": {"file": "/path/to/key.pem"},
 			"algorithm": "RSA-OAEP",
 			"input_header": "Authorization",
@@ -23,10 +23,10 @@ func TestConfigSchema(t *testing.T) {
 		}`)
 	})
 	t.Run("empty config", func(t *testing.T) {
-		pkg.AssertSchemaInvalid(t, "config.schema.json", `{}`)
+		internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{}`)
 	})
 	t.Run("invalid private key both set", func(t *testing.T) {
-		pkg.AssertSchemaInvalid(t, "config.schema.json", `{
+		internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{
 			"private_key": {"inline": "key-data", "file": "/path/to/key.pem"},
 			"algorithm": "RSA-OAEP"
 		}`)

@@ -31,3 +31,5 @@ header:
     - "**/coraza/rules/**"
     - "**/.claude/**"
     - "**/*.json"
+    - "**/*.log"
+    - "**/integration/coreruleset/**"
