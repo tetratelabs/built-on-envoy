@@ -15,7 +15,7 @@ tool (
 require (
 	github.com/beevik/etree v1.6.0
 	github.com/cedar-policy/cedar-go v1.5.2
-	github.com/corazawaf/coraza/v3 v3.5.0
+	github.com/corazawaf/coraza/v3 v3.4.0
 	github.com/crewjam/saml v0.5.1
 	github.com/docker/cli v29.2.0+incompatible
 	github.com/envoyproxy/envoy/source/extensions/dynamic_modules v0.0.0-20260311012303-5ef4e4cea57f

@@ -38,8 +38,8 @@ github.com/containerd/stargz-snapshotter/estargz v0.18.1 h1:cy2/lpgBXDA3cDKSyEfN
 github.com/containerd/stargz-snapshotter/estargz v0.18.1/go.mod h1:ALIEqa7B6oVDsrF37GkGN20SuvG/pIMm7FwP7ZmRb0Q=
 github.com/corazawaf/coraza-coreruleset v0.0.0-20240226094324-415b1017abdc h1:OlJhrgI3I+FLUCTI3JJW8MoqyM78WbqJjecqMnqG+wc=
 github.com/corazawaf/coraza-coreruleset v0.0.0-20240226094324-415b1017abdc/go.mod h1:7rsocqNDkTCira5T0M7buoKR2ehh7YZiPkzxRuAgvVU=
-github.com/corazawaf/coraza/v3 v3.5.0 h1:zGYW3cKhDa05Ztdt7+SGp7OkmR9AgxOFfLbDPwi0Y5M=
-github.com/corazawaf/coraza/v3 v3.5.0/go.mod h1:q7gszZCSufoHIy9jV2NCgk+glYwZpP2mIKgbu2dZkvE=
+github.com/corazawaf/coraza/v3 v3.4.0 h1:+ejPoDPUS9wK0a2oPOKqVNbawACCRbMRRzC72nT8yhY=
+github.com/corazawaf/coraza/v3 v3.4.0/go.mod h1:vBFhAVlVsnOfgnKIIxrumwY9LI2TrSqEHes3c7tBeuU=
 github.com/corazawaf/libinjection-go v0.3.2 h1:9rrKt0lpg4WvUXt+lwS06GywfqRXXsa/7JcOw5cQLwI=
 github.com/corazawaf/libinjection-go v0.3.2/go.mod h1:Ik/+w3UmTWH9yn366RgS9D95K3y7Atb5m/H/gXzzPCk=
 github.com/coreos/go-systemd/v22 v22.5.0/go.mod h1:Y58oyj3AT4RCenI/lSvhwexgC+NSVTIJ3seZv2GcEnc=
