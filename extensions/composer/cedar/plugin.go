@@ -46,6 +46,9 @@ type cedarConfig struct {
 	FailOpen bool `json:"fail_open"`
 	// DryRun when true logs the decision but always allows the request.
 	DryRun bool `json:"dry_run"`
+	// MetadataNamespaces is an optional list of dynamic metadata namespaces to include in the Cedar
+	// context record under the "dynamic_metadata" key.
+	MetadataNamespaces []string `json:"metadata_namespaces"`
 }
 
 // Metric tag values for authorization decisions.
@@ -274,9 +277,32 @@ func (c *cedarHttpFilter) buildContext(headers shared.HeaderMap) cedarlib.Record
 			"mtls":        cedarlib.Boolean(mtls),
 			"tls_version": cedarlib.String(tlsVersion.ToUnsafeString()),
 		}),
-		"parsed_path":  cedarlib.NewSet(pathValues...),
-		"parsed_query": cedarlib.NewRecord(queryRecord),
+		"dynamic_metadata": c.dynamicMetadataMap(),
+		"parsed_path":      cedarlib.NewSet(pathValues...),
+		"parsed_query":     cedarlib.NewRecord(queryRecord),
 	})
+}
+
+// dynamicMetadataMap extracts dynamic metadata from the filter handle and returns it as a
+// Cedar Record keyed by namespace, where each namespace value is a Record of key-value pairs.
+func (c *cedarHttpFilter) dynamicMetadataMap() cedarlib.Value {
+	dm := cedarlib.RecordMap{}
+	for _, ns := range c.config.MetadataNamespaces {
+		nsMap := cedarlib.RecordMap{}
+		keys := c.handle.GetMetadataKeys(shared.MetadataSourceTypeDynamic, ns)
+		for _, key := range keys {
+			keyStr := key.ToUnsafeString()
+			if value, ok := c.handle.GetMetadataString(shared.MetadataSourceTypeDynamic, ns, keyStr); ok {
+				nsMap[cedarlib.String(keyStr)] = cedarlib.String(value.ToUnsafeString())
+			} else if numValue, ok := c.handle.GetMetadataNumber(shared.MetadataSourceTypeDynamic, ns, keyStr); ok {
+				nsMap[cedarlib.String(keyStr)] = cedarlib.Long(int64(numValue))
+			}
+		}
+		if len(nsMap) > 0 {
+			dm[cedarlib.String(ns)] = cedarlib.NewRecord(nsMap)
+		}
+	}
+	return cedarlib.NewRecord(dm)
 }
 
 // parsePath splits the path into segments and parses query parameters into a map.

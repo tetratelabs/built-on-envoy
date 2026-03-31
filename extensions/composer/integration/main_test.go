@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	envoyLogFile = "envoy.log"
+	envoyLogFile  = "envoy.log"
 	albedoLogFile = "albedo.log"
 
 	envoyAdminPort = 9901

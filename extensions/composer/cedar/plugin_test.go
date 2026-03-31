@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	cedarlib "github.com/cedar-policy/cedar-go"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/fake"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
@@ -1513,4 +1514,105 @@ func TestFilterFactory_Create(t *testing.T) {
 	cedarFilter, ok := filter.(*cedarHttpFilter)
 	require.True(t, ok)
 	require.Equal(t, mockHandle, cedarFilter.handle)
+}
+
+// Tests for dynamicMetadataMap / buildContext dynamic metadata
+
+func TestBuildContext_DynamicMetadata_MultipleNamespacesAndKeys(t *testing.T) {
+	policy := `permit(principal, action, resource);`
+	policyFile := createTestPolicyFile(t, policy)
+	cfg := &cedarConfig{
+		Policy:             pkg.DataSource{File: policyFile},
+		PrincipalType:      "User",
+		PrincipalIDHeader:  "x-user-id",
+		MetadataNamespaces: []string{"ns.auth", "ns.ratelimit"},
+	}
+	configJSON, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	factory := &CedarHttpFilterConfigFactory{}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockConfigHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockConfigHandle.EXPECT().DefineCounter("cedar_requests_total", "decision").Return(shared.MetricID(1), shared.MetricsSuccess)
+
+	filterFactory, err := factory.Create(mockConfigHandle, configJSON)
+	require.NoError(t, err)
+
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().GetAttributeString(gomock.Any()).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
+	mockHandle.EXPECT().GetAttributeBool(gomock.Any()).Return(false, false).AnyTimes()
+
+	// Namespace "ns.auth" has two string keys.
+	mockHandle.EXPECT().GetMetadataKeys(shared.MetadataSourceTypeDynamic, "ns.auth").Return([]shared.UnsafeEnvoyBuffer{
+		pkg.UnsafeBufferFromString("identity"),
+		pkg.UnsafeBufferFromString("role"),
+	})
+	mockHandle.EXPECT().GetMetadataString(shared.MetadataSourceTypeDynamic, "ns.auth", "identity").Return(pkg.UnsafeBufferFromString("user-123"), true)
+	mockHandle.EXPECT().GetMetadataString(shared.MetadataSourceTypeDynamic, "ns.auth", "role").Return(pkg.UnsafeBufferFromString("admin"), true)
+
+	// Namespace "ns.ratelimit" has a string key.
+	mockHandle.EXPECT().GetMetadataKeys(shared.MetadataSourceTypeDynamic, "ns.ratelimit").Return([]shared.UnsafeEnvoyBuffer{
+		pkg.UnsafeBufferFromString("bucket"),
+	})
+	mockHandle.EXPECT().GetMetadataString(shared.MetadataSourceTypeDynamic, "ns.ratelimit", "bucket").Return(pkg.UnsafeBufferFromString("default"), true)
+
+	filter := filterFactory.Create(mockHandle).(*cedarHttpFilter)
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":    {"GET"},
+		":path":      {"/api/resource"},
+		":authority": {"example.com"},
+	})
+
+	ctx := filter.buildContext(headers)
+
+	// Extract the dynamic_metadata record from context.
+	dmVal, ok := ctx.Get("dynamic_metadata")
+	require.True(t, ok, "dynamic_metadata should be present in context")
+
+	// Verify ns.auth namespace.
+	dmRecord, ok := dmVal.(cedarlib.Record)
+	require.True(t, ok)
+	authNs, ok := dmRecord.Get("ns.auth")
+	require.True(t, ok, "ns.auth namespace should be present")
+	authRecord, ok := authNs.(cedarlib.Record)
+	require.True(t, ok)
+	identity, ok := authRecord.Get("identity")
+	require.True(t, ok)
+	require.Equal(t, cedarlib.String("user-123"), identity)
+	role, ok := authRecord.Get("role")
+	require.True(t, ok)
+	require.Equal(t, cedarlib.String("admin"), role)
+
+	// Verify ns.ratelimit namespace.
+	rlNs, ok := dmRecord.Get("ns.ratelimit")
+	require.True(t, ok, "ns.ratelimit namespace should be present")
+	rlRecord, ok := rlNs.(cedarlib.Record)
+	require.True(t, ok)
+	bucket, ok := rlRecord.Get("bucket")
+	require.True(t, ok)
+	require.Equal(t, cedarlib.String("default"), bucket)
+}
+
+func TestBuildContext_DynamicMetadata_Empty(t *testing.T) {
+	policy := `permit(principal, action, resource);`
+	filter, _ := createTestFilter(t, &cedarConfig{Policy: pkg.DataSource{Inline: policy}})
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{
+		":method":    {"GET"},
+		":path":      {"/"},
+		":authority": {"example.com"},
+	})
+
+	ctx := filter.buildContext(headers)
+
+	// When no metadata namespaces are configured, dynamic_metadata should be an empty record.
+	dmVal, ok := ctx.Get("dynamic_metadata")
+	require.True(t, ok, "dynamic_metadata should be present in context")
+	_, ok = dmVal.(cedarlib.Record)
+	require.True(t, ok, "dynamic_metadata should be a Record")
 }
