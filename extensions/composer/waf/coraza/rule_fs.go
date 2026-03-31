@@ -62,11 +62,11 @@ func (r rulesFS) ReadFile(name string) ([]byte, error) {
 func mapPath(p string) (string, bool) {
 	switch p {
 	case "@recommended.conf", "@recommended-conf":
-		return "rules/@coraza.conf", true
+		return "rules/recommended.conf", true
 	case "@ftw.conf", "@ftw-conf":
-		return "rules/@ftw.conf", true
+		return "rules/ftw.conf", true
 	case "@crs-setup.conf", "@crs-setup-conf":
-		return "rules/@crs-setup.conf", true
+		return "rules/crs-setup.conf", true
 	default:
 		if strings.HasPrefix(p, "@owasp_crs") {
 			return strings.Replace(p, "@owasp_crs", "rules/owasp_crs", 1), true
