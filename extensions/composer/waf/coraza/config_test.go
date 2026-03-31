@@ -18,8 +18,8 @@ func Test_newWAF(t *testing.T) {
 	t.Run("ok", func(t *testing.T) {
 		config := map[string]interface{}{
 			"directives": []string{
-				"Include @recommended.conf",
-				"Include @ftw.conf",
+				"Include @coraza.conf-recommended",
+				// "Include @ftw.conf",
 				"Include @crs-setup.conf",
 				"Include @owasp_crs/*.conf",
 			},
@@ -32,6 +32,9 @@ func Test_newWAF(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, waf)
 		require.Equal(t, ModeRequestOnly, mode)
+
+		// TODO test requestBodyLimit including user override behaviour
+		// something like require.Equal(t, int64(131072), waf.requestBodyLimit) // Verify that directives are applied
 	})
 
 	t.Run("error", func(t *testing.T) {

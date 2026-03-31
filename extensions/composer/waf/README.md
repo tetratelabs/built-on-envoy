@@ -4,13 +4,13 @@ This extension implements a Web Application Firewall using [OWASP Coraza](https:
 
 ## Upgrading CRS
 
-The CRS rules are located under [coraza/rules/](coraza/rules/) and embedded into the binary at build time in [coraza/rule_fs.go](coraza/rule_fs.go) via Go's `//go:embed` directive.
+The CRS rules are embedded into the binary at build time using [Coraza Corerulset package](https://github.com/corazawaf/coraza-coreruleset). We provide sensible defaults that you can override.
 
-To upgrade to a new CRS version:
-
-1. Download the new CRS release minimal archive from the [coreruleset releases page](https://github.com/coreruleset/coreruleset/releases).
-1. Replace the contents of `coraza/rules/owasp_crs/` with the `.conf` and `.data` files from the new release `rules/` directory.
-1. Update `coraza/rules/crs-setup.conf` with the new `crs-setup.conf.example` available in the new release root folder, reviewing any changes and merging them into the existing `crs-setup.conf` as needed. Note that some configurations are specific for this repository, and this should not be overwritten.
+1. Bump the Coraza Corerulset dependency version in `go.mod`. You can find the latest Coraza version on the [Coraza Coreruleset releases page](https://github.com/corazawaf/coraza-coreruleset/releases).
+   ```sh
+   go get github.com/corazawaf/coraza-coreruleset/v4@<new-version>
+   go mod tidy
+   ```
 
 ## Upgrading Coraza
 

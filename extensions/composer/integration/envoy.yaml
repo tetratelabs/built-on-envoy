@@ -105,7 +105,7 @@ static_resources:
                           {
                             "mode": "FULL",
                             "directives": [
-                              "Include @recommended.conf",
+                              "Include @coraza.conf-recommended",
                               "Include @ftw.conf",
                               "Include @crs-setup.conf",
                               "Include @owasp_crs/*.conf"

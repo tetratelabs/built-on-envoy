@@ -3,74 +3,67 @@
 // The full text of the Apache license is available in the LICENSE file at
 // the root of the repo.
 
-// Copyright The OWASP Coraza contributors
-// SPDX-License-Identifier: Apache-2.0
-
 package coraza
 
 import (
 	"embed"
 	"io/fs"
-	"os"
-	"path/filepath"
+	"log"
 	"strings"
 )
 
+type subFS interface {
+	Open(name string) (fs.File, error)
+	ReadDir(name string) ([]fs.DirEntry, error)
+	ReadFile(name string) ([]byte, error)
+	Glob(pattern string) ([]string, error)
+}
+
 //go:embed rules
-var crs embed.FS
+var localRules embed.FS
 
-// rulesFS implements fs.FS for the embedded rules.
-// Basically, this is a wrapper around `rules` directory in the embedded filesystem while
-// making it possible to support "@" prefixed paths which will be resolved to the actual
-// file paths in the embedded filesystem.
-type rulesFS struct{}
+var embeddedRulesFS fs.FS
 
-// Open implements [fs.FS.Open]
+func init() {
+	sub, err := fs.Sub(localRules, "rules")
+	if err != nil {
+		log.Fatal(err)
+	}
+	embeddedRulesFS = rulesFS{sub.(subFS)}
+}
+
+// rulesFS exposes the embedded local rules directory and normalizes @-prefixed paths.
+// This matches how Coraza resolves includes relative to the parent directive file.
+type rulesFS struct {
+	subFS
+}
+
 func (r rulesFS) Open(name string) (fs.File, error) {
-	path, ok := mapPath(name)
-	if !ok {
-		// If the given path is not a recognized embedded path, fallback to load the
-		// file from the local filesystem.
-		return os.Open(filepath.Clean(name))
-	}
-	return crs.Open(path)
+	return r.subFS.Open(normalizeRulePath(name))
 }
 
-// ReadDir implements [fs.FS.ReadDir]
 func (r rulesFS) ReadDir(name string) ([]fs.DirEntry, error) {
-	path, ok := mapPath(name)
-	if !ok {
-		// If the given path is not a recognized embedded path, fallback to load the
-		// file from the local filesystem.
-		return os.ReadDir(filepath.Clean(name))
-	}
-	return fs.ReadDir(crs, path)
+	return r.subFS.ReadDir(normalizeRulePath(name))
 }
 
-// ReadFile implements [fs.FS.ReadFile]
 func (r rulesFS) ReadFile(name string) ([]byte, error) {
-	path, ok := mapPath(name)
-	if !ok {
-		// If the given path is not a recognized embedded path, fallback to load the
-		// file from the local filesystem.
-		return os.ReadFile(filepath.Clean(name))
-	}
-	return fs.ReadFile(crs, path)
+	return r.subFS.ReadFile(normalizeRulePath(name))
 }
 
-// mapPath maps the "@" prefixed paths to the actual file paths in the embedded filesystem.
-func mapPath(p string) (string, bool) {
-	switch p {
-	case "@recommended.conf", "@recommended-conf":
-		return "rules/recommended.conf", true
-	case "@ftw.conf", "@ftw-conf":
-		return "rules/ftw.conf", true
-	case "@crs-setup.conf", "@crs-setup-conf":
-		return "rules/crs-setup.conf", true
-	default:
-		if strings.HasPrefix(p, "@owasp_crs") {
-			return strings.Replace(p, "@owasp_crs", "rules/owasp_crs", 1), true
-		}
+func (r rulesFS) Glob(pattern string) ([]string, error) {
+	return r.subFS.Glob(normalizeRulePath(pattern))
+}
+
+func normalizeRulePath(name string) string {
+	idx := strings.Index(name, "@")
+	if idx != -1 {
+		name = name[idx:]
 	}
-	return "", false
+
+	switch name {
+	case "@recommended.conf", "@recommended-conf":
+		return "@coraza.conf-recommended"
+	default:
+		return name
+	}
 }

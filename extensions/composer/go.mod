@@ -15,12 +15,14 @@ tool (
 require (
 	github.com/beevik/etree v1.6.0
 	github.com/cedar-policy/cedar-go v1.5.2
+	github.com/corazawaf/coraza-coreruleset/v4 v4.25.0
 	github.com/corazawaf/coraza/v3 v3.4.0
 	github.com/crewjam/saml v0.5.1
 	github.com/docker/cli v29.2.0+incompatible
 	github.com/envoyproxy/envoy/source/extensions/dynamic_modules v0.0.0-20260311012303-5ef4e4cea57f
 	github.com/getkin/kin-openapi v0.133.0
 	github.com/google/go-containerregistry v0.20.7
+	github.com/jcchavezs/mergefs v0.1.1
 	github.com/lestrrat-go/jwx/v3 v3.0.13
 	github.com/mccutchen/go-httpbin/v2 v2.18.3
 	github.com/open-policy-agent/opa v1.13.1
@@ -100,7 +102,7 @@ require (
 	github.com/lestrrat-go/httpcc v1.0.1 // indirect
 	github.com/lestrrat-go/httprc/v3 v3.0.2 // indirect
 	github.com/lestrrat-go/option/v2 v2.0.0 // indirect
-	github.com/magefile/mage v1.15.1-0.20250615140142-78acbaf2e3ae // indirect
+	github.com/magefile/mage v1.17.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattermost/xml-roundtrip-validator v0.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect

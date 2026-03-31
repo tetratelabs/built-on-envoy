@@ -34,7 +34,7 @@ longDescription: |
   ```json
   {
     "directives": [
-      "Include @recommended.conf",
+      "Include @coraza.conf-recommended",
       "Include @crs-setup.conf",
       "Include @owasp_crs/*.conf"
     ]
@@ -59,7 +59,7 @@ longDescription: |
   {
     "mode": "FULL",
     "directives": [
-      "Include @recommended.conf",
+      "Include @coraza.conf-recommended",
       "Include @crs-setup.conf",
       "Include @owasp_crs/*.conf"
     ]
@@ -112,7 +112,7 @@ examples:
       boe run --extension coraza-waf --config '
         {
           "directives": [
-            "Include @recommended.conf",
+            "Include @coraza.conf-recommended",
             "SecRuleEngine On",
             "SecResponseBodyAccess Off",
             "Include @crs-setup.conf",
