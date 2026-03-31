@@ -24,7 +24,8 @@ func TestConfigSchema(t *testing.T) {
 			"deny_body": "Forbidden",
 			"deny_headers": {"x-denied": "true"},
 			"fail_open": false,
-			"dry_run": false
+			"dry_run": false,
+			"metadata_namespaces": ["envoy.filters.http.jwt_authn"]
 		}`)
 	})
 	t.Run("empty config", func(t *testing.T) {

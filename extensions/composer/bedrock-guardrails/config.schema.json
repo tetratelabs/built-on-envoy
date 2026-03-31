@@ -41,7 +41,7 @@
     },
     "bedrock_timeoutms": {
       "type": "integer",
-      "description": "API request timeout in milliseconds. Defaults to 10000 (10 seconds).",
+      "description": "API request timeout in milliseconds. Defaults to 20000 (20 seconds).",
       "minimum": 0
     }
   }

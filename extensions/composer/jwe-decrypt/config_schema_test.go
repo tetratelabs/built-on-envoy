@@ -25,6 +25,13 @@ func TestConfigSchema(t *testing.T) {
 	t.Run("empty config", func(t *testing.T) {
 		internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{}`)
 	})
+	t.Run("valid output metadata without namespace", func(t *testing.T) {
+		internaltesting.AssertSchemaValid(t, "config.schema.json", `{
+			"private_key": {"file": "/path/to/key.pem"},
+			"algorithm": "RSA-OAEP",
+			"output_metadata": {"key": "payload"}
+		}`)
+	})
 	t.Run("invalid private key both set", func(t *testing.T) {
 		internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{
 			"private_key": {"inline": "key-data", "file": "/path/to/key.pem"},

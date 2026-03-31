@@ -30,4 +30,12 @@ func TestConfigSchema(t *testing.T) {
 			"path_mappings": []
 		}`)
 	})
+	t.Run("invalid directory index file with slash", func(t *testing.T) {
+		internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{
+			"path_mappings": [
+				{"request_path_prefix": "/static/", "file_path_prefix": "/var/www/"}
+			],
+			"directory_index_files": ["path/index.html"]
+		}`)
+	})
 }

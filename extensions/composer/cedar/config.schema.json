@@ -55,6 +55,13 @@
     "dry_run": {
       "type": "boolean",
       "description": "If true, log authorization decisions without enforcing them. Defaults to false."
+    },
+    "metadata_namespaces": {
+      "type": "array",
+      "description": "List of dynamic metadata namespaces to include in the Cedar context record under the \"dynamic_metadata\" key.",
+      "items": {
+        "type": "string"
+      }
     }
   },
   "$defs": {

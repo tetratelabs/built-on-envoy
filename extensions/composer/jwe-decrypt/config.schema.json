@@ -56,7 +56,7 @@
       "type": "object",
       "description": "Identifies a location in Envoy dynamic metadata.",
       "additionalProperties": false,
-      "required": ["namespace", "key"],
+      "required": ["key"],
       "properties": {
         "namespace": {
           "type": "string",

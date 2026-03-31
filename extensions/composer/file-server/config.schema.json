@@ -44,7 +44,8 @@
       "type": "array",
       "description": "Files to serve for directory requests (e.g. [\"index.html\"]). File names must not contain slashes.",
       "items": {
-        "type": "string"
+        "type": "string",
+        "pattern": "^[^/]*$"
       }
     }
   }

@@ -30,6 +30,13 @@
     "with_body": {
       "type": "boolean",
       "description": "If true, buffer the request body and include it as parsed JSON in the OPA input. Defaults to false."
+    },
+    "metadata_namespaces": {
+      "type": "array",
+      "description": "List of dynamic metadata namespaces to include in the OPA input document under the \"dynamic_metadata\" key.",
+      "items": {
+        "type": "string"
+      }
     }
   },
   "$defs": {

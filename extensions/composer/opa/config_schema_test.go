@@ -21,7 +21,8 @@ func TestConfigSchema(t *testing.T) {
 			"decision_path": "envoy.authz.allow",
 			"fail_open": false,
 			"dry_run": true,
-			"with_body": true
+			"with_body": true,
+			"metadata_namespaces": ["envoy.filters.http.jwt_authn"]
 		}`)
 	})
 	t.Run("empty config", func(t *testing.T) {
