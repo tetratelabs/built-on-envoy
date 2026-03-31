@@ -63,8 +63,8 @@ func normalizeRulePath(name string) string {
 	switch name {
 	case "@recommended.conf", "@recommended-conf":
 		return "@coraza.conf-recommended"
-	case "@crs-setup.conf", "@crs-setup-conf":
-		return "crs-setup.conf"
+	case "@crs-setup.conf",	"@crs-setup-conf":
+		return "@crs-setup.conf"
 	default:
 		return name
 	}
