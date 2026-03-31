@@ -78,6 +78,12 @@ longDescription: |
       "mtls": true,
       "tls_version": "TLSv1.3"
     },
+    "dynamic_metadata": {
+      "envoy.filters.http.jwt_authn": {
+        "sub": "user-123",
+        "iss": "https://issuer.example.com"
+      }
+    },
     "parsed_path": ["api", "v1", "resource"],
     "parsed_query": {"key": ["value"]}
   }
@@ -293,4 +299,16 @@ examples:
         "principal_type": "User",
         "principal_id_header": "x-user-id",
         "fail_open": true
+      }'
+  - title: Include Envoy dynamic metadata in Cedar context
+    description: |
+      Include Envoy dynamic metadata in the Cedar context record under `context.dynamic_metadata`.
+      This allows writing policies that make decisions based on dynamic metadata from other Envoy
+      filters, such as JWT authentication claims.
+    code: |
+      boe run --extension cedar-auth --config '{
+        "policy": {"file": "/tmp/policy.cedar"},
+        "principal_type": "User",
+        "principal_id_header": "x-user-id",
+        "metadata_namespaces": ["envoy.filters.http.jwt_authn"]
       }'
