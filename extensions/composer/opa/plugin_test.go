@@ -236,7 +236,6 @@ func createTestFilter(t *testing.T, cfg opaConfig) (*opaHttpFilter, *mocks.MockH
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
 	mockHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), gomock.Any()).Return(shared.MetricsSuccess).AnyTimes()
-	mockHandle.EXPECT().GetMetadataNamespaces(shared.MetadataSourceTypeDynamic).Return(nil).AnyTimes()
 
 	filter := filterFactory.Create(mockHandle)
 	opaFilter, ok := filter.(*opaHttpFilter)
@@ -415,7 +414,6 @@ func createTestFilterWithMetricExpectation(t *testing.T, cfg opaConfig, expected
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
 	mockHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), expectedDecision).Return(shared.MetricsSuccess)
-	mockHandle.EXPECT().GetMetadataNamespaces(shared.MetadataSourceTypeDynamic).Return(nil).AnyTimes()
 
 	filter := filterFactory.Create(mockHandle)
 	opaFilter, ok := filter.(*opaHttpFilter)
@@ -544,7 +542,6 @@ allow := true
 	mockFilterHandle.EXPECT().GetAttributeString(gomock.Any()).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
 	mockFilterHandle.EXPECT().GetAttributeBool(gomock.Any()).Return(false, false).AnyTimes()
 	mockFilterHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), "allowed").Return(shared.MetricsSuccess)
-	mockFilterHandle.EXPECT().GetMetadataNamespaces(shared.MetadataSourceTypeDynamic).Return(nil).AnyTimes()
 
 	filter := filterFactory.Create(mockFilterHandle).(*opaHttpFilter)
 
@@ -582,7 +579,6 @@ allow := false
 	mockFilterHandle.EXPECT().GetAttributeBool(gomock.Any()).Return(false, false).AnyTimes()
 	mockFilterHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "opa_denied")
 	mockFilterHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), "denied").Return(shared.MetricsSuccess)
-	mockFilterHandle.EXPECT().GetMetadataNamespaces(shared.MetadataSourceTypeDynamic).Return(nil).AnyTimes()
 
 	filter := filterFactory.Create(mockFilterHandle).(*opaHttpFilter)
 
@@ -704,7 +700,6 @@ default allow := true
 	mockHandle.EXPECT().GetAttributeBool(shared.AttributeIDConnectionMtls).Return(false, false).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return(pkg.UnsafeBufferFromString("TLSv1.3"), true).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return(pkg.UnsafeBufferFromString("abc123def456"), true).AnyTimes()
-	mockHandle.EXPECT().GetMetadataNamespaces(shared.MetadataSourceTypeDynamic).Return(nil).AnyTimes()
 
 	filter := filterFactory.Create(mockHandle).(*opaHttpFilter)
 
@@ -774,7 +769,6 @@ allow if {
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return(pkg.UnsafeBufferFromString("TLSv1.3"), true).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
 	mockHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), "allowed").Return(shared.MetricsSuccess)
-	mockHandle.EXPECT().GetMetadataNamespaces(shared.MetadataSourceTypeDynamic).Return(nil).AnyTimes()
 
 	filter := filterFactory.Create(mockHandle).(*opaHttpFilter)
 
@@ -826,7 +820,6 @@ allow if {
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
 	mockHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "opa_denied")
 	mockHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), "denied").Return(shared.MetricsSuccess)
-	mockHandle.EXPECT().GetMetadataNamespaces(shared.MetadataSourceTypeDynamic).Return(nil).AnyTimes()
 
 	filter := filterFactory.Create(mockHandle).(*opaHttpFilter)
 
@@ -1130,7 +1123,6 @@ result := 1 / 0
 	mockHandle.EXPECT().GetAttributeBool(shared.AttributeIDConnectionMtls).Return(false, false).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
-	mockHandle.EXPECT().GetMetadataNamespaces(shared.MetadataSourceTypeDynamic).Return(nil).AnyTimes()
 
 	filter := &opaHttpFilter{handle: mockHandle, config: parsed}
 	return filter, mockHandle
@@ -1425,7 +1417,10 @@ func TestBuildInput_DynamicMetadata_MultipleNamespacesAndKeys(t *testing.T) {
 default allow := true
 `
 	policyFile := createTestPolicyFile(t, policy)
-	cfg := opaConfig{Policies: []pkg.DataSource{{File: policyFile}}}
+	cfg := opaConfig{
+		Policies:           []pkg.DataSource{{File: policyFile}},
+		MetadataNamespaces: []string{"ns.auth", "ns.ratelimit"},
+	}
 	configJSON, err := json.Marshal(cfg)
 	require.NoError(t, err)
 
@@ -1444,12 +1439,6 @@ default allow := true
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(gomock.Any()).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
 	mockHandle.EXPECT().GetAttributeBool(gomock.Any()).Return(false, false).AnyTimes()
-
-	// Set up dynamic metadata with two namespaces, each with multiple keys (string and numeric).
-	mockHandle.EXPECT().GetMetadataNamespaces(shared.MetadataSourceTypeDynamic).Return([]shared.UnsafeEnvoyBuffer{
-		pkg.UnsafeBufferFromString("ns.auth"),
-		pkg.UnsafeBufferFromString("ns.ratelimit"),
-	})
 
 	// Namespace "ns.auth" has two string keys.
 	mockHandle.EXPECT().GetMetadataKeys(shared.MetadataSourceTypeDynamic, "ns.auth").Return([]shared.UnsafeEnvoyBuffer{

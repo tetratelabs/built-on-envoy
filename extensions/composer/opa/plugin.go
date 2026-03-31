@@ -41,6 +41,9 @@ type opaConfig struct {
 	// result in "body" being absent from the input. When false (default), the policy is
 	// evaluated on request headers only.
 	WithBody bool `json:"with_body"`
+	// MetadataNamespaces is an optional list of dynamic metadata namespaces to include in the OPA
+	// input document under the "dynamic_metadata" key.
+	MetadataNamespaces []string `json:"metadata_namespaces"`
 }
 
 // Metric tag values for authorization decisions.
@@ -287,7 +290,7 @@ func (o *opaHttpFilter) buildInput(headers shared.HeaderMap, parsedBody any) map
 				"tls_version": tlsVersion.ToUnsafeString(),
 			},
 		},
-		"dynamic_metadata": dynamicMetadataMap(o.handle),
+		"dynamic_metadata": o.dynamicMetadataMap(),
 		"parsed_path":      parsedPath,
 		"parsed_query":     parsedQuery,
 	}
@@ -299,23 +302,21 @@ func (o *opaHttpFilter) buildInput(headers shared.HeaderMap, parsedBody any) map
 
 // dynamicMetadataMap extracts dynamic metadata from the filter handle and returns it as a
 // nested map keyed by namespace and then by key.
-func dynamicMetadataMap(handle shared.HttpFilterHandle) map[string]any {
+func (o *opaHttpFilter) dynamicMetadataMap() map[string]any {
 	dm := make(map[string]any)
-	namespaces := handle.GetMetadataNamespaces(shared.MetadataSourceTypeDynamic)
-	for _, ns := range namespaces {
-		nsStr := ns.ToUnsafeString()
+	for _, ns := range o.config.MetadataNamespaces {
 		nsMap := make(map[string]any)
-		keys := handle.GetMetadataKeys(shared.MetadataSourceTypeDynamic, nsStr)
+		keys := o.handle.GetMetadataKeys(shared.MetadataSourceTypeDynamic, ns)
 		for _, key := range keys {
 			keyStr := key.ToUnsafeString()
-			if value, ok := handle.GetMetadataString(shared.MetadataSourceTypeDynamic, nsStr, keyStr); ok {
+			if value, ok := o.handle.GetMetadataString(shared.MetadataSourceTypeDynamic, ns, keyStr); ok {
 				nsMap[keyStr] = value.ToUnsafeString()
-			} else if numValue, ok := handle.GetMetadataNumber(shared.MetadataSourceTypeDynamic, nsStr, keyStr); ok {
+			} else if numValue, ok := o.handle.GetMetadataNumber(shared.MetadataSourceTypeDynamic, ns, keyStr); ok {
 				nsMap[keyStr] = numValue
 			}
 		}
 		if len(nsMap) > 0 {
-			dm[nsStr] = nsMap
+			dm[ns] = nsMap
 		}
 	}
 	return dm

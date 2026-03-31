@@ -619,6 +619,11 @@
         "code": "boe run --extension opa --config '{\n  \"policies\": [{\"file\": \"/tmp/policy.rego\"}],\n  \"dry_run\": true\n}'\n"
       },
       {
+        "title": "Include Envoy dynamic metadata in OPA input",
+        "description": "Include Envoy dynamic metadata in the OPA input document under `input.metadata`.\nThis allows writing policies that make decisions based on dynamic metadata from Envoy.\n",
+        "code": "boe run --extension opa --config '{\n  \"policies\": [{\"file\": \"/tmp/policy.rego\"}],\n  \"metadata_namespaces\": [\"envoy.filters.http.jwt_authn\"]\n}'\n"
+      },
+      {
         "title": "Fail-Open Mode",
         "description": "Enable fail-open mode to allow requests through when policy evaluation\nencounters an error, instead of returning a 500 response. Useful for\nnon-critical authorization checks where availability is prioritized\nover enforcement.\n",
         "code": "boe run --extension opa --config '{\n  \"policies\": [{\"file\": \"/tmp/policy.rego\"}],\n  \"fail_open\": true\n}'\n"

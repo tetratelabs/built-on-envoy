@@ -245,6 +245,15 @@ examples:
         "policies": [{"file": "/tmp/policy.rego"}],
         "dry_run": true
       }'
+  - title: Include Envoy dynamic metadata in OPA input
+    description: |
+      Include Envoy dynamic metadata in the OPA input document under `input.metadata`.
+      This allows writing policies that make decisions based on dynamic metadata from Envoy.
+    code: |
+      boe run --extension opa --config '{
+        "policies": [{"file": "/tmp/policy.rego"}],
+        "metadata_namespaces": ["envoy.filters.http.jwt_authn"]
+      }'
   - title: Fail-Open Mode
     description: |
       Enable fail-open mode to allow requests through when policy evaluation
