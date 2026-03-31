@@ -511,8 +511,8 @@
       },
       {
         "title": "Add decrypted payload to metadata",
-        "description": "Set `output_metadata` in the config to store the decrypted payload in Envoy's dynamic metadata instead of a\nheader. Specify the `key` to store the value under. The `namespace` defaults to `jwe-decrypt` if omitted.\nDownstream filters such as JWT authn, OPA, or ext_authz can then read the value from this metadata.\n",
-        "code": "# Store the decrypted payload in the default \"jwe-decrypt\" namespace\nboe run --extension jwe-decrypt --config '{\n  \"private_key\": { \"file\": \"/path/to/private-key.pem\" },\n  \"algorithm\": \"RSA-OAEP\",\n  \"input_header\": \"X-JWE-Token\",\n  \"output_metadata\": { \"key\": \"jwe_decrypted_payload\" }\n}'\n\n# Store the decrypted payload in a custom namespace\nboe run --extension jwe-decrypt --config '{\n  \"private_key\": { \"file\": \"/path/to/private-key.pem\" },\n  \"input_header\": \"X-JWE-Token\",\n  \"output_metadata\": { \"namespace\": \"my-namespace\", \"key\": \"jwe_decrypted_payload\" }\n}'\n"
+        "description": "Set `output_metadata` in the config to store the decrypted payload in Envoy's dynamic metadata instead of a\nheader. Specify the `key` to store the value under. The `namespace` defaults to `io.builtonenvoy.jwe-decrypt` if omitted.\nDownstream filters such as JWT authn, OPA, or ext_authz can then read the value from this metadata.\n",
+        "code": "# Store the decrypted payload in the default \"io.builtonenvoy.jwe-decrypt\" namespace\nboe run --extension jwe-decrypt --config '{\n  \"private_key\": { \"file\": \"/path/to/private-key.pem\" },\n  \"algorithm\": \"RSA-OAEP\",\n  \"input_header\": \"X-JWE-Token\",\n  \"output_metadata\": { \"key\": \"jwe_decrypted_payload\" }\n}'\n\n# Store the decrypted payload in a custom namespace\nboe run --extension jwe-decrypt --config '{\n  \"private_key\": { \"file\": \"/path/to/private-key.pem\" },\n  \"input_header\": \"X-JWE-Token\",\n  \"output_metadata\": { \"namespace\": \"my-namespace\", \"key\": \"jwe_decrypted_payload\" }\n}'\n"
       }
     ],
     "minEnvoyVersion": "1.37.1",
