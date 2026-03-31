@@ -6,7 +6,7 @@ This extension implements a Web Application Firewall using [OWASP Coraza](https:
 
 The CRS rules are embedded into the binary at build time using [Coraza Corerulset package](https://github.com/corazawaf/coraza-coreruleset). We provide sensible defaults that you can override.
 
-1. Bump the Coraza Corerulset dependency version in `go.mod`. You can find the latest Coraza version on the [Coraza Coreruleset releases page](https://github.com/corazawaf/coraza-coreruleset/releases).
+1. Bump the `coraza-corerulese` dependency version in `go.mod`. You can find the latest CRS version on the [coraza-coreruleset releases page](https://github.com/corazawaf/coraza-coreruleset/releases).
    ```sh
    go get github.com/corazawaf/coraza-coreruleset/v4@<new-version>
    go mod tidy
