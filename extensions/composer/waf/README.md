@@ -12,6 +12,22 @@ The CRS rules are embedded into the binary at build time using [Coraza Corerulse
    go mod tidy
    ```
 
+Or as a one-liner:
+
+```bash
+CRS_VERSION="4.25.0"; TMP_DIR="/tmp/coreruleset-v$CRS_VERSION"; \
+mkdir -p "$TMP_DIR" && \
+curl -fsSL "https://github.com/coreruleset/coreruleset/releases/download/v$CRS_VERSION/coreruleset-$CRS_VERSION-minimal.tar.gz" -o "$TMP_DIR/crs.tar.gz" && \
+tar -xzf "$TMP_DIR/crs.tar.gz" -C "$TMP_DIR" && \
+find coraza/rules/owasp_crs -type f \( -name '*.conf' -o -name '*.data' \) -delete && \
+mv "$TMP_DIR/coreruleset-$CRS_VERSION/rules/"*.conf "$TMP_DIR/coreruleset-$CRS_VERSION/rules/"*.data coraza/rules/owasp_crs/ && \
+mv "$TMP_DIR/coreruleset-$CRS_VERSION/crs-setup.conf.example" coraza/rules/crs-setup.conf.example.upstream && \
+rm -rf "$TMP_DIR"
+```
+
+> [!NOTE]
+> Manual review is needed afterward. Some configurations in this code are specific to the tetratelabs/built-on-envoy repository and should not be overwritten when making updates or migrations. Please ensure that repository-specific settings are preserved during any refactoring or dependency updates.
+
 ## Upgrading Coraza
 
 To upgrade to a new Coraza version:

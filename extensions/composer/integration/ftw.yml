@@ -42,6 +42,7 @@ testoverride:
     "932239-19": "Referer header is sanitized by Envoy and removed from the request"
     "932239-27": "Referer header is sanitized by Envoy and removed from the request"
     "932239-29": "Referer header is sanitized by Envoy and removed from the request"
+    "932390-9": "Referer header is sanitized by Envoy and removed from the request"
     "941101-1": "Referer header is sanitized by Envoy and removed from the request"
     "941110-4": "Referer header is sanitized by Envoy and removed from the request"
     "941120-50": "Referer header is sanitized by Envoy and removed from the request"
@@ -70,6 +71,9 @@ testoverride:
     "930110-7": "Coraza or CRS side. See https://github.com/corazawaf/coraza/pull/1081"
     "920274-1": "Failing on Coraza upstream as well"
     "920290-4": "Failing on Coraza upstream as well"
+    "941310-1": "upstream issue, see https://github.com/corazawaf/coraza/pull/1580"
+    "941310-3": "upstream issue, see https://github.com/corazawaf/coraza/pull/1580"
+    "941310-12": "upstream issue, see https://github.com/corazawaf/coraza/pull/1580"
 
     # Excluding individual failing tests probably not compatible with Envoy
     "920180-1": ""
