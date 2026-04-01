@@ -29,17 +29,29 @@ longDescription: |
 
   The WAF comes with support for OWASP CRS, formerly known as ModSecurity Core Rule Set (CRS), as well as
   some recommended configurations and allows custom rule configuration for specific security requirements.
-  To use the bundled rules, you can include them with the following special inclusion directives:
+  To use the bundled rules, you can include them with the Coraza `Include` directives as shown in this example:
 
   ```json
   {
     "directives": [
-      "Include @recommended.conf",
+      "Include @coraza.conf",
       "Include @crs-setup.conf",
       "Include @owasp_crs/*.conf"
     ]
   }
   ```
+
+  Available special names are:
+
+  | Name | Aliases | Description |
+  |---|---|---|
+  | `@coraza.conf-recommended` | — | Coraza upstream configuration file example |
+  | [`@coraza.conf`](coraza/directives/@coraza.conf) | `@recommended.conf`, `@recommended-conf` | Coraza configuration file tailored for Coraza dynamic module implementation |
+  | `@crs-setup.conf.example` | — | CRS upstream configuration file example |
+  | [`@crs-setup.conf`](coraza/directives/@crs-setup.conf) | `@crs-setup-conf` | CRS configuration file tailored for Coraza dynamic module implementation |
+  | `@owasp_crs/` | — | CRS rules directory |
+
+  Note: Aliases are provided for backward compatibility, but are deprecated and may be removed in future releases. It is recommended to use the primary names for new configurations.
 
   To create custom rules, refer to the [SecLang reference docs](https://coraza.io/docs/seclang/).
 
@@ -59,7 +71,7 @@ longDescription: |
   {
     "mode": "FULL",
     "directives": [
-      "Include @recommended.conf",
+      "Include @coraza.conf",
       "Include @crs-setup.conf",
       "Include @owasp_crs/*.conf"
     ]
@@ -112,7 +124,7 @@ examples:
       boe run --extension coraza-waf --config '
         {
           "directives": [
-            "Include @recommended.conf",
+            "Include @coraza.conf",
             "SecRuleEngine On",
             "SecResponseBodyAccess Off",
             "Include @crs-setup.conf",
@@ -147,7 +159,7 @@ examples:
       boe run --extension coraza-waf --config '
         {
           "directives": [
-            "Include @recommended.conf",
+            "Include @coraza.conf",
             "SecRuleEngine On",
             "SecResponseBodyAccess Off",
             "Include @crs-setup.conf",

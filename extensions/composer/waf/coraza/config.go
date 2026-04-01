@@ -14,10 +14,6 @@ import (
 	"github.com/corazawaf/coraza/v3"
 	ctypes "github.com/corazawaf/coraza/v3/types"
 	"go.uber.org/zap"
-
-	coreruleset "github.com/corazawaf/coraza-coreruleset/v4"
-	"github.com/jcchavezs/mergefs"
-	"github.com/jcchavezs/mergefs/io"
 )
 
 // WAFMode defines the operation mode for the WAF plugin.
@@ -76,7 +72,7 @@ func NewWAFConfigFromBytes(configBytes []byte, l *zap.Logger) (coraza.WAF, WAFMo
 func NewWAFFromDirectives(directives string, l *zap.Logger) (coraza.WAF, error) {
 	conf := coraza.NewWAFConfig().
 		WithErrorCallback(newSlogError(l)).
-		WithRootFS(mergefs.Merge(rulesFS{}, coreruleset.FS, io.OSFS))
+		WithRootFS(CombinedDirectivesFS)
 	return coraza.NewWAF(conf.WithDirectives(directives))
 }
 
