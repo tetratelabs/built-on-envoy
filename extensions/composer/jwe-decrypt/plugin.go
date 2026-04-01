@@ -17,6 +17,8 @@ import (
 	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
+const defaultMetadataNamespace = "io.builtonenvoy.jwe-decrypt"
+
 // Config represents the JSON configuration for this filter.
 type jweDecryptConfig struct {
 	// PrivateKey is the PKCS8 private key used for decryption, provided either via a file path or inline.
@@ -31,7 +33,7 @@ type jweDecryptConfig struct {
 	// OutputHeader is the name of the header where the decrypted payload will be stored.
 	OutputHeader string `json:"output_header"`
 	// OutputMetadata specifies the metadata namespace and key under which the decrypted payload will be stored.
-	// The namespace defaults to "jwe-decrypt" if not specified.
+	// The namespace defaults to "io.builtonenvoy.jwe-decrypt" if not specified.
 	OutputMetadata *pkg.MetadataKey `json:"output_metadata"`
 
 	privateKey *boeJwe.Keys
@@ -148,10 +150,10 @@ func (f *JWEDecryptHttpFilterConfigFactory) Create(handle shared.HttpFilterConfi
 	if cfg.InputHeader == "" {
 		cfg.InputHeader = "Authorization"
 	}
-	// Default metadata namespace to "jwe-decrypt" if not specified
+	// Default metadata namespace if not specified
 	if cfg.OutputMetadata != nil {
 		if cfg.OutputMetadata.Namespace == "" {
-			cfg.OutputMetadata.Namespace = "jwe-decrypt"
+			cfg.OutputMetadata.Namespace = defaultMetadataNamespace
 		}
 		if err := cfg.OutputMetadata.Validate(); err != nil {
 			handle.Log(shared.LogLevelError, "jwe-decrypt: invalid output metadata config: "+err.Error())

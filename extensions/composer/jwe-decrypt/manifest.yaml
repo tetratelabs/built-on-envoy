@@ -121,10 +121,10 @@ examples:
   - title: Add decrypted payload to metadata
     description: |
       Set `output_metadata` in the config to store the decrypted payload in Envoy's dynamic metadata instead of a
-      header. Specify the `key` to store the value under. The `namespace` defaults to `jwe-decrypt` if omitted.
+      header. Specify the `key` to store the value under. The `namespace` defaults to `io.builtonenvoy.jwe-decrypt` if omitted.
       Downstream filters such as JWT authn, OPA, or ext_authz can then read the value from this metadata.
     code: |
-      # Store the decrypted payload in the default "jwe-decrypt" namespace
+      # Store the decrypted payload in the default "io.builtonenvoy.jwe-decrypt" namespace
       boe run --extension jwe-decrypt --config '{
         "private_key": { "file": "/path/to/private-key.pem" },
         "algorithm": "RSA-OAEP",

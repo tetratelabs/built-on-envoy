@@ -738,7 +738,7 @@ func TestJWEDecryptHttpFilterConfigFactory_Create_DefaultMetadataNamespace(t *te
 	require.NoError(t, err)
 	jweFilterFactory, ok := filterFactory.(*jweDecryptHttpFilterFactory)
 	require.True(t, ok)
-	require.Equal(t, "jwe-decrypt", jweFilterFactory.config.OutputMetadata.Namespace)
+	require.Equal(t, "io.builtonenvoy.jwe-decrypt", jweFilterFactory.config.OutputMetadata.Namespace)
 }
 
 func TestJWEDecryptHttpFilterConfigFactory_Create_CustomMetadataNamespace(t *testing.T) {
