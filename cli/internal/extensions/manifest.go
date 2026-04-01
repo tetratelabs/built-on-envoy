@@ -287,10 +287,55 @@ func LoadLocalManifest(path string) (*Manifest, error) {
 		return nil, err
 	}
 	m.Path = path
-	if err = resolveVersions(m, Manifests); err != nil {
-		return nil, err
-	}
 	return m, nil
+}
+
+// ResolveLocalVersions resolves version fields for a local manifest that has a parent.
+// It first tries to find the parent manifest on the local filesystem by walking up the
+// directory tree from the manifest's path. If not found locally, it falls back to the
+// embedded manifests.
+func ResolveLocalVersions(m *Manifest) error {
+	if m.Type != TypeGo || m.Parent == "" {
+		return nil
+	}
+
+	// Try to find the parent manifest on the local filesystem.
+	parent, err := findLocalParentManifest(m)
+	if err == nil {
+		return resolveVersions(m, map[string]*Manifest{parent.Name: parent})
+	}
+
+	// Fall back to the embedded manifests.
+	return resolveVersions(m, Manifests)
+}
+
+// findLocalParentManifest walks up the directory tree from the manifest's path
+// looking for a manifest.yaml whose name matches the parent field.
+func findLocalParentManifest(m *Manifest) (*Manifest, error) {
+	// Start from the directory containing the child manifest and walk up.
+	dir := filepath.Dir(m.Path)
+	for {
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			// Reached filesystem root without finding the parent.
+			return nil, fmt.Errorf("%w: %s", ErrParentManifestNotFound, m.Parent)
+		}
+		dir = parent
+
+		candidate := filepath.Join(dir, "manifest.yaml")
+		if _, err := os.Stat(candidate); err != nil {
+			continue
+		}
+
+		// Load without validation since the parent may have a different type (e.g. composer).
+		cm, err := loadManifest(os.DirFS(dir), "manifest.yaml", false)
+		if err != nil {
+			continue
+		}
+		if cm.Name == m.Parent {
+			return cm, nil
+		}
+	}
 }
 
 // ValidateManifest validates the manifest against the JSON schema.

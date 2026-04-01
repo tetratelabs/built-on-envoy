@@ -330,6 +330,10 @@ func loadLocalManifests(ctx context.Context, logger *slog.Logger, downloader *ex
 			return nil, fmt.Errorf("%w from %s: %w", errFailedToLoadLocalManifest, path, err)
 		}
 
+		if err := extensions.ResolveLocalVersions(manifest); err != nil {
+			return nil, fmt.Errorf("%w from %s: %w", errFailedToLoadLocalManifest, path, err)
+		}
+
 		if build {
 			switch manifest.Type {
 			case extensions.TypeGo:
