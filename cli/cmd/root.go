@@ -42,6 +42,7 @@ type CLI struct {
 	Create      Create      `cmd:"" help:"Create a new extension template"`
 	Download    Download    `cmd:"" help:"Download extensions from the registry"`
 	Clean       Clean       `cmd:"" help:"Clean cache directories"`
+	UI          UI          `cmd:"" help:"Start the web UI"`
 	Version     Version     `cmd:"" help:"Print version information"`
 
 	// Global XDG flags

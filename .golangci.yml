@@ -39,6 +39,9 @@ linters:
       disable:
         - float-compare
         - go-require
+  exclusions:
+    paths:
+      - "node_modules/.*"
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0

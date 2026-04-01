@@ -35,7 +35,8 @@
       "type": "integer",
       "description": "HTTP status code returned when a request is denied. Defaults to 403.",
       "minimum": 100,
-      "maximum": 599
+      "maximum": 599,
+      "default": 403
     },
     "deny_body": {
       "type": "string",

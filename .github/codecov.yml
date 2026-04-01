@@ -17,6 +17,9 @@ flags:
   extensions:
     paths:
       - extensions
+  ui:
+    paths:
+      - ui
 
 coverage:
   status:
@@ -31,6 +34,11 @@ coverage:
           - extensions
         target: auto
         threshold: 5%
+      ui:
+        flags:
+          - ui
+        target: auto
+        threshold: 5%
     patch:
       cli:
         flags:
@@ -41,6 +49,12 @@ coverage:
       extensions:
         flags:
           - extensions
+        target: auto
+        only_pulls: true
+        threshold: 5%
+      ui:
+        flags:
+          - ui
         target: auto
         only_pulls: true
         threshold: 5%

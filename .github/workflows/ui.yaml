@@ -3,7 +3,7 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-name: CLI
+name: UI
 
 on:
   push:
@@ -28,10 +28,7 @@ jobs:
         with:
           filters: |
             code:
-              - '!**/*.md'
-              - '!examples/**'
-              - '!website/**'
-              - '!CODEOWNERS'
+              - 'ui/**'
           predicate-quantifier: every  # Make the filters be AND-ed
           token: "" # don't use github api
     outputs:
@@ -43,7 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./cli
+        working-directory: ./ui
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -62,7 +59,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./cli
+        working-directory: ./ui
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -80,7 +77,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./cli
+        working-directory: ./ui
     env:
       TEST_OPTS: -race
     steps:
@@ -96,49 +93,16 @@ jobs:
       - uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          flags: cli
-  
-  e2e:
-    needs: changes
-    if: ${{ needs.changes.outputs.code == 'true' }}
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./cli
-    env:
-      # For PRs, skip the long running tests. For pushes to main or release branches, run all tests.
-      GO_TEST_ARGS: ${{ github.event_name == 'pull_request' && '-v -test.short' || '-v' }}
-      TEST_BOE_REQUEST_TIMEOUT: 10s
-      TEST_BOE_REGISTRY: ghcr.io/tetratelabs/built-on-envoy
-      TEST_BOE_REGISTRY_USERNAME: ${{ github.actor }}
-      TEST_BOE_REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '22'
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
-      - run: make build_image
-      - run: make test-e2e
+          flags: ui
+          files: out/go-test-coverage.out,src/coverage/lcov.info
 
   # Aggregate all the required jobs and make it easier to customize CI required jobs
-  cli-checks:
+  ui-checks:
     runs-on: ubuntu-latest
     needs:
       - check
       - build
       - test
-      - e2e
     # We need this to run always to force-fail (and not skip) if any needed
     # job has failed. Otherwise, a skipped job will not fail the workflow.
     if: always()

@@ -14,8 +14,6 @@ header:
       the root of the repo.
   paths-ignore:
     - out/
-    # Ignore the CLI generated code
-    - internal/extensions/manifests/
     - "**/go.mod"
     - "**/go.sum"
     - "**/*.md"
@@ -34,3 +32,8 @@ header:
     - "**/*.json"
     - "**/*.log"
     - "**/integration/coreruleset/**"
+    # UI files
+    - "src/node_modules/**"
+    - "src/coverage/**"
+    - "schemas/**"
+    - "compiled/**"
