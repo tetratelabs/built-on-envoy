@@ -45,28 +45,6 @@ normalize_version() {
     esac
 }
 
-# Helper function to run curl with optional authentication
-auth_curl() {
-    if [ -n "${BOE_REGISTRY_PASSWORD:-}" ]; then
-        curl -sL -H "Authorization: Bearer ${BOE_REGISTRY_PASSWORD}" "$@"
-    else
-        curl -sL "$@"
-    fi
-}
-
-# Check for required dependencies
-check_dependencies() {
-    if ! command -v jq > /dev/null 2>&1; then
-        printf "${RED}[ERROR]${NC} jq is required but not installed.\n\n"
-        printf "To install jq:\n"
-        printf "  macOS:   brew install jq\n"
-        printf "  Linux:   sudo apt-get install jq  (Debian/Ubuntu)\n"
-        printf "           sudo yum install jq      (RHEL/CentOS)\n\n"
-        printf "For more info, visit: https://jqlang.github.io/jq/download/\n"
-        exit 1
-    fi
-}
-
 # Detect the operating system
 detect_os() {
     _os="$(uname -s | tr '[:upper:]' '[:lower:]')"
@@ -89,7 +67,7 @@ detect_arch() {
 
 # Get the latest release version from GitHub
 get_latest_version() {
-    _version=$(auth_curl "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    _version=$(curl -sL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
     if [ -z "$_version" ]; then
         error "Failed to fetch the latest release version. Please check your internet connection or try again later."
     fi
@@ -106,18 +84,10 @@ install_binary() {
     _tmp_dir=$(mktemp -d)
     trap 'rm -rf "$_tmp_dir"' EXIT
 
-    # Fetch asset ID using jq
-    _asset_id=$(auth_curl --fail -H "Accept: application/vnd.github+json" \
-        "https://api.github.com/repos/${REPO}/releases/tags/${_version}" | \
-        jq -r ".assets[] | select(.name == \"${_binary_name}\") | .id")
-    if [ -z "$_asset_id" ]; then
-        error "No available binary found for ${_os}/${_arch} in release ${_version}"
-    fi
-
     info "Downloading ${BINARY_NAME} ${_version} for ${_os}/${_arch}..."
-    _download_url="https://api.github.com/repos/${REPO}/releases/assets/${_asset_id}"
+    _download_url="https://github.com/tetratelabs/built-on-envoy/releases/download/${_version}/${_binary_name}"
     
-    if ! auth_curl --fail -H "Accept: application/octet-stream" -o "${_tmp_dir}/${BINARY_NAME}" "$_download_url"; then
+    if ! curl --fail -sL -H "Accept: application/octet-stream" -o "${_tmp_dir}/${BINARY_NAME}" "$_download_url"; then
         error "Failed to download ${BINARY_NAME} from ${_download_url}"
     fi
 
@@ -176,8 +146,6 @@ main() {
                 ;;
         esac
     done
-
-    check_dependencies
 
     printf "\n"
     bold "Installing Built On Envoy..."
