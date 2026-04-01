@@ -229,8 +229,8 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 						name, extensionSrc, err)
 				}
 				manifest.Remote = true // Mark the manifest as remote since it is from a downloaded artifact
-				// The LoadLocalmanifest resolves "parent" the versions from the embedded manifests, but here, after downloading the source
-				// we want to force the version to the ones form the downloaded artifact.
+				// Composer source artifacts contains manifests without version information (just the parent reference).
+				// We need to set the versions here.
 				manifest.Version = artifact.Manifest.Version
 				manifest.ComposerVersion = artifact.Manifest.ComposerVersion
 
