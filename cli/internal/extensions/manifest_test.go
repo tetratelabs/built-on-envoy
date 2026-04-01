@@ -7,6 +7,7 @@ package extensions
 
 import (
 	"io/fs"
+	"os"
 	"path/filepath"
 	"testing"
 	"testing/fstest"
@@ -503,5 +504,82 @@ func TestLoadLocalManifest(t *testing.T) {
 	t.Run("invalid-yaml", func(t *testing.T) {
 		_, err := LoadLocalManifest(filepath.Join("testdata", "invalid_manifest.yaml"))
 		require.ErrorIs(t, err, ErrParseManifestFile)
+	})
+}
+
+func TestResolveLocalVersions(t *testing.T) {
+	t.Run("local-parent-found", func(t *testing.T) {
+		// Create a directory structure: parent/child/manifest.yaml
+		tmpDir := t.TempDir()
+		parentDir := tmpDir
+		childDir := filepath.Join(tmpDir, "child")
+		require.NoError(t, os.MkdirAll(childDir, 0o750))
+
+		parentManifest := `name: test-parent
+version: 9.9.9
+composerVersion: 9.9.9
+minEnvoyVersion: 1.99.0
+type: composer
+extensionSet: true
+`
+		childManifest := `name: test-child
+parent: test-parent
+categories: [Misc]
+author: Test
+description: A child extension
+longDescription: A child extension
+type: go
+tags: [test]
+license: Apache-2.0
+examples: []
+`
+		require.NoError(t, os.WriteFile(filepath.Join(parentDir, "manifest.yaml"), []byte(parentManifest), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(childDir, "manifest.yaml"), []byte(childManifest), 0o600))
+
+		m, err := LoadLocalManifest(filepath.Join(childDir, "manifest.yaml"))
+		require.NoError(t, err)
+		require.Empty(t, m.Version)
+
+		require.NoError(t, ResolveLocalVersions(m))
+		assert.Equal(t, "9.9.9", m.Version)
+		assert.Equal(t, "9.9.9", m.ComposerVersion)
+		assert.Equal(t, "1.99.0", m.MinEnvoyVersion)
+	})
+
+	t.Run("no-local-parent-falls-back-to-embedded", func(t *testing.T) {
+		// Create a child manifest in an isolated temp dir (no parent on filesystem).
+		tmpDir := t.TempDir()
+		childManifest := `name: test-child
+parent: composer
+categories: [Misc]
+author: Test
+description: A child extension
+longDescription: A child extension
+type: go
+tags: [test]
+license: Apache-2.0
+examples: []
+`
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "manifest.yaml"), []byte(childManifest), 0o600))
+
+		m, err := LoadLocalManifest(filepath.Join(tmpDir, "manifest.yaml"))
+		require.NoError(t, err)
+
+		// Should fall back to embedded manifests (composer exists in embedded).
+		require.NoError(t, ResolveLocalVersions(m))
+		assert.Equal(t, Manifests["composer"].Version, m.Version)
+		assert.Equal(t, Manifests["composer"].Version, m.ComposerVersion)
+	})
+
+	t.Run("noop-for-non-go-type", func(t *testing.T) {
+		m := &Manifest{Name: "test", Type: TypeWasm, Version: "1.0.0"}
+		require.NoError(t, ResolveLocalVersions(m))
+		assert.Equal(t, "1.0.0", m.Version)
+	})
+
+	t.Run("noop-for-no-parent", func(t *testing.T) {
+		m := &Manifest{Name: "test", Type: TypeGo, Version: "1.0.0"}
+		require.NoError(t, ResolveLocalVersions(m))
+		assert.Equal(t, "1.0.0", m.Version)
 	})
 }

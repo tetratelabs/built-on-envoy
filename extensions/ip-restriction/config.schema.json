@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/ip-restriction/config.schema.json",
+  "title": "IP Restriction Configuration",
+  "description": "Configuration for the IP Restriction extension. Controls access based on IP allowlists or denylists. Exactly one of allow_addresses or deny_addresses must be provided.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "allow_addresses": {
+      "type": "array",
+      "description": "IP addresses or CIDR ranges to allow. When set, only requests from these addresses are permitted.",
+      "items": {
+        "type": "string",
+        "description": "An IPv4/IPv6 address or CIDR range (e.g. \"192.168.1.0/24\", \"::1\", \"10.0.0.1\")."
+      },
+      "uniqueItems": true
+    },
+    "deny_addresses": {
+      "type": "array",
+      "description": "IP addresses or CIDR ranges to deny. When set, requests from these addresses are blocked with 403 Forbidden.",
+      "items": {
+        "type": "string",
+        "description": "An IPv4/IPv6 address or CIDR range (e.g. \"192.168.1.50\", \"10.0.0.0/8\")."
+      },
+      "uniqueItems": true
+    }
+  },
+  "oneOf": [
+    {
+      "required": ["allow_addresses"],
+      "properties": {
+        "allow_addresses": {
+          "minItems": 1
+        }
+      }
+    },
+    {
+      "required": ["deny_addresses"],
+      "properties": {
+        "deny_addresses": {
+          "minItems": 1
+        }
+      }
+    }
+  ]
+}
