@@ -84,7 +84,6 @@ testoverride:
     "921140-1": ""
     "921250-1": ""
     "921250-2": ""
-    "942120-29": ""
 
     # Temporary exclusions while stabilizing the suite
     "920100-*": "failed: Connection refused"
