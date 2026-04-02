@@ -203,14 +203,14 @@ ENVOY_VERSION ?= distroless-dev
 ENVOY_IMAGE ?= docker.io/envoyproxy/envoy:$(ENVOY_VERSION)
 COMPOSER_LIB_PATH ?= $(CURDIR)/libcomposer.so
 CRS_REPO ?= https://github.com/coreruleset/coreruleset.git
-WAF_CRS_VERSION ?= $(shell sed -n 's/^\# OWASP CRS ver\.//p' $(CURDIR)/waf/coraza/rules/crs-setup.conf | head -n 1)
+WAF_CRS_VERSION ?= $(shell sed -n 's/^\# OWASP CRS ver\.//p' $(CURDIR)/waf/coraza/directives/@crs-setup.conf | head -n 1)
 CRS_REF ?= v$(WAF_CRS_VERSION)
 CRS_DIR ?= $(CURDIR)/integration/coreruleset/tests/regression/tests
 
 .PHONY: integration-setup
 integration-setup:
 	@if [ -z "$(WAF_CRS_VERSION)" ]; then \
-		echo "Could not determine WAF CRS version from waf/coraza/rules/crs-setup.conf"; \
+		echo "Could not determine WAF CRS version from waf/coraza/directives/@crs-setup.conf"; \
 		exit 1; \
 	fi
 	@if [ ! -d "$(CURDIR)/integration/coreruleset/.git" ]; then \

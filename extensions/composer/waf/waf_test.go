@@ -186,7 +186,7 @@ func Test_RequestOnlyWaf(t *testing.T) {
 	defer ctrl.Finish()
 
 	wafPluginFactory := newWAFFactory(t, ctrl, []string{
-		"Include @recommended.conf",
+		"Include @coraza.conf",
 		"Include @ftw.conf",
 		"Include @crs-setup.conf",
 		"Include @owasp_crs/*.conf",
@@ -399,7 +399,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 	defer ctrl.Finish()
 
 	wafPluginFactory := newWAFFactory(t, ctrl, []string{
-		"Include @recommended.conf",
+		"Include @coraza.conf",
 		"Include @ftw.conf",
 		"Include @crs-setup.conf",
 		"Include @owasp_crs/*.conf",
@@ -678,7 +678,7 @@ func Test_FullWaf(t *testing.T) {
 	defer ctrl.Finish()
 
 	wafPluginFactory := newWAFFactory(t, ctrl, []string{
-		"Include @recommended.conf",
+		"Include @coraza.conf",
 		"Include @ftw.conf",
 		"Include @crs-setup.conf",
 		"Include @owasp_crs/*.conf",

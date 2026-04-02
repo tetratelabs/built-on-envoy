@@ -29,17 +29,29 @@ longDescription: |
 
   The WAF comes with support for OWASP CRS, formerly known as ModSecurity Core Rule Set (CRS), as well as
   some recommended configurations and allows custom rule configuration for specific security requirements.
-  To use the bundled rules, you can include them with the following special inclusion directives:
+  To use the bundled rules, you can include them with the Coraza `Include` directives as shown in this example:
 
   ```json
   {
     "directives": [
-      "Include @recommended.conf",
+      "Include @coraza.conf",
       "Include @crs-setup.conf",
       "Include @owasp_crs/*.conf"
     ]
   }
   ```
+
+  Available special names are:
+
+  | Name | Aliases | Description |
+  |---|---|---|
+  | `@coraza.conf-recommended` | — | Coraza upstream configuration file example |
+  | [`@coraza.conf`](coraza/directives/@coraza.conf) | `@recommended.conf`, `@recommended-conf` | Coraza configuration file tailored for Coraza dynamic module implementation |
+  | `@crs-setup.conf.example` | — | CRS upstream configuration file example |
+  | [`@crs-setup.conf`](coraza/directives/@crs-setup.conf) | `@crs-setup-conf` | CRS configuration file tailored for Coraza dynamic module implementation |
+  | `@owasp_crs/` | — | CRS rules directory |
+
+  Note: Aliases are provided for backward compatibility, but are deprecated and may be removed in future releases. It is recommended to use the primary names for new configurations.
 
   To create custom rules, refer to the [SecLang reference docs](https://coraza.io/docs/seclang/).
 
@@ -59,7 +71,7 @@ longDescription: |
   {
     "mode": "FULL",
     "directives": [
-      "Include @recommended.conf",
+      "Include @coraza.conf",
       "Include @crs-setup.conf",
       "Include @owasp_crs/*.conf"
     ]
@@ -112,7 +124,7 @@ examples:
       boe run --extension coraza-waf --config '
         {
           "directives": [
-            "Include @recommended.conf",
+            "Include @coraza.conf",
             "SecRuleEngine On",
             "SecResponseBodyAccess Off",
             "Include @crs-setup.conf",
@@ -130,3 +142,40 @@ examples:
       < server: envoy
       <
       Request blocked by WAF
+  - title: CRS plugin from local filesystem
+    description: |
+      The following example demonstrates how to load a CRS plugin from the local filesystem and run the WAF plugin
+      with recommended OWASP CRS rules.
+
+      It first downloads the WordPress rule exclusions plugin to a local file, enables blocking with
+      `SecRuleEngine On`, and includes the plugin using `Include /tmp/wordpress-plugin.conf`. The same SQL injection
+      payload that would normally be blocked is no longer blocked because the plugin excludes this specific attack
+      vector.
+    code: |
+      # Retrieve the file
+      curl https://raw.githubusercontent.com/coreruleset/wordpress-rule-exclusions-plugin/refs/heads/master/plugins/wordpress-rule-exclusions-before.conf -o /tmp/wordpress-plugin-before.conf
+      
+      # Start WAF with recommended OWASP CRS rules, enforcement enabled, and loading the plugin file
+      boe run --extension coraza-waf --config '
+        {
+          "directives": [
+            "Include @coraza.conf",
+            "SecRuleEngine On",
+            "SecResponseBodyAccess Off",
+            "Include @crs-setup.conf",
+            "Include /tmp/wordpress-plugin-before.conf",
+            "Include @owasp_crs/*.conf"
+          ]
+        }'
+
+      # Try sending a SQL injection payload and see the request rejected
+      curl -v "http://localhost:10000/wp-json/wp/v2/posts/1" -X POST -H "Content-Type: application/json" --data '{"content": "SELECT * FROM users WHERE id=1"}'
+  
+
+      # the request is no longer blocked by the WAF as the rules in the plugin file are excluding the specific attack vector from being detected
+      < HTTP/1.1 404 Not Found
+      < date: Wed, 01 Apr 2026 13:10:33 GMT
+      < content-type: text/html
+      < content-length: 233
+      < server: envoy
+      ...

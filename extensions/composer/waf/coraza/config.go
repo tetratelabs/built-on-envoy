@@ -72,7 +72,7 @@ func NewWAFConfigFromBytes(configBytes []byte, l *zap.Logger) (coraza.WAF, WAFMo
 func NewWAFFromDirectives(directives string, l *zap.Logger) (coraza.WAF, error) {
 	conf := coraza.NewWAFConfig().
 		WithErrorCallback(newSlogError(l)).
-		WithRootFS(rulesFS{})
+		WithRootFS(combinedDirectivesFS)
 	return coraza.NewWAF(conf.WithDirectives(directives))
 }
 
