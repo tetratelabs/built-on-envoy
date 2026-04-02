@@ -46,9 +46,9 @@ longDescription: |
   | Name | Aliases | Description |
   |---|---|---|
   | `@coraza.conf-recommended` | — | Coraza upstream configuration file example |
-  | [`@coraza.conf`](coraza/directives/@coraza.conf) | `@recommended.conf`, `@recommended-conf` | Coraza configuration file tailored for Coraza dynamic module implementation |
+  | [`@coraza.conf`](https://github.com/tetratelabs/built-on-envoy/blob/main/extensions/composer/waf/coraza/directives/%40coraza.conf) | `@recommended.conf`, `@recommended-conf` | Coraza configuration file tailored for Coraza dynamic module implementation |
   | `@crs-setup.conf.example` | — | CRS upstream configuration file example |
-  | [`@crs-setup.conf`](coraza/directives/@crs-setup.conf) | `@crs-setup-conf` | CRS configuration file tailored for Coraza dynamic module implementation |
+  | [`@crs-setup.conf`](https://github.com/tetratelabs/built-on-envoy/blob/main/extensions/composer/waf/coraza/directives/%40crs-setup.conf) | `@crs-setup-conf` | CRS configuration file tailored for Coraza dynamic module implementation |
   | `@owasp_crs/` | — | CRS rules directory |
 
   Note: Aliases are provided for backward compatibility, but are deprecated and may be removed in future releases. It is recommended to use the primary names for new configurations.
@@ -170,9 +170,8 @@ examples:
 
       # Try sending a SQL injection payload and see the request rejected
       curl -v "http://localhost:10000/wp-json/wp/v2/posts/1" -X POST -H "Content-Type: application/json" --data '{"content": "SELECT * FROM users WHERE id=1"}'
-  
 
-      # the request is no longer blocked by the WAF as the rules in the plugin file are excluding the specific attack vector from being detected
+      # The request is no longer blocked by the WAF as the rules in the plugin file are excluding the specific attack vector from being detected
       < HTTP/1.1 404 Not Found
       < date: Wed, 01 Apr 2026 13:10:33 GMT
       < content-type: text/html
