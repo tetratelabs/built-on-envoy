@@ -18,7 +18,7 @@ func Test_newWAF(t *testing.T) {
 	t.Run("ok", func(t *testing.T) {
 		config := map[string]interface{}{
 			"directives": []string{
-				"Include @recommended.conf",
+				"Include @coraza.conf",
 				"Include @ftw.conf",
 				"Include @crs-setup.conf",
 				"Include @owasp_crs/*.conf",
