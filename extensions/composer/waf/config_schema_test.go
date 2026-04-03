@@ -21,6 +21,16 @@ func TestConfigSchema(t *testing.T) {
 	t.Run("empty config", func(t *testing.T) {
 		internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{}`)
 	})
+	t.Run("empty directives array", func(t *testing.T) {
+		internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{
+			"directives": []
+		}`)
+	})
+	t.Run("empty directive string", func(t *testing.T) {
+		internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{
+			"directives": [""]
+		}`)
+	})
 	t.Run("invalid mode", func(t *testing.T) {
 		internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{
 			"directives": ["SecRuleEngine On"],

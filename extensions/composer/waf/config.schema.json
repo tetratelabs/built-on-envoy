@@ -11,7 +11,8 @@
       "type": "array",
       "description": "List of Coraza SecLang directives. Each entry is a single directive string. Special includes are supported: \"Include @recommended.conf\", \"Include @crs-setup.conf\", \"Include @owasp_crs/*.conf\".",
       "items": {
-        "type": "string"
+        "type": "string",
+        "minLength": 1
       },
       "minItems": 1
     },
