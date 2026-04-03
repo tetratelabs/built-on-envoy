@@ -14,10 +14,12 @@ import (
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/chat-completions-decoder/embedded" // Chat Completions Decoder plugin.
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/example/embedded"                  // Example built-in plugin.
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/file-server/embedded"              // File server plugin.
+
 	// Go plugin to loader other composer plugins that be compiled into separate shared libraries.
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/goplugin-loader"
-	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/jwe-decrypt/embedded"       // JWE decryption plugin.
-	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/llm-proxy/embedded"         // LLM Proxy plugin.
+	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/jwe-decrypt/embedded" // JWE decryption plugin.
+	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/llm-proxy/embedded"   // LLM Proxy plugin.
+
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/opa/embedded"               // OPA authorization plugin.
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/openapi-validator/embedded" // OpenAPI validator plugin.
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/saml/embedded"              // SAML SP plugin.

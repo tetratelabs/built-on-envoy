@@ -17,6 +17,34 @@ import (
 	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
+
+// mustOpenAIFactory returns an LLMFactory for OpenAI, panicking on error.
+func mustOpenAIFactory() LLMFactory {
+f, err := FactoryForKind(KindOpenAI)
+if err != nil {
+panic(err)
+}
+return f
+}
+
+// mustAnthropicFactory returns an LLMFactory for Anthropic, panicking on error.
+func mustAnthropicFactory() LLMFactory {
+f, err := FactoryForKind(KindAnthropic)
+if err != nil {
+panic(err)
+}
+return f
+}
+
+// mustCustomFactory returns an LLMFactory for custom kind, panicking on error.
+func mustCustomFactory() LLMFactory {
+f, err := FactoryForKind(KindCustom)
+if err != nil {
+panic(err)
+}
+return f
+}
+
 // defaultCfg returns a config with one OpenAI rule and the default namespace.
 // LLMFactory is set so that OnRequestHeaders can proceed past the nil-factory guard.
 func defaultCfg() *llmProxyConfig {
@@ -24,7 +52,7 @@ func defaultCfg() *llmProxyConfig {
 		LLMConfigs: []llmConfig{{
 			Matcher: prefixMatcher("/v1/chat/completions"),
 			Kind:    KindOpenAI,
-			Factory: &openaiFactory{},
+			Factory: mustOpenAIFactory(),
 		}},
 		MetadataNamespace: defaultMetadataNamespace,
 	}
@@ -259,7 +287,7 @@ func TestOnRequestBody_NotEndOfStream(t *testing.T) {
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 
-	filter := &llmProxyFilter{handle: mockHandle, config: defaultCfg(), matched: true, factory: &openaiFactory{}}
+	filter := &llmProxyFilter{handle: mockHandle, config: defaultCfg(), matched: true, factory: mustOpenAIFactory()}
 	result := filter.OnRequestBody(fake.NewFakeBodyBuffer([]byte(`partial`)), false)
 	require.Equal(t, shared.BodyStatusStopAndBuffer, result)
 }
@@ -282,7 +310,7 @@ func TestOnRequestBody_OpenAI_SetsMetadata(t *testing.T) {
 		config:  defaultCfgWithStats(newTestStats(ctrl)),
 		matched: true,
 		kind:    KindOpenAI,
-		factory: &openaiFactory{},
+		factory: mustOpenAIFactory(),
 	}
 	result := filter.OnRequestBody(fake.NewFakeBodyBuffer(body), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
@@ -312,7 +340,7 @@ func TestOnRequestBody_Anthropic_SetsMetadata(t *testing.T) {
 		config:  cfg,
 		matched: true,
 		kind:    KindAnthropic,
-		factory: &anthropicFactory{},
+		factory: mustAnthropicFactory(),
 	}
 	result := filter.OnRequestBody(fake.NewFakeBodyBuffer(body), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
@@ -330,7 +358,7 @@ func TestOnRequestBody_InvalidJSON_LogsDebug(t *testing.T) {
 	mockHandle.EXPECT().IncrementCounterValue(idRequestError, uint64(1), "", "").Return(shared.MetricsSuccess).Times(1)
 	mockHandle.EXPECT().IncrementCounterValue(idRequestTotal, uint64(1), "", "").Return(shared.MetricsSuccess).Times(1)
 
-	filter := &llmProxyFilter{handle: mockHandle, config: defaultCfgWithStats(newTestStats(ctrl)), matched: true, factory: &openaiFactory{}}
+	filter := &llmProxyFilter{handle: mockHandle, config: defaultCfgWithStats(newTestStats(ctrl)), matched: true, factory: mustOpenAIFactory()}
 	result := filter.OnRequestBody(fake.NewFakeBodyBuffer(body), true)
 	// Graceful degradation: continue even on parse failure.
 	require.Equal(t, shared.BodyStatusContinue, result)
@@ -356,7 +384,7 @@ func TestOnRequestTrailers_NotProcessed_ParsesBody(t *testing.T) {
 		config:  defaultCfgWithStats(newTestStats(ctrl)),
 		matched: true,
 		kind:    KindOpenAI,
-		factory: &openaiFactory{},
+		factory: mustOpenAIFactory(),
 	}
 	result := filter.OnRequestTrailers(fake.NewFakeHeaderMap(nil))
 	require.Equal(t, shared.TrailersStatusContinue, result)
@@ -407,7 +435,7 @@ func TestOnResponseHeaders_SSE_SetsParser(t *testing.T) {
 	// "llm-proxy: handling SSE response" has no format args → 0 variadic args.
 	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any()).Times(1)
 
-	filter := &llmProxyFilter{handle: mockHandle, config: defaultCfg(), matched: true, factory: &openaiFactory{}}
+	filter := &llmProxyFilter{handle: mockHandle, config: defaultCfg(), matched: true, factory: mustOpenAIFactory()}
 	headers := fake.NewFakeHeaderMap(map[string][]string{":status": {"200"}, "content-type": {"text/event-stream"}})
 	result := filter.OnResponseHeaders(headers, false)
 	require.Equal(t, shared.HeadersStatusContinue, result)
@@ -419,7 +447,7 @@ func TestOnResponseHeaders_JSON_Stop(t *testing.T) {
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 
-	filter := &llmProxyFilter{handle: mockHandle, config: defaultCfg(), matched: true, factory: &openaiFactory{}}
+	filter := &llmProxyFilter{handle: mockHandle, config: defaultCfg(), matched: true, factory: mustOpenAIFactory()}
 	headers := fake.NewFakeHeaderMap(map[string][]string{":status": {"200"}, "content-type": {"application/json"}})
 	result := filter.OnResponseHeaders(headers, false)
 	require.Equal(t, shared.HeadersStatusStop, result)
@@ -443,7 +471,7 @@ func TestOnResponseBody_NonStreaming_NotEndOfStream(t *testing.T) {
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 
-	filter := &llmProxyFilter{handle: mockHandle, config: defaultCfg(), matched: true, factory: &openaiFactory{}}
+	filter := &llmProxyFilter{handle: mockHandle, config: defaultCfg(), matched: true, factory: mustOpenAIFactory()}
 	result := filter.OnResponseBody(fake.NewFakeBodyBuffer([]byte(`partial`)), false)
 	require.Equal(t, shared.BodyStatusStopAndBuffer, result)
 }
@@ -468,7 +496,7 @@ func TestOnResponseBody_OpenAI_SetsUsageMetadata(t *testing.T) {
 		handle:  mockHandle,
 		config:  defaultCfgWithStats(newTestStats(ctrl)),
 		matched: true,
-		factory: &openaiFactory{},
+		factory: mustOpenAIFactory(),
 		model:   "gpt-4o",
 		kind:    KindOpenAI,
 	}
@@ -502,7 +530,7 @@ func TestOnResponseBody_Anthropic_SetsUsageMetadata(t *testing.T) {
 		handle:  mockHandle,
 		config:  cfg,
 		matched: true,
-		factory: &anthropicFactory{},
+		factory: mustAnthropicFactory(),
 		model:   "gpt-4o",
 		kind:    KindAnthropic,
 	}
@@ -532,7 +560,7 @@ func TestOnResponseBody_NoUsageInResponse(t *testing.T) {
 		handle:  mockHandle,
 		config:  defaultCfgWithStats(newTestStats(ctrl)),
 		matched: true,
-		factory: &openaiFactory{},
+		factory: mustOpenAIFactory(),
 		model:   "gpt-4o",
 		kind:    KindOpenAI,
 	}
@@ -554,12 +582,12 @@ func TestOnResponseBody_SSE_OpenAI_AccumulatesAndSetsMetadata(t *testing.T) {
 	mockHandle.EXPECT().IncrementCounterValue(idOutputTokens, uint64(4), "openai", "gpt-4o").Return(shared.MetricsSuccess).Times(1)
 	mockHandle.EXPECT().IncrementCounterValue(idTotalTokens, uint64(12), "openai", "gpt-4o").Return(shared.MetricsSuccess).Times(1)
 
-	acc := newOpenAISSEParser()
+	acc := mustOpenAIFactory().NewSSEParser()
 	filter := &llmProxyFilter{
 		handle:    mockHandle,
 		config:    defaultCfgWithStats(newTestStats(ctrl)),
 		matched:   true,
-		factory:   &openaiFactory{},
+		factory:   mustOpenAIFactory(),
 		sseParser: acc,
 		model:     "gpt-4o",
 		kind:      KindOpenAI,
@@ -587,7 +615,7 @@ func TestOnResponseBody_SSE_Anthropic_AccumulatesAndSetsMetadata(t *testing.T) {
 	mockHandle.EXPECT().IncrementCounterValue(idOutputTokens, uint64(10), "anthropic", "claude-1").Return(shared.MetricsSuccess).Times(1)
 	mockHandle.EXPECT().IncrementCounterValue(idTotalTokens, uint64(35), "anthropic", "claude-1").Return(shared.MetricsSuccess).Times(1)
 
-	acc := newAnthropicSSEParser()
+	acc := mustAnthropicFactory().NewSSEParser()
 	cfg := &llmProxyConfig{
 		LLMConfigs:        []llmConfig{{Matcher: prefixMatcher("/v1/messages"), Kind: KindAnthropic}},
 		MetadataNamespace: defaultMetadataNamespace,
@@ -597,7 +625,7 @@ func TestOnResponseBody_SSE_Anthropic_AccumulatesAndSetsMetadata(t *testing.T) {
 		handle:    mockHandle,
 		config:    cfg,
 		matched:   true,
-		factory:   &anthropicFactory{},
+		factory:   mustAnthropicFactory(),
 		sseParser: acc,
 		model:     "claude-1",
 		kind:      KindAnthropic,
@@ -656,7 +684,7 @@ func TestOnResponseTrailers_NonStreaming_ParsesBody(t *testing.T) {
 		handle:  mockHandle,
 		config:  defaultCfgWithStats(newTestStats(ctrl)),
 		matched: true,
-		factory: &openaiFactory{},
+		factory: mustOpenAIFactory(),
 		model:   "gpt-4o",
 		kind:    KindOpenAI,
 	}
@@ -690,7 +718,7 @@ func TestCustomAPIType_RequestParsedLikeOpenAI(t *testing.T) {
 		config:  cfg,
 		matched: true,
 		kind:    KindCustom,
-		factory: &customFactory{},
+		factory: mustCustomFactory(),
 	}
 	filter.parseRequestBody()
 	require.NotNil(t, filter.llmReq)
@@ -775,7 +803,7 @@ func TestOnRequestBody_LLMModelHeader_SetsRequestHeader(t *testing.T) {
 	mockHandle.EXPECT().IncrementCounterValue(idRequestTotal, uint64(1), "openai", "gpt-4o").Return(shared.MetricsSuccess).Times(1)
 
 	cfg := &llmProxyConfig{
-		LLMConfigs:        []llmConfig{{Matcher: prefixMatcher("/v1/chat/completions"), Kind: KindOpenAI, Factory: &openaiFactory{}}},
+		LLMConfigs:        []llmConfig{{Matcher: prefixMatcher("/v1/chat/completions"), Kind: KindOpenAI, Factory: mustOpenAIFactory()}},
 		MetadataNamespace: defaultMetadataNamespace,
 		LLMModelHeader:    "x-llm-model",
 		stats:             newTestStats(ctrl),
@@ -785,7 +813,7 @@ func TestOnRequestBody_LLMModelHeader_SetsRequestHeader(t *testing.T) {
 		config:  cfg,
 		matched: true,
 		kind:    KindOpenAI,
-		factory: &openaiFactory{},
+		factory: mustOpenAIFactory(),
 	}
 	filter.OnRequestBody(fake.NewFakeBodyBuffer(body), true)
 }
@@ -805,7 +833,7 @@ func TestOnRequestBody_ClearRouteCache_CallsClearRouteCache(t *testing.T) {
 	mockHandle.EXPECT().IncrementCounterValue(idRequestTotal, uint64(1), "openai", "gpt-4o").Return(shared.MetricsSuccess).Times(1)
 
 	cfg := &llmProxyConfig{
-		LLMConfigs:        []llmConfig{{Matcher: prefixMatcher("/v1/chat/completions"), Kind: KindOpenAI, Factory: &openaiFactory{}}},
+		LLMConfigs:        []llmConfig{{Matcher: prefixMatcher("/v1/chat/completions"), Kind: KindOpenAI, Factory: mustOpenAIFactory()}},
 		MetadataNamespace: defaultMetadataNamespace,
 		ClearRouteCache:   true,
 		stats:             newTestStats(ctrl),
@@ -815,7 +843,7 @@ func TestOnRequestBody_ClearRouteCache_CallsClearRouteCache(t *testing.T) {
 		config:  cfg,
 		matched: true,
 		kind:    KindOpenAI,
-		factory: &openaiFactory{},
+		factory: mustOpenAIFactory(),
 	}
 	filter.OnRequestBody(fake.NewFakeBodyBuffer(body), true)
 }
@@ -834,16 +862,18 @@ func TestOnResponseTrailers_Streaming_FinishesSSE(t *testing.T) {
 	mockHandle.EXPECT().IncrementCounterValue(idOutputTokens, uint64(5), "openai", "gpt-4o").Return(shared.MetricsSuccess).Times(1)
 	mockHandle.EXPECT().IncrementCounterValue(idTotalTokens, uint64(15), "openai", "gpt-4o").Return(shared.MetricsSuccess).Times(1)
 
-	acc := newOpenAISSEParser()
+	acc := mustOpenAIFactory().NewSSEParser()
 	// Feed a usage chunk before the trailers arrive.
-	require.NoError(t, acc.Feed([]byte("data: {\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"total_tokens\":15}}\n")))
-	require.NoError(t, acc.Feed([]byte("data: [DONE]\n")))
+	_, err := acc.Feed([]byte("data: {\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"total_tokens\":15}}\n"))
+	require.NoError(t, err)
+	_, err = acc.Feed([]byte("data: [DONE]\n"))
+	require.NoError(t, err)
 
 	filter := &llmProxyFilter{
 		handle:    mockHandle,
 		config:    defaultCfgWithStats(newTestStats(ctrl)),
 		matched:   true,
-		factory:   &openaiFactory{},
+		factory:   mustOpenAIFactory(),
 		sseParser: acc,
 		model:     "gpt-4o",
 		kind:      KindOpenAI,

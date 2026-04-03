@@ -57,16 +57,11 @@ func (c *llmConfig) ValidateAndParse() error {
 	}
 
 	// Set the LLMFactory based on the API kind.
-	if c.Kind == KindOpenAI {
-		c.Factory = &openaiFactory{}
+	factory, err := FactoryForKind(c.Kind)
+	if err != nil {
+		return err
 	}
-	if c.Kind == KindAnthropic {
-		c.Factory = &anthropicFactory{}
-	}
-	// TODO(wbpcode): support custom format in the future.
-	if c.Kind == KindCustom {
-		c.Factory = &customFactory{}
-	}
+	c.Factory = factory
 	return nil
 }
 
@@ -327,7 +322,7 @@ func (f *llmProxyFilter) OnResponseBody(body shared.BodyBuffer, endOfStream bool
 		// Streaming SSE: feed each arriving chunk into the parser.
 		if body != nil {
 			for _, chunk := range body.GetChunks() {
-				if err := f.sseParser.Feed(chunk.ToUnsafeBytes()); err != nil {
+				if _, err := f.sseParser.Feed(chunk.ToUnsafeBytes()); err != nil {
 					f.onError(fmt.Sprintf("event stream error: %s", err.Error()))
 					return shared.BodyStatusContinue
 				}

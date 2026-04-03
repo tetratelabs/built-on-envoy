@@ -81,7 +81,7 @@ func TestStats_RequestBody_Success_RecordsTotal(t *testing.T) {
 
 	filter := &llmProxyFilter{
 		handle: handle, config: defaultCfgWithStats(s),
-		matched: true, kind: KindOpenAI, factory: &openaiFactory{},
+		matched: true, kind: KindOpenAI, factory: mustOpenAIFactory(),
 	}
 	filter.OnRequestBody(fake.NewFakeBodyBuffer(body), true)
 	require.False(t, filter.requestSentAt.IsZero(), "requestSentAt must be set on success")
@@ -109,7 +109,7 @@ func TestStats_RequestBody_ParseError_RecordsErrorAndTotal(t *testing.T) {
 
 	filter := &llmProxyFilter{
 		handle: handle, config: defaultCfgWithStats(s),
-		matched: true, kind: KindOpenAI, factory: &openaiFactory{},
+		matched: true, kind: KindOpenAI, factory: mustOpenAIFactory(),
 	}
 	filter.OnRequestBody(fake.NewFakeBodyBuffer(body), true)
 	require.True(t, filter.hasError)
@@ -132,7 +132,7 @@ func TestStats_NonStreamingResponse_RecordsTokenCounters(t *testing.T) {
 
 	filter := &llmProxyFilter{
 		handle: handle, config: defaultCfgWithStats(s),
-		matched: true, kind: KindOpenAI, factory: &openaiFactory{},
+		matched: true, kind: KindOpenAI, factory: mustOpenAIFactory(),
 		model: "gpt-4o",
 	}
 	filter.OnResponseBody(fake.NewFakeBodyBuffer(body), true)
@@ -152,10 +152,10 @@ func TestStats_StreamingResponse_RecordsTTFT_TPOT_Tokens(t *testing.T) {
 	handle.EXPECT().RecordHistogramValue(idTTFT, gomock.Any(), "openai", "gpt-4o").Return(shared.MetricsSuccess).Times(1)
 	handle.EXPECT().RecordHistogramValue(idTPOT, gomock.Any(), "openai", "gpt-4o").Return(shared.MetricsSuccess).Times(1)
 
-	acc := newOpenAISSEParser()
+	acc := mustOpenAIFactory().NewSSEParser()
 	filter := &llmProxyFilter{
 		handle: handle, config: defaultCfgWithStats(s),
-		matched: true, kind: KindOpenAI, factory: &openaiFactory{},
+		matched: true, kind: KindOpenAI, factory: mustOpenAIFactory(),
 		model:         "gpt-4o",
 		sseParser:     acc,
 		requestSentAt: time.Now().Add(-100 * time.Millisecond), // simulate sent 100 ms ago
@@ -182,10 +182,10 @@ func TestStats_StreamingResponse_NoTTFT_WhenRequestSentAtNotSet(t *testing.T) {
 	handle.EXPECT().IncrementCounterValue(idTotalTokens, gomock.Any(), gomock.Any(), gomock.Any()).Return(shared.MetricsSuccess).AnyTimes()
 	// No RecordHistogramValue expected.
 
-	acc := newOpenAISSEParser()
+	acc := mustOpenAIFactory().NewSSEParser()
 	filter := &llmProxyFilter{
 		handle: handle, config: defaultCfgWithStats(s),
-		matched: true, kind: KindOpenAI, factory: &openaiFactory{},
+		matched: true, kind: KindOpenAI, factory: mustOpenAIFactory(),
 		model:     "gpt-4o",
 		sseParser: acc,
 		// requestSentAt left as zero value → TTFT/TPOT skipped

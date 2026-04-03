@@ -7,66 +7,116 @@
 // and extracts model, stream, and token-usage information into filter metadata.
 package llmproxy
 
-const (
-	// KindOpenAI matches the OpenAI Chat Completions API.
-	KindOpenAI string = "openai"
-	// KindAnthropic matches the Anthropic Messages API.
-	KindAnthropic string = "anthropic"
-	// KindCustom matches a custom OpenAI-compatible API.
-	// It uses the same request/response structure as OpenAI.
-	KindCustom string = "custom"
+import (
+	"fmt"
+
+	anthropicpkg "github.com/tetratelabs/built-on-envoy/extensions/composer/llm-proxy/anthropic"
+	llm "github.com/tetratelabs/built-on-envoy/extensions/composer/llm-proxy/llm"
+	openaipkg "github.com/tetratelabs/built-on-envoy/extensions/composer/llm-proxy/openai"
 )
 
-// LLMUsage holds the token-usage counters extracted from an LLM API response.
-type LLMUsage struct {
-	// InputTokens is the number of tokens consumed by the prompt / input.
-	InputTokens uint32
-	// OutputTokens is the number of tokens produced by the completion / output.
-	OutputTokens uint32
-	// TotalTokens is the sum of InputTokens and OutputTokens.
-	TotalTokens uint32
+// Type aliases so plugin.go and stats.go need no changes.
+type (
+	LLMRequest       = llm.LLMRequest
+	LLMResponse      = llm.LLMResponse
+	LLMResponseChunk = llm.LLMResponseChunk
+	SSEParser        = llm.SSEParser
+	LLMFactory       = llm.LLMFactory
+	LLMUsage         = llm.LLMUsage
+	LLMMessage       = llm.LLMMessage
+	LLMContentPart   = llm.LLMContentPart
+	LLMTool          = llm.LLMTool
+	LLMToolCall      = llm.LLMToolCall
+	LLMToolChoice    = llm.LLMToolChoice
+	LLMContentAudio  = llm.LLMContentAudio
+	LLMContentImage  = llm.LLMContentImage
+	LLMContentFile   = llm.LLMContentFile
+)
+
+const (
+	// KindOpenAI matches the OpenAI Chat Completions API.
+	KindOpenAI = llm.KindOpenAI
+	// KindAnthropic matches the Anthropic Messages API.
+	KindAnthropic = llm.KindAnthropic
+	// KindCustom matches a custom OpenAI-compatible API.
+	KindCustom = llm.KindCustom
+)
+
+// Message role constants.
+const (
+	RoleSystem    = llm.RoleSystem
+	RoleUser      = llm.RoleUser
+	RoleAssistant = llm.RoleAssistant
+	RoleTool      = llm.RoleTool
+)
+
+// Tool type constant.
+const ToolTypeFunction = llm.ToolTypeFunction
+
+// Tool choice type constants.
+const (
+	ToolChoiceAuto     = llm.ToolChoiceAuto
+	ToolChoiceNone     = llm.ToolChoiceNone
+	ToolChoiceRequired = llm.ToolChoiceRequired
+	ToolChoiceFunction = llm.ToolChoiceFunction
+)
+
+// Canonical finish reason constants (OpenAI-compatible values used throughout).
+const (
+	FinishReasonStop      = llm.FinishReasonStop
+	FinishReasonLength    = llm.FinishReasonLength
+	FinishReasonToolCalls = llm.FinishReasonToolCalls
+)
+
+// Content part type constants.
+const (
+	ContentPartTypeText    = llm.ContentPartTypeText
+	ContentPartTypeRefusal = llm.ContentPartTypeRefusal
+	ContentPartTypeImage   = llm.ContentPartTypeImage
+	ContentPartTypeAudio   = llm.ContentPartTypeAudio
+	ContentPartTypeFile    = llm.ContentPartTypeFile
+)
+
+// FactoryForKind returns the LLMFactory for the given kind string.
+// Supported kinds: KindOpenAI, KindAnthropic, KindCustom.
+// KindCustom reuses the OpenAI factory since custom providers are OpenAI-compatible.
+func FactoryForKind(kind string) (LLMFactory, error) {
+	switch kind {
+	case KindOpenAI, KindCustom:
+		return openaipkg.NewFactory(), nil
+	case KindAnthropic:
+		return anthropicpkg.NewFactory(), nil
+	default:
+		return nil, fmt.Errorf("llm-proxy: unsupported target kind %q", kind)
+	}
 }
 
-// LLMRequest abstracts over different LLM API request formats.
-type LLMRequest interface {
-	// GetModel returns the model name specified in the request.
-	GetModel() string
-	// IsStream returns whether the request asks for a streaming (SSE) response.
-	IsStream() bool
+// TransformLLMRequestTo converts any LLMRequest into a new LLMRequest backed by
+// the concrete implementation for the given API kind.
+func TransformLLMRequestTo(req LLMRequest, kind string) (LLMRequest, error) {
+	f, err := FactoryForKind(kind)
+	if err != nil {
+		return nil, err
+	}
+	return f.TransformRequest(req)
 }
 
-// LLMResponse abstracts over different LLM API non-streaming response formats.
-type LLMResponse interface {
-	// GetUsage returns token-usage information extracted from the response body.
-	// The zero value of LLMUsage indicates that no usage data was present.
-	GetUsage() LLMUsage
+// TransformLLMResponseTo converts any LLMResponse into a new LLMResponse backed by
+// the concrete implementation for the given API kind.
+func TransformLLMResponseTo(resp LLMResponse, kind string) (LLMResponse, error) {
+	f, err := FactoryForKind(kind)
+	if err != nil {
+		return nil, err
+	}
+	return f.TransformResponse(resp)
 }
 
-// LLMResponseChunk abstracts over a single event in an LLM streaming SSE response.
-type LLMResponseChunk interface {
-	// GetUsage returns token-usage information carried by this chunk.
-	// The zero value of LLMUsage indicates that the chunk carries no usage data.
-	GetUsage() LLMUsage
-}
-
-// SSEParser incrementally consumes body chunks from an LLM streaming SSE response
-// and produces an LLMResponse once the stream is complete.
-type SSEParser interface {
-	// Feed appends a new body chunk to the parser's internal buffer and processes
-	// any complete SSE events it contains. It returns the first parse error
-	// encountered in this chunk, if any; the caller is responsible for logging it.
-	Feed(data []byte) error
-	// Finish finalises parsing and returns the accumulated LLMResponse and any
-	// terminal error encountered while processing the stream.
-	Finish() (LLMResponse, error)
-}
-
-// LLMFactory creates the per-API-type parsers for a specific LLM provider.
-type LLMFactory interface {
-	// ParseRequest parses a complete request body and returns an LLMRequest.
-	ParseRequest(body []byte) (LLMRequest, error)
-	// ParseResponse parses a complete non-streaming response body and returns an LLMResponse.
-	ParseResponse(body []byte) (LLMResponse, error)
-	// NewSSEParser creates an SSEParser for accumulating a streaming SSE response.
-	NewSSEParser() SSEParser
+// TransformLLMResponseChunkTo converts any LLMResponseChunk into a new
+// LLMResponseChunk backed by the concrete implementation for the given API kind.
+func TransformLLMResponseChunkTo(chunk LLMResponseChunk, kind string) (LLMResponseChunk, error) {
+	f, err := FactoryForKind(kind)
+	if err != nil {
+		return nil, err
+	}
+	return f.TransformChunk(chunk)
 }
