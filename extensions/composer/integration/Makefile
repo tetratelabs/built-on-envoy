@@ -3,7 +3,7 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-.PHONY: cleqn
+.PHONY: clean
 clean:
 	rm -rf *.log
 	rm -rf coreruleset
