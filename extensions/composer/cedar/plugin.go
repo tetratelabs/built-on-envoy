@@ -295,7 +295,12 @@ func (c *cedarHttpFilter) dynamicMetadataMap() cedarlib.Value {
 			if value, ok := c.handle.GetMetadataString(shared.MetadataSourceTypeDynamic, ns, keyStr); ok {
 				nsMap[cedarlib.String(keyStr)] = cedarlib.String(value.ToUnsafeString())
 			} else if numValue, ok := c.handle.GetMetadataNumber(shared.MetadataSourceTypeDynamic, ns, keyStr); ok {
-				nsMap[cedarlib.String(keyStr)] = cedarlib.Long(int64(numValue))
+				intValue := int64(numValue)
+				if float64(intValue) == numValue {
+					nsMap[cedarlib.String(keyStr)] = cedarlib.Long(intValue)
+				} else {
+					nsMap[cedarlib.String(keyStr)] = cedarlib.String(fmt.Sprintf("%g", numValue))
+				}
 			}
 		}
 		if len(nsMap) > 0 {
