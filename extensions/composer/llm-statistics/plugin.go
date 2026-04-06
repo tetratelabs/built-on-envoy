@@ -207,16 +207,36 @@ func (f *statisticsFilter) OnResponseBody(body shared.BodyBuffer, endOfStream bo
 	if !endOfStream {
 		return shared.BodyStatusStopAndBuffer
 	}
+	f.finalizeBufferedResponse()
+	return shared.BodyStatusContinue
+}
+
+func (f *statisticsFilter) finalizeBufferedResponse() {
+	if f.parseFailed {
+		return
+	}
+
+	// Mark the buffered non-stream response as finalized so trailers/body end
+	// callbacks cannot parse and record metrics twice.
+	f.parseFailed = true
+
 	resp, err := f.factory.ParseResponse(utility.ReadWholeResponseBody(f.handle))
 	if err != nil {
 		f.metrics.requestsErrorIncrement(f.handle, f.kind, f.model, responseTypeNonStream)
 		f.handle.Log(shared.LogLevelDebug, "llm-statistics: failed to parse response: %s", err.Error())
-		return shared.BodyStatusContinue
+		return
 	}
 	f.finish(resp, responseTypeNonStream)
-	return shared.BodyStatusContinue
 }
 
+func (f *statisticsFilter) OnResponseTrailers(trailers shared.HeaderMap) shared.HeadersStatus {
+	if !f.matched || f.parseFailed || f.sseParser != nil {
+		return shared.HeadersStatusContinue
+	}
+
+	f.finalizeBufferedResponse()
+	return shared.HeadersStatusContinue
+}
 func (f *statisticsFilter) finish(resp LLMResponse, responseType string) {
 	usage := resp.GetUsage()
 	f.metrics.requestsIncrement(f.handle, f.kind, f.model, responseType)
