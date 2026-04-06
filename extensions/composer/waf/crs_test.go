@@ -7,7 +7,7 @@
 // These tests include validating that certain coraza build tags are enabled by default in the plugin.
 // Details on each build tag can be found at https://github.com/corazawaf/coraza?tab=readme-ov-file#build-tags
 
-//go:build coraza.rule.case_sensitive_args_keys && coraza.rule.no_regex_multiline && coraza.rule.mandatory_rule_id_check
+//go:build coraza.rule.case_sensitive_args_keys && coraza.rule.no_regex_multiline && coraza.rule.mandatory_rule_id_check && coraza.rule.rx_prefilter
 
 package waf
 
