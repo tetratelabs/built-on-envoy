@@ -77,7 +77,7 @@ longDescription: |
       "envoy.filters.http.jwt_authn": {
         "sub": "user-123",
         "iss": "https://issuer.example.com"
-      },
+      }
     },
     "parsed_path":  ["api", "v1", "resource"],  // Path segments
     "parsed_query": {"key": ["value"]},         // Parsed query parameters
