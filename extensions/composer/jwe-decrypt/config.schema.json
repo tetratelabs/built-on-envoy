@@ -29,7 +29,7 @@
     },
     "output_metadata": {
       "$ref": "#/$defs/MetadataKey",
-      "description": "Envoy dynamic metadata location for the decrypted JWT payload. Namespace defaults to \"jwe-decrypt\"."
+      "description": "Envoy dynamic metadata location for the decrypted JWT payload. Namespace defaults to \"io.builtonenvoy.jwe-decrypt\"."
     }
   },
   "$defs": {
