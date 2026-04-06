@@ -247,7 +247,7 @@ examples:
       }'
   - title: Include Envoy dynamic metadata in OPA input
     description: |
-      Include Envoy dynamic metadata in the OPA input document under `input.metadata`.
+      Include Envoy dynamic metadata in the OPA input document under `input.dynamic_metadata`.
       This allows writing policies that make decisions based on dynamic metadata from Envoy.
     code: |
       boe run --extension opa --config '{
