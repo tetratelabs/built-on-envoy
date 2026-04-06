@@ -285,9 +285,6 @@ func (a *anthropicSSEParser) processEvent(eventType string, data []byte) error {
 		if err := json.Unmarshal(data, &delta); err != nil {
 			return fmt.Errorf("llm-statistics: failed to parse Anthropic SSE event %q: %w", eventType, err)
 		}
-		if deltaChunk, err := parseAnthropicChunk(eventType, data); err == nil && deltaChunk.HasTextToken() {
-			// No-op: this path lets the caller detect the first real text token chunk.
-		}
 		switch delta.Delta.Type {
 		case "text_delta":
 			a.seenTextToken = true
