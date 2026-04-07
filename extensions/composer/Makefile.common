@@ -6,4 +6,4 @@
 # BUILD_TAGS contains all build tags populated by different Makefiles and used at build and test time.
 # Coraza WAF build tags that are always enabled for both builds and tests are added here.
 # See https://github.com/corazawaf/coraza for the full list of supported tags.
-BUILD_TAGS := coraza.rule.case_sensitive_args_keys,coraza.rule.no_regex_multiline,coraza.rule.mandatory_rule_id_check
+BUILD_TAGS := coraza.rule.case_sensitive_args_keys,coraza.rule.no_regex_multiline,coraza.rule.mandatory_rule_id_check,coraza.rule.rx_prefilter
