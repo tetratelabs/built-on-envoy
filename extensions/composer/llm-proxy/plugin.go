@@ -240,7 +240,7 @@ func (f *llmProxyFilter) matchRule(path string) *llmConfig {
 func (f *llmProxyFilter) matchDefaultRule(path string) *llmConfig {
 	for i := range f.config.LLMConfigs {
 		cfg := &f.config.LLMConfigs[i]
-		if !isDefaultWellKnownRule(*cfg) {
+		if !isDefaultWellKnownRule(cfg) {
 			continue
 		}
 		if cfg.Matcher.Matches(path) {
@@ -636,7 +636,7 @@ func stripQueryString(path string) string {
 	return path
 }
 
-func isDefaultWellKnownRule(cfg llmConfig) bool {
+func isDefaultWellKnownRule(cfg *llmConfig) bool {
 	if !cfg.DefaultRule {
 		return false
 	}
