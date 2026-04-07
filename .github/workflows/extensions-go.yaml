@@ -76,9 +76,6 @@ jobs:
       - name: Build composer
         run: make build
 
-      - name: Prepare WAF integration dependencies
-        run: make integration-setup
-
       - name: Run WAF integration tests
         env:
           COMPOSER_LIB_PATH: ${{ github.workspace }}/extensions/composer/libcomposer.so

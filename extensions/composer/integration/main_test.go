@@ -8,6 +8,7 @@
 package integration
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
@@ -18,6 +19,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -95,11 +97,12 @@ func TestIntegration(t *testing.T) {
 		}
 
 		if _, err := os.Stat(crsDir); errors.Is(err, os.ErrNotExist) {
-			t.Skipf("Core Rule Set path %s does not exist, skipping FTW tests. Run `make integration-setup` first.", crsDir)
+			t.Skipf("Core Rule Set path %s does not exist, skipping FTW tests. Run `make test-setup` first.", crsDir)
 		}
 
 		cmdArgs := []string{
 			"tool",
+			fmt.Sprintf("-modfile=%s/../../../tools/go.mod", integrationDir),
 			"go-ftw",
 			"run",
 			"-d",
@@ -194,10 +197,12 @@ func startAlbedo(t *testing.T, integrationDir string) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = logFile.Close() })
 
-	// #nosec G204
-	cmd := exec.Command("go", "tool", "albedo", "--port", strconv.Itoa(albedoPort))
+	toolsDirArg := fmt.Sprintf("-modfile=%s/../../../tools/go.mod", integrationDir)
+	cmd := exec.Command("go", "tool", toolsDirArg, "albedo", "--port", strconv.Itoa(albedoPort))
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
+	// Create a new process group so we can kill boe and all its children
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	require.NoError(t, cmd.Start())
 
 	// `go tool albedo` may take time on first run (toolchain/module setup). Make
@@ -212,8 +217,8 @@ func startAlbedo(t *testing.T, integrationDir string) {
 	}, 180*time.Second, time.Second, "waiting for albedo listener %d", albedoPort)
 
 	t.Cleanup(func() {
-		_ = cmd.Process.Kill()
-		_, _ = cmd.Process.Wait()
+		pgid := -cmd.Process.Pid
+		_ = syscall.Kill(pgid, syscall.SIGTERM)
 	})
 }
 
@@ -245,7 +250,7 @@ func requireRunEnvoy(t *testing.T, integrationDir, composerLibPath string) {
 		dockerArgs = append(dockerArgs,
 			envoyImage,
 			"-c", "/integration/envoy.yaml",
-			"--log-level", "warn",
+			"--log-level", cmp.Or(os.Getenv("ENVOY_LOG_LEVEL"), "warn"),
 			"--concurrency", strconv.Itoa(max(runtime.NumCPU(), 2)),
 			"--base-id", strconv.Itoa(time.Now().Nanosecond()),
 		)
@@ -275,12 +280,15 @@ func requireRunEnvoy(t *testing.T, integrationDir, composerLibPath string) {
 	// #nosec G204
 	cmd := exec.CommandContext(t.Context(), "envoy",
 		"-c", filepath.Join(integrationDir, "envoy.yaml"),
-		"--log-level", "warn",
+		"--log-level", cmp.Or(os.Getenv("ENVOY_LOG_LEVEL"), "warn"),
 		"--concurrency", strconv.Itoa(max(runtime.NumCPU(), 2)),
 	)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
-	cmd.Env = append(os.Environ(), "ENVOY_DYNAMIC_MODULES_SEARCH_PATH="+composerDir)
+	cmd.Env = append(os.Environ(),
+		"ENVOY_DYNAMIC_MODULES_SEARCH_PATH="+composerDir,
+		"GODEBUG=cgocheck=0",
+	)
 	require.NoError(t, cmd.Start())
 	t.Cleanup(func() {
 		_ = cmd.Process.Signal(os.Interrupt)

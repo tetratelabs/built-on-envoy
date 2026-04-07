@@ -3,7 +3,7 @@ module github.com/tetratelabs/built-on-envoy/cli/tools/gen-manifest-reference
 go 1.26.1
 
 require (
-	github.com/tetratelabs/built-on-envoy/cli v0.0.0-00010101000000-000000000000
+	github.com/tetratelabs/built-on-envoy v0.0.0
 	golang.org/x/text v0.33.0
 )
 
@@ -17,4 +17,4 @@ require (
 	oras.land/oras-go/v2 v2.6.0 // indirect
 )
 
-replace github.com/tetratelabs/built-on-envoy/cli => ../../
+replace github.com/tetratelabs/built-on-envoy => ../../..

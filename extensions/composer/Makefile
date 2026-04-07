@@ -4,7 +4,7 @@
 # the root of the repo.
 
 ROOT    := $(shell git rev-parse --show-toplevel)
-GO_TOOL := go tool -modfile=$(ROOT)/cli/tools/go.mod
+GO_TOOL := go tool -modfile=$(ROOT)/tools/go.mod
 
 GO_TEST_ARGS ?=
 
@@ -199,39 +199,6 @@ install_plugins: ## Install all plugins locally
 		$(MAKE) -f Makefile.plugin install EXTENSION_PATH=$$dir; \
 	done
 	
-ENVOY_VERSION ?= distroless-dev
-ENVOY_IMAGE ?= docker.io/envoyproxy/envoy:$(ENVOY_VERSION)
-COMPOSER_LIB_PATH ?= $(CURDIR)/libcomposer.so
-CRS_REPO ?= https://github.com/coreruleset/coreruleset.git
-WAF_CRS_VERSION ?= $(shell sed -n 's/^\# OWASP CRS ver\.//p' $(CURDIR)/waf/coraza/directives/@crs-setup.conf | head -n 1)
-CRS_REF ?= v$(WAF_CRS_VERSION)
-CRS_DIR ?= $(CURDIR)/integration/coreruleset/tests/regression/tests
-
-.PHONY: integration-setup
-integration-setup:
-	@if [ -z "$(WAF_CRS_VERSION)" ]; then \
-		echo "Could not determine WAF CRS version from waf/coraza/directives/@crs-setup.conf"; \
-		exit 1; \
-	fi
-	@if [ ! -d "$(CURDIR)/integration/coreruleset/.git" ]; then \
-		echo "Cloning Core Rule Set $(CRS_REF) into integration/coreruleset"; \
-		git clone --depth 1 --branch $(CRS_REF) --single-branch $(CRS_REPO) $(CURDIR)/integration/coreruleset; \
-	else \
-		echo "Syncing integration/coreruleset to $(CRS_REF)"; \
-		git -C $(CURDIR)/integration/coreruleset fetch --depth 1 origin refs/tags/$(CRS_REF):refs/tags/$(CRS_REF) && \
-		git -C $(CURDIR)/integration/coreruleset checkout --detach tags/$(CRS_REF); \
-	fi
-	@if [ ! -d "$(CRS_DIR)" ]; then \
-		echo "Core Rule Set checkout exists but $(CRS_DIR) is missing at $(CRS_REF)"; \
-		exit 1; \
-	fi
-	@echo "Ensuring integration tools are available..."
-	@go tool albedo --help >/dev/null
-	@go tool go-ftw help >/dev/null
-
 .PHONY: test-integration
-test-integration: build integration-setup
-	@echo "Running WAF integration tests..."
-	@COMPOSER_LIB_PATH=$(COMPOSER_LIB_PATH) CRS_DIR=$(CRS_DIR) ENVOY_VERSION=$(ENVOY_VERSION) \
-		ENVOY_IMAGE=$(ENVOY_IMAGE) DOCKER_PLATFORM=$(DOCKER_PLATFORM) FTW_INCLUDE=$(FTW_INCLUDE) \
-		go test -tags integration -count=1 -timeout 30m -v $(GO_TEST_ARGS) ./integration
+test-integration: build
+	$(MAKE) -C integration test

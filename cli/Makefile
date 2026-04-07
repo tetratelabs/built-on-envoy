@@ -24,7 +24,7 @@ GO_TEST_ARGS ?=
 # Use a specific go tool invocation that uses the tools module for linters and other tools so that
 # the main go.mod is not polluted with tool dependencies.
 ROOT     := $(shell git rev-parse --show-toplevel)
-GO_TOOL  := go tool -modfile=$(ROOT)/cli/tools/go.mod
+GO_TOOL  := go tool -modfile=$(ROOT)/tools/go.mod
 
 # Base OCI image annotations (shared by all image types)
 BASE_OCI_ANNOTATIONS := \

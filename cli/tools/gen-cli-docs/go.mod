@@ -4,7 +4,7 @@ go 1.26.1
 
 require (
 	github.com/alecthomas/kong v1.13.0
-	github.com/tetratelabs/built-on-envoy/cli v0.0.0
+	github.com/tetratelabs/built-on-envoy v0.0.0
 )
 
 require (
@@ -40,4 +40,4 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-replace github.com/tetratelabs/built-on-envoy/cli => ../..
+replace github.com/tetratelabs/built-on-envoy => ../../..

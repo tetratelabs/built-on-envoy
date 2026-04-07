@@ -1,4 +1,4 @@
-module github.com/tetratelabs/built-on-envoy/cli
+module github.com/tetratelabs/built-on-envoy
 
 go 1.26.1
 
