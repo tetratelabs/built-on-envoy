@@ -618,7 +618,7 @@ func (f *llmProxyFilter) emitStructuredLog() {
 		entry["llm_first_token_duration_ms"] = f.firstChunkAt.Sub(f.requestSentAt).Milliseconds()
 	}
 	if payload, err := json.Marshal(entry); err == nil {
-		f.handle.Log(shared.LogLevelInfo, "llm-proxy: %s", string(payload))
+		f.handle.Log(shared.LogLevelInfo, "%s", string(payload))
 	}
 }
 
