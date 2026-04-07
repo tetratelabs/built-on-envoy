@@ -19,8 +19,27 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	waf "github.com/tetratelabs/built-on-envoy/extensions/composer/waf/coraza"
 	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
+
+// newPluginHandle creates a mock HttpFilterHandle with default expectations including
+// GetMostSpecificConfig returning nil (no per-route config).
+func newPluginHandle(ctrl *gomock.Controller) *mocks.MockHttpFilterHandle {
+	pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	pluginHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
+	return pluginHandle
+}
+
+// newPluginHandleWithPerRouteConfig creates a mock HttpFilterHandle that returns
+// the given per-route config from GetMostSpecificConfig.
+func newPluginHandleWithPerRouteConfig(ctrl *gomock.Controller, perRouteConfig any) *mocks.MockHttpFilterHandle {
+	pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	pluginHandle.EXPECT().GetMostSpecificConfig().Return(perRouteConfig).AnyTimes()
+	return pluginHandle
+}
 
 // newWAFFactory creates a wafPluginFactory from raw directives, encapsulating the
 // JSON marshalling.
@@ -49,8 +68,7 @@ func Test_DisableWaf(t *testing.T) {
 	wafPluginFactory := newWAFFactory(t, ctrl, []string{"SecRuleEngine Off"}, "FULL")
 
 	t.Run("WAF disabled should skip processing", func(t *testing.T) {
-		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
-		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+		pluginHandle := newPluginHandle(ctrl)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
 			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 
@@ -110,8 +128,7 @@ func Test_DisableWaf(t *testing.T) {
 
 	t.Run("Get source address", func(t *testing.T) {
 		// Get source address.
-		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
-		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+		pluginHandle := newPluginHandle(ctrl)
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 
@@ -154,8 +171,7 @@ func Test_DisableWaf(t *testing.T) {
 
 	t.Run("Get request protocol", func(t *testing.T) {
 		// Get request protocol.
-		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
-		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+		pluginHandle := newPluginHandle(ctrl)
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 
@@ -194,8 +210,7 @@ func Test_RequestOnlyWaf(t *testing.T) {
 
 	t.Run("Header only request", func(t *testing.T) {
 		// Header only request.
-		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
-		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+		pluginHandle := newPluginHandle(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 
 		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
@@ -225,8 +240,7 @@ func Test_RequestOnlyWaf(t *testing.T) {
 
 	t.Run("Handle request with upgrade", func(t *testing.T) {
 		// Handle request with upgrade.
-		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
-		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+		pluginHandle := newPluginHandle(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 
 		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
@@ -269,8 +283,7 @@ func Test_RequestOnlyWaf(t *testing.T) {
 
 	t.Run("Handle request with body", func(t *testing.T) {
 		// Handle request with body.
-		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
-		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+		pluginHandle := newPluginHandle(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 
 		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
@@ -309,8 +322,7 @@ func Test_RequestOnlyWaf(t *testing.T) {
 	})
 
 	t.Run("Handle request with body and trailers", func(t *testing.T) {
-		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
-		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+		pluginHandle := newPluginHandle(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 
 		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
@@ -351,8 +363,7 @@ func Test_RequestOnlyWaf(t *testing.T) {
 
 	t.Run("Response should be no-op in request only mode", func(t *testing.T) {
 		// Response should be no-op in request only mode.
-		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
-		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+		pluginHandle := newPluginHandle(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 
 		requestHeaders := fake.NewFakeHeaderMap(map[string][]string{
@@ -407,8 +418,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 
 	t.Run("Request should be no-op in response only mode", func(t *testing.T) {
 		// Request should be no-op in response only mode.
-		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
-		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+		pluginHandle := newPluginHandle(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
 			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
@@ -448,8 +458,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 
 	t.Run("Header only response", func(t *testing.T) {
 		// Header only response.
-		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
-		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+		pluginHandle := newPluginHandle(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 
 		requestHeaders := fake.NewFakeHeaderMap(map[string][]string{
@@ -482,8 +491,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 
 	t.Run("Handle response with upgrade", func(t *testing.T) {
 		// Handle response with upgrade.
-		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
-		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+		pluginHandle := newPluginHandle(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 
 		requestHeaders := fake.NewFakeHeaderMap(map[string][]string{
@@ -529,8 +537,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 	})
 
 	t.Run("Handle response with body", func(t *testing.T) {
-		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
-		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+		pluginHandle := newPluginHandle(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 
 		requestHeaders := fake.NewFakeHeaderMap(map[string][]string{
@@ -573,8 +580,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 	})
 
 	t.Run("Handle response with body and trailers", func(t *testing.T) {
-		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
-		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+		pluginHandle := newPluginHandle(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 
 		requestHeaders := fake.NewFakeHeaderMap(map[string][]string{
@@ -618,8 +624,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 	})
 
 	t.Run("Handle response with SSE", func(t *testing.T) {
-		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
-		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+		pluginHandle := newPluginHandle(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 
 		requestHeaders := fake.NewFakeHeaderMap(map[string][]string{
@@ -686,8 +691,7 @@ func Test_FullWaf(t *testing.T) {
 
 	t.Run("Full WAF request and response processing", func(t *testing.T) {
 		// Full WAF request and response processing.
-		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
-		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+		pluginHandle := newPluginHandle(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 
 		plugin := wafPluginFactory.Create(pluginHandle)
@@ -771,8 +775,7 @@ func Test_BlockRequestWaf(t *testing.T) {
 	}, "FULL")
 
 	t.Run("Block request on headers", func(t *testing.T) {
-		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
-		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+		pluginHandle := newPluginHandle(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
 			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
@@ -812,8 +815,7 @@ func Test_BlockRequestWaf(t *testing.T) {
 	})
 
 	t.Run("Block request on body", func(t *testing.T) {
-		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
-		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+		pluginHandle := newPluginHandle(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
 			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
@@ -857,8 +859,7 @@ func Test_BlockRequestWaf(t *testing.T) {
 	})
 
 	t.Run("Block response on body", func(t *testing.T) {
-		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
-		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+		pluginHandle := newPluginHandle(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
 			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
@@ -923,8 +924,7 @@ func Test_BlockRequest(t *testing.T) {
 	m := newMetrics(configHandle)
 
 	t.Run("nil interruption sends 500 and records internal block metric", func(*testing.T) {
-		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
-		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+		pluginHandle := newPluginHandle(ctrl)
 
 		p := &wafPlugin{
 			handle:            pluginHandle,
@@ -948,8 +948,7 @@ func Test_BlockRequest(t *testing.T) {
 	})
 
 	t.Run("interruption with zero status defaults to 403", func(*testing.T) {
-		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
-		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+		pluginHandle := newPluginHandle(ctrl)
 
 		p := &wafPlugin{
 			handle:            pluginHandle,
@@ -977,8 +976,7 @@ func Test_BlockRequest(t *testing.T) {
 	})
 
 	t.Run("interruption with explicit status uses that status", func(*testing.T) {
-		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
-		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+		pluginHandle := newPluginHandle(ctrl)
 
 		p := &wafPlugin{
 			handle:            pluginHandle,
@@ -1039,8 +1037,7 @@ func Test_SecRequestBodyAccessOff(t *testing.T) {
 				`SecRule REQUEST_BODY "@contains malicious-payload" "id:100002,phase:2,deny,status:403,msg:'Blocked request body'"`,
 			}, "FULL")
 
-			pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
-			pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			pluginHandle := newPluginHandle(ctrl)
 			pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
@@ -1114,8 +1111,7 @@ func Test_Phase2ArgsRuleWithSecRequestBodyAccessOff(t *testing.T) {
 				`SecRule ARGS "@contains malicious-payload" "id:100002,phase:2,deny,status:403,msg:'Blocked ARGS'"`,
 			}, "FULL")
 
-			pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
-			pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			pluginHandle := newPluginHandle(ctrl)
 			pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
@@ -1190,8 +1186,7 @@ func Test_Phase2RulesOnHeaderOnlyRequest(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			wafPluginFactory := newWAFFactory(t, ctrl, tc.directives, "FULL")
 
-			pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
-			pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			pluginHandle := newPluginHandle(ctrl)
 			pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
@@ -1254,8 +1249,7 @@ func Test_SecResponseBodyAccessOff(t *testing.T) {
 				`SecRule RESPONSE_BODY "@contains leaked-secret" "id:100003,phase:4,deny,status:403,msg:'Blocked response body'"`,
 			}, "FULL")
 
-			pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
-			pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			pluginHandle := newPluginHandle(ctrl)
 			pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
@@ -1330,8 +1324,7 @@ func Test_Phase4ResponseHeadersRuleWithSecResponseBodyAccessOff(t *testing.T) {
 				`SecRule RESPONSE_HEADERS:content-type "@contains application/json" "id:100003,phase:4,deny,status:403,msg:'Blocked response header'"`,
 			}, "FULL")
 
-			pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
-			pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			pluginHandle := newPluginHandle(ctrl)
 			pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
@@ -1366,4 +1359,199 @@ func Test_Phase4ResponseHeadersRuleWithSecResponseBodyAccessOff(t *testing.T) {
 			wafPlugin.OnStreamComplete()
 		})
 	}
+}
+
+func Test_CreatePerRoute(t *testing.T) {
+	t.Run("valid config", func(t *testing.T) {
+		config := map[string]interface{}{
+			"directives": []string{"SecRuleEngine On"},
+			"mode":       "REQUEST_ONLY",
+		}
+		configBytes, err := json.Marshal(config)
+		require.NoError(t, err)
+
+		result, err := (&wafPluginConfigFactory{}).CreatePerRoute(configBytes)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		perRoute, ok := result.(*perRouteWafPluginConfig)
+		require.True(t, ok, "expected *perRouteWafPluginConfig")
+		require.NotNil(t, perRoute.config)
+		assert.Equal(t, waf.ModeRequestOnly, perRoute.mode)
+	})
+
+	t.Run("invalid config returns error", func(t *testing.T) {
+		result, err := (&wafPluginConfigFactory{}).CreatePerRoute([]byte(`{invalid`))
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
+}
+
+func Test_PerRouteConfigOverride(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	// Factory with WAF disabled (SecRuleEngine Off).
+	baseFactory := newWAFFactory(t, ctrl, []string{"SecRuleEngine Off"}, "FULL")
+
+	t.Run("per-route config overrides factory config", func(t *testing.T) {
+		// Create a per-route config that enables WAF with blocking rules.
+		perRouteConfig := map[string]interface{}{
+			"directives": []string{
+				"Include @coraza.conf",
+				"Include @ftw.conf",
+				"Include @crs-setup.conf",
+				"Include @owasp_crs/*.conf",
+			},
+			"mode": "REQUEST_ONLY",
+		}
+		perRouteBytes, err := json.Marshal(perRouteConfig)
+		require.NoError(t, err)
+
+		perRoute, err := (&wafPluginConfigFactory{}).CreatePerRoute(perRouteBytes)
+		require.NoError(t, err)
+
+		pluginHandle := newPluginHandleWithPerRouteConfig(ctrl, perRoute)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
+			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(
+			pkg.UnsafeBufferFromString("127.0.0.1:8080"), true)
+		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+
+		plugin := baseFactory.Create(pluginHandle)
+		wafPlugin, ok := plugin.(*wafPlugin)
+		require.True(t, ok)
+
+		// The per-route config should enable WAF processing with REQUEST_ONLY mode.
+		assert.Equal(t, waf.ModeRequestOnly, wafPlugin.mode)
+
+		// Verify request headers are processed (WAF is enabled via per-route).
+		fakeHeaders := fake.NewFakeHeaderMap(map[string][]string{
+			":authority":   {"example.com"},
+			":method":      {"GET"},
+			":path":        {"/"},
+			":scheme":      {"http"},
+			"x-request-id": {"req-12345"},
+		})
+		status := wafPlugin.OnRequestHeaders(fakeHeaders, true)
+		assert.Equal(t, shared.HeadersStatusContinue, status,
+			"expected request to pass with benign request")
+
+		// Response should be skipped in REQUEST_ONLY mode.
+		pluginHandle.EXPECT().RequestHeaders().Return(fakeHeaders)
+		respHeaders := fake.NewFakeHeaderMap(map[string][]string{
+			":status":      {"200"},
+			"content-type": {"text/plain"},
+		})
+		respStatus := wafPlugin.OnResponseHeaders(respHeaders, true)
+		assert.Equal(t, shared.HeadersStatusContinue, respStatus,
+			"expected response to pass in REQUEST_ONLY mode")
+
+		wafPlugin.OnStreamComplete()
+	})
+
+	t.Run("nil per-route config uses factory config", func(t *testing.T) {
+		// No per-route config (GetMostSpecificConfig returns nil).
+		pluginHandle := newPluginHandle(ctrl)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
+			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+
+		plugin := baseFactory.Create(pluginHandle)
+		wafPlugin, ok := plugin.(*wafPlugin)
+		require.True(t, ok)
+
+		// Factory has SecRuleEngine Off, so everything should continue.
+		fakeHeaders := fake.NewFakeHeaderMap(map[string][]string{
+			":authority":   {"example.com"},
+			":method":      {"GET"},
+			":path":        {"/"},
+			"x-request-id": {"req-12345"},
+		})
+		status := wafPlugin.OnRequestHeaders(fakeHeaders, true)
+		assert.Equal(t, shared.HeadersStatusContinue, status,
+			"expected continue with WAF disabled (factory config)")
+
+		wafPlugin.OnStreamComplete()
+	})
+
+	t.Run("non-matching per-route config type uses factory config", func(t *testing.T) {
+		// GetMostSpecificConfig returns a non-*perRouteWafPluginConfig value.
+		pluginHandle := newPluginHandleWithPerRouteConfig(ctrl, "not-a-per-route-config")
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
+			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+
+		plugin := baseFactory.Create(pluginHandle)
+		wafPlugin, ok := plugin.(*wafPlugin)
+		require.True(t, ok)
+
+		// Should fall back to factory config (WAF disabled).
+		fakeHeaders := fake.NewFakeHeaderMap(map[string][]string{
+			":authority":   {"example.com"},
+			":method":      {"GET"},
+			":path":        {"/"},
+			"x-request-id": {"req-12345"},
+		})
+		status := wafPlugin.OnRequestHeaders(fakeHeaders, true)
+		assert.Equal(t, shared.HeadersStatusContinue, status,
+			"expected continue with WAF disabled (factory fallback)")
+
+		wafPlugin.OnStreamComplete()
+	})
+}
+
+func Test_PerRouteConfigBlocksRequest(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	// Factory with WAF disabled.
+	baseFactory := newWAFFactory(t, ctrl, []string{"SecRuleEngine Off"}, "FULL")
+
+	// Per-route config with a custom rule that blocks X-Block-Test header.
+	perRouteConfig := map[string]interface{}{
+		"directives": []string{
+			"SecRuleEngine On",
+			`SecRule REQUEST_HEADERS:X-Block-Test "@streq block-me" "id:200001,phase:1,deny,status:403,msg:'Blocked by per-route rule'"`,
+		},
+		"mode": "FULL",
+	}
+	perRouteBytes, err := json.Marshal(perRouteConfig)
+	require.NoError(t, err)
+
+	perRoute, err := (&wafPluginConfigFactory{}).CreatePerRoute(perRouteBytes)
+	require.NoError(t, err)
+
+	pluginHandle := newPluginHandleWithPerRouteConfig(ctrl, perRoute)
+	pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
+		pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+	pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(
+		pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
+	pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+	pluginHandle.EXPECT().IncrementCounterValue(
+		shared.MetricID(2), uint64(1),
+		"example.com",
+		strconv.Itoa(int(ctypes.PhaseRequestHeaders)),
+		"200001",
+	).Return(shared.MetricsSuccess)
+	pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 200001)
+	pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestHeaders))
+	pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_request_headers_blocked")
+
+	plugin := baseFactory.Create(pluginHandle)
+	wafPlugin, ok := plugin.(*wafPlugin)
+	require.True(t, ok)
+
+	fakeHeaders := fake.NewFakeHeaderMap(map[string][]string{
+		":authority":    {"example.com"},
+		":method":      {"GET"},
+		":path":        {"/"},
+		":scheme":      {"http"},
+		"x-request-id": {"req-block"},
+		"x-block-test": {"block-me"},
+	})
+
+	status := wafPlugin.OnRequestHeaders(fakeHeaders, true)
+	assert.Equal(t, shared.HeadersStatusStop, status,
+		"expected per-route WAF to block request")
+
+	wafPlugin.OnStreamComplete()
 }

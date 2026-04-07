@@ -32,12 +32,28 @@ type wafPluginFactory struct {
 	metrics *metrics
 }
 
+type perRouteWafPluginConfig struct {
+	config coraza.WAF
+	mode   waf.WAFMode
+}
+
 func (f *wafPluginFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
+	config := f.config
+	mode := f.mode
+
+	// Check for per-route config and override if present.
+	if perRouteConfigAny := handle.GetMostSpecificConfig(); perRouteConfigAny != nil {
+		if perRouteConfig, ok := perRouteConfigAny.(*perRouteWafPluginConfig); ok {
+			config = perRouteConfig.config
+			mode = perRouteConfig.mode
+		}
+	}
+
 	return &wafPlugin{
 		logger:            logger.GetLogger(),
 		handle:            handle,
-		config:            f.config,
-		mode:              f.mode,
+		config:            config,
+		mode:              mode,
 		metrics:           f.metrics,
 		metadataNamespace: defaultMetadataNamespace,
 	}
@@ -59,6 +75,17 @@ func (f *wafPluginConfigFactory) Create(
 		config:  wafConfig,
 		mode:    mode,
 		metrics: newMetrics(handle),
+	}, nil
+}
+
+func (f *wafPluginConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, error) {
+	wafConfig, mode, err := waf.NewWAFConfigFromBytes(unparsedConfig, logger.GetLogger())
+	if err != nil {
+		return nil, err
+	}
+	return &perRouteWafPluginConfig{
+		config: wafConfig,
+		mode:   mode,
 	}, nil
 }
 

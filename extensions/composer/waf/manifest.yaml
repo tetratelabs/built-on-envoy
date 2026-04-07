@@ -99,6 +99,12 @@ longDescription: |
   |--------|------|------|-------------|
   | `waf_tx_total` | - | Counter | Total amount of transactions processed by the WAF. |
   | `waf_tx_blocked` | `authority`, `phase`, `rule_id` | Counter | Total amount of transactions blocked by the WAF. The `rule_id` will not be set if the request is not blocked by a concrete rule but by a WAF internal error. |
+
+  ## Per Route Configuration
+
+  The extension supports per-route configuration, allowing you to specify different WAF rules and policies for different routes in your application. This is useful for tailoring security measures to specific endpoints or services.
+
+  The per-route configuration share the same format as the extension configuration and see Envoy's [Dynamic Per Route Configuration](https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/filters/http/dynamic_modules/v3/dynamic_modules.proto) for more details on how to set it up.
 type: go
 tags:
   - go
