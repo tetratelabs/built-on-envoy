@@ -575,9 +575,9 @@ func (f *llmProxyFilter) emitStructuredLog() {
 		"kind":          f.kind,
 		"model":         f.model,
 		"response_type": responseType,
-		"input_token":   f.usage.InputTokens,
-		"output_token":  f.usage.OutputTokens,
-		"total_token":   f.usage.TotalTokens,
+		"input_tokens":  f.usage.InputTokens,
+		"output_tokens": f.usage.OutputTokens,
+		"total_tokens":  f.usage.TotalTokens,
 	}
 	if f.sessionID != "" {
 		entry["session_id"] = f.sessionID
