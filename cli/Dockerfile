@@ -21,8 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libc6-dev \
     pkg-config \
     libssl-dev \
-    gosu \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user and install Go and Rust with that user, so that
 # later on the user can build extensions without permission issues.
