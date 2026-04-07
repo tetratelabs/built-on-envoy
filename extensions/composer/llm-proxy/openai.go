@@ -13,22 +13,27 @@ import (
 	"strings"
 )
 
+// openAIRequest is the subset of an OpenAI Chat Completions request body
+// needed for routing and richer observability extraction.
 type openAIRequest struct {
 	Model    string                 `json:"model"`
 	Stream   bool                   `json:"stream"`
 	Messages []openAIRequestMessage `json:"messages"`
 }
 
+// openAIRequestMessage models one request message in a Chat Completions payload.
 type openAIRequestMessage struct {
 	Role    string `json:"role"`
 	Content any    `json:"content"`
 }
 
+// openAIContentPart is used to extract text from array-form message content.
 type openAIContentPart struct {
 	Type string `json:"type"`
 	Text string `json:"text"`
 }
 
+// openAIUsage holds token-usage fields from an OpenAI response or chunk.
 type openAIUsage struct {
 	PromptTokens            uint32                         `json:"prompt_tokens"`
 	CompletionTokens        uint32                         `json:"completion_tokens"`
@@ -37,15 +42,19 @@ type openAIUsage struct {
 	CompletionTokensDetails *openAICompletionTokensDetails `json:"completion_tokens_details"`
 }
 
+// openAIPromptTokensDetails holds provider-specific prompt token detail fields.
 type openAIPromptTokensDetails struct {
 	CachedTokens uint32 `json:"cached_tokens"`
 }
 
+// openAICompletionTokensDetails holds provider-specific completion token detail fields.
 type openAICompletionTokensDetails struct {
 	ReasoningTokens uint32 `json:"reasoning_tokens"`
 	AudioTokens     uint32 `json:"audio_tokens"`
 }
 
+// openAIResponse is the subset of a non-streaming Chat Completions response
+// needed for richer observability extraction.
 type openAIResponse struct {
 	Choices []struct {
 		Message struct {
@@ -57,6 +66,7 @@ type openAIResponse struct {
 	Usage openAIUsage `json:"usage"`
 }
 
+// openAIChunk is a single data event in an OpenAI streaming SSE response.
 type openAIChunk struct {
 	Choices []struct {
 		Delta struct {
@@ -68,17 +78,20 @@ type openAIChunk struct {
 	Usage openAIUsage `json:"usage"`
 }
 
+// openAIToolCall represents a tool call in a non-streaming response.
 type openAIToolCall struct {
 	ID       string                 `json:"id"`
 	Type     string                 `json:"type"`
 	Function openAIToolCallFunction `json:"function"`
 }
 
+// openAIToolCallFunction represents the function call payload of a tool call.
 type openAIToolCallFunction struct {
 	Name      string `json:"name"`
 	Arguments string `json:"arguments"`
 }
 
+// openAIStreamingToolCallDelta represents an incremental tool call update in a stream.
 type openAIStreamingToolCallDelta struct {
 	Index    int                    `json:"index"`
 	ID       string                 `json:"id"`
@@ -86,6 +99,7 @@ type openAIStreamingToolCallDelta struct {
 	Function openAIToolCallFunction `json:"function"`
 }
 
+// openAILLMRequest implements LLMRequest for the OpenAI Chat Completions API.
 type openAILLMRequest struct {
 	model    string
 	stream   bool
@@ -100,6 +114,7 @@ func (r *openAILLMRequest) GetQuestion() string {
 }
 func (r *openAILLMRequest) GetSystem() string { return r.system }
 
+// openAILLMResponse implements LLMResponse for the OpenAI Chat Completions API.
 type openAILLMResponse struct {
 	usage              LLMUsage
 	answer             string
@@ -122,6 +137,7 @@ func (r *openAILLMResponse) GetCachedTokens() uint32    { return r.cachedTokens 
 func (r *openAILLMResponse) GetInputTokenDetails() any  { return r.inputTokenDetails }
 func (r *openAILLMResponse) GetOutputTokenDetails() any { return r.outputTokenDetails }
 
+// openAILLMResponseChunk implements LLMResponseChunk for the OpenAI streaming API.
 type openAILLMResponseChunk struct {
 	usage              LLMUsage
 	answer             string
@@ -143,6 +159,8 @@ func (c *openAILLMResponseChunk) HasTextToken() bool {
 	return c.answer != "" || c.reasoning != ""
 }
 
+// openAISSEParser accumulates usage, text, reasoning, tool calls, and token-detail
+// fields from an OpenAI streaming SSE response and produces an LLMResponse when finished.
 type openAISSEParser struct {
 	buf                []byte
 	done               bool
@@ -157,6 +175,8 @@ type openAISSEParser struct {
 	outputTokenDetails any
 }
 
+// parseOpenAIRequest parses an OpenAI Chat Completions request body and returns
+// an LLMRequest with routing and observability fields.
 func parseOpenAIRequest(body []byte) (LLMRequest, error) {
 	var req openAIRequest
 	if err := json.Unmarshal(body, &req); err != nil {
@@ -170,6 +190,8 @@ func parseOpenAIRequest(body []byte) (LLMRequest, error) {
 	}, nil
 }
 
+// parseOpenAIResponse parses a non-streaming OpenAI Chat Completions response
+// and extracts token usage plus richer observability fields.
 func parseOpenAIResponse(body []byte) (LLMResponse, error) {
 	var resp openAIResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
@@ -192,6 +214,7 @@ func parseOpenAIResponse(body []byte) (LLMResponse, error) {
 	return result, nil
 }
 
+// parseOpenAIChunk parses a single OpenAI streaming SSE payload.
 func parseOpenAIChunk(data []byte) (LLMResponseChunk, error) {
 	var chunk openAIChunk
 	if err := json.Unmarshal(data, &chunk); err != nil {
@@ -214,6 +237,7 @@ func parseOpenAIChunk(data []byte) (LLMResponseChunk, error) {
 	return result, nil
 }
 
+// openAIUsageToLLM converts an OpenAI usage payload to the common LLMUsage shape.
 func openAIUsageToLLM(u openAIUsage) LLMUsage {
 	return LLMUsage{
 		InputTokens:  u.PromptTokens,
@@ -222,12 +246,14 @@ func openAIUsageToLLM(u openAIUsage) LLMUsage {
 	}
 }
 
+// newOpenAISSEParser creates a parser for incremental OpenAI SSE accumulation.
 func newOpenAISSEParser() *openAISSEParser {
 	return &openAISSEParser{
 		toolCallsByIndex: map[int]*openAIToolCall{},
 	}
 }
 
+// Feed appends a new response body chunk and parses any complete SSE events.
 func (a *openAISSEParser) Feed(data []byte) error {
 	if a.done {
 		return nil
@@ -236,6 +262,7 @@ func (a *openAISSEParser) Feed(data []byte) error {
 	return a.parseEvents()
 }
 
+// parseEvents processes complete SSE lines accumulated in the internal buffer.
 func (a *openAISSEParser) parseEvents() error {
 	for {
 		idx := bytes.IndexByte(a.buf, '\n')
@@ -318,6 +345,7 @@ func (f *openaiFactory) ParseResponse(body []byte) (LLMResponse, error) {
 
 func (f *openaiFactory) NewSSEParser() SSEParser { return newOpenAISSEParser() }
 
+// Finish finalises the stream and returns the accumulated response fields.
 func (a *openAISSEParser) Finish() (LLMResponse, error) {
 	var toolCalls []openAIToolCall
 	if len(a.toolCallsByIndex) > 0 {
@@ -342,8 +370,10 @@ func (a *openAISSEParser) Finish() (LLMResponse, error) {
 	}, nil
 }
 
+// SeenTextToken reports whether the stream has emitted a real text token yet.
 func (a *openAISSEParser) SeenTextToken() bool { return a.seenTextToken }
 
+// extractOpenAIQuestion returns the last user message content from the request.
 func extractOpenAIQuestion(messages []openAIRequestMessage) string {
 	for i := len(messages) - 1; i >= 0; i-- {
 		if messages[i].Role != "user" {
@@ -354,6 +384,7 @@ func extractOpenAIQuestion(messages []openAIRequestMessage) string {
 	return ""
 }
 
+// extractOpenAISystem returns the first system message content from the request.
 func extractOpenAISystem(messages []openAIRequestMessage) string {
 	for i := 0; i < len(messages); i++ {
 		if messages[i].Role != "system" {
@@ -364,6 +395,7 @@ func extractOpenAISystem(messages []openAIRequestMessage) string {
 	return ""
 }
 
+// extractOpenAIMessageContent extracts text from either string or array-form content.
 func extractOpenAIMessageContent(content any) string {
 	if s, ok := content.(string); ok {
 		return s

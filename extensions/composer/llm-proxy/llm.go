@@ -45,12 +45,19 @@ type LLMResponse interface {
 	// GetUsage returns token-usage information extracted from the response body.
 	// The zero value of LLMUsage indicates that no usage data was present.
 	GetUsage() LLMUsage
+	// GetAnswer returns the textual assistant answer extracted from the response if available.
 	GetAnswer() string
+	// GetReasoning returns provider-specific reasoning content when available.
 	GetReasoning() string
+	// GetToolCalls returns any tool call payload emitted by the model.
 	GetToolCalls() any
+	// GetReasoningTokens returns the number of reasoning tokens when provided.
 	GetReasoningTokens() uint32
+	// GetCachedTokens returns cached input token counts when provided.
 	GetCachedTokens() uint32
+	// GetInputTokenDetails returns provider-specific prompt/input token detail fields.
 	GetInputTokenDetails() any
+	// GetOutputTokenDetails returns provider-specific completion/output token detail fields.
 	GetOutputTokenDetails() any
 }
 
@@ -59,9 +66,13 @@ type LLMResponseChunk interface {
 	// GetUsage returns token-usage information carried by this chunk.
 	// The zero value of LLMUsage indicates that the chunk carries no usage data.
 	GetUsage() LLMUsage
+	// GetAnswer returns any assistant text carried by this chunk.
 	GetAnswer() string
+	// GetReasoning returns any reasoning content carried by this chunk.
 	GetReasoning() string
+	// GetToolCalls returns any tool call delta carried by this chunk.
 	GetToolCalls() any
+	// HasTextToken reports whether the chunk contains a real text token.
 	HasTextToken() bool
 }
 

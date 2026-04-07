@@ -13,6 +13,8 @@ import (
 	"strings"
 )
 
+// anthropicRequest is the subset of an Anthropic Messages request body
+// needed for routing and richer observability extraction.
 type anthropicRequest struct {
 	Model    string                    `json:"model"`
 	Stream   bool                      `json:"stream"`
@@ -20,11 +22,13 @@ type anthropicRequest struct {
 	Messages []anthropicRequestMessage `json:"messages"`
 }
 
+// anthropicRequestMessage models one request message in the Anthropic payload.
 type anthropicRequestMessage struct {
 	Role    string `json:"role"`
 	Content any    `json:"content"`
 }
 
+// anthropicUsage holds token-usage and cache-related fields from an Anthropic response.
 type anthropicUsage struct {
 	InputTokens              uint32 `json:"input_tokens"`
 	OutputTokens             uint32 `json:"output_tokens"`
@@ -32,6 +36,8 @@ type anthropicUsage struct {
 	CacheReadInputTokens     uint32 `json:"cache_read_input_tokens"`
 }
 
+// anthropicResponse is the subset of a non-streaming Anthropic response
+// needed for richer observability extraction.
 type anthropicResponse struct {
 	Content []struct {
 		Type  string          `json:"type"`
@@ -43,24 +49,28 @@ type anthropicResponse struct {
 	Usage anthropicUsage `json:"usage"`
 }
 
+// anthropicToolCall represents a tool use block in Anthropic responses.
 type anthropicToolCall struct {
 	ID    string `json:"id"`
 	Name  string `json:"name"`
 	Input string `json:"input"`
 }
 
+// anthropicMessageStartData is the payload of a "message_start" SSE event.
 type anthropicMessageStartData struct {
 	Message struct {
 		Usage anthropicUsage `json:"usage"`
 	} `json:"message"`
 }
 
+// anthropicMessageDeltaData is the payload of a "message_delta" SSE event.
 type anthropicMessageDeltaData struct {
 	Usage struct {
 		OutputTokens uint32 `json:"output_tokens"`
 	} `json:"usage"`
 }
 
+// anthropicContentBlockStartData is the payload of a "content_block_start" SSE event.
 type anthropicContentBlockStartData struct {
 	Index        int `json:"index"`
 	ContentBlock struct {
@@ -72,6 +82,7 @@ type anthropicContentBlockStartData struct {
 	} `json:"content_block"`
 }
 
+// anthropicContentBlockDeltaData is the payload of a "content_block_delta" SSE event.
 type anthropicContentBlockDeltaData struct {
 	Index int `json:"index"`
 	Delta struct {
@@ -81,6 +92,7 @@ type anthropicContentBlockDeltaData struct {
 	} `json:"delta"`
 }
 
+// anthropicLLMRequest implements LLMRequest for the Anthropic Messages API.
 type anthropicLLMRequest struct {
 	model    string
 	stream   bool
@@ -95,6 +107,7 @@ func (r *anthropicLLMRequest) GetQuestion() string {
 }
 func (r *anthropicLLMRequest) GetSystem() string { return r.system }
 
+// anthropicLLMResponse implements LLMResponse for the Anthropic Messages API.
 type anthropicLLMResponse struct {
 	usage              LLMUsage
 	answer             string
@@ -117,6 +130,7 @@ func (r *anthropicLLMResponse) GetCachedTokens() uint32    { return r.cachedToke
 func (r *anthropicLLMResponse) GetInputTokenDetails() any  { return r.inputTokenDetails }
 func (r *anthropicLLMResponse) GetOutputTokenDetails() any { return r.outputTokenDetails }
 
+// anthropicLLMResponseChunk implements LLMResponseChunk for Anthropic streaming SSE.
 type anthropicLLMResponseChunk struct {
 	usage             LLMUsage
 	hasTextToken      bool
@@ -134,6 +148,8 @@ func (c *anthropicLLMResponseChunk) HasTextToken() bool {
 	return c.hasTextToken
 }
 
+// parseAnthropicRequest parses an Anthropic Messages request body and returns
+// an LLMRequest with routing and observability fields.
 func parseAnthropicRequest(body []byte) (LLMRequest, error) {
 	var req anthropicRequest
 	if err := json.Unmarshal(body, &req); err != nil {
@@ -147,6 +163,8 @@ func parseAnthropicRequest(body []byte) (LLMRequest, error) {
 	}, nil
 }
 
+// parseAnthropicResponse parses a non-streaming Anthropic response and extracts
+// usage plus richer observability fields.
 func parseAnthropicResponse(body []byte) (LLMResponse, error) {
 	var resp anthropicResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
@@ -175,6 +193,7 @@ func parseAnthropicResponse(body []byte) (LLMResponse, error) {
 	}, nil
 }
 
+// parseAnthropicChunk parses a single Anthropic SSE event payload.
 func parseAnthropicChunk(eventType string, data []byte) (anthropicLLMResponseChunk, error) {
 	switch eventType {
 	case "message_start":
@@ -204,6 +223,7 @@ func parseAnthropicChunk(eventType string, data []byte) (anthropicLLMResponseChu
 	return anthropicLLMResponseChunk{}, nil
 }
 
+// anthropicUsageToLLM converts an Anthropic usage payload to the common LLMUsage shape.
 func anthropicUsageToLLM(u anthropicUsage) LLMUsage {
 	return LLMUsage{
 		InputTokens:  u.InputTokens,
@@ -217,6 +237,8 @@ var (
 	anthropicSSEDataPrefix  = []byte("data: ")
 )
 
+// anthropicSSEParser accumulates usage, text, tool calls, and cache-related
+// fields from an Anthropic streaming SSE response.
 type anthropicSSEParser struct {
 	buf               []byte
 	done              bool
@@ -230,6 +252,7 @@ type anthropicSSEParser struct {
 	inputTokenDetails any
 }
 
+// newAnthropicSSEParser creates a parser for incremental Anthropic SSE accumulation.
 func newAnthropicSSEParser() *anthropicSSEParser {
 	return &anthropicSSEParser{
 		textByIndex: map[int]string{},
@@ -237,6 +260,7 @@ func newAnthropicSSEParser() *anthropicSSEParser {
 	}
 }
 
+// Feed appends a new response body chunk and parses any complete SSE events.
 func (a *anthropicSSEParser) Feed(data []byte) error {
 	if a.done {
 		return nil
@@ -245,6 +269,7 @@ func (a *anthropicSSEParser) Feed(data []byte) error {
 	return a.parseEvents()
 }
 
+// parseEvents processes complete SSE lines accumulated in the internal buffer.
 func (a *anthropicSSEParser) parseEvents() error {
 	for {
 		idx := bytes.IndexByte(a.buf, '\n')
@@ -268,6 +293,7 @@ func (a *anthropicSSEParser) parseEvents() error {
 	}
 }
 
+// processEvent handles a single parsed Anthropic SSE event.
 func (a *anthropicSSEParser) processEvent(eventType string, data []byte) error {
 	if eventType == "message_stop" {
 		a.done = true
@@ -335,6 +361,7 @@ func (a *anthropicSSEParser) processEvent(eventType string, data []byte) error {
 	return nil
 }
 
+// Finish finalises the stream and returns the accumulated response fields.
 func (a *anthropicSSEParser) Finish() (LLMResponse, error) {
 	answer := ""
 	if len(a.textByIndex) > 0 {
@@ -377,8 +404,10 @@ func (f *anthropicFactory) ParseResponse(body []byte) (LLMResponse, error) {
 
 func (f *anthropicFactory) NewSSEParser() SSEParser { return newAnthropicSSEParser() }
 
+// SeenTextToken reports whether the stream has emitted a real text token yet.
 func (a *anthropicSSEParser) SeenTextToken() bool { return a.seenTextToken }
 
+// extractAnthropicQuestion returns the last user message content from the request.
 func extractAnthropicQuestion(messages []anthropicRequestMessage) string {
 	for i := len(messages) - 1; i >= 0; i-- {
 		if messages[i].Role != "user" {
@@ -389,6 +418,7 @@ func extractAnthropicQuestion(messages []anthropicRequestMessage) string {
 	return ""
 }
 
+// extractAnthropicSystem returns the system prompt from either string or block form.
 func extractAnthropicSystem(raw json.RawMessage) string {
 	if len(raw) == 0 {
 		return ""
@@ -416,6 +446,7 @@ func extractAnthropicSystem(raw json.RawMessage) string {
 	return ""
 }
 
+// buildAnthropicInputTokenDetails returns cache-related input token detail fields when present.
 func buildAnthropicInputTokenDetails(u anthropicUsage) any {
 	if u.CacheCreationInputTokens == 0 && u.CacheReadInputTokens == 0 {
 		return nil
@@ -426,6 +457,7 @@ func buildAnthropicInputTokenDetails(u anthropicUsage) any {
 	}
 }
 
+// extractAnthropicMessageContent extracts text from either string or block-form content.
 func extractAnthropicMessageContent(content any) string {
 	if s, ok := content.(string); ok {
 		return s
