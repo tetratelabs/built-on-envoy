@@ -181,18 +181,12 @@ func (p *wafPlugin) OnRequestHeaders(headers shared.HeaderMap, endOfStream bool)
 		return shared.HeadersStatusStop
 	}
 
-	// If endOfStream is true, there will be no request body callback.
-	// We still need to call handleRequestBody even when no request body is expected.
-	// This allows rules in the request body phase to run, even if there is no actual body to process.
-	if endOfStream {
+	// If endOfStream is true or if we won't buffer the body (upgrade), call handleRequestBody to run phase 2 rules.
+	// This allows rules in the request body phase to run, even if there is no actual body to process and before sending the headers.
+	if endOfStream || p.isUpgrade {
 		if !p.handleRequestBody() {
 			return shared.HeadersStatusStop
 		}
-		return shared.HeadersStatusContinue
-	}
-
-	// For upgrades, continue the filter chain because we won't buffer the body.
-	if p.isUpgrade {
 		return shared.HeadersStatusContinue
 	}
 	return shared.HeadersStatusStop
@@ -278,17 +272,13 @@ func (p *wafPlugin) OnResponseHeaders(headers shared.HeaderMap, endOfStream bool
 		return shared.HeadersStatusStop
 	}
 
-	// If endOfStream is true, there will be no response body callback.
-	// handleResponseBody needs to be called to still run phase 4 rules, validating response variables already populated.
-	if endOfStream {
+	// If endOfStream is true or if we are not going to buffer the response body anyway (upgrade or SSE),
+	// run handleResponseBody to enforce phase 4 rules. Doing so, response variables already populated
+	// are checked, before the headers are sent back.
+	if endOfStream || p.isUpgrade || p.isSSE {
 		if !p.handleResponseBody() {
 			return shared.HeadersStatusStop
 		}
-		return shared.HeadersStatusContinue
-	}
-
-	// For upgrades or SSE, continue the filter chain because we won't buffer the body.
-	if p.isUpgrade || p.isSSE {
 		return shared.HeadersStatusContinue
 	}
 	return shared.HeadersStatusStop
