@@ -1208,6 +1208,76 @@ func Test_Phase2RulesOnHeaderOnlyRequest(t *testing.T) {
 	}
 }
 
+func Test_Phase4RulesOnHeaderOnlyResponse(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	testCases := []struct {
+		name        string
+		directives  []string
+		respHeaders map[string][]string
+		ruleID      int
+	}{
+		{
+			name: "phase 4 response header rule executes on header-only response",
+			directives: []string{
+				"SecRuleEngine On",
+				`SecRule RESPONSE_HEADERS:content-type "@contains application/json" "id:100401,phase:4,deny,status:403,msg:'Blocked response header'"`,
+			},
+			respHeaders: map[string][]string{
+				":status":      {"200"},
+				"content-type": {"application/json"},
+			},
+			ruleID: 100401,
+		},
+		{
+			name: "phase 4 response status rule executes on header-only response",
+			directives: []string{
+				"SecRuleEngine On",
+				`SecRule RESPONSE_STATUS "@eq 204" "id:100402,phase:4,deny,status:403,msg:'Backend returned 204'"`,
+			},
+			respHeaders: map[string][]string{
+				":status": {"204"},
+			},
+			ruleID: 100402,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			wafPluginFactory := newWAFFactory(t, ctrl, tc.directives, "FULL")
+
+			pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+			pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
+			pluginHandle.EXPECT().IncrementCounterValue(
+				shared.MetricID(2), uint64(1), "example.com", strconv.Itoa(int(ctypes.PhaseResponseBody)), strconv.Itoa(tc.ruleID),
+			).Return(shared.MetricsSuccess)
+			pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, tc.ruleID)
+			pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseResponseBody))
+			pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_response_body_blocked")
+
+			wafPlugin, ok := wafPluginFactory.Create(pluginHandle).(*wafPlugin)
+			require.True(t, ok, "failed to cast plugin to wafPlugin")
+
+			requestHeaders := fake.NewFakeHeaderMap(map[string][]string{
+				":authority": {"example.com:8080"},
+				":method":    {"GET"},
+				":path":      {"/"},
+			})
+			require.Equal(t, shared.HeadersStatusContinue, wafPlugin.OnRequestHeaders(requestHeaders, true))
+
+			pluginHandle.EXPECT().RequestHeaders().Return(requestHeaders)
+			headerStatus := wafPlugin.OnResponseHeaders(fake.NewFakeHeaderMap(tc.respHeaders), true)
+			require.Equal(t, shared.HeadersStatusStop, headerStatus, "expected phase 4 block on header-only response")
+
+			wafPlugin.OnStreamComplete()
+		})
+	}
+}
+
 func Test_SecResponseBodyAccessOff(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
