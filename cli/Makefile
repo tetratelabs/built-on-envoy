@@ -179,7 +179,7 @@ format:  ## Format code.
 .PHONY: tidy
 tidy:  ## Run go mod tidy.
 	@echo "go mod tidy => ./..."
-	@find . -name go.mod -execdir go mod tidy \;
+	@find $(ROOT) -name go.mod -execdir go mod tidy \;
 
 .PHONY: check
 check: gen tidy format  ## Run all necessary steps to prepare for a commit and check for any differences in the codebase
