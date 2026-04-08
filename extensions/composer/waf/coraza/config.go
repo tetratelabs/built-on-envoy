@@ -87,10 +87,10 @@ func newSlogError(l *zap.Logger) func(err ctypes.MatchedRule) {
 			l.Error(msg, severityField)
 		case "warning":
 			l.Warn(msg, severityField)
-		case "notice", "info":
-			l.Info(msg, severityField)
 		default:
-			l.Debug(msg, severityField)
+			// Rules without an explicit severity "unknown" and informational severities ("notice", "info") are logged at Info level.
+			// The error callback is only invoked for triggered rules with the log action, so suppressing these at Debug level would silently drop intentional log entries.
+			l.Info(msg, severityField)
 		}
 	}
 }
