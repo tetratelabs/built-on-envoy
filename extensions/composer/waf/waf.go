@@ -15,6 +15,7 @@ import (
 	ctypes "github.com/corazawaf/coraza/v3/types"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 	waf "github.com/tetratelabs/built-on-envoy/extensions/composer/waf/coraza"
 	"github.com/tetratelabs/built-on-envoy/extensions/composer/waf/logger"
 )
@@ -42,11 +43,10 @@ func (f *wafPluginFactory) Create(handle shared.HttpFilterHandle) shared.HttpFil
 	mode := f.mode
 
 	// Check for per-route config and override if present.
-	if perRouteConfigAny := handle.GetMostSpecificConfig(); perRouteConfigAny != nil {
-		if perRouteConfig, ok := perRouteConfigAny.(*perRouteWafPluginConfig); ok {
-			config = perRouteConfig.config
-			mode = perRouteConfig.mode
-		}
+	perRouteWafPluginConfig := pkg.GetMostSpecificConfig[*perRouteWafPluginConfig](handle)
+	if perRouteWafPluginConfig != nil {
+		config = perRouteWafPluginConfig.config
+		mode = perRouteWafPluginConfig.mode
 	}
 
 	return &wafPlugin{

@@ -19,13 +19,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	waf "github.com/tetratelabs/built-on-envoy/extensions/composer/waf/coraza"
 	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
+	waf "github.com/tetratelabs/built-on-envoy/extensions/composer/waf/coraza"
 )
 
-// newPluginHandle creates a mock HttpFilterHandle with default expectations including
+// newPluginHandleWithoutPerRouteConfig creates a mock HttpFilterHandle with default expectations including
 // GetMostSpecificConfig returning nil (no per-route config).
-func newPluginHandle(ctrl *gomock.Controller) *mocks.MockHttpFilterHandle {
+func newPluginHandleWithoutPerRouteConfig(ctrl *gomock.Controller) *mocks.MockHttpFilterHandle {
 	pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	pluginHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
@@ -68,7 +68,7 @@ func Test_DisableWaf(t *testing.T) {
 	wafPluginFactory := newWAFFactory(t, ctrl, []string{"SecRuleEngine Off"}, "FULL")
 
 	t.Run("WAF disabled should skip processing", func(t *testing.T) {
-		pluginHandle := newPluginHandle(ctrl)
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
 			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 
@@ -128,7 +128,7 @@ func Test_DisableWaf(t *testing.T) {
 
 	t.Run("Get source address", func(t *testing.T) {
 		// Get source address.
-		pluginHandle := newPluginHandle(ctrl)
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 
@@ -171,7 +171,7 @@ func Test_DisableWaf(t *testing.T) {
 
 	t.Run("Get request protocol", func(t *testing.T) {
 		// Get request protocol.
-		pluginHandle := newPluginHandle(ctrl)
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 
@@ -210,7 +210,7 @@ func Test_RequestOnlyWaf(t *testing.T) {
 
 	t.Run("Header only request", func(t *testing.T) {
 		// Header only request.
-		pluginHandle := newPluginHandle(ctrl)
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 
 		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
@@ -240,7 +240,7 @@ func Test_RequestOnlyWaf(t *testing.T) {
 
 	t.Run("Handle request with upgrade", func(t *testing.T) {
 		// Handle request with upgrade.
-		pluginHandle := newPluginHandle(ctrl)
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 
 		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
@@ -283,7 +283,7 @@ func Test_RequestOnlyWaf(t *testing.T) {
 
 	t.Run("Handle request with body", func(t *testing.T) {
 		// Handle request with body.
-		pluginHandle := newPluginHandle(ctrl)
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 
 		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
@@ -322,7 +322,7 @@ func Test_RequestOnlyWaf(t *testing.T) {
 	})
 
 	t.Run("Handle request with body and trailers", func(t *testing.T) {
-		pluginHandle := newPluginHandle(ctrl)
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 
 		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
@@ -363,7 +363,7 @@ func Test_RequestOnlyWaf(t *testing.T) {
 
 	t.Run("Response should be no-op in request only mode", func(t *testing.T) {
 		// Response should be no-op in request only mode.
-		pluginHandle := newPluginHandle(ctrl)
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 
 		requestHeaders := fake.NewFakeHeaderMap(map[string][]string{
@@ -418,7 +418,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 
 	t.Run("Request should be no-op in response only mode", func(t *testing.T) {
 		// Request should be no-op in response only mode.
-		pluginHandle := newPluginHandle(ctrl)
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
 			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
@@ -458,7 +458,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 
 	t.Run("Header only response", func(t *testing.T) {
 		// Header only response.
-		pluginHandle := newPluginHandle(ctrl)
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 
 		requestHeaders := fake.NewFakeHeaderMap(map[string][]string{
@@ -491,7 +491,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 
 	t.Run("Handle response with upgrade", func(t *testing.T) {
 		// Handle response with upgrade.
-		pluginHandle := newPluginHandle(ctrl)
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 
 		requestHeaders := fake.NewFakeHeaderMap(map[string][]string{
@@ -537,7 +537,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 	})
 
 	t.Run("Handle response with body", func(t *testing.T) {
-		pluginHandle := newPluginHandle(ctrl)
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 
 		requestHeaders := fake.NewFakeHeaderMap(map[string][]string{
@@ -580,7 +580,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 	})
 
 	t.Run("Handle response with body and trailers", func(t *testing.T) {
-		pluginHandle := newPluginHandle(ctrl)
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 
 		requestHeaders := fake.NewFakeHeaderMap(map[string][]string{
@@ -624,7 +624,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 	})
 
 	t.Run("Handle response with SSE", func(t *testing.T) {
-		pluginHandle := newPluginHandle(ctrl)
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 
 		requestHeaders := fake.NewFakeHeaderMap(map[string][]string{
@@ -691,7 +691,7 @@ func Test_FullWaf(t *testing.T) {
 
 	t.Run("Full WAF request and response processing", func(t *testing.T) {
 		// Full WAF request and response processing.
-		pluginHandle := newPluginHandle(ctrl)
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 
 		plugin := wafPluginFactory.Create(pluginHandle)
@@ -775,7 +775,7 @@ func Test_BlockRequestWaf(t *testing.T) {
 	}, "FULL")
 
 	t.Run("Block request on headers", func(t *testing.T) {
-		pluginHandle := newPluginHandle(ctrl)
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
 			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
@@ -815,7 +815,7 @@ func Test_BlockRequestWaf(t *testing.T) {
 	})
 
 	t.Run("Block request on body", func(t *testing.T) {
-		pluginHandle := newPluginHandle(ctrl)
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
 			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
@@ -859,7 +859,7 @@ func Test_BlockRequestWaf(t *testing.T) {
 	})
 
 	t.Run("Block response on body", func(t *testing.T) {
-		pluginHandle := newPluginHandle(ctrl)
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
 			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
@@ -924,7 +924,7 @@ func Test_BlockRequest(t *testing.T) {
 	m := newMetrics(configHandle)
 
 	t.Run("nil interruption sends 500 and records internal block metric", func(*testing.T) {
-		pluginHandle := newPluginHandle(ctrl)
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 
 		p := &wafPlugin{
 			handle:            pluginHandle,
@@ -948,7 +948,7 @@ func Test_BlockRequest(t *testing.T) {
 	})
 
 	t.Run("interruption with zero status defaults to 403", func(*testing.T) {
-		pluginHandle := newPluginHandle(ctrl)
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 
 		p := &wafPlugin{
 			handle:            pluginHandle,
@@ -976,7 +976,7 @@ func Test_BlockRequest(t *testing.T) {
 	})
 
 	t.Run("interruption with explicit status uses that status", func(*testing.T) {
-		pluginHandle := newPluginHandle(ctrl)
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 
 		p := &wafPlugin{
 			handle:            pluginHandle,
@@ -1037,7 +1037,7 @@ func Test_SecRequestBodyAccessOff(t *testing.T) {
 				`SecRule REQUEST_BODY "@contains malicious-payload" "id:100002,phase:2,deny,status:403,msg:'Blocked request body'"`,
 			}, "FULL")
 
-			pluginHandle := newPluginHandle(ctrl)
+			pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 			pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
@@ -1111,7 +1111,7 @@ func Test_Phase2ArgsRuleWithSecRequestBodyAccessOff(t *testing.T) {
 				`SecRule ARGS "@contains malicious-payload" "id:100002,phase:2,deny,status:403,msg:'Blocked ARGS'"`,
 			}, "FULL")
 
-			pluginHandle := newPluginHandle(ctrl)
+			pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 			pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
@@ -1186,7 +1186,7 @@ func Test_Phase2RulesOnHeaderOnlyRequest(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			wafPluginFactory := newWAFFactory(t, ctrl, tc.directives, "FULL")
 
-			pluginHandle := newPluginHandle(ctrl)
+			pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 			pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
@@ -1249,7 +1249,7 @@ func Test_SecResponseBodyAccessOff(t *testing.T) {
 				`SecRule RESPONSE_BODY "@contains leaked-secret" "id:100003,phase:4,deny,status:403,msg:'Blocked response body'"`,
 			}, "FULL")
 
-			pluginHandle := newPluginHandle(ctrl)
+			pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 			pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
@@ -1324,7 +1324,7 @@ func Test_Phase4ResponseHeadersRuleWithSecResponseBodyAccessOff(t *testing.T) {
 				`SecRule RESPONSE_HEADERS:content-type "@contains application/json" "id:100003,phase:4,deny,status:403,msg:'Blocked response header'"`,
 			}, "FULL")
 
-			pluginHandle := newPluginHandle(ctrl)
+			pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 			pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
@@ -1452,7 +1452,7 @@ func Test_PerRouteConfigOverride(t *testing.T) {
 
 	t.Run("nil per-route config uses factory config", func(t *testing.T) {
 		// No per-route config (GetMostSpecificConfig returns nil).
-		pluginHandle := newPluginHandle(ctrl)
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
 			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 
@@ -1541,7 +1541,7 @@ func Test_PerRouteConfigBlocksRequest(t *testing.T) {
 	require.True(t, ok)
 
 	fakeHeaders := fake.NewFakeHeaderMap(map[string][]string{
-		":authority":    {"example.com"},
+		":authority":   {"example.com"},
 		":method":      {"GET"},
 		":path":        {"/"},
 		":scheme":      {"http"},

@@ -30,6 +30,7 @@ import (
 func newPluginHandle(ctrl *gomock.Controller, sourceAddr, protocol string) *mocks.MockHttpFilterHandle {
 	h := mocks.NewMockHttpFilterHandle(ctrl)
 	h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	h.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 	h.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString(protocol), true).AnyTimes()
 	h.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString(sourceAddr), true).AnyTimes()
 	// waf_tx_total (2 args)
