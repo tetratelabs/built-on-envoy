@@ -30,7 +30,7 @@ longDescription: |
   - **AI Gateway ready**: Works in the same Envoy filter chain as the AI Gateway External
     Processor. Use it to control access to AI models, MCP tools, or any HTTP resource.
   - **Dry-run mode**: Log authorization decisions without enforcing them.
-  - **Fail-open mode**: Allow requests through when the OpenFGA server is unreachable.
+  - **Fail-open mode**: Allow requests through when OpenFGA or the filter cannot enforce a deny (see Metrics).
 
   ## OpenFGA best practices
 
@@ -66,7 +66,8 @@ longDescription: |
   ## Configuration
 
   The extension requires an Envoy cluster pointing to the OpenFGA server. The `user`, `relation`,
-  and `object` fields for the Check API are extracted from request headers or set as static values.
+  and `object` fields for the Check API are built from static values, request headers, URL path
+  segments, or query parameters (see valueSource below).
 
   ```json
   {
@@ -123,7 +124,7 @@ longDescription: |
   | `object` | valueSource | yes* | | How to extract the object (*when not using `rules`) |
   | `rules` | array | no | | Multi-rule config; each rule has `match`, `relation`, `object`, optional `user` |
   | `match` | object | no | | Per-rule: `headers` map (header name → `"*"` or exact value) |
-  | `fail_open` | bool | no | `false` | Allow requests when OpenFGA is unreachable |
+  | `fail_open` | bool | no | `false` | Allow requests through when the filter would otherwise deny due to OpenFGA errors, missing check inputs, or no matching rule (see Metrics) |
   | `dry_run` | bool | no | `false` | Log decisions without enforcing them |
   | `timeout_ms` | int | no | `5000` | HTTP callout timeout in milliseconds |
   | `deny_status` | int | no | `403` | HTTP status code for denied requests |
@@ -222,10 +223,10 @@ longDescription: |
   | Decision | Description |
   |----------|-------------|
   | `allowed` | The Check API allowed the request. |
-  | `denied` | The Check API denied the request. |
-  | `failopen` | An error occurred and the request was allowed because fail-open is enabled. |
-  | `dryrun_allow` | The request was denied but allowed because dry-run is enabled. |
-  | `error` | An error occurred and the request was denied. |
+  | `denied` | The request was denied: OpenFGA returned not allowed, **or** no rule matched the request, **or** `user` / `relation` / `object` resolved empty (when `fail_open` is false). |
+  | `failopen` | The request was allowed because `fail_open` is true after a callout/API/parse failure, empty check inputs, or no matching rule. |
+  | `dryrun_allow` | OpenFGA would have denied the request but it was allowed because `dry_run` is enabled. |
+  | `error` | The request was denied after a callout failure, non-OK Check response, or unparseable response body (HTTP 502 to the client); not used when `fail_open` is true (those count as `failopen`). |
 type: go
 tags:
   - go
@@ -239,9 +240,11 @@ license: Apache-2.0
 examples:
   - title: AI Model Access Control
     description: |
-      Control which users can access specific AI models through an AIGatewayRoute.
-      The user identity comes from a header set by upstream authentication, and the
-      model name from a header set by the AI Gateway ExtProc.
+      Control which users can access specific AI models (for example on an AIGatewayRoute).
+      The user identity comes from a header set by upstream authentication; the model name
+      comes from a header you choose (here `x-ai-model`, often set by the client or an
+      upstream filter). For Envoy AI Gateway’s body-derived model header (`x-ai-eg-model`),
+      use the multi-rule example below or place openfga after the AI Gateway ExtProc.
     code: |
       boe run --local . --config '{
         "cluster": "openfga",
@@ -321,7 +324,8 @@ examples:
       }'
   - title: Fail-Open Mode
     description: |
-      Allow requests when the OpenFGA server is unreachable.
+      Allow requests when OpenFGA or the filter cannot complete a normal deny/allow path
+      (unreachable API, missing tuple inputs, no matching rule, etc.); see Metrics for details.
     code: |
       boe run --local . --config '{
         "cluster": "openfga",
