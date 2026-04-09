@@ -15,6 +15,7 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/fake"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
@@ -68,6 +69,7 @@ func createTestFilter(t *testing.T, cfg *cedarConfig) (*cedarHttpFilter, *mocks.
 	require.NoError(t, err)
 
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:5000"), true).AnyTimes()
@@ -120,11 +122,15 @@ func TestConfigFactory_Create_EmptyConfig(t *testing.T) {
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().DefineCounter("cedar_requests_total", "decision").Return(shared.MetricID(1), shared.MetricsSuccess)
 
 	filterFactory, err := factory.Create(mockHandle, []byte{})
-	require.Error(t, err)
-	require.Nil(t, filterFactory)
-	require.Contains(t, err.Error(), "empty config")
+	require.NoError(t, err)
+	require.NotNil(t, filterFactory)
+
+	mockHTTPHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
+	filter := filterFactory.Create(mockHTTPHandle)
+	require.IsType(t, &shared.EmptyHttpFilter{}, filter)
 }
 
 func TestConfigFactory_Create_InvalidJSON(t *testing.T) {
@@ -681,6 +687,7 @@ func createTestFilterWithMetricExpectation(t *testing.T, cfg *cedarConfig, expec
 	require.NoError(t, err)
 
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:5000"), true).AnyTimes()
@@ -1281,6 +1288,7 @@ func TestBuildContext_MTLSAttributes(t *testing.T) {
 	require.NoError(t, err)
 
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/2"), true).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:5000"), true).AnyTimes()
@@ -1333,6 +1341,7 @@ func TestOnRequestHeaders_PolicyUsesSPIFFE(t *testing.T) {
 
 	t.Run("trusted SPIFFE identity is allowed", func(t *testing.T) {
 		mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+		mockHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 		mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 		mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/2"), true).AnyTimes()
 		mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:5000"), true).AnyTimes()
@@ -1361,6 +1370,7 @@ func TestOnRequestHeaders_PolicyUsesSPIFFE(t *testing.T) {
 
 	t.Run("untrusted SPIFFE identity is denied", func(t *testing.T) {
 		mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+		mockHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 		mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 		mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/2"), true).AnyTimes()
 		mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:5000"), true).AnyTimes()
@@ -1508,6 +1518,7 @@ func TestFilterFactory_Create(t *testing.T) {
 	require.NoError(t, err)
 
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().GetMostSpecificConfig().Return(nil)
 	filter := filterFactory.Create(mockHandle)
 
 	require.NotNil(t, filter)
@@ -1542,6 +1553,7 @@ func TestBuildContext_DynamicMetadata_MultipleNamespacesAndKeys(t *testing.T) {
 	require.NoError(t, err)
 
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(gomock.Any()).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
 	mockHandle.EXPECT().GetAttributeBool(gomock.Any()).Return(false, false).AnyTimes()
@@ -1616,3 +1628,136 @@ func TestBuildContext_DynamicMetadata_Empty(t *testing.T) {
 	_, ok = dmVal.(cedarlib.Record)
 	require.True(t, ok, "dynamic_metadata should be a Record")
 }
+
+func newPluginHandleWithoutPerRouteConfig(ctrl *gomock.Controller) *mocks.MockHttpFilterHandle {
+	h := mocks.NewMockHttpFilterHandle(ctrl)
+	h.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
+	h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	return h
+}
+
+func newPluginHandleWithPerRouteConfig(ctrl *gomock.Controller, perRouteConfig any) *mocks.MockHttpFilterHandle {
+	h := mocks.NewMockHttpFilterHandle(ctrl)
+	h.EXPECT().GetMostSpecificConfig().Return(perRouteConfig).AnyTimes()
+	h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	return h
+}
+
+func Test_CreatePerRoute(t *testing.T) {
+	f := &CedarHttpFilterConfigFactory{}
+	policy := `permit(principal, action, resource);`
+
+	t.Run("valid config", func(t *testing.T) {
+		policyFile := createTestPolicyFile(t, policy)
+		cfg := map[string]any{
+			"policy":              map[string]any{"file": policyFile},
+			"principal_type":      "User",
+			"principal_id_header": "x-user-id",
+		}
+		b, _ := json.Marshal(cfg)
+		result, err := f.CreatePerRoute(b)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		perRoute, ok := result.(*cedarParsedConfig)
+		require.True(t, ok)
+		assert.Equal(t, "User", perRoute.PrincipalType)
+		assert.NotNil(t, perRoute.policySet)
+	})
+
+	t.Run("empty config returns error", func(t *testing.T) {
+		result, err := f.CreatePerRoute([]byte{})
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
+
+	t.Run("missing principal_type returns error", func(t *testing.T) {
+		policyFile := createTestPolicyFile(t, policy)
+		cfg := map[string]any{
+			"policy":              map[string]any{"file": policyFile},
+			"principal_id_header": "x-user-id",
+		}
+		b, _ := json.Marshal(cfg)
+		result, err := f.CreatePerRoute(b)
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
+
+	t.Run("invalid policy returns error", func(t *testing.T) {
+		cfg := map[string]any{
+			"policy":              map[string]any{"inline": "not valid cedar!!!"},
+			"principal_type":      "User",
+			"principal_id_header": "x-user-id",
+		}
+		b, _ := json.Marshal(cfg)
+		result, err := f.CreatePerRoute(b)
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
+
+	t.Run("invalid JSON returns error", func(t *testing.T) {
+		result, err := f.CreatePerRoute([]byte(`{invalid`))
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
+}
+
+func Test_PerRouteConfigOverride(t *testing.T) {
+	basePolicy := `permit(principal, action, resource);`
+	routePolicy := `forbid(principal, action, resource);`
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	basePolicyFile := createTestPolicyFile(t, basePolicy)
+	baseCfg := cedarConfig{
+		Policy:            pkg.DataSource{File: basePolicyFile},
+		PrincipalType:     "User",
+		PrincipalIDHeader: "x-user-id",
+	}
+	baseConfigJSON, _ := json.Marshal(baseCfg)
+
+	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockConfigHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockConfigHandle.EXPECT().DefineCounter("cedar_requests_total", "decision").Return(shared.MetricID(1), shared.MetricsSuccess).AnyTimes()
+
+	baseFilterFactory, err := (&CedarHttpFilterConfigFactory{}).Create(mockConfigHandle, baseConfigJSON)
+	require.NoError(t, err)
+	baseFactory := baseFilterFactory.(*cedarHttpFilterFactory)
+
+	t.Run("per-route config overrides factory config", func(t *testing.T) {
+		routePolicyFile := createTestPolicyFile(t, routePolicy)
+		perRouteJSON, _ := json.Marshal(map[string]any{
+			"policy":              map[string]any{"file": routePolicyFile},
+			"principal_type":      "Admin",
+			"principal_id_header": "x-admin-id",
+		})
+		perRouteResult, err := (&CedarHttpFilterConfigFactory{}).CreatePerRoute(perRouteJSON)
+		require.NoError(t, err)
+		perRoute := perRouteResult.(*cedarParsedConfig)
+
+		handle := newPluginHandleWithPerRouteConfig(ctrl, perRoute)
+		filter := baseFactory.Create(handle)
+		f, ok := filter.(*cedarHttpFilter)
+		require.True(t, ok)
+		assert.Equal(t, "Admin", f.config.PrincipalType)
+		assert.Equal(t, baseFactory.metrics, f.metrics)
+	})
+
+	t.Run("nil per-route config uses factory config", func(t *testing.T) {
+		handle := newPluginHandleWithoutPerRouteConfig(ctrl)
+		filter := baseFactory.Create(handle)
+		f, ok := filter.(*cedarHttpFilter)
+		require.True(t, ok)
+		assert.Equal(t, baseFactory.config, f.config)
+	})
+
+	t.Run("wrong type per-route config uses factory config", func(t *testing.T) {
+		handle := newPluginHandleWithPerRouteConfig(ctrl, "not-a-per-route-config")
+		filter := baseFactory.Create(handle)
+		f, ok := filter.(*cedarHttpFilter)
+		require.True(t, ok)
+		assert.Equal(t, baseFactory.config, f.config)
+	})
+}
+
+var _ = cedarlib.Allow // ensure cedarlib import is used

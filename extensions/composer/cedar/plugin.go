@@ -77,14 +77,14 @@ type cedarParsedConfig struct {
 	cedarConfig
 	policySet *cedarlib.PolicySet
 	entities  cedarlib.EntityMap
-	metrics   cedarMetrics
 }
 
 // cedarHttpFilter is the per-request HTTP filter instance.
 type cedarHttpFilter struct { //nolint:revive
 	shared.EmptyHttpFilter
-	handle shared.HttpFilterHandle
-	config *cedarParsedConfig
+	handle  shared.HttpFilterHandle
+	config  *cedarParsedConfig
+	metrics cedarMetrics
 }
 
 func (c *cedarHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) shared.HeadersStatus {
@@ -92,12 +92,12 @@ func (c *cedarHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) sha
 	if err != nil {
 		if c.config.FailOpen {
 			c.handle.Log(shared.LogLevelWarn, "cedar: request building error (fail_open enabled): %s", err.Error())
-			c.config.metrics.IncRequestsTotal(c.handle, decisionFailOpen)
+			c.metrics.IncRequestsTotal(c.handle, decisionFailOpen)
 			return shared.HeadersStatusContinue
 		}
 		c.handle.Log(shared.LogLevelWarn, "cedar: request building error: %s", err.Error())
 		c.handle.SendLocalResponse(403, nil, []byte("Forbidden"), "cedar_denied")
-		c.config.metrics.IncRequestsTotal(c.handle, decisionDenied)
+		c.metrics.IncRequestsTotal(c.handle, decisionDenied)
 		return shared.HeadersStatusStop
 	}
 
@@ -111,12 +111,12 @@ func (c *cedarHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) sha
 	if len(diagnostic.Errors) > 0 {
 		if c.config.FailOpen {
 			c.handle.Log(shared.LogLevelError, "cedar: policy evaluation errors (fail_open enabled): %v", diagnostic.Errors)
-			c.config.metrics.IncRequestsTotal(c.handle, decisionFailOpen)
+			c.metrics.IncRequestsTotal(c.handle, decisionFailOpen)
 			return shared.HeadersStatusContinue
 		}
 		c.handle.Log(shared.LogLevelError, "cedar: policy evaluation errors: %v", diagnostic.Errors)
 		c.handle.SendLocalResponse(500, nil, []byte("Internal Server Error"), "cedar_eval_error")
-		c.config.metrics.IncRequestsTotal(c.handle, decisionDenied)
+		c.metrics.IncRequestsTotal(c.handle, decisionDenied)
 		return shared.HeadersStatusStop
 	}
 
@@ -124,7 +124,7 @@ func (c *cedarHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) sha
 
 	if !allowed && c.config.DryRun {
 		c.handle.Log(shared.LogLevelInfo, "cedar: dry-run decision: allowed=%v", allowed)
-		c.config.metrics.IncRequestsTotal(c.handle, decisionDryAllow)
+		c.metrics.IncRequestsTotal(c.handle, decisionDryAllow)
 		allowed = true
 	}
 
@@ -148,12 +148,12 @@ func (c *cedarHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) sha
 			[]byte(body),
 			"cedar_denied",
 		)
-		c.config.metrics.IncRequestsTotal(c.handle, decisionDenied)
+		c.metrics.IncRequestsTotal(c.handle, decisionDenied)
 		return shared.HeadersStatusStop
 	}
 
 	if !c.config.DryRun {
-		c.config.metrics.IncRequestsTotal(c.handle, decisionAllowed)
+		c.metrics.IncRequestsTotal(c.handle, decisionAllowed)
 	}
 
 	return shared.HeadersStatusContinue
@@ -332,11 +332,22 @@ func parsePath(fullPath string) ([]string, map[string][]string) {
 // cedarHttpFilterFactory creates filter instances per-request.
 type cedarHttpFilterFactory struct { //nolint:revive
 	shared.EmptyHttpFilterFactory
-	config *cedarParsedConfig
+	config  *cedarParsedConfig
+	metrics cedarMetrics
 }
 
 func (c *cedarHttpFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
-	return &cedarHttpFilter{handle: handle, config: c.config}
+	cfg := c.config
+	if perRoute := pkg.GetMostSpecificConfig[*cedarParsedConfig](handle); perRoute != nil {
+		cfg = perRoute
+	}
+
+	if cfg == nil {
+		handle.Log(shared.LogLevelInfo, "cedar: no config available and use empty filter")
+		return &shared.EmptyHttpFilter{}
+	}
+
+	return &cedarHttpFilter{handle: handle, config: cfg, metrics: c.metrics}
 }
 
 // CedarHttpFilterConfigFactory is the configuration factory for the HTTP filter.
@@ -344,64 +355,61 @@ type CedarHttpFilterConfigFactory struct { //nolint:revive
 	shared.EmptyHttpFilterConfigFactory
 }
 
-// Create parses the JSON configuration and creates a factory for the HTTP filter.
-func (c *CedarHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
+func parseConfig(config []byte) (*cedarParsedConfig, error) {
 	if len(config) == 0 {
-		handle.Log(shared.LogLevelError, "cedar: empty config")
-		return nil, fmt.Errorf("empty config")
+		return nil, nil
 	}
 
 	cfg := cedarConfig{}
 	if err := json.Unmarshal(config, &cfg); err != nil {
-		handle.Log(shared.LogLevelError, "cedar: failed to parse config: %s", err.Error())
-		return nil, err
+		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
 	if cfg.PrincipalType == "" {
-		handle.Log(shared.LogLevelError, "cedar: principal_type is required")
 		return nil, fmt.Errorf("principal_type is required")
 	}
 
 	if cfg.PrincipalIDHeader == "" {
-		handle.Log(shared.LogLevelError, "cedar: principal_id_header is required")
 		return nil, fmt.Errorf("principal_id_header is required")
 	}
 
 	if err := cfg.Policy.Validate(); err != nil {
-		handle.Log(shared.LogLevelError, "cedar: invalid 'policy' configuration: %s", err.Error())
 		return nil, fmt.Errorf("invalid 'policy' configuration: %w", err)
 	}
 
 	policyBytes, err := cfg.Policy.Content()
 	if err != nil {
-		handle.Log(shared.LogLevelError, "cedar: failed to get policy content: %s", err.Error())
 		return nil, fmt.Errorf("failed to get policy content: %w", err)
 	}
 
-	handle.Log(shared.LogLevelDebug, "cedar: loading policy (principal_type=%s, principal_id_header=%s, dry_run=%v, fail_open=%v)",
-		cfg.PrincipalType, cfg.PrincipalIDHeader, cfg.DryRun, cfg.FailOpen)
-
 	policySet, err := cedarlib.NewPolicySetFromBytes("policy.cedar", policyBytes)
 	if err != nil {
-		handle.Log(shared.LogLevelError, "cedar: failed to parse policy: %s", err.Error())
 		return nil, fmt.Errorf("failed to parse policy: %w", err)
 	}
 
-	handle.Log(shared.LogLevelDebug, "cedar: policy parsed successfully")
-
-	// Load entities if provided.
 	var entities cedarlib.EntityMap
 	if cfg.EntitiesFile != "" {
 		entitiesBytes, err := os.ReadFile(cfg.EntitiesFile)
 		if err != nil {
-			handle.Log(shared.LogLevelError, "cedar: failed to read entities file: %s", err.Error())
 			return nil, fmt.Errorf("failed to read entities file: %w", err)
 		}
 		if err := json.Unmarshal(entitiesBytes, &entities); err != nil {
-			handle.Log(shared.LogLevelError, "cedar: failed to parse entities: %s", err.Error())
 			return nil, fmt.Errorf("failed to parse entities: %w", err)
 		}
-		handle.Log(shared.LogLevelDebug, "cedar: entities loaded successfully")
+	}
+
+	return &cedarParsedConfig{cedarConfig: cfg, policySet: policySet, entities: entities}, nil
+}
+
+// Create parses the JSON configuration and creates a factory for the HTTP filter.
+func (c *CedarHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
+	parsed, err := parseConfig(config)
+	if err != nil {
+		return nil, err
+	}
+
+	if parsed == nil {
+		handle.Log(shared.LogLevelInfo, "cedar: empty filter config")
 	}
 
 	var metrics cedarMetrics
@@ -411,14 +419,23 @@ func (c *CedarHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHand
 		metrics.enabled = true
 	}
 
-	parsed := &cedarParsedConfig{
-		cedarConfig: cfg,
-		policySet:   policySet,
-		entities:    entities,
-		metrics:     metrics,
+	return &cedarHttpFilterFactory{config: parsed, metrics: metrics}, nil
+}
+
+// CreatePerRoute parses per-route configuration for the Cedar filter.
+func (c *CedarHttpFilterConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, error) {
+	parsed, err := parseConfig(unparsedConfig)
+	if err != nil {
+		return nil, err
 	}
 
-	return &cedarHttpFilterFactory{config: parsed}, nil
+	if parsed == nil {
+		// It's not allowed to have empty route config because it doesn't make sense to have an
+		// empty config override the global config.
+		return nil, fmt.Errorf("cedar: per-route config is empty or invalid")
+	}
+
+	return parsed, nil
 }
 
 // ExtensionName is the name of the extension that will be used in the
