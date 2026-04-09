@@ -14,6 +14,7 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/fake"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
@@ -103,6 +104,7 @@ func createTestFilter(t *testing.T, spec string, cfg *openAPIValidatorConfig) (*
 	require.NoError(t, err)
 
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	filter := filterFactory.Create(mockHandle)
@@ -161,9 +163,12 @@ func TestConfigFactory_Create_EmptyConfig(t *testing.T) {
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	filterFactory, err := factory.Create(mockHandle, []byte{})
-	require.Error(t, err)
-	require.Nil(t, filterFactory)
-	require.Contains(t, err.Error(), "empty config")
+	require.NoError(t, err)
+	require.NotNil(t, filterFactory)
+
+	mockHTTPHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
+	filter := filterFactory.Create(mockHTTPHandle)
+	require.IsType(t, &shared.EmptyHttpFilter{}, filter)
 }
 
 func TestConfigFactory_Create_InvalidJSON(t *testing.T) {
@@ -864,6 +869,7 @@ func TestFilterFactory_Create(t *testing.T) {
 	require.NoError(t, err)
 
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 	filter := filterFactory.Create(mockHandle)
 
 	require.NotNil(t, filter)
@@ -890,3 +896,132 @@ func TestOnRequestTrailers_AlreadyProcessed(t *testing.T) {
 	trailersStatus := filter.OnRequestTrailers(trailers)
 	require.Equal(t, shared.TrailersStatusContinue, trailersStatus)
 }
+
+func newPluginHandleWithoutPerRouteConfig(ctrl *gomock.Controller) *mocks.MockHttpFilterHandle {
+	h := mocks.NewMockHttpFilterHandle(ctrl)
+	h.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
+	h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	return h
+}
+
+func newPluginHandleWithPerRouteConfig(ctrl *gomock.Controller, perRouteConfig any) *mocks.MockHttpFilterHandle {
+	h := mocks.NewMockHttpFilterHandle(ctrl)
+	h.EXPECT().GetMostSpecificConfig().Return(perRouteConfig).AnyTimes()
+	h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	return h
+}
+
+func Test_CreatePerRoute(t *testing.T) {
+	f := &OpenAPIValidatorHttpFilterConfigFactory{}
+
+	t.Run("valid inline spec", func(t *testing.T) {
+		cfg := map[string]any{
+			"spec": map[string]any{"inline": testSpec},
+		}
+		b, _ := json.Marshal(cfg)
+		result, err := f.CreatePerRoute(b)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		perRoute, ok := result.(*openAPIValidatorParsedConfig)
+		require.True(t, ok)
+		assert.NotNil(t, perRoute.router)
+		assert.Equal(t, 400, perRoute.DenyResponse.Status)
+	})
+
+	t.Run("empty config returns error", func(t *testing.T) {
+		result, err := f.CreatePerRoute([]byte{})
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
+
+	t.Run("invalid JSON returns error", func(t *testing.T) {
+		result, err := f.CreatePerRoute([]byte(`{invalid`))
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
+
+	t.Run("invalid spec returns error", func(t *testing.T) {
+		cfg := map[string]any{
+			"spec": map[string]any{"inline": "not valid openapi"},
+		}
+		b, _ := json.Marshal(cfg)
+		result, err := f.CreatePerRoute(b)
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
+
+	t.Run("custom deny response status", func(t *testing.T) {
+		cfg := map[string]any{
+			"spec":          map[string]any{"inline": testSpec},
+			"deny_response": map[string]any{"status": 422, "body": "Unprocessable Entity"},
+		}
+		b, _ := json.Marshal(cfg)
+		result, err := f.CreatePerRoute(b)
+		require.NoError(t, err)
+		perRoute, ok := result.(*openAPIValidatorParsedConfig)
+		require.True(t, ok)
+		assert.Equal(t, 422, perRoute.DenyResponse.Status)
+	})
+}
+
+func Test_PerRouteConfigOverride(t *testing.T) {
+	// Build a spec that only allows GET /items
+	routeSpec := `openapi: "3.0.0"
+info:
+  title: Route API
+  version: "1.0"
+paths:
+  /items:
+    get:
+      operationId: listItems
+      responses:
+        "200":
+          description: OK
+`
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockConfigHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	baseConfigJSON, _ := json.Marshal(openAPIValidatorConfig{
+		Spec: pkg.DataSource{Inline: testSpec},
+	})
+	baseFilterFactory, err := (&OpenAPIValidatorHttpFilterConfigFactory{}).Create(mockConfigHandle, baseConfigJSON)
+	require.NoError(t, err)
+	baseFactory := baseFilterFactory.(*openAPIValidatorHttpFilterFactory)
+
+	t.Run("per-route config overrides factory config", func(t *testing.T) {
+		perRouteJSON, _ := json.Marshal(map[string]any{
+			"spec": map[string]any{"inline": routeSpec},
+		})
+		perRouteResult, err := (&OpenAPIValidatorHttpFilterConfigFactory{}).CreatePerRoute(perRouteJSON)
+		require.NoError(t, err)
+		perRoute := perRouteResult.(*openAPIValidatorParsedConfig)
+
+		handle := newPluginHandleWithPerRouteConfig(ctrl, perRoute)
+		filter := baseFactory.Create(handle)
+		f, ok := filter.(*openAPIValidatorHttpFilter)
+		require.True(t, ok)
+		assert.Equal(t, perRoute, f.config)
+	})
+
+	t.Run("nil per-route config uses factory config", func(t *testing.T) {
+		handle := newPluginHandleWithoutPerRouteConfig(ctrl)
+		filter := baseFactory.Create(handle)
+		f, ok := filter.(*openAPIValidatorHttpFilter)
+		require.True(t, ok)
+		assert.Equal(t, baseFactory.config, f.config)
+	})
+
+	t.Run("wrong type per-route config uses factory config", func(t *testing.T) {
+		handle := newPluginHandleWithPerRouteConfig(ctrl, "not-a-per-route-config")
+		filter := baseFactory.Create(handle)
+		f, ok := filter.(*openAPIValidatorHttpFilter)
+		require.True(t, ok)
+		assert.Equal(t, baseFactory.config, f.config)
+	})
+}
+
+// ensure shared used
+var _ = shared.MetricsSuccess

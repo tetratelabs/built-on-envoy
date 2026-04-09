@@ -258,7 +258,17 @@ type openAPIValidatorHttpFilterFactory struct { //nolint:revive
 }
 
 func (o *openAPIValidatorHttpFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
-	return &openAPIValidatorHttpFilter{handle: handle, config: o.config}
+	cfg := o.config
+	if perRouteConfig := pkg.GetMostSpecificConfig[*openAPIValidatorParsedConfig](handle); perRouteConfig != nil {
+		cfg = perRouteConfig
+	}
+
+	if cfg == nil {
+		handle.Log(shared.LogLevelInfo, "openapi-validator: no config available and use empty filter")
+		return &shared.EmptyHttpFilter{}
+	}
+
+	return &openAPIValidatorHttpFilter{handle: handle, config: cfg}
 }
 
 // OpenAPIValidatorHttpFilterConfigFactory is the configuration factory for the HTTP filter.
@@ -266,52 +276,39 @@ type OpenAPIValidatorHttpFilterConfigFactory struct { //nolint:revive
 	shared.EmptyHttpFilterConfigFactory
 }
 
-// Create parses the JSON configuration, loads the OpenAPI spec, and creates a factory.
-func (o *OpenAPIValidatorHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
+func parseConfig(config []byte) (*openAPIValidatorParsedConfig, error) {
 	if len(config) == 0 {
-		handle.Log(shared.LogLevelError, "openapi-validator: empty config")
-		return nil, fmt.Errorf("empty config")
+		return nil, nil
 	}
 
 	cfg := openAPIValidatorConfig{}
 	if err := json.Unmarshal(config, &cfg); err != nil {
-		handle.Log(shared.LogLevelError, "openapi-validator: failed to parse config: %s", err.Error())
-		return nil, err
+		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
 	if err := cfg.Spec.Validate(); err != nil {
-		handle.Log(shared.LogLevelError, "openapi-validator: invalid spec config: %s", err.Error())
 		return nil, fmt.Errorf("invalid spec config: %w", err)
 	}
 
-	handle.Log(shared.LogLevelDebug, "openapi-validator: loading spec (max_body_bytes=%d, dry_run=%v)",
-		cfg.MaxBodyBytes, cfg.DryRun)
-
 	specData, err := cfg.Spec.Content()
 	if err != nil {
-		handle.Log(shared.LogLevelError, "openapi-validator: failed to read spec: %s", err.Error())
 		return nil, fmt.Errorf("failed to read spec: %w", err)
 	}
 
 	loader := openapi3.NewLoader()
 	doc, err := loader.LoadFromData(specData)
 	if err != nil {
-		handle.Log(shared.LogLevelError, "openapi-validator: failed to parse spec: %s", err.Error())
 		return nil, fmt.Errorf("failed to parse spec: %w", err)
 	}
 
 	if err = doc.Validate(context.Background()); err != nil {
-		handle.Log(shared.LogLevelError, "openapi-validator: invalid OpenAPI spec: %s", err.Error())
 		return nil, fmt.Errorf("invalid OpenAPI spec: %w", err)
 	}
 
 	router, err := gorillamux.NewRouter(doc)
 	if err != nil {
-		handle.Log(shared.LogLevelError, "openapi-validator: failed to create router: %s", err.Error())
 		return nil, fmt.Errorf("failed to create router: %w", err)
 	}
-
-	handle.Log(shared.LogLevelDebug, "openapi-validator: spec loaded and router created successfully")
 
 	if cfg.DenyResponse == nil {
 		cfg.DenyResponse = &pkg.LocalResponse{
@@ -322,24 +319,50 @@ func (o *OpenAPIValidatorHttpFilterConfigFactory) Create(handle shared.HttpFilte
 			cfg.DenyResponse.Status = 400
 		}
 		if err := cfg.DenyResponse.Validate(); err != nil {
-			handle.Log(shared.LogLevelError, "openapi-validator: invalid deny_response config: %s", err.Error())
 			return nil, fmt.Errorf("invalid deny_response config: %w", err)
 		}
 	}
 
-	// Pre-compute deny response headers to avoid allocating per-request.
 	var denyResponseHeaders [][2]string
 	for k, v := range cfg.DenyResponse.Headers {
 		denyResponseHeaders = append(denyResponseHeaders, [2]string{k, v})
 	}
 
-	parsed := &openAPIValidatorParsedConfig{
+	return &openAPIValidatorParsedConfig{
 		openAPIValidatorConfig: cfg,
 		router:                 router,
 		denyResponseHeaders:    denyResponseHeaders,
+	}, nil
+}
+
+// Create parses the JSON configuration, loads the OpenAPI spec, and creates a factory.
+func (o *OpenAPIValidatorHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle,
+	config []byte,
+) (shared.HttpFilterFactory, error) {
+	parsed, err := parseConfig(config)
+	if err != nil {
+		return nil, err
+	}
+
+	if parsed == nil {
+		handle.Log(shared.LogLevelInfo, "openapi-validator: empty filter config")
 	}
 
 	return &openAPIValidatorHttpFilterFactory{config: parsed}, nil
+}
+
+// CreatePerRoute parses per-route configuration for the OpenAPI validator filter.
+func (o *OpenAPIValidatorHttpFilterConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, error) {
+	cfg, err := parseConfig(unparsedConfig)
+	if err != nil {
+		return nil, err
+	}
+	if cfg == nil {
+		// It's not allowed to have empty route config because it doesn't make sense to have an
+		// empty config override the global config.
+		return nil, fmt.Errorf("openapi-validator: per-route config is empty or invalid")
+	}
+	return cfg, nil
 }
 
 // ExtensionName is the name of the extension that will be used in the
