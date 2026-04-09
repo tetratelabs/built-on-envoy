@@ -6,11 +6,13 @@
 package llmproxy
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/fake"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
@@ -45,6 +47,24 @@ func expectStatsDefinitions(h *mocks.MockHttpFilterConfigHandle) {
 	}
 	h.EXPECT().DefineCounter(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(nextID).Times(5)
 	h.EXPECT().DefineHistogram(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(nextID).Times(2)
+}
+
+// newPluginHandleWithoutPerRouteConfig creates a mock HttpFilterHandle with default expectations including
+// GetMostSpecificConfig returning nil (no per-route config).
+func newPluginHandleWithoutPerRouteConfig(ctrl *gomock.Controller) *mocks.MockHttpFilterHandle {
+	pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	pluginHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
+	return pluginHandle
+}
+
+// newPluginHandleWithPerRouteConfig creates a mock HttpFilterHandle that returns
+// the given per-route config from GetMostSpecificConfig.
+func newPluginHandleWithPerRouteConfig(ctrl *gomock.Controller, perRouteConfig any) *mocks.MockHttpFilterHandle {
+	pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	pluginHandle.EXPECT().GetMostSpecificConfig().Return(perRouteConfig).AnyTimes()
+	return pluginHandle
 }
 
 // --- llmProxyConfigFactory.Create ---
@@ -109,7 +129,7 @@ func TestConfigFactory_Create_InvalidJSON(t *testing.T) {
 func TestFilterFactory_Create(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 
 	cfg := defaultCfg()
 	ff := &llmProxyFilterFactory{config: cfg}
@@ -120,6 +140,73 @@ func TestFilterFactory_Create(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, mockHandle, lf.handle)
 	require.Equal(t, cfg, lf.config)
+}
+
+func Test_CreatePerRoute(t *testing.T) {
+	t.Run("valid config", func(t *testing.T) {
+		config := map[string]any{
+			"metadata_namespace": "io.test",
+			"llm_configs": []map[string]any{
+				{"matcher": map[string]any{"suffix": "/v1/chat/completions"}, "kind": "openai"},
+			},
+		}
+		configJSON, _ := json.Marshal(config)
+		result, err := (&llmProxyConfigFactory{}).CreatePerRoute(configJSON)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		perRoute, ok := result.(*llmProxyConfig)
+		require.True(t, ok)
+		assert.Equal(t, "io.test", perRoute.MetadataNamespace)
+	})
+
+	t.Run("empty config uses defaults", func(t *testing.T) {
+		result, err := (&llmProxyConfigFactory{}).CreatePerRoute([]byte{})
+		require.NoError(t, err)
+		perRoute, ok := result.(*llmProxyConfig)
+		require.True(t, ok)
+		assert.Equal(t, defaultMetadataNamespace, perRoute.MetadataNamespace)
+	})
+
+	t.Run("invalid JSON returns error", func(t *testing.T) {
+		result, err := (&llmProxyConfigFactory{}).CreatePerRoute([]byte(`{invalid`))
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
+}
+
+func Test_PerRouteConfigOverride(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	baseFactory := &llmProxyFilterFactory{config: defaultCfg()}
+
+	t.Run("per-route config overrides factory config", func(t *testing.T) {
+		perRouteConfig := &llmProxyConfig{
+			LLMConfigs:        []llmConfig{},
+			MetadataNamespace: "io.per.route",
+		}
+		mockHandle := newPluginHandleWithPerRouteConfig(ctrl, perRouteConfig)
+		filter := baseFactory.Create(mockHandle)
+		lf, ok := filter.(*llmProxyFilter)
+		require.True(t, ok)
+		assert.Equal(t, "io.per.route", lf.config.MetadataNamespace)
+	})
+
+	t.Run("nil per-route config uses factory config", func(t *testing.T) {
+		mockHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
+		filter := baseFactory.Create(mockHandle)
+		lf, ok := filter.(*llmProxyFilter)
+		require.True(t, ok)
+		assert.Equal(t, defaultMetadataNamespace, lf.config.MetadataNamespace)
+	})
+
+	t.Run("non-matching per-route config type uses factory config", func(t *testing.T) {
+		mockHandle := newPluginHandleWithPerRouteConfig(ctrl, "not-a-per-route-config")
+		filter := baseFactory.Create(mockHandle)
+		lf, ok := filter.(*llmProxyFilter)
+		require.True(t, ok)
+		assert.Equal(t, defaultMetadataNamespace, lf.config.MetadataNamespace)
+	})
 }
 
 // --- WellKnownHttpFilterConfigFactories ---
@@ -199,7 +286,7 @@ func TestOnRequestHeaders_MatchedPath_EndOfStream(t *testing.T) {
 	mockHandle.EXPECT().IncrementCounterValue(idRequestError, uint64(1), "openai", "").Return(shared.MetricsSuccess).Times(1)
 	mockHandle.EXPECT().IncrementCounterValue(idRequestTotal, uint64(1), "openai", "").Return(shared.MetricsSuccess).Times(1)
 
-	filter := &llmProxyFilter{handle: mockHandle, config: defaultCfgWithStats(newTestStats(ctrl))}
+	filter := &llmProxyFilter{handle: mockHandle, config: defaultCfg(), stats: newTestStats(ctrl)}
 	headers := fake.NewFakeHeaderMap(map[string][]string{"content-type": {"application/json"}})
 	result := filter.OnRequestHeaders(headers, true)
 	require.Equal(t, shared.HeadersStatusContinue, result)
@@ -233,7 +320,7 @@ func TestOnRequestHeaders_NonJSONContentType_Error(t *testing.T) {
 	mockHandle.EXPECT().IncrementCounterValue(idRequestError, uint64(1), "openai", "").Return(shared.MetricsSuccess).Times(1)
 	mockHandle.EXPECT().IncrementCounterValue(idRequestTotal, uint64(1), "openai", "").Return(shared.MetricsSuccess).Times(1)
 
-	filter := &llmProxyFilter{handle: mockHandle, config: defaultCfgWithStats(newTestStats(ctrl))}
+	filter := &llmProxyFilter{handle: mockHandle, config: defaultCfg(), stats: newTestStats(ctrl)}
 	headers := fake.NewFakeHeaderMap(map[string][]string{"content-type": {"text/plain"}})
 	result := filter.OnRequestHeaders(headers, false)
 	// Request is passed through (Continue) but processing is skipped due to the error.
@@ -279,7 +366,8 @@ func TestOnRequestBody_OpenAI_SetsMetadata(t *testing.T) {
 
 	filter := &llmProxyFilter{
 		handle:  mockHandle,
-		config:  defaultCfgWithStats(newTestStats(ctrl)),
+		config:  defaultCfg(),
+		stats:   newTestStats(ctrl),
 		matched: true,
 		kind:    KindOpenAI,
 		factory: &openaiFactory{},
@@ -298,7 +386,6 @@ func TestOnRequestBody_Anthropic_SetsMetadata(t *testing.T) {
 		LLMConfigs:        []llmConfig{{Matcher: prefixMatcher("/v1/messages"), Kind: KindAnthropic}},
 		MetadataNamespace: defaultMetadataNamespace,
 	}
-	cfg.stats = newTestStats(ctrl)
 	body := []byte(`{"model":"claude-3-5-sonnet-20241022","stream":true}`)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fake.NewFakeBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
@@ -310,6 +397,7 @@ func TestOnRequestBody_Anthropic_SetsMetadata(t *testing.T) {
 	filter := &llmProxyFilter{
 		handle:  mockHandle,
 		config:  cfg,
+		stats:   newTestStats(ctrl),
 		matched: true,
 		kind:    KindAnthropic,
 		factory: &anthropicFactory{},
@@ -330,7 +418,7 @@ func TestOnRequestBody_InvalidJSON_LogsDebug(t *testing.T) {
 	mockHandle.EXPECT().IncrementCounterValue(idRequestError, uint64(1), "", "").Return(shared.MetricsSuccess).Times(1)
 	mockHandle.EXPECT().IncrementCounterValue(idRequestTotal, uint64(1), "", "").Return(shared.MetricsSuccess).Times(1)
 
-	filter := &llmProxyFilter{handle: mockHandle, config: defaultCfgWithStats(newTestStats(ctrl)), matched: true, factory: &openaiFactory{}}
+	filter := &llmProxyFilter{handle: mockHandle, config: defaultCfg(), stats: newTestStats(ctrl), matched: true, factory: &openaiFactory{}}
 	result := filter.OnRequestBody(fake.NewFakeBodyBuffer(body), true)
 	// Graceful degradation: continue even on parse failure.
 	require.Equal(t, shared.BodyStatusContinue, result)
@@ -353,7 +441,8 @@ func TestOnRequestTrailers_NotProcessed_ParsesBody(t *testing.T) {
 
 	filter := &llmProxyFilter{
 		handle:  mockHandle,
-		config:  defaultCfgWithStats(newTestStats(ctrl)),
+		config:  defaultCfg(),
+		stats:   newTestStats(ctrl),
 		matched: true,
 		kind:    KindOpenAI,
 		factory: &openaiFactory{},
@@ -393,7 +482,7 @@ func TestOnResponseHeaders_EndOfStream_Continue(t *testing.T) {
 	mockHandle.EXPECT().IncrementCounterValue(idRequestError, uint64(1), "", "").Return(shared.MetricsSuccess).Times(1)
 	mockHandle.EXPECT().IncrementCounterValue(idRequestTotal, uint64(1), "", "").Return(shared.MetricsSuccess).Times(1)
 
-	filter := &llmProxyFilter{handle: mockHandle, config: defaultCfgWithStats(newTestStats(ctrl)), matched: true}
+	filter := &llmProxyFilter{handle: mockHandle, config: defaultCfg(), stats: newTestStats(ctrl), matched: true}
 	headers := fake.NewFakeHeaderMap(map[string][]string{"content-type": {"application/json"}})
 	result := filter.OnResponseHeaders(headers, true)
 	require.Equal(t, shared.HeadersStatusContinue, result)
@@ -466,7 +555,8 @@ func TestOnResponseBody_OpenAI_SetsUsageMetadata(t *testing.T) {
 	// Set some field values that should be set in the request phase.
 	filter := &llmProxyFilter{
 		handle:  mockHandle,
-		config:  defaultCfgWithStats(newTestStats(ctrl)),
+		config:  defaultCfg(),
+		stats:   newTestStats(ctrl),
 		matched: true,
 		factory: &openaiFactory{},
 		model:   "gpt-4o",
@@ -486,7 +576,6 @@ func TestOnResponseBody_Anthropic_SetsUsageMetadata(t *testing.T) {
 		LLMConfigs:        []llmConfig{{Matcher: prefixMatcher("/v1/messages"), Kind: KindAnthropic}},
 		MetadataNamespace: defaultMetadataNamespace,
 	}
-	cfg.stats = newTestStats(ctrl)
 	body := []byte(`{"id":"m1","type":"message","usage":{"input_tokens":15,"output_tokens":5}}`)
 	mockHandle.EXPECT().BufferedResponseBody().Return(fake.NewFakeBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
@@ -501,6 +590,7 @@ func TestOnResponseBody_Anthropic_SetsUsageMetadata(t *testing.T) {
 	filter := &llmProxyFilter{
 		handle:  mockHandle,
 		config:  cfg,
+		stats:   newTestStats(ctrl),
 		matched: true,
 		factory: &anthropicFactory{},
 		model:   "gpt-4o",
@@ -530,7 +620,8 @@ func TestOnResponseBody_NoUsageInResponse(t *testing.T) {
 
 	filter := &llmProxyFilter{
 		handle:  mockHandle,
-		config:  defaultCfgWithStats(newTestStats(ctrl)),
+		config:  defaultCfg(),
+		stats:   newTestStats(ctrl),
 		matched: true,
 		factory: &openaiFactory{},
 		model:   "gpt-4o",
@@ -557,7 +648,8 @@ func TestOnResponseBody_SSE_OpenAI_AccumulatesAndSetsMetadata(t *testing.T) {
 	acc := newOpenAISSEParser()
 	filter := &llmProxyFilter{
 		handle:    mockHandle,
-		config:    defaultCfgWithStats(newTestStats(ctrl)),
+		config:    defaultCfg(),
+		stats:     newTestStats(ctrl),
 		matched:   true,
 		factory:   &openaiFactory{},
 		sseParser: acc,
@@ -592,10 +684,10 @@ func TestOnResponseBody_SSE_Anthropic_AccumulatesAndSetsMetadata(t *testing.T) {
 		LLMConfigs:        []llmConfig{{Matcher: prefixMatcher("/v1/messages"), Kind: KindAnthropic}},
 		MetadataNamespace: defaultMetadataNamespace,
 	}
-	cfg.stats = newTestStats(ctrl)
 	filter := &llmProxyFilter{
 		handle:    mockHandle,
 		config:    cfg,
+		stats:     newTestStats(ctrl),
 		matched:   true,
 		factory:   &anthropicFactory{},
 		sseParser: acc,
@@ -654,7 +746,8 @@ func TestOnResponseTrailers_NonStreaming_ParsesBody(t *testing.T) {
 
 	filter := &llmProxyFilter{
 		handle:  mockHandle,
-		config:  defaultCfgWithStats(newTestStats(ctrl)),
+		config:  defaultCfg(),
+		stats:   newTestStats(ctrl),
 		matched: true,
 		factory: &openaiFactory{},
 		model:   "gpt-4o",
@@ -683,11 +776,11 @@ func TestCustomAPIType_RequestParsedLikeOpenAI(t *testing.T) {
 	cfg := &llmProxyConfig{
 		LLMConfigs:        []llmConfig{{Matcher: prefixMatcher("/custom/v1/chat"), Kind: KindCustom}},
 		MetadataNamespace: defaultMetadataNamespace,
-		stats:             newTestStats(ctrl),
 	}
 	filter := &llmProxyFilter{
 		handle:  mockHandle,
 		config:  cfg,
+		stats:   newTestStats(ctrl),
 		matched: true,
 		kind:    KindCustom,
 		factory: &customFactory{},
@@ -778,11 +871,11 @@ func TestOnRequestBody_LLMModelHeader_SetsRequestHeader(t *testing.T) {
 		LLMConfigs:        []llmConfig{{Matcher: prefixMatcher("/v1/chat/completions"), Kind: KindOpenAI, Factory: &openaiFactory{}}},
 		MetadataNamespace: defaultMetadataNamespace,
 		LLMModelHeader:    "x-llm-model",
-		stats:             newTestStats(ctrl),
 	}
 	filter := &llmProxyFilter{
 		handle:  mockHandle,
 		config:  cfg,
+		stats:   newTestStats(ctrl),
 		matched: true,
 		kind:    KindOpenAI,
 		factory: &openaiFactory{},
@@ -808,11 +901,11 @@ func TestOnRequestBody_ClearRouteCache_CallsClearRouteCache(t *testing.T) {
 		LLMConfigs:        []llmConfig{{Matcher: prefixMatcher("/v1/chat/completions"), Kind: KindOpenAI, Factory: &openaiFactory{}}},
 		MetadataNamespace: defaultMetadataNamespace,
 		ClearRouteCache:   true,
-		stats:             newTestStats(ctrl),
 	}
 	filter := &llmProxyFilter{
 		handle:  mockHandle,
 		config:  cfg,
+		stats:   newTestStats(ctrl),
 		matched: true,
 		kind:    KindOpenAI,
 		factory: &openaiFactory{},
@@ -841,7 +934,8 @@ func TestOnResponseTrailers_Streaming_FinishesSSE(t *testing.T) {
 
 	filter := &llmProxyFilter{
 		handle:    mockHandle,
-		config:    defaultCfgWithStats(newTestStats(ctrl)),
+		config:    defaultCfg(),
+		stats:     newTestStats(ctrl),
 		matched:   true,
 		factory:   &openaiFactory{},
 		sseParser: acc,

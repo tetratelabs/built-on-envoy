@@ -19,7 +19,7 @@ import (
 // newTestStats builds a real llmProxyStats backed by a mock config handle.
 // The handle assigns MetricIDs 1–7 sequentially (counters first, then histograms)
 // so individual metrics can be identified in EXPECT calls.
-func newTestStats(ctrl *gomock.Controller) llmProxyStats {
+func newTestStats(ctrl *gomock.Controller) *llmProxyStats {
 	cfgHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	id := shared.MetricID(0)
 	nextID := func(_ string, _ ...string) (shared.MetricID, shared.MetricsResult) {
@@ -41,13 +41,6 @@ const (
 	idTTFT         shared.MetricID = 6
 	idTPOT         shared.MetricID = 7
 )
-
-// defaultCfgWithStats returns a copy of defaultCfg with the provided stats installed.
-func defaultCfgWithStats(s llmProxyStats) *llmProxyConfig {
-	cfg := defaultCfg()
-	cfg.stats = s
-	return cfg
-}
 
 // --- newLLMProxyStats ---
 
@@ -80,7 +73,7 @@ func TestStats_RequestBody_Success_RecordsTotal(t *testing.T) {
 		Return(shared.MetricsSuccess).Times(1)
 
 	filter := &llmProxyFilter{
-		handle: handle, config: defaultCfgWithStats(s),
+		handle: handle, config: defaultCfg(), stats: s,
 		matched: true, kind: KindOpenAI, factory: &openaiFactory{},
 	}
 	filter.OnRequestBody(fake.NewFakeBodyBuffer(body), true)
@@ -108,7 +101,7 @@ func TestStats_RequestBody_ParseError_RecordsErrorAndTotal(t *testing.T) {
 		Return(shared.MetricsSuccess).Times(1)
 
 	filter := &llmProxyFilter{
-		handle: handle, config: defaultCfgWithStats(s),
+		handle: handle, config: defaultCfg(), stats: s,
 		matched: true, kind: KindOpenAI, factory: &openaiFactory{},
 	}
 	filter.OnRequestBody(fake.NewFakeBodyBuffer(body), true)
@@ -131,7 +124,7 @@ func TestStats_NonStreamingResponse_RecordsTokenCounters(t *testing.T) {
 	// requestSentAt is zero → no TTFT/TPOT histograms recorded.
 
 	filter := &llmProxyFilter{
-		handle: handle, config: defaultCfgWithStats(s),
+		handle: handle, config: defaultCfg(), stats: s,
 		matched: true, kind: KindOpenAI, factory: &openaiFactory{},
 		model: "gpt-4o",
 	}
@@ -154,7 +147,7 @@ func TestStats_StreamingResponse_RecordsTTFT_TPOT_Tokens(t *testing.T) {
 
 	acc := newOpenAISSEParser()
 	filter := &llmProxyFilter{
-		handle: handle, config: defaultCfgWithStats(s),
+		handle: handle, config: defaultCfg(), stats: s,
 		matched: true, kind: KindOpenAI, factory: &openaiFactory{},
 		model:         "gpt-4o",
 		sseParser:     acc,
@@ -184,7 +177,7 @@ func TestStats_StreamingResponse_NoTTFT_WhenRequestSentAtNotSet(t *testing.T) {
 
 	acc := newOpenAISSEParser()
 	filter := &llmProxyFilter{
-		handle: handle, config: defaultCfgWithStats(s),
+		handle: handle, config: defaultCfg(), stats: s,
 		matched: true, kind: KindOpenAI, factory: &openaiFactory{},
 		model:     "gpt-4o",
 		sseParser: acc,

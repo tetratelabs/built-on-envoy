@@ -85,8 +85,6 @@ type llmProxyConfig struct {
 	// based on the extracted model and metadata.
 	// Only one of ClearRouteCache and ClearClusterCache can be true.
 	ClearRouteCache bool `json:"clear_route_cache"`
-	// Stats are defined at the config level and shared across all filter instances.
-	stats llmProxyStats `json:"-"`
 }
 
 func (c *llmProxyConfig) ValidateAndParse() error {
@@ -144,35 +142,56 @@ type llmProxyConfigFactory struct {
 	shared.EmptyHttpFilterConfigFactory
 }
 
-func (f *llmProxyConfigFactory) Create(handle shared.HttpFilterConfigHandle,
-	config []byte,
-) (shared.HttpFilterFactory, error) {
+func parseConfig(config []byte) (*llmProxyConfig, error) {
 	cfg := &llmProxyConfig{}
 	if len(config) > 0 {
 		if err := json.Unmarshal(config, cfg); err != nil {
-			handle.Log(shared.LogLevelError, "llm-proxy: failed to parse config: %s", err.Error())
-			return nil, err
+			return nil, fmt.Errorf("failed to parse config: %w", err)
 		}
 	}
 	if err := cfg.ValidateAndParse(); err != nil {
-		handle.Log(shared.LogLevelError, "%s", err.Error())
 		return nil, err
 	}
+	return cfg, nil
+}
 
-	cfg.stats = newLLMProxyStats(handle)
+func (f *llmProxyConfigFactory) Create(handle shared.HttpFilterConfigHandle,
+	config []byte,
+) (shared.HttpFilterFactory, error) {
+	cfg, err := parseConfig(config)
+	if err != nil {
+		handle.Log(shared.LogLevelError, "llm-proxy: %s", err.Error())
+		return nil, err
+	}
+	stats := newLLMProxyStats(handle)
 	handle.Log(shared.LogLevelInfo, "llm-proxy: initialized with %d rules, namespace %q",
 		len(cfg.LLMConfigs), cfg.MetadataNamespace)
-	return &llmProxyFilterFactory{config: cfg}, nil
+	return &llmProxyFilterFactory{config: cfg, stats: stats}, nil
+}
+
+// CreatePerRoute parses the per-route configuration.
+func (f *llmProxyConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, error) {
+	return parseConfig(unparsedConfig)
 }
 
 // llmProxyFilterFactory implements shared.HttpFilterFactory.
 type llmProxyFilterFactory struct {
 	shared.EmptyHttpFilterFactory
 	config *llmProxyConfig
+	// Stats are defined at the config level and shared across all filter instances.
+	stats *llmProxyStats
 }
 
 func (f *llmProxyFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
-	return &llmProxyFilter{handle: handle, config: f.config}
+	config := f.config
+
+	// Check for per-route config and override if present.
+	// The factory's stats are retained since they are registered with the config-level handle.
+	if perRoute := pkg.GetMostSpecificConfig[*llmProxyConfig](handle); perRoute != nil {
+		config = perRoute
+	}
+
+	return &llmProxyFilter{handle: handle, config: config, stats: f.stats}
 }
 
 // llmProxyFilter is the per-request HTTP filter instance.
@@ -180,6 +199,7 @@ type llmProxyFilter struct {
 	shared.EmptyHttpFilter
 	handle shared.HttpFilterHandle
 	config *llmProxyConfig
+	stats  *llmProxyStats
 
 	// matched is true when the request path matched one of the configured rules.
 	matched bool
@@ -369,12 +389,12 @@ func (f *llmProxyFilter) onError(errorString string) {
 		"llm-proxy: error during request processing and skipping further parsing: %s",
 		errorString,
 	)
-	f.handle.IncrementCounterValue(f.config.stats.requestError, 1, f.kind, f.model)
+	f.handle.IncrementCounterValue(f.stats.requestError, 1, f.kind, f.model)
 
 	// If the error happens before the request is down, let's update the stats to count the request
 	// and avoid missing metrics.
 	if f.requestSentAt.IsZero() {
-		f.handle.IncrementCounterValue(f.config.stats.requestTotal, 1, f.kind, f.model)
+		f.handle.IncrementCounterValue(f.stats.requestTotal, 1, f.kind, f.model)
 	}
 }
 
@@ -386,7 +406,7 @@ func (f *llmProxyFilter) onRequestSuccess() {
 	f.handle.SetMetadata(ns, "model", f.model)
 	f.handle.SetMetadata(ns, "is_stream", f.isStream)
 
-	f.handle.IncrementCounterValue(f.config.stats.requestTotal, 1, f.kind, f.model)
+	f.handle.IncrementCounterValue(f.stats.requestTotal, 1, f.kind, f.model)
 
 	if f.config.LLMModelHeader != "" {
 		f.handle.RequestHeaders().Set(f.config.LLMModelHeader, f.model)
@@ -404,11 +424,11 @@ func (f *llmProxyFilter) onResponseSuccess() {
 
 	// Set tokens stats. Token counts are always non-negative; clamp to 0 to satisfy
 	// the static analyser before converting to uint64.
-	f.handle.IncrementCounterValue(f.config.stats.inputTokens,
+	f.handle.IncrementCounterValue(f.stats.inputTokens,
 		uint64(f.usage.InputTokens), f.kind, f.model)
-	f.handle.IncrementCounterValue(f.config.stats.outputTokens,
+	f.handle.IncrementCounterValue(f.stats.outputTokens,
 		uint64(f.usage.OutputTokens), f.kind, f.model)
-	f.handle.IncrementCounterValue(f.config.stats.totalTokens,
+	f.handle.IncrementCounterValue(f.stats.totalTokens,
 		uint64(f.usage.TotalTokens), f.kind, f.model)
 
 	// Handle some corner cases to avoid error.
@@ -423,9 +443,9 @@ func (f *llmProxyFilter) onResponseSuccess() {
 	f.handle.SetMetadata(ns, "request_tpot", tpot)
 
 	// nolint:gosec
-	f.handle.RecordHistogramValue(f.config.stats.requestTTFT, uint64(max(ttfp, 0)), f.kind, f.model)
+	f.handle.RecordHistogramValue(f.stats.requestTTFT, uint64(max(ttfp, 0)), f.kind, f.model)
 	// nolint:gosec
-	f.handle.RecordHistogramValue(f.config.stats.requestTPOT, uint64(max(tpot, 0)), f.kind, f.model)
+	f.handle.RecordHistogramValue(f.stats.requestTPOT, uint64(max(tpot, 0)), f.kind, f.model)
 }
 
 // parseRequestBody reads the complete request body, parses it via the matched

@@ -31,7 +31,7 @@ type llmProxyStats struct {
 }
 
 // newLLMProxyStats initialises and registers all metrics for the llm-proxy filter.
-func newLLMProxyStats(h shared.HttpFilterConfigHandle) llmProxyStats {
+func newLLMProxyStats(h shared.HttpFilterConfigHandle) *llmProxyStats {
 	// The defintions here will never fail.
 	requestTotal, _ := h.DefineCounter("llm_proxy_request_total", "kind", "model")
 	requestError, _ := h.DefineCounter("llm_proxy_request_error", "kind", "model")
@@ -41,7 +41,7 @@ func newLLMProxyStats(h shared.HttpFilterConfigHandle) llmProxyStats {
 	requestTTFT, _ := h.DefineHistogram("llm_proxy_request_ttft", "kind", "model")
 	requestTPOT, _ := h.DefineHistogram("llm_proxy_request_tpot", "kind", "model")
 
-	return llmProxyStats{
+	return &llmProxyStats{
 		requestTotal: requestTotal,
 		requestError: requestError,
 		inputTokens:  inputTokens,
