@@ -24,11 +24,12 @@ func newTestFilter(t *testing.T) (*samlHTTPFilter, *mocks.MockHttpFilterHandle, 
 	handle := mocks.NewMockHttpFilterHandle(ctrl)
 	spKP := generateTestKeyPair("sp.example.com")
 	idpKP := generateTestKeyPair("idp.example.com")
-	filterCfg := testFilterConfig(spKP, idpKP)
+	filterCfg, metrics := testFilterConfig(spKP, idpKP)
 
 	f := &samlHTTPFilter{
-		handle: handle,
-		cfg:    filterCfg,
+		handle:  handle,
+		cfg:     filterCfg,
+		metrics: metrics,
 	}
 	return f, handle, ctrl
 }
@@ -304,10 +305,11 @@ func TestFilterFactory_Create(t *testing.T) {
 
 	spKP := generateTestKeyPair("sp.example.com")
 	idpKP := generateTestKeyPair("idp.example.com")
-	filterCfg := testFilterConfig(spKP, idpKP)
-	factory := &samlFilterFactory{cfg: filterCfg}
+	filterCfg, metrics := testFilterConfig(spKP, idpKP)
+	factory := &samlFilterFactory{config: filterCfg, metrics: metrics}
 
 	handle := mocks.NewMockHttpFilterHandle(ctrl)
+	handle.EXPECT().GetMostSpecificConfig().Return(nil)
 	filter := factory.Create(handle)
 	require.NotNil(t, filter)
 

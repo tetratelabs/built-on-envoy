@@ -19,8 +19,9 @@ import (
 // ACS endpoint processing, and SP metadata serving.
 type samlHTTPFilter struct {
 	shared.EmptyHttpFilter
-	handle shared.HttpFilterHandle
-	cfg    *samlFilterConfig
+	handle  shared.HttpFilterHandle
+	cfg     *samlFilterConfig
+	metrics *samlMetrics
 
 	// isACSRequest tracks whether the current request is an ACS POST.
 	isACSRequest bool
@@ -264,28 +265,28 @@ func getRequestMethod(handle shared.HttpFilterHandle) string {
 
 // incrementAuthnRequests increments the authn requests counter.
 func (f *samlHTTPFilter) incrementAuthnRequests() {
-	if m := f.cfg.metrics; m != nil && m.hasAuthnRequests {
+	if m := f.metrics; m != nil && m.hasAuthnRequests {
 		f.handle.IncrementCounterValue(m.authnRequests, 1)
 	}
 }
 
 // incrementAssertionsValidated increments the assertions validated counter with a result tag.
 func (f *samlHTTPFilter) incrementAssertionsValidated(result string) {
-	if m := f.cfg.metrics; m != nil && m.hasAssertionsValidated {
+	if m := f.metrics; m != nil && m.hasAssertionsValidated {
 		f.handle.IncrementCounterValue(m.assertionsValidated, 1, result)
 	}
 }
 
 // incrementSessionsCreated increments the sessions created counter.
 func (f *samlHTTPFilter) incrementSessionsCreated() {
-	if m := f.cfg.metrics; m != nil && m.hasSessionsCreated {
+	if m := f.metrics; m != nil && m.hasSessionsCreated {
 		f.handle.IncrementCounterValue(m.sessionsCreated, 1)
 	}
 }
 
 // incrementSessionsValidated increments the sessions validated counter with a result tag.
 func (f *samlHTTPFilter) incrementSessionsValidated(result string) {
-	if m := f.cfg.metrics; m != nil && m.hasSessionsValidated {
+	if m := f.metrics; m != nil && m.hasSessionsValidated {
 		f.handle.IncrementCounterValue(m.sessionsValidated, 1, result)
 	}
 }

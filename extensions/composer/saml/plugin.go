@@ -8,6 +8,8 @@ package saml
 
 import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 // samlMetrics holds metric IDs defined at config time, used at request time.
@@ -27,17 +29,21 @@ type samlMetrics struct {
 type samlFilterConfig struct {
 	config      *Config
 	idpMetadata *IDPMetadata
-	metrics     *samlMetrics
 }
 
 // samlFilterFactory creates per-request filter instances.
 type samlFilterFactory struct {
 	shared.EmptyHttpFilterFactory
-	cfg *samlFilterConfig
+	config  *samlFilterConfig
+	metrics *samlMetrics
 }
 
 func (f *samlFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
-	return &samlHTTPFilter{handle: handle, cfg: f.cfg}
+	cfg := f.config
+	if perRoute := pkg.GetMostSpecificConfig[*samlFilterConfig](handle); perRoute != nil {
+		cfg = perRoute
+	}
+	return &samlHTTPFilter{handle: handle, cfg: cfg}
 }
 
 // HTTPFilterConfigFactory is the configuration factory for the SAML filter.
@@ -66,6 +72,11 @@ func (f *HTTPFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, c
 	}
 	handle.Log(shared.LogLevelInfo, "saml: parsed idp metadata for entity_id=%s, sso_url=%s", idpMeta.EntityID, idpMeta.SSOURL)
 
+	filterCfg := &samlFilterConfig{
+		config:      cfg,
+		idpMetadata: idpMeta,
+	}
+
 	// Define metrics.
 	metrics := &samlMetrics{}
 	if id, status := handle.DefineCounter("saml_authn_requests_total"); status == shared.MetricsSuccess {
@@ -85,15 +96,22 @@ func (f *HTTPFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, c
 		metrics.hasSessionsValidated = true
 	}
 
-	filterCfg := &samlFilterConfig{
-		config:      cfg,
-		idpMetadata: idpMeta,
-		metrics:     metrics,
-	}
-
 	handle.Log(shared.LogLevelDebug, "saml: config: %s", cfg.String())
 
-	return &samlFilterFactory{cfg: filterCfg}, nil
+	return &samlFilterFactory{config: filterCfg, metrics: metrics}, nil
+}
+
+// CreatePerRoute parses per-route configuration for the SAML filter.
+func (f *HTTPFilterConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, error) {
+	cfg, err := parseConfig(unparsedConfig)
+	if err != nil {
+		return nil, err
+	}
+	idpMeta, err := parseIDPMetadata([]byte(cfg.IDPMetadataXML))
+	if err != nil {
+		return nil, err
+	}
+	return &samlFilterConfig{config: cfg, idpMetadata: idpMeta}, nil
 }
 
 // WellKnownHttpFilterConfigFactories is used to load the plugin.
