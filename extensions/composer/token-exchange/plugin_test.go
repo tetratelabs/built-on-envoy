@@ -388,3 +388,93 @@ func TestFullExchange(t *testing.T) {
 	require.Equal(t, shared.HeadersStatusStopAllAndBuffer, status)
 	require.Equal(t, "Bearer new-token", reqHeaders.GetOne("authorization").ToUnsafeString())
 }
+
+func newFilterHandleWithoutPerRouteConfig(ctrl *gomock.Controller) *mocks.MockHttpFilterHandle {
+	h := mocks.NewMockHttpFilterHandle(ctrl)
+	h.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
+	h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	return h
+}
+
+func newFilterHandleWithPerRouteConfig(ctrl *gomock.Controller, perRouteConfig any) *mocks.MockHttpFilterHandle {
+	h := mocks.NewMockHttpFilterHandle(ctrl)
+	h.EXPECT().GetMostSpecificConfig().Return(perRouteConfig).AnyTimes()
+	h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	return h
+}
+
+func Test_CreatePerRoute(t *testing.T) {
+	f := &tokenExchangeHttpFilterConfigFactory{}
+
+	t.Run("valid config", func(t *testing.T) {
+		cfg := &tokenExchangeConfig{
+			Cluster:          "sts_cluster",
+			TokenExchangeURL: "sts.example.com/token",
+			ClientID:         "client",
+			ClientSecret:     "secret",
+		}
+		b, _ := json.Marshal(cfg)
+		result, err := f.CreatePerRoute(b)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		perRoute, ok := result.(*tokenExchangeConfig)
+		require.True(t, ok)
+		require.Equal(t, "sts_cluster", perRoute.Cluster)
+	})
+
+	t.Run("invalid JSON returns error", func(t *testing.T) {
+		result, err := f.CreatePerRoute([]byte(`{invalid`))
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
+}
+
+func Test_PerRouteConfigOverride(t *testing.T) {
+	baseConfig := mustParseConfig(t, &tokenExchangeConfig{
+		Cluster:          "base_cluster",
+		TokenExchangeURL: "base.example.com/token",
+		ClientID:         "base_client",
+		ClientSecret:     "base_secret",
+	})
+	baseMetrics := testMetrics()
+	baseFactory := &tokenExchangeFilterFactory{config: baseConfig, metrics: baseMetrics}
+
+	t.Run("per-route config overrides factory config", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		perRouteConfig := mustParseConfig(t, &tokenExchangeConfig{
+			Cluster:          "route_cluster",
+			TokenExchangeURL: "route.example.com/token",
+			ClientID:         "route_client",
+			ClientSecret:     "route_secret",
+		})
+		perRoute := perRouteConfig
+		handle := newFilterHandleWithPerRouteConfig(ctrl, perRoute)
+		filter := baseFactory.Create(handle)
+		f, ok := filter.(*tokenExchangeFilter)
+		require.True(t, ok)
+		require.Equal(t, "route_cluster", f.config.Cluster)
+		require.Equal(t, baseMetrics, f.metrics)
+	})
+
+	t.Run("nil per-route config uses factory config", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		handle := newFilterHandleWithoutPerRouteConfig(ctrl)
+		filter := baseFactory.Create(handle)
+		f, ok := filter.(*tokenExchangeFilter)
+		require.True(t, ok)
+		require.Equal(t, "base_cluster", f.config.Cluster)
+	})
+
+	t.Run("wrong type per-route config uses factory config", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		handle := newFilterHandleWithPerRouteConfig(ctrl, "not-a-per-route-config")
+		filter := baseFactory.Create(handle)
+		f, ok := filter.(*tokenExchangeFilter)
+		require.True(t, ok)
+		require.Equal(t, "base_cluster", f.config.Cluster)
+	})
+}

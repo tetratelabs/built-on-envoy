@@ -14,6 +14,8 @@ import (
 	"strings"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 const (
@@ -41,7 +43,16 @@ type tokenExchangeFilterFactory struct {
 }
 
 func (f *tokenExchangeFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
-	return &tokenExchangeFilter{handle: handle, config: f.config, metrics: f.metrics}
+	cfg := f.config
+	if perRoute := pkg.GetMostSpecificConfig[*tokenExchangeConfig](handle); perRoute != nil {
+		cfg = perRoute
+	}
+	if cfg == nil {
+		handle.Log(shared.LogLevelInfo, "token-exchange: no config available and use empty filter")
+		return &shared.EmptyHttpFilter{}
+	}
+
+	return &tokenExchangeFilter{handle: handle, config: cfg, metrics: f.metrics}
 }
 
 // tokenExchangeHttpFilterConfigFactory is the configuration factory for the OAuth2 Token Exchange filter.
@@ -50,13 +61,19 @@ type tokenExchangeHttpFilterConfigFactory struct { //nolint:revive
 }
 
 // Create parses the configuration and returns a new filter factory.
-func (f *tokenExchangeHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
+func (f *tokenExchangeHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle,
+	config []byte,
+) (shared.HttpFilterFactory, error) {
 	cfg, err := parseConfig(config)
 	if err != nil {
-		handle.Log(shared.LogLevelError, err.Error())
 		return nil, err
 	}
-	handle.Log(shared.LogLevelDebug, "token-exchange: parsed config: %v", cfg)
+
+	if cfg == nil {
+		handle.Log(shared.LogLevelInfo, "token-exchange: empty filter config")
+	} else {
+		handle.Log(shared.LogLevelDebug, "token-exchange: parsed config: %v", cfg)
+	}
 
 	// Define metrics.
 	metrics := &tokenExchangeMetrics{}
@@ -69,9 +86,28 @@ func (f *tokenExchangeHttpFilterConfigFactory) Create(handle shared.HttpFilterCo
 		metrics.hasExchangeResults = true
 	}
 
-	handle.Log(shared.LogLevelInfo, "token-exchange: loaded token exchange config for cluster=%s url=%s",
-		cfg.Cluster, cfg.TokenExchangeURL)
+	if cfg != nil {
+		handle.Log(shared.LogLevelInfo,
+			"token-exchange: loaded token exchange config for cluster=%s url=%s",
+			cfg.Cluster,
+			cfg.TokenExchangeURL)
+	}
 	return &tokenExchangeFilterFactory{config: cfg, metrics: metrics}, nil
+}
+
+// CreatePerRoute parses per-route configuration for the token-exchange filter.
+func (f *tokenExchangeHttpFilterConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, error) {
+	cfg, err := parseConfig(unparsedConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	if cfg == nil {
+		// It's not allowed to have empty route config because it doesn't make sense to have an
+		// empty config override the global config.
+		return nil, fmt.Errorf("token-exchange: per-route config is empty or invalid")
+	}
+	return cfg, nil
 }
 
 // WellKnownHttpFilterConfigFactories is used to load the plugin.

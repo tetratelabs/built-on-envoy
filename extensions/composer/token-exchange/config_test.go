@@ -64,12 +64,16 @@ func TestConfigFactory(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
+		configHandle := newMockConfigHandle(ctrl)
 		factory := &tokenExchangeHttpFilterConfigFactory{}
-		ff, err := factory.Create(newMockConfigHandle(ctrl), []byte{})
+		ff, err := factory.Create(configHandle, []byte{})
 
-		require.Error(t, err)
-		require.Nil(t, ff)
-		require.Contains(t, err.Error(), "configuration is required")
+		require.NoError(t, err)
+		require.NotNil(t, ff)
+
+		httpHandle := newFilterHandleWithoutPerRouteConfig(ctrl)
+		filter := ff.Create(httpHandle)
+		require.IsType(t, &shared.EmptyHttpFilter{}, filter)
 	})
 
 	t.Run("invalid JSON", func(t *testing.T) {
