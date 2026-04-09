@@ -49,6 +49,11 @@ func (f *wafPluginFactory) Create(handle shared.HttpFilterHandle) shared.HttpFil
 		mode = perRouteWafPluginConfig.mode
 	}
 
+	if config == nil {
+		handle.Log(shared.LogLevelInfo, "waf: no config available and use empty filter")
+		return &shared.EmptyHttpFilter{}
+	}
+
 	return &wafPlugin{
 		logger:            logger.GetLogger(),
 		handle:            handle,
@@ -67,10 +72,22 @@ func (f *wafPluginConfigFactory) Create(
 	handle shared.HttpFilterConfigHandle,
 	unparsedConfig []byte,
 ) (shared.HttpFilterFactory, error) {
-	wafConfig, mode, err := waf.NewWAFConfigFromBytes(unparsedConfig, logger.GetLogger())
+	var wafConfig coraza.WAF
+	var mode waf.WAFMode
+	var err error
+
+	if len(unparsedConfig) > 0 {
+		wafConfig, mode, err = waf.NewWAFConfigFromBytes(unparsedConfig, logger.GetLogger())
+	}
+
 	if err != nil {
 		return nil, err
 	}
+
+	if wafConfig == nil {
+		handle.Log(shared.LogLevelInfo, "waf: empty filter config")
+	}
+
 	return &wafPluginFactory{
 		config:  wafConfig,
 		mode:    mode,
