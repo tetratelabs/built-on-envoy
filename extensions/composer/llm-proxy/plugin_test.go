@@ -6,7 +6,9 @@
 package llmproxy
 
 import (
+	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/fake"
@@ -222,6 +224,74 @@ func TestOnRequestHeaders_MatchedPath_HasBody(t *testing.T) {
 	require.True(t, filter.matched)
 }
 
+func TestOnRequestHeaders_DefaultSuffixRule_StripsQueryString(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestPath).
+		Return(pkg.UnsafeBufferFromString("/v1/chat/completions?api-version=2024-10-21"), true)
+	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
+
+	cfg := &llmProxyConfig{}
+	require.NoError(t, cfg.ValidateAndParse())
+
+	filter := &llmProxyFilter{handle: mockHandle, config: cfg}
+	headers := fake.NewFakeHeaderMap(map[string][]string{"content-type": {"application/json"}})
+	result := filter.OnRequestHeaders(headers, false)
+	require.Equal(t, shared.HeadersStatusStop, result)
+	require.True(t, filter.matched)
+	require.Equal(t, KindOpenAI, filter.kind)
+}
+
+func TestOnRequestHeaders_CustomMatcher_PreservesQueryStringSemantics(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestPath).
+		Return(pkg.UnsafeBufferFromString("/custom/v1/chat?provider=openai"), true)
+	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
+
+	cfg := &llmProxyConfig{
+		LLMConfigs: []llmConfig{{
+			Matcher: pkg.StringMatcher{Suffix: "?provider=openai"},
+			Kind:    KindCustom,
+			Factory: &customFactory{},
+		}},
+		MetadataNamespace: defaultMetadataNamespace,
+	}
+
+	filter := &llmProxyFilter{handle: mockHandle, config: cfg}
+	headers := fake.NewFakeHeaderMap(map[string][]string{"content-type": {"application/json"}})
+	result := filter.OnRequestHeaders(headers, false)
+	require.Equal(t, shared.HeadersStatusStop, result)
+	require.True(t, filter.matched)
+	require.Equal(t, KindCustom, filter.kind)
+}
+
+func TestOnRequestHeaders_UserProvidedSuffixRule_DoesNotUseQueryFallback(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestPath).
+		Return(pkg.UnsafeBufferFromString("/v1/chat/completions?api-version=2024-10-21"), true)
+	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any(), gomock.Any()).Times(1)
+
+	cfg := &llmProxyConfig{
+		LLMConfigs: []llmConfig{{
+			Matcher: pkg.StringMatcher{Suffix: "/v1/chat/completions"},
+			Kind:    KindOpenAI,
+			Factory: &openaiFactory{},
+		}},
+		MetadataNamespace: defaultMetadataNamespace,
+	}
+
+	filter := &llmProxyFilter{handle: mockHandle, config: cfg}
+	headers := fake.NewFakeHeaderMap(map[string][]string{"content-type": {"application/json"}})
+	result := filter.OnRequestHeaders(headers, false)
+	require.Equal(t, shared.HeadersStatusContinue, result)
+	require.False(t, filter.matched)
+}
+
 func TestOnRequestHeaders_NonJSONContentType_Error(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -275,6 +345,7 @@ func TestOnRequestBody_OpenAI_SetsMetadata(t *testing.T) {
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "kind", "openai").Times(1)
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "model", "gpt-4o").Times(1)
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "is_stream", false).Times(1)
+	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "response_type", "nonstream").Times(1)
 	mockHandle.EXPECT().IncrementCounterValue(idRequestTotal, uint64(1), "openai", "gpt-4o").Return(shared.MetricsSuccess).Times(1)
 
 	filter := &llmProxyFilter{
@@ -305,6 +376,7 @@ func TestOnRequestBody_Anthropic_SetsMetadata(t *testing.T) {
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "kind", "anthropic").Times(1)
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "model", "claude-3-5-sonnet-20241022").Times(1)
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "is_stream", true).Times(1)
+	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "response_type", "stream").Times(1)
 	mockHandle.EXPECT().IncrementCounterValue(idRequestTotal, uint64(1), "anthropic", "claude-3-5-sonnet-20241022").Return(shared.MetricsSuccess).Times(1)
 
 	filter := &llmProxyFilter{
@@ -313,6 +385,47 @@ func TestOnRequestBody_Anthropic_SetsMetadata(t *testing.T) {
 		matched: true,
 		kind:    KindAnthropic,
 		factory: &anthropicFactory{},
+	}
+	result := filter.OnRequestBody(fake.NewFakeBodyBuffer(body), true)
+	require.Equal(t, shared.BodyStatusContinue, result)
+}
+
+func TestOnRequestBody_OpenAI_RicherMetadata(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+
+	body := []byte(`{
+		"model":"gpt-4o",
+		"stream":false,
+		"messages":[
+			{"role":"system","content":"You are concise."},
+			{"role":"user","content":"What is 2+2?"}
+		]
+	}`)
+	mockHandle.EXPECT().BufferedRequestBody().Return(fake.NewFakeBodyBuffer(body)).AnyTimes()
+	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().RequestHeaders().Return(fake.NewFakeHeaderMap(map[string][]string{
+		"x-session-id": {"sess-123"},
+	})).AnyTimes()
+	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "kind", "openai").Times(1)
+	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "model", "gpt-4o").Times(1)
+	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "is_stream", false).Times(1)
+	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "response_type", "nonstream").Times(1)
+	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "session_id", "sess-123").Times(1)
+	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "question", "What is 2+2?").Times(1)
+	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "system", "You are concise.").Times(1)
+	mockHandle.EXPECT().IncrementCounterValue(idRequestTotal, uint64(1), "openai", "gpt-4o").Return(shared.MetricsSuccess).Times(1)
+
+	cfg := defaultCfgWithStats(newTestStats(ctrl))
+	cfg.SessionIDHeader = "x-session-id"
+
+	filter := &llmProxyFilter{
+		handle:  mockHandle,
+		config:  cfg,
+		matched: true,
+		kind:    KindOpenAI,
+		factory: &openaiFactory{},
 	}
 	result := filter.OnRequestBody(fake.NewFakeBodyBuffer(body), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
@@ -349,6 +462,7 @@ func TestOnRequestTrailers_NotProcessed_ParsesBody(t *testing.T) {
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "kind", "openai").Times(1)
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "model", "gpt-4o").Times(1)
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "is_stream", false).Times(1)
+	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "response_type", "nonstream").Times(1)
 	mockHandle.EXPECT().IncrementCounterValue(idRequestTotal, uint64(1), "openai", "gpt-4o").Return(shared.MetricsSuccess).Times(1)
 
 	filter := &llmProxyFilter{
@@ -508,6 +622,157 @@ func TestOnResponseBody_Anthropic_SetsUsageMetadata(t *testing.T) {
 	}
 	result := filter.OnResponseBody(fake.NewFakeBodyBuffer(body), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
+}
+
+func TestOnResponseBody_OpenAI_RicherMetadataAndLog(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+
+	body := []byte(`{
+		"choices":[
+			{"message":{
+				"content":"4",
+				"reasoning_content":"Simple arithmetic",
+				"tool_calls":[
+					{"id":"call_1","type":"function","function":{"name":"get_weather","arguments":"{\"loc\":\"NYC\"}"}}
+				]
+			}}
+		],
+		"usage":{
+			"prompt_tokens":100,
+			"completion_tokens":50,
+			"total_tokens":150,
+			"prompt_tokens_details":{"cached_tokens":80},
+			"completion_tokens_details":{"reasoning_tokens":25}
+		}
+	}`)
+	mockHandle.EXPECT().BufferedResponseBody().Return(fake.NewFakeBodyBuffer(body)).AnyTimes()
+	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
+	captured := map[string]any{}
+	mockHandle.EXPECT().SetMetadata(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(_ string, key string, value any) {
+			captured[key] = value
+		},
+	).AnyTimes()
+	mockHandle.EXPECT().IncrementCounterValue(idInputTokens, uint64(100), "openai", "gpt-4o").Return(shared.MetricsSuccess).Times(1)
+	mockHandle.EXPECT().IncrementCounterValue(idOutputTokens, uint64(50), "openai", "gpt-4o").Return(shared.MetricsSuccess).Times(1)
+	mockHandle.EXPECT().IncrementCounterValue(idTotalTokens, uint64(150), "openai", "gpt-4o").Return(shared.MetricsSuccess).Times(1)
+	mockHandle.EXPECT().RecordHistogramValue(idTTFT, gomock.Any(), "openai", "gpt-4o").Return(shared.MetricsSuccess).Times(1)
+	mockHandle.EXPECT().RecordHistogramValue(idTPOT, gomock.Any(), "openai", "gpt-4o").Return(shared.MetricsSuccess).Times(1)
+	mockHandle.EXPECT().Log(shared.LogLevelInfo, gomock.Any(), gomock.Any()).Do(func(_ shared.LogLevel, _ string, payload string) {
+		var entry map[string]any
+		require.NoError(t, json.Unmarshal([]byte(payload), &entry))
+		require.Equal(t, "What is 2+2?", entry["question"])
+		require.Equal(t, "You are concise.", entry["system"])
+		require.Equal(t, "4", entry["answer"])
+		require.Equal(t, "Simple arithmetic", entry["reasoning"])
+		require.Equal(t, "sess-123", entry["session_id"])
+	}).Times(1)
+
+	cfg := defaultCfgWithStats(newTestStats(ctrl))
+	cfg.UseDefaultAttributes = true
+	cfg.SessionIDHeader = "x-session-id"
+
+	filter := &llmProxyFilter{
+		handle:        mockHandle,
+		config:        cfg,
+		matched:       true,
+		factory:       &openaiFactory{},
+		model:         "gpt-4o",
+		kind:          KindOpenAI,
+		llmReq:        &openAILLMRequest{model: "gpt-4o", question: "What is 2+2?", system: "You are concise."},
+		question:      "What is 2+2?",
+		system:        "You are concise.",
+		sessionID:     "sess-123",
+		requestSentAt: time.Now().Add(-100 * time.Millisecond),
+		firstChunkAt:  time.Now().Add(-50 * time.Millisecond),
+	}
+	result := filter.OnResponseBody(fake.NewFakeBodyBuffer(body), true)
+	require.Equal(t, shared.BodyStatusContinue, result)
+	require.Equal(t, "4", captured["answer"])
+	require.Equal(t, "Simple arithmetic", captured["reasoning"])
+	require.EqualValues(t, 25, captured["reasoning_tokens"])
+	require.EqualValues(t, 80, captured["cached_tokens"])
+	toolCalls, ok := captured["tool_calls"].([]openAIToolCall)
+	require.True(t, ok)
+	require.Len(t, toolCalls, 1)
+}
+
+func TestOnResponseBody_SSE_OpenAI_RicherDetails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+
+	captured := map[string]any{}
+	mockHandle.EXPECT().SetMetadata(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(_ string, key string, value any) {
+			captured[key] = value
+		},
+	).AnyTimes()
+	mockHandle.EXPECT().IncrementCounterValue(idInputTokens, uint64(100), "openai", "gpt-4o").Return(shared.MetricsSuccess).Times(1)
+	mockHandle.EXPECT().IncrementCounterValue(idOutputTokens, uint64(50), "openai", "gpt-4o").Return(shared.MetricsSuccess).Times(1)
+	mockHandle.EXPECT().IncrementCounterValue(idTotalTokens, uint64(150), "openai", "gpt-4o").Return(shared.MetricsSuccess).Times(1)
+	mockHandle.EXPECT().RecordHistogramValue(idTTFT, gomock.Any(), "openai", "gpt-4o").Return(shared.MetricsSuccess).Times(1)
+	mockHandle.EXPECT().RecordHistogramValue(idTPOT, gomock.Any(), "openai", "gpt-4o").Return(shared.MetricsSuccess).Times(1)
+
+	acc := newOpenAISSEParser()
+	filter := &llmProxyFilter{
+		handle:        mockHandle,
+		config:        defaultCfgWithStats(newTestStats(ctrl)),
+		matched:       true,
+		factory:       &openaiFactory{},
+		sseParser:     acc,
+		model:         "gpt-4o",
+		kind:          KindOpenAI,
+		requestSentAt: time.Now().Add(-100 * time.Millisecond),
+	}
+
+	chunk := fake.NewFakeBodyBuffer([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"hello\"}}],\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":50,\"total_tokens\":150,\"prompt_tokens_details\":{\"cached_tokens\":80},\"completion_tokens_details\":{\"reasoning_tokens\":25}}}\n"))
+	done := fake.NewFakeBodyBuffer([]byte("data: [DONE]\n"))
+
+	require.Equal(t, shared.BodyStatusContinue, filter.OnResponseBody(chunk, false))
+	require.Equal(t, shared.BodyStatusContinue, filter.OnResponseBody(done, true))
+	require.EqualValues(t, 25, captured["reasoning_tokens"])
+	require.EqualValues(t, 80, captured["cached_tokens"])
+}
+
+func TestOnResponseBody_SSE_Anthropic_RicherDetails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+
+	captured := map[string]any{}
+	mockHandle.EXPECT().SetMetadata(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(_ string, key string, value any) {
+			captured[key] = value
+		},
+	).AnyTimes()
+	mockHandle.EXPECT().IncrementCounterValue(idInputTokens, uint64(9), "anthropic", "claude-sonnet-4-20250514").Return(shared.MetricsSuccess).Times(1)
+	mockHandle.EXPECT().IncrementCounterValue(idOutputTokens, uint64(5), "anthropic", "claude-sonnet-4-20250514").Return(shared.MetricsSuccess).Times(1)
+	mockHandle.EXPECT().IncrementCounterValue(idTotalTokens, uint64(14), "anthropic", "claude-sonnet-4-20250514").Return(shared.MetricsSuccess).Times(1)
+	mockHandle.EXPECT().RecordHistogramValue(idTTFT, gomock.Any(), "anthropic", "claude-sonnet-4-20250514").Return(shared.MetricsSuccess).Times(1)
+	mockHandle.EXPECT().RecordHistogramValue(idTPOT, gomock.Any(), "anthropic", "claude-sonnet-4-20250514").Return(shared.MetricsSuccess).Times(1)
+
+	acc := newAnthropicSSEParser()
+	filter := &llmProxyFilter{
+		handle:        mockHandle,
+		config:        defaultCfgWithStats(newTestStats(ctrl)),
+		matched:       true,
+		factory:       &anthropicFactory{},
+		sseParser:     acc,
+		model:         "claude-sonnet-4-20250514",
+		kind:          KindAnthropic,
+		requestSentAt: time.Now().Add(-100 * time.Millisecond),
+	}
+
+	chunk1 := fake.NewFakeBodyBuffer([]byte("event: message_start\ndata: {\"message\":{\"usage\":{\"input_tokens\":9,\"cache_creation_input_tokens\":20,\"cache_read_input_tokens\":30}}}\n\n"))
+	chunk2 := fake.NewFakeBodyBuffer([]byte("event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"hello\"}}\n\nevent: message_delta\ndata: {\"usage\":{\"output_tokens\":5}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"))
+
+	require.Equal(t, shared.BodyStatusContinue, filter.OnResponseBody(chunk1, false))
+	require.Equal(t, shared.BodyStatusContinue, filter.OnResponseBody(chunk2, true))
+	require.EqualValues(t, 30, captured["cached_tokens"])
+	require.NotNil(t, captured["input_token_details"])
 }
 
 // TestOnResponseBody_NoUsageInResponse verifies that onResponseSuccess always sets
@@ -674,6 +939,7 @@ func TestCustomAPIType_RequestParsedLikeOpenAI(t *testing.T) {
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "kind", "custom").Times(1)
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "model", "my-model").Times(1)
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "is_stream", false).Times(1)
+	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "response_type", "nonstream").Times(1)
 	mockHandle.EXPECT().BufferedRequestBody().Return(nil).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(
 		fake.NewFakeBodyBuffer([]byte(`{"model":"my-model","messages":[]}`)),

@@ -138,6 +138,35 @@ func TestStats_NonStreamingResponse_RecordsTokenCounters(t *testing.T) {
 	filter.OnResponseBody(fake.NewFakeBodyBuffer(body), true)
 }
 
+func TestStats_NonStreamingResponse_RecordsTTFT_TPOT_WhenRequestSentAtSet(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	s := newTestStats(ctrl)
+
+	body := []byte(`{"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":20,"total_tokens":30}}`)
+	handle := mocks.NewMockHttpFilterHandle(ctrl)
+	handle.EXPECT().BufferedResponseBody().Return(fake.NewFakeBodyBuffer(body)).AnyTimes()
+	handle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
+	handle.EXPECT().SetMetadata(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	handle.EXPECT().IncrementCounterValue(idInputTokens, uint64(10), "openai", "gpt-4o").Return(shared.MetricsSuccess).Times(1)
+	handle.EXPECT().IncrementCounterValue(idOutputTokens, uint64(20), "openai", "gpt-4o").Return(shared.MetricsSuccess).Times(1)
+	handle.EXPECT().IncrementCounterValue(idTotalTokens, uint64(30), "openai", "gpt-4o").Return(shared.MetricsSuccess).Times(1)
+	handle.EXPECT().RecordHistogramValue(idTTFT, gomock.Any(), "openai", "gpt-4o").Return(shared.MetricsSuccess).Times(1)
+	handle.EXPECT().RecordHistogramValue(idTPOT, gomock.Any(), "openai", "gpt-4o").Return(shared.MetricsSuccess).Times(1)
+
+	filter := &llmProxyFilter{
+		handle:        handle,
+		config:        defaultCfgWithStats(s),
+		matched:       true,
+		kind:          KindOpenAI,
+		factory:       &openaiFactory{},
+		model:         "gpt-4o",
+		requestSentAt: time.Now().Add(-100 * time.Millisecond),
+	}
+	filter.OnResponseBody(fake.NewFakeBodyBuffer(body), true)
+	require.False(t, filter.firstChunkAt.IsZero(), "firstChunkAt must be set for non-streaming responses")
+}
+
 func TestStats_StreamingResponse_RecordsTTFT_TPOT_Tokens(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -161,11 +190,11 @@ func TestStats_StreamingResponse_RecordsTTFT_TPOT_Tokens(t *testing.T) {
 		requestSentAt: time.Now().Add(-100 * time.Millisecond), // simulate sent 100 ms ago
 	}
 
-	chunk := fake.NewFakeBodyBuffer([]byte("data: {\"choices\":[],\"usage\":{\"prompt_tokens\":8,\"completion_tokens\":4,\"total_tokens\":12}}\n"))
+	chunk := fake.NewFakeBodyBuffer([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"hello\"}}],\"usage\":{\"prompt_tokens\":8,\"completion_tokens\":4,\"total_tokens\":12}}\n"))
 	done := fake.NewFakeBodyBuffer([]byte("data: [DONE]\n"))
 
 	require.Equal(t, shared.BodyStatusContinue, filter.OnResponseBody(chunk, false))
-	require.False(t, filter.firstChunkAt.IsZero(), "firstChunkAt must be set on first SSE body chunk")
+	require.False(t, filter.firstChunkAt.IsZero(), "firstChunkAt must be set on first text token chunk")
 	require.Equal(t, shared.BodyStatusContinue, filter.OnResponseBody(done, true))
 }
 

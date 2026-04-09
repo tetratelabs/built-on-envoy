@@ -9,7 +9,7 @@ categories:
   - AI
 author: Tetrate
 featured: true
-description: Routes LLM API requests by the module name and monitors token usage and latency via Envoy metadata and metrics.
+description: Routes LLM API requests and emits richer observability metadata, metrics, and optional structured logs.
 longDescription: |
   An HTTP filter plugin that inspects incoming requests against a set of configured
   path-matcher rules to identify the LLM provider API in use (OpenAI Chat Completions,
@@ -18,9 +18,11 @@ longDescription: |
   1. Parses the request body to extract the model name and streaming flag, then
      writes them to Envoy's dynamic filter metadata.
   2. Parses the response body (JSON for non-streaming, SSE for streaming) to extract
-     token-usage information and writes it to filter metadata.
+     token-usage information and richer observability fields such as `question`,
+     `system`, `answer`, `reasoning`, and `tool_calls`.
   3. Records Envoy metrics (counters and histograms) for request counts, token usage,
      time-to-first-token (TTFT), and time-per-output-token (TPOT).
+  4. Optionally emits lightweight or full structured logs for downstream observability.
 
   Requests whose path does not match any rule are passed through without modification.
 
@@ -38,9 +40,20 @@ longDescription: |
   | `kind` | string | API kind: `"openai"`, `"anthropic"`, or `"custom"` |
   | `model` | string | Model name extracted from the request body |
   | `is_stream` | bool | Whether the request asks for a streaming (SSE) response |
+  | `response_type` | string | `"stream"` or `"nonstream"` |
+  | `session_id` | string | Session or conversation ID extracted from `session_id_header`, if configured |
+  | `question` | string | User question extracted from the request body, when available |
+  | `system` | string | System prompt extracted from the request body, when available |
+  | `answer` | string | Assistant response content, when available |
+  | `reasoning` | string | Provider-specific reasoning content, when available |
+  | `tool_calls` | array | Tool calls emitted by the model, when available |
   | `input_tokens` | uint32 | Input / prompt token count from the response |
   | `output_tokens` | uint32 | Output / completion token count from the response |
   | `total_tokens` | uint32 | Total token count from the response |
+  | `reasoning_tokens` | uint32 | Reasoning token count when provided by the upstream API |
+  | `cached_tokens` | uint32 | Cached input token count when provided by the upstream API |
+  | `input_token_details` | object | Provider-specific prompt/input token detail fields |
+  | `output_token_details` | object | Provider-specific completion/output token detail fields |
   | `request_ttft` | int64 | Time to first token in milliseconds |
   | `request_tpot` | int64 | Average time per output token in milliseconds |
 
@@ -67,6 +80,9 @@ longDescription: |
   | `llm_configs[].kind` | string | yes | — | `"openai"`, `"anthropic"`, or `"custom"` |
   | `metadata_namespace` | string | no | `io.builtonenvoy.llm-proxy` | Filter metadata namespace |
   | `llm_model_header` | string | no | `""` | If set, the extracted model name is written to this request header |
+  | `use_default_attributes` | bool | no | `false` | Emit the full built-in structured log payload |
+  | `use_default_response_attributes` | bool | no | `false` | Emit the lightweight built-in structured log payload |
+  | `session_id_header` | string | no | `""` | Optional request header used to extract a session or conversation ID |
   | `clear_route_cache` | bool | no | `false` | Clear the route cache after request parsing so Envoy can re-select the route based on updated metadata |
 
 type: go
@@ -129,4 +145,14 @@ examples:
         --config '{
           "llm_model_header": "x-llm-model",
           "clear_route_cache": true
+        }'
+  - title: Full observability output
+    description: |
+      Emit richer metadata and a structured log entry including prompts, answers,
+      tool calls, and provider token-detail fields.
+    code: |
+      boe run --extension llm-proxy \
+        --config '{
+          "use_default_attributes": true,
+          "session_id_header": "x-session-id"
         }'

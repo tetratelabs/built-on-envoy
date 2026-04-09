@@ -20,6 +20,9 @@ func TestConfigSchema(t *testing.T) {
 			],
 			"metadata_namespace": "custom.ns",
 			"llm_model_header": "x-llm-model",
+			"use_default_attributes": true,
+			"use_default_response_attributes": false,
+			"session_id_header": "x-session-id",
 			"clear_route_cache": true
 		}`)
 	})
@@ -31,6 +34,11 @@ func TestConfigSchema(t *testing.T) {
 			"llm_configs": [
 				{"matcher": {"prefix": "/v1"}, "kind": "unknown"}
 			]
+		}`)
+	})
+	t.Run("invalid wrong type", func(t *testing.T) {
+		internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{
+			"use_default_attributes": "yes"
 		}`)
 	})
 }

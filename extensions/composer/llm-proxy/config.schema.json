@@ -34,6 +34,18 @@
       "type": "string",
       "description": "Request header to set with the extracted model name."
     },
+    "use_default_attributes": {
+      "type": "boolean",
+      "description": "Emit the full built-in structured log payload."
+    },
+    "use_default_response_attributes": {
+      "type": "boolean",
+      "description": "Emit the lightweight built-in structured log payload."
+    },
+    "session_id_header": {
+      "type": "string",
+      "description": "Optional request header used to extract a session or conversation ID."
+    },
     "clear_route_cache": {
       "type": "boolean",
       "description": "Clear Envoy route cache after setting metadata, enabling route re-selection. Defaults to false."

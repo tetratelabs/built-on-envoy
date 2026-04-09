@@ -16,6 +16,7 @@ package llmproxy
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -44,6 +45,9 @@ type llmConfig struct {
 	// Factory is the factory for parsing requests/responses for this rule; set during
 	// filter initialization.
 	Factory LLMFactory `json:"-"`
+	// DefaultRule marks rules that were auto-injected by ValidateAndParse rather
+	// than explicitly provided by the user.
+	DefaultRule bool `json:"-"`
 }
 
 func (c *llmConfig) ValidateAndParse() error {
@@ -81,6 +85,12 @@ type llmProxyConfig struct {
 	MetadataNamespace string `json:"metadata_namespace"`
 	// Header key to set the extracted model name if any.
 	LLMModelHeader string `json:"llm_model_header"`
+	// Emit the full built-in structured log payload when true.
+	UseDefaultAttributes bool `json:"use_default_attributes"`
+	// Emit the lightweight structured log payload when true.
+	UseDefaultResponseAttributes bool `json:"use_default_response_attributes"`
+	// Optional request header to extract a session or conversation ID from.
+	SessionIDHeader string `json:"session_id_header"`
 	// ClearRouteCache indicates whether to clear route cache to reselect route
 	// based on the extracted model and metadata.
 	// Only one of ClearRouteCache and ClearClusterCache can be true.
@@ -114,14 +124,16 @@ func (c *llmProxyConfig) ValidateAndParse() error {
 	// for the most common case.
 	if !hasOpenAI {
 		c.LLMConfigs = append([]llmConfig{{
-			Matcher: pkg.StringMatcher{Suffix: "/v1/chat/completions"},
-			Kind:    KindOpenAI,
+			Matcher:     pkg.StringMatcher{Suffix: "/v1/chat/completions"},
+			Kind:        KindOpenAI,
+			DefaultRule: true,
 		}}, c.LLMConfigs...)
 	}
 	if !hasAnthropic {
 		c.LLMConfigs = append([]llmConfig{{
-			Matcher: pkg.StringMatcher{Suffix: "/v1/messages"},
-			Kind:    KindAnthropic,
+			Matcher:     pkg.StringMatcher{Suffix: "/v1/messages"},
+			Kind:        KindAnthropic,
+			DefaultRule: true,
 		}}, c.LLMConfigs...)
 	}
 
@@ -196,9 +208,12 @@ type llmProxyFilter struct {
 	sseParser SSEParser
 
 	// llmReq holds the parsed LLM request; set after the request body is processed.
-	llmReq   LLMRequest
-	model    string
-	isStream bool
+	llmReq    LLMRequest
+	model     string
+	isStream  bool
+	sessionID string
+	question  string
+	system    string
 
 	// llmResp holds the parsed LLM response; set after the response body is processed.
 	llmResp LLMResponse
@@ -222,10 +237,29 @@ func (f *llmProxyFilter) matchRule(path string) *llmConfig {
 	return nil
 }
 
+func (f *llmProxyFilter) matchDefaultRule(path string) *llmConfig {
+	for i := range f.config.LLMConfigs {
+		cfg := &f.config.LLMConfigs[i]
+		if !isDefaultWellKnownRule(cfg) {
+			continue
+		}
+		if cfg.Matcher.Matches(path) {
+			return cfg
+		}
+	}
+	return nil
+}
+
 func (f *llmProxyFilter) OnRequestHeaders(headers shared.HeaderMap, endOfStream bool) shared.HeadersStatus {
 	pathBuffer, _ := f.handle.GetAttributeString(shared.AttributeIDRequestPath)
 	path := pathBuffer.ToUnsafeString()
 	rule := f.matchRule(path)
+	if rule == nil {
+		strippedPath := stripQueryString(path)
+		if strippedPath != path {
+			rule = f.matchDefaultRule(strippedPath)
+		}
+	}
 	if rule == nil || rule.Factory == nil {
 		// Unknown path: pass through without any processing.
 		f.handle.Log(shared.LogLevelDebug, "llm-proxy: no matching valid rule found for path %q", path)
@@ -318,9 +352,7 @@ func (f *llmProxyFilter) OnResponseBody(body shared.BodyBuffer, endOfStream bool
 		return shared.BodyStatusContinue
 	}
 
-	// Record the time when the first chunk arrives even for non-streaming responses,
-	// so that TTFT and TPOT can be computed consistently.
-	if f.firstChunkAt.IsZero() {
+	if f.sseParser == nil && f.firstChunkAt.IsZero() {
 		f.firstChunkAt = time.Now()
 	}
 
@@ -331,6 +363,9 @@ func (f *llmProxyFilter) OnResponseBody(body shared.BodyBuffer, endOfStream bool
 				if err := f.sseParser.Feed(chunk.ToUnsafeBytes()); err != nil {
 					f.onError(fmt.Sprintf("event stream error: %s", err.Error()))
 					return shared.BodyStatusContinue
+				}
+				if f.firstChunkAt.IsZero() && f.sseParser.SeenTextToken() {
+					f.firstChunkAt = time.Now()
 				}
 			}
 		}
@@ -385,6 +420,20 @@ func (f *llmProxyFilter) onRequestSuccess() {
 	f.handle.SetMetadata(ns, "kind", f.kind)
 	f.handle.SetMetadata(ns, "model", f.model)
 	f.handle.SetMetadata(ns, "is_stream", f.isStream)
+	if f.isStream {
+		f.handle.SetMetadata(ns, "response_type", "stream")
+	} else {
+		f.handle.SetMetadata(ns, "response_type", "nonstream")
+	}
+	if f.sessionID != "" {
+		f.handle.SetMetadata(ns, "session_id", f.sessionID)
+	}
+	if f.question != "" {
+		f.handle.SetMetadata(ns, "question", f.question)
+	}
+	if f.system != "" {
+		f.handle.SetMetadata(ns, "system", f.system)
+	}
 
 	f.handle.IncrementCounterValue(f.config.stats.requestTotal, 1, f.kind, f.model)
 
@@ -401,6 +450,27 @@ func (f *llmProxyFilter) onResponseSuccess() {
 	f.handle.SetMetadata(ns, "input_tokens", f.usage.InputTokens)
 	f.handle.SetMetadata(ns, "output_tokens", f.usage.OutputTokens)
 	f.handle.SetMetadata(ns, "total_tokens", f.usage.TotalTokens)
+	if answer := f.llmResp.GetAnswer(); answer != "" {
+		f.handle.SetMetadata(ns, "answer", answer)
+	}
+	if reasoning := f.llmResp.GetReasoning(); reasoning != "" {
+		f.handle.SetMetadata(ns, "reasoning", reasoning)
+	}
+	if reasoningTokens := f.llmResp.GetReasoningTokens(); reasoningTokens > 0 {
+		f.handle.SetMetadata(ns, "reasoning_tokens", reasoningTokens)
+	}
+	if cachedTokens := f.llmResp.GetCachedTokens(); cachedTokens > 0 {
+		f.handle.SetMetadata(ns, "cached_tokens", cachedTokens)
+	}
+	if toolCalls := f.llmResp.GetToolCalls(); hasToolCalls(toolCalls) {
+		f.handle.SetMetadata(ns, "tool_calls", toolCalls)
+	}
+	if inputDetails := f.llmResp.GetInputTokenDetails(); inputDetails != nil {
+		f.handle.SetMetadata(ns, "input_token_details", inputDetails)
+	}
+	if outputDetails := f.llmResp.GetOutputTokenDetails(); outputDetails != nil {
+		f.handle.SetMetadata(ns, "output_token_details", outputDetails)
+	}
 
 	// Set tokens stats. Token counts are always non-negative; clamp to 0 to satisfy
 	// the static analyser before converting to uint64.
@@ -413,6 +483,7 @@ func (f *llmProxyFilter) onResponseSuccess() {
 
 	// Handle some corner cases to avoid error.
 	if f.requestSentAt.IsZero() || f.firstChunkAt.IsZero() || f.usage.OutputTokens == 0 {
+		f.emitStructuredLog()
 		return
 	}
 
@@ -426,6 +497,7 @@ func (f *llmProxyFilter) onResponseSuccess() {
 	f.handle.RecordHistogramValue(f.config.stats.requestTTFT, uint64(max(ttfp, 0)), f.kind, f.model)
 	// nolint:gosec
 	f.handle.RecordHistogramValue(f.config.stats.requestTPOT, uint64(max(tpot, 0)), f.kind, f.model)
+	f.emitStructuredLog()
 }
 
 // parseRequestBody reads the complete request body, parses it via the matched
@@ -448,6 +520,9 @@ func (f *llmProxyFilter) parseRequestBody() {
 	}
 	f.isStream = req.IsStream()
 	f.llmReq = req
+	f.question = req.GetQuestion()
+	f.system = req.GetSystem()
+	f.sessionID = f.extractSessionID()
 
 	// Get the request correctly parsed and metadata set, we can set some metadata or stats now.
 	f.onRequestSuccess()
@@ -485,6 +560,115 @@ func (f *llmProxyFilter) finishStreamingResponse() {
 
 	// Get the response correctly parsed and we can set metadata and stats now.
 	f.onResponseSuccess()
+}
+
+func (f *llmProxyFilter) emitStructuredLog() {
+	if !f.config.UseDefaultResponseAttributes && !f.config.UseDefaultAttributes {
+		return
+	}
+
+	responseType := "nonstream"
+	if f.isStream {
+		responseType = "stream"
+	}
+	entry := map[string]any{
+		"kind":          f.kind,
+		"model":         f.model,
+		"response_type": responseType,
+		"input_tokens":  f.usage.InputTokens,
+		"output_tokens": f.usage.OutputTokens,
+		"total_tokens":  f.usage.TotalTokens,
+	}
+	if f.sessionID != "" {
+		entry["session_id"] = f.sessionID
+	}
+	if f.config.UseDefaultAttributes {
+		if f.question != "" {
+			entry["question"] = f.question
+		}
+		if f.system != "" {
+			entry["system"] = f.system
+		}
+		if answer := f.llmResp.GetAnswer(); answer != "" {
+			entry["answer"] = answer
+		}
+		if reasoning := f.llmResp.GetReasoning(); reasoning != "" {
+			entry["reasoning"] = reasoning
+		}
+		if reasoningTokens := f.llmResp.GetReasoningTokens(); reasoningTokens > 0 {
+			entry["reasoning_tokens"] = reasoningTokens
+		}
+		if cachedTokens := f.llmResp.GetCachedTokens(); cachedTokens > 0 {
+			entry["cached_tokens"] = cachedTokens
+		}
+		if toolCalls := f.llmResp.GetToolCalls(); hasToolCalls(toolCalls) {
+			entry["tool_calls"] = toolCalls
+		}
+		if inputDetails := f.llmResp.GetInputTokenDetails(); inputDetails != nil {
+			entry["input_token_details"] = inputDetails
+		}
+		if outputDetails := f.llmResp.GetOutputTokenDetails(); outputDetails != nil {
+			entry["output_token_details"] = outputDetails
+		}
+	}
+	if !f.requestSentAt.IsZero() {
+		entry["llm_service_duration_ms"] = time.Since(f.requestSentAt).Milliseconds()
+	}
+	if f.isStream && !f.requestSentAt.IsZero() && !f.firstChunkAt.IsZero() {
+		entry["llm_first_token_duration_ms"] = f.firstChunkAt.Sub(f.requestSentAt).Milliseconds()
+	}
+	if payload, err := json.Marshal(entry); err == nil {
+		f.handle.Log(shared.LogLevelInfo, "%s", string(payload))
+	}
+}
+
+func (f *llmProxyFilter) extractSessionID() string {
+	if f.config.SessionIDHeader == "" {
+		return ""
+	}
+	return f.handle.RequestHeaders().GetOne(f.config.SessionIDHeader).ToUnsafeString()
+}
+
+func stripQueryString(path string) string {
+	if idx := strings.IndexByte(path, '?'); idx >= 0 {
+		return path[:idx]
+	}
+	return path
+}
+
+func isDefaultWellKnownRule(cfg *llmConfig) bool {
+	if !cfg.DefaultRule {
+		return false
+	}
+	if cfg.Matcher.Prefix != "" || cfg.Matcher.Regex != "" {
+		return false
+	}
+	switch cfg.Kind {
+	case KindOpenAI:
+		return cfg.Matcher.Suffix == "/v1/chat/completions"
+	case KindAnthropic:
+		return cfg.Matcher.Suffix == "/v1/messages"
+	default:
+		return false
+	}
+}
+
+func hasToolCalls(toolCalls any) bool {
+	if toolCalls == nil {
+		return false
+	}
+	v := reflect.ValueOf(toolCalls)
+	if !v.IsValid() {
+		return false
+	}
+	switch v.Kind() {
+	case reflect.Slice, reflect.Array, reflect.Map, reflect.String:
+		return v.Len() > 0
+	case reflect.Interface, reflect.Pointer:
+		return !v.IsNil()
+	default:
+		return true
+	}
 }
 
 // ExtensionName is the name used to refer to this plugin in Envoy configuration.
