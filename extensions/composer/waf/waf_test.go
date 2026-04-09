@@ -1180,6 +1180,22 @@ func Test_Phase2RulesOnHeaderOnlyRequest(t *testing.T) {
 			},
 			ruleID: 100202,
 		},
+		{
+			name: "phase 2 rule executes on upgrade (websocket) request",
+			directives: []string{
+				"SecRuleEngine On",
+				`SecRule REQUEST_HEADERS:x-custom "@contains malicious-value" "id:100203,phase:2,deny,status:403,msg:'Blocked upgrade request'"`,
+			},
+			headers: map[string][]string{
+				":authority": {"example.com:8080"},
+				":method":    {"GET"},
+				":path":      {"/ws"},
+				"connection": {"keep-alive, Upgrade"},
+				"upgrade":    {"websocket"},
+				"x-custom":   {"malicious-value"},
+			},
+			ruleID: 100203,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -1213,10 +1229,12 @@ func Test_Phase4RulesOnHeaderOnlyResponse(t *testing.T) {
 	defer ctrl.Finish()
 
 	testCases := []struct {
-		name        string
-		directives  []string
-		respHeaders map[string][]string
-		ruleID      int
+		name            string
+		directives      []string
+		reqHeaders      map[string][]string
+		respHeaders     map[string][]string
+		respEndOfStream bool
+		ruleID          int
 	}{
 		{
 			name: "phase 4 response header rule executes on header-only response",
@@ -1228,7 +1246,8 @@ func Test_Phase4RulesOnHeaderOnlyResponse(t *testing.T) {
 				":status":      {"200"},
 				"content-type": {"application/json"},
 			},
-			ruleID: 100401,
+			respEndOfStream: true,
+			ruleID:          100401,
 		},
 		{
 			name: "phase 4 response status rule executes on header-only response",
@@ -1239,7 +1258,43 @@ func Test_Phase4RulesOnHeaderOnlyResponse(t *testing.T) {
 			respHeaders: map[string][]string{
 				":status": {"204"},
 			},
-			ruleID: 100402,
+			respEndOfStream: true,
+			ruleID:          100402,
+		},
+		{
+			name: "phase 4 rule executes on upgrade (websocket) response",
+			directives: []string{
+				"SecRuleEngine On",
+				`SecRule RESPONSE_HEADERS:x-custom "@contains blocked" "id:100403,phase:4,deny,status:403,msg:'Blocked upgrade response'"`,
+			},
+			reqHeaders: map[string][]string{
+				":authority": {"example.com:8080"},
+				":method":    {"GET"},
+				":path":      {"/ws"},
+				"connection": {"keep-alive, Upgrade"},
+				"upgrade":    {"websocket"},
+			},
+			respHeaders: map[string][]string{
+				":status":    {"101"},
+				"connection": {"Upgrade"},
+				"upgrade":    {"websocket"},
+				"x-custom":   {"blocked-value"},
+			},
+			respEndOfStream: false,
+			ruleID:          100403,
+		},
+		{
+			name: "phase 4 rule executes on SSE response",
+			directives: []string{
+				"SecRuleEngine On",
+				`SecRule RESPONSE_STATUS "@eq 200" "id:100404,phase:4,deny,status:403,msg:'Blocked SSE response'"`,
+			},
+			respHeaders: map[string][]string{
+				":status":      {"200"},
+				"content-type": {"text/event-stream"},
+			},
+			respEndOfStream: false,
+			ruleID:          100404,
 		},
 	}
 
@@ -1248,8 +1303,6 @@ func Test_Phase4RulesOnHeaderOnlyResponse(t *testing.T) {
 			wafPluginFactory := newWAFFactory(t, ctrl, tc.directives, "FULL")
 
 			pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
-			pluginHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
-			pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 			pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
@@ -1263,16 +1316,20 @@ func Test_Phase4RulesOnHeaderOnlyResponse(t *testing.T) {
 			wafPlugin, ok := wafPluginFactory.Create(pluginHandle).(*wafPlugin)
 			require.True(t, ok, "failed to cast plugin to wafPlugin")
 
-			requestHeaders := fake.NewFakeHeaderMap(map[string][]string{
-				":authority": {"example.com:8080"},
-				":method":    {"GET"},
-				":path":      {"/"},
-			})
+			reqHeaders := tc.reqHeaders
+			if reqHeaders == nil {
+				reqHeaders = map[string][]string{
+					":authority": {"example.com:8080"},
+					":method":    {"GET"},
+					":path":      {"/"},
+				}
+			}
+			requestHeaders := fake.NewFakeHeaderMap(reqHeaders)
 			require.Equal(t, shared.HeadersStatusContinue, wafPlugin.OnRequestHeaders(requestHeaders, true))
 
 			pluginHandle.EXPECT().RequestHeaders().Return(requestHeaders)
-			headerStatus := wafPlugin.OnResponseHeaders(fake.NewFakeHeaderMap(tc.respHeaders), true)
-			require.Equal(t, shared.HeadersStatusStop, headerStatus, "expected phase 4 block on header-only response")
+			headerStatus := wafPlugin.OnResponseHeaders(fake.NewFakeHeaderMap(tc.respHeaders), tc.respEndOfStream)
+			require.Equal(t, shared.HeadersStatusStop, headerStatus, "expected phase 4 block before releasing response headers")
 
 			wafPlugin.OnStreamComplete()
 		})
