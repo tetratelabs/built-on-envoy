@@ -1248,6 +1248,7 @@ func Test_Phase4RulesOnHeaderOnlyResponse(t *testing.T) {
 			wafPluginFactory := newWAFFactory(t, ctrl, tc.directives, "FULL")
 
 			pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+			pluginHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 			pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 			pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
