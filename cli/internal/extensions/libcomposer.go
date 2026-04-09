@@ -74,7 +74,7 @@ func BuildExtensionFromPath(logger *slog.Logger, dirs *xdg.Directories, manifest
 	// Build the extension and save the binary in the local cache directory for composer to load.
 	dest := LocalCacheExtension(dirs, manifest)
 	// #nosec G204
-	cmd = exec.Command("go", "build", "-buildmode=plugin", "-o", dest, "./standalone")
+	cmd = exec.Command("go", "build", "-trimpath", "-buildmode=plugin", "-o", dest, "./standalone")
 	cmd.Dir = path
 	logger.Debug("building local extension", "version", manifest.Version, "path", path, "cmd", cmd.String())
 	output, err = cmd.CombinedOutput()
