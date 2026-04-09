@@ -11,6 +11,7 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/fake"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
@@ -44,6 +45,24 @@ func (b *testBodyBuffer) Append(data []byte) { b.body = append(b.body, data...) 
 // defaultCfg returns a config with the default namespace set (simulates what Create does).
 func defaultCfg() *anthropicDecoderConfig {
 	return &anthropicDecoderConfig{MetadataNamespace: defaultMetadataNamespace}
+}
+
+// newPluginHandleWithoutPerRouteConfig creates a mock HttpFilterHandle with default expectations including
+// GetMostSpecificConfig returning nil (no per-route config).
+func newPluginHandleWithoutPerRouteConfig(ctrl *gomock.Controller) *mocks.MockHttpFilterHandle {
+	pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	pluginHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
+	return pluginHandle
+}
+
+// newPluginHandleWithPerRouteConfig creates a mock HttpFilterHandle that returns
+// the given per-route config from GetMostSpecificConfig.
+func newPluginHandleWithPerRouteConfig(ctrl *gomock.Controller, perRouteConfig any) *mocks.MockHttpFilterHandle {
+	pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	pluginHandle.EXPECT().GetMostSpecificConfig().Return(perRouteConfig).AnyTimes()
+	return pluginHandle
 }
 
 // --- Tests for decoderConfigFactory.Create ---
@@ -100,7 +119,6 @@ func TestDecoderConfigFactory_Create_InvalidJSON(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
-	mockConfigHandle.EXPECT().Log(shared.LogLevelError, gomock.Any(), gomock.Any()).Times(1)
 
 	factory := &decoderConfigFactory{}
 	filterFactory, err := factory.Create(mockConfigHandle, []byte(`{invalid json}`))
@@ -113,7 +131,7 @@ func TestDecoderConfigFactory_Create_InvalidJSON(t *testing.T) {
 func TestDecoderFilterFactory_Create(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 
 	cfg := defaultCfg()
 	factory := &decoderFilterFactory{config: cfg}
@@ -124,6 +142,65 @@ func TestDecoderFilterFactory_Create(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, mockHandle, df.handle)
 	require.Equal(t, cfg, df.config)
+}
+
+func Test_CreatePerRoute(t *testing.T) {
+	t.Run("valid config", func(t *testing.T) {
+		result, err := (&decoderConfigFactory{}).CreatePerRoute([]byte(`{"metadata_namespace":"io.test"}`))
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		perRoute, ok := result.(*anthropicDecoderConfig)
+		require.True(t, ok)
+		assert.Equal(t, "io.test", perRoute.MetadataNamespace)
+	})
+
+	t.Run("empty config uses default namespace", func(t *testing.T) {
+		result, err := (&decoderConfigFactory{}).CreatePerRoute([]byte{})
+		require.NoError(t, err)
+		perRoute, ok := result.(*anthropicDecoderConfig)
+		require.True(t, ok)
+		assert.Equal(t, defaultMetadataNamespace, perRoute.MetadataNamespace)
+	})
+
+	t.Run("invalid config returns error", func(t *testing.T) {
+		result, err := (&decoderConfigFactory{}).CreatePerRoute([]byte(`{invalid`))
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
+}
+
+func Test_PerRouteConfigOverride(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	baseFactory := &decoderFilterFactory{config: defaultCfg()}
+
+	t.Run("per-route config overrides factory config", func(t *testing.T) {
+		perRoute := &anthropicDecoderConfig{
+			MetadataNamespace: "io.per.route",
+		}
+		mockHandle := newPluginHandleWithPerRouteConfig(ctrl, perRoute)
+		filter := baseFactory.Create(mockHandle)
+		df, ok := filter.(*decoderFilter)
+		require.True(t, ok)
+		assert.Equal(t, "io.per.route", df.config.MetadataNamespace)
+	})
+
+	t.Run("nil per-route config uses factory config", func(t *testing.T) {
+		mockHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
+		filter := baseFactory.Create(mockHandle)
+		df, ok := filter.(*decoderFilter)
+		require.True(t, ok)
+		assert.Equal(t, defaultMetadataNamespace, df.config.MetadataNamespace)
+	})
+
+	t.Run("non-matching per-route config type uses factory config", func(t *testing.T) {
+		mockHandle := newPluginHandleWithPerRouteConfig(ctrl, "not-a-per-route-config")
+		filter := baseFactory.Create(mockHandle)
+		df, ok := filter.(*decoderFilter)
+		require.True(t, ok)
+		assert.Equal(t, defaultMetadataNamespace, df.config.MetadataNamespace)
+	})
 }
 
 // --- Tests for WellKnownHttpFilterConfigFactories ---

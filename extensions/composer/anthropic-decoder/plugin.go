@@ -13,6 +13,8 @@ import (
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/utility"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 const defaultMetadataNamespace = "io.builtonenvoy.anthropic"
@@ -29,21 +31,33 @@ type decoderConfigFactory struct {
 	shared.EmptyHttpFilterConfigFactory
 }
 
-func (d *decoderConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
-	var cfg anthropicDecoderConfig
+func parseConfig(config []byte) (*anthropicDecoderConfig, error) {
+	cfg := &anthropicDecoderConfig{}
 	if len(config) > 0 {
-		if err := json.Unmarshal(config, &cfg); err != nil {
-			handle.Log(shared.LogLevelError, "anthropic-messages-decoder: failed to parse config: %s", err.Error())
-			return nil, err
+		if err := json.Unmarshal(config, cfg); err != nil {
+			return nil, fmt.Errorf("failed to parse config: %w", err)
 		}
 	}
 	if cfg.MetadataNamespace == "" {
 		cfg.MetadataNamespace = defaultMetadataNamespace
 	}
+	return cfg, nil
+}
 
+func (d *decoderConfigFactory) Create(handle shared.HttpFilterConfigHandle,
+	config []byte,
+) (shared.HttpFilterFactory, error) {
+	cfg, err := parseConfig(config)
+	if err != nil {
+		return nil, err
+	}
 	handle.Log(shared.LogLevelInfo, "anthropic-messages-decoder: using metadata namespace %q", cfg.MetadataNamespace)
+	return &decoderFilterFactory{config: cfg}, nil
+}
 
-	return &decoderFilterFactory{config: &cfg}, nil
+// CreatePerRoute parses the per-route configuration.
+func (d *decoderConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, error) {
+	return parseConfig(unparsedConfig)
 }
 
 // decoderFilterFactory implements shared.HttpFilterFactory.
@@ -53,7 +67,14 @@ type decoderFilterFactory struct {
 }
 
 func (d *decoderFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
-	return &decoderFilter{handle: handle, config: d.config}
+	config := d.config
+
+	// Check for per-route config and override if present.
+	if perRoute := pkg.GetMostSpecificConfig[*anthropicDecoderConfig](handle); perRoute != nil {
+		config = perRoute
+	}
+
+	return &decoderFilter{handle: handle, config: config}
 }
 
 // decoderFilter implements shared.HttpFilter.
