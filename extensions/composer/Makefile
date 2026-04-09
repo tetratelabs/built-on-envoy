@@ -127,7 +127,7 @@ create_builder:
 
 .PHONY: build
 build:
-	CGO_ENABLED=1 go build -buildmode=c-shared $(COMPOSER_BUILD_TAG) -o lib$(NAME).so ./main
+	CGO_ENABLED=1 go build -trimpath -buildmode=c-shared $(COMPOSER_BUILD_TAG) -o lib$(NAME).so ./main
 
 .PHONY: install
 install: build

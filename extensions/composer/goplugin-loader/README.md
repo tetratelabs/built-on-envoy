@@ -25,6 +25,7 @@ Plugins must:
 
 - Be compiled with the same Go version as the host binary
 - Use `-buildmode=plugin` when building
+- Use the same build flags as the host binary, including `-trimpath` when the host uses it
 - Have identical versions of all shared dependencies
 - Export a `WellKnownHttpFilterConfigFactories` function with signature:
   ```go

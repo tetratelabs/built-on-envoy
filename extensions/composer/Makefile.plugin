@@ -95,7 +95,7 @@ create_builder:
 
 .PHONY: build
 build:
-	CGO_ENABLED=1 go build -buildmode=plugin $(PLUGIN_BUILD_TAG) -o $(NAME).so ./$(EXTENSION_PATH)/standalone
+	CGO_ENABLED=1 go build -trimpath -buildmode=plugin $(PLUGIN_BUILD_TAG) -o $(NAME).so ./$(EXTENSION_PATH)/standalone
 
 .PHONY: install
 install: build
