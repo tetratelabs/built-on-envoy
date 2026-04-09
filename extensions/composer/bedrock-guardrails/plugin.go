@@ -13,6 +13,8 @@ import (
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/utility"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 func getContent(bytes []byte) ([]Content, error) {
@@ -135,7 +137,14 @@ type customHTTPFilterFactory struct {
 }
 
 func (f *customHTTPFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
-	return &bedrockGuardrailsHTTPFilter{handle: handle, config: f.config}
+	config := f.config
+
+	// Check for per-route config and override if present.
+	if perRoute := pkg.GetMostSpecificConfig[*bedrockGuardrailsConfig](handle); perRoute != nil {
+		config = perRoute
+	}
+
+	return &bedrockGuardrailsHTTPFilter{handle: handle, config: config}
 }
 
 // OnDestroy implements EmptyHttpFilterConfigFactory
@@ -146,25 +155,34 @@ type CustomHttpFilterConfigFactory struct { //nolint:revive
 	shared.EmptyHttpFilterConfigFactory
 }
 
-// Create creates a new instance of the HTTP filter factory with the given configuration.
-func (f *CustomHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
-	// Parse JSON configuration
-	handle.Log(shared.LogLevelDebug, "bedrock-guardrails: creating filter factory with config: %s", string(config))
+func parseConfig(config []byte) (*bedrockGuardrailsConfig, error) {
 	cfg := &bedrockGuardrailsConfig{
 		TimeoutMs: 1000 * 10, // 10s default
 	}
 	if len(config) > 0 {
 		if err := json.Unmarshal(config, cfg); err != nil {
-			handle.Log(shared.LogLevelError, "bedrock-guardrails: failed to parse config: "+err.Error())
-			return nil, err
+			return nil, fmt.Errorf("failed to parse config: %w", err)
 		}
 	}
-
-	// Remove duplicated guardrails, if any
 	cfg.BedrockGuardrails = dedupGuardrails(cfg.BedrockGuardrails)
+	return cfg, nil
+}
 
+// Create creates a new instance of the HTTP filter factory with the given configuration.
+func (f *CustomHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
+	handle.Log(shared.LogLevelDebug, "bedrock-guardrails: creating filter factory with config: %s", string(config))
+	cfg, err := parseConfig(config)
+	if err != nil {
+		handle.Log(shared.LogLevelError, "bedrock-guardrails: %s", err.Error())
+		return nil, err
+	}
 	handle.Log(shared.LogLevelInfo, "bedrock-guardrails: loaded config: cluster=%s guardrails=%v", cfg.Cluster, cfg.BedrockGuardrails)
 	return &customHTTPFilterFactory{config: cfg}, nil
+}
+
+// CreatePerRoute parses the per-route configuration.
+func (f *CustomHttpFilterConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, error) {
+	return parseConfig(unparsedConfig)
 }
 
 // WellKnownHttpFilterConfigFactories is used to load the plugin.

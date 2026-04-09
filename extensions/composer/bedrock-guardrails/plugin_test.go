@@ -12,6 +12,7 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/fake"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
@@ -42,6 +43,24 @@ func (b *testBodyBuffer) Drain(size uint64) {
 	b.body = b.body[size:]
 }
 func (b *testBodyBuffer) Append(data []byte) { b.body = append(b.body, data...) }
+
+// newPluginHandleWithoutPerRouteConfig creates a mock HttpFilterHandle with default expectations including
+// GetMostSpecificConfig returning nil (no per-route config).
+func newPluginHandleWithoutPerRouteConfig(ctrl *gomock.Controller) *mocks.MockHttpFilterHandle {
+	pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	pluginHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
+	return pluginHandle
+}
+
+// newPluginHandleWithPerRouteConfig creates a mock HttpFilterHandle that returns
+// the given per-route config from GetMostSpecificConfig.
+func newPluginHandleWithPerRouteConfig(ctrl *gomock.Controller, perRouteConfig any) *mocks.MockHttpFilterHandle {
+	pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	pluginHandle.EXPECT().GetMostSpecificConfig().Return(perRouteConfig).AnyTimes()
+	return pluginHandle
+}
 
 // --- Tests for getContent ---
 
@@ -203,7 +222,7 @@ func TestCustomHTTPFilterConfigFactory_Create_DefaultTimeout(t *testing.T) {
 func TestCustomHTTPFilterFactory_Create(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 
 	cfg := &bedrockGuardrailsConfig{
 		Cluster: "my-cluster",
@@ -217,6 +236,74 @@ func TestCustomHTTPFilterFactory_Create(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, mockHandle, bgFilter.handle)
 	require.Equal(t, cfg, bgFilter.config)
+}
+
+func Test_CreatePerRoute(t *testing.T) {
+	t.Run("valid config", func(t *testing.T) {
+		config := map[string]any{
+			"bedrock_cluster": "my-cluster",
+			"bedrock_guardrails": []map[string]any{
+				{"identifier": "guardrail-1", "version": "1"},
+			},
+		}
+		configJSON, err := json.Marshal(config)
+		require.NoError(t, err)
+
+		result, err := (&CustomHttpFilterConfigFactory{}).CreatePerRoute(configJSON)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		perRoute, ok := result.(*bedrockGuardrailsConfig)
+		require.True(t, ok)
+		assert.Equal(t, "my-cluster", perRoute.Cluster)
+		assert.Len(t, perRoute.BedrockGuardrails, 1)
+	})
+
+	t.Run("empty config returns default config", func(t *testing.T) {
+		result, err := (&CustomHttpFilterConfigFactory{}).CreatePerRoute([]byte{})
+		require.NoError(t, err)
+		perRoute, ok := result.(*bedrockGuardrailsConfig)
+		require.True(t, ok)
+		assert.Empty(t, perRoute.Cluster)
+	})
+
+	t.Run("invalid JSON returns error", func(t *testing.T) {
+		result, err := (&CustomHttpFilterConfigFactory{}).CreatePerRoute([]byte(`{invalid`))
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
+}
+
+func Test_PerRouteConfigOverride(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	baseConfig := &bedrockGuardrailsConfig{Cluster: "base-cluster"}
+	baseFactory := &customHTTPFilterFactory{config: baseConfig}
+
+	t.Run("per-route config overrides factory config", func(t *testing.T) {
+		perRouteConfig := &bedrockGuardrailsConfig{Cluster: "override-cluster"}
+		mockHandle := newPluginHandleWithPerRouteConfig(ctrl, perRouteConfig)
+		filter := baseFactory.Create(mockHandle)
+		bgFilter, ok := filter.(*bedrockGuardrailsHTTPFilter)
+		require.True(t, ok)
+		assert.Equal(t, "override-cluster", bgFilter.config.Cluster)
+	})
+
+	t.Run("nil per-route config uses factory config", func(t *testing.T) {
+		mockHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
+		filter := baseFactory.Create(mockHandle)
+		bgFilter, ok := filter.(*bedrockGuardrailsHTTPFilter)
+		require.True(t, ok)
+		assert.Equal(t, "base-cluster", bgFilter.config.Cluster)
+	})
+
+	t.Run("non-matching per-route config type uses factory config", func(t *testing.T) {
+		mockHandle := newPluginHandleWithPerRouteConfig(ctrl, "not-a-per-route-config")
+		filter := baseFactory.Create(mockHandle)
+		bgFilter, ok := filter.(*bedrockGuardrailsHTTPFilter)
+		require.True(t, ok)
+		assert.Equal(t, "base-cluster", bgFilter.config.Cluster)
+	})
 }
 
 // --- Tests for WellKnownHttpFilterConfigFactories ---
