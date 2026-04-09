@@ -46,7 +46,7 @@ func parseConfig(unparsedConfig []byte,
 	logFunc func(format string, args ...any),
 ) (*azureContentSafetyConfig, *azureContentSafetyClient, error) {
 	if len(unparsedConfig) == 0 {
-		// Allow empty config because we route level config can be used to override the
+		// Allow empty config because route level config can be used to override the
 		// global config, and in that case the global config could be empty.
 		return nil, nil, nil
 	}
