@@ -509,13 +509,18 @@ func TestConfigFactory_ValidConfig(t *testing.T) {
 func TestConfigFactory_EmptyConfig(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
-	mockHandle.EXPECT().Log(shared.LogLevelError, gomock.Any(), gomock.Any())
+	mockHandle.EXPECT().DefineCounter("azure_content_safety_requests_total", "decision").Return(shared.MetricID(1), shared.MetricsSuccess)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	factory := &contentSafetyConfigFactory{}
 	filterFactory, err := factory.Create(mockHandle, []byte{})
 
-	require.Error(t, err)
-	require.Nil(t, filterFactory)
+	require.NoError(t, err)
+	require.NotNil(t, filterFactory)
+
+	mockHTTPHandle := newFilterHandleWithoutPerRouteConfig(ctrl)
+	filter := filterFactory.Create(mockHTTPHandle)
+	require.IsType(t, &shared.EmptyHttpFilter{}, filter)
 }
 
 func TestConfigFactory_InvalidJSON(t *testing.T) {
@@ -1792,4 +1797,118 @@ func TestOnResponseTrailers_ProcessesBody_HarmfulContent(t *testing.T) {
 	status := filter.OnResponseTrailers(fake.NewFakeHeaderMap(nil))
 	require.Equal(t, shared.TrailersStatusStop, status)
 	sched.Wait()
+}
+
+func newFilterHandleWithoutPerRouteConfig(ctrl *gomock.Controller) *mocks.MockHttpFilterHandle {
+	h := mocks.NewMockHttpFilterHandle(ctrl)
+	h.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
+	h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	return h
+}
+
+func newFilterHandleWithPerRouteConfig(ctrl *gomock.Controller, perRouteConfig any) *mocks.MockHttpFilterHandle {
+	h := mocks.NewMockHttpFilterHandle(ctrl)
+	h.EXPECT().GetMostSpecificConfig().Return(perRouteConfig).AnyTimes()
+	h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	return h
+}
+
+func testBaseFactory(server *httptest.Server) *contentSafetyFilterFactory {
+	cfg := &azureContentSafetyConfig{
+		Endpoint: server.URL,
+		APIKey:   pkg.DataSource{Inline: "test-key"},
+	}
+	client := newAzureContentSafetyClient(cfg.Endpoint, cfg.APIKey.Inline, cfg.apiVersion(), nil)
+	return &contentSafetyFilterFactory{config: cfg, client: client, metrics: testMetrics}
+}
+
+func Test_CreatePerRoute(t *testing.T) {
+	f := &contentSafetyConfigFactory{}
+
+	t.Run("valid config", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {}))
+		defer server.Close()
+
+		cfg := map[string]any{
+			"endpoint": server.URL,
+			"api_key":  map[string]any{"inline": "test-key"},
+		}
+		b, _ := json.Marshal(cfg)
+		result, err := f.CreatePerRoute(b)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		perRoute, ok := result.(*perRouteAzureContentSafetyConfig)
+		require.True(t, ok)
+		require.Equal(t, server.URL, perRoute.config.Endpoint)
+		require.NotNil(t, perRoute.client)
+	})
+
+	t.Run("empty config returns error", func(t *testing.T) {
+		result, err := f.CreatePerRoute([]byte{})
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
+
+	t.Run("missing endpoint returns error", func(t *testing.T) {
+		cfg := map[string]any{"api_key": map[string]any{"inline": "key"}}
+		b, _ := json.Marshal(cfg)
+		result, err := f.CreatePerRoute(b)
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
+
+	t.Run("invalid JSON returns error", func(t *testing.T) {
+		result, err := f.CreatePerRoute([]byte(`{invalid`))
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
+}
+
+func Test_PerRouteConfigOverride(t *testing.T) {
+	baseServer := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {}))
+	defer baseServer.Close()
+	baseFactory := testBaseFactory(baseServer)
+
+	t.Run("per-route config overrides factory config", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		routeServer := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {}))
+		defer routeServer.Close()
+
+		perRouteCfg := &azureContentSafetyConfig{
+			Endpoint: routeServer.URL,
+			APIKey:   pkg.DataSource{Inline: "route-key"},
+		}
+		perRouteClient := newAzureContentSafetyClient(perRouteCfg.Endpoint, perRouteCfg.APIKey.Inline, perRouteCfg.apiVersion(), nil)
+		perRoute := &perRouteAzureContentSafetyConfig{config: perRouteCfg, client: perRouteClient}
+
+		handle := newFilterHandleWithPerRouteConfig(ctrl, perRoute)
+		filter := baseFactory.Create(handle)
+		cf, ok := filter.(*contentSafetyFilter)
+		require.True(t, ok)
+		require.Equal(t, routeServer.URL, cf.config.Endpoint)
+		require.Equal(t, perRouteClient, cf.client)
+		require.Equal(t, &baseFactory.metrics, cf.metrics)
+	})
+
+	t.Run("nil per-route config uses factory config", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		handle := newFilterHandleWithoutPerRouteConfig(ctrl)
+		filter := baseFactory.Create(handle)
+		cf, ok := filter.(*contentSafetyFilter)
+		require.True(t, ok)
+		require.Equal(t, baseServer.URL, cf.config.Endpoint)
+	})
+
+	t.Run("wrong type per-route config uses factory config", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		handle := newFilterHandleWithPerRouteConfig(ctrl, "not-a-per-route-config")
+		filter := baseFactory.Create(handle)
+		cf, ok := filter.(*contentSafetyFilter)
+		require.True(t, ok)
+		require.Equal(t, baseServer.URL, cf.config.Endpoint)
+	})
 }

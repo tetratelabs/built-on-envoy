@@ -13,6 +13,8 @@ import (
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/utility"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 const (
@@ -40,45 +42,61 @@ type contentSafetyConfigFactory struct {
 	shared.EmptyHttpFilterConfigFactory
 }
 
+func parseConfig(unparsedConfig []byte,
+	logFunc func(format string, args ...any),
+) (*azureContentSafetyConfig, *azureContentSafetyClient, error) {
+	if len(unparsedConfig) == 0 {
+		// Allow empty config because we route level config can be used to override the
+		// global config, and in that case the global config could be empty.
+		return nil, nil, nil
+	}
+
+	config := &azureContentSafetyConfig{}
+	if err := json.Unmarshal(unparsedConfig, config); err != nil {
+		return nil, nil, fmt.Errorf("failed to parse config: %w", err)
+	}
+
+	if config.Endpoint == "" {
+		return nil, nil, fmt.Errorf("endpoint is required")
+	}
+	if err := config.APIKey.Validate(); err != nil {
+		return nil, nil, fmt.Errorf("invalid 'api_key' configuration: %w", err)
+	}
+
+	apiKeyBytes, err := config.APIKey.Content()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get api key content: %w", err)
+	}
+
+	apiKey := strings.TrimSpace(string(apiKeyBytes))
+	if config.Mode != "" && config.Mode != "block" && config.Mode != "monitor" {
+		return nil, nil, fmt.Errorf("invalid mode %q", config.Mode)
+	}
+
+	client := newAzureContentSafetyClient(config.Endpoint, apiKey, config.apiVersion(), logFunc)
+	return config, client, nil
+}
+
 func (f *contentSafetyConfigFactory) Create(
 	handle shared.HttpFilterConfigHandle,
-	config []byte,
+	unparsedConfig []byte,
 ) (shared.HttpFilterFactory, error) {
-	if len(config) == 0 {
-		handle.Log(shared.LogLevelError, "azure-content-safety: empty config")
-		return nil, fmt.Errorf("empty config")
-	}
-
-	var cfg azureContentSafetyConfig
-	if err := json.Unmarshal(config, &cfg); err != nil {
-		handle.Log(shared.LogLevelError, "azure-content-safety: failed to parse config: %s", err.Error())
-		return nil, err
-	}
-
-	if cfg.Endpoint == "" {
-		handle.Log(shared.LogLevelError, "azure-content-safety: endpoint is required")
-		return nil, fmt.Errorf("endpoint is required")
-	}
-	if err := cfg.APIKey.Validate(); err != nil {
-		handle.Log(shared.LogLevelError, "azure-content-safety: invalid 'api_key' configuration: %s", err.Error())
-		return nil, fmt.Errorf("invalid 'api_key' configuration: %w", err)
-	}
-	apiKeyBytes, err := cfg.APIKey.Content()
-	if err != nil {
-		handle.Log(shared.LogLevelError, "azure-content-safety: failed to get api key content: %s", err.Error())
-		return nil, fmt.Errorf("failed to get api key content: %w", err)
-	}
-	apiKey := strings.TrimSpace(string(apiKeyBytes))
-	if cfg.Mode != "" && cfg.Mode != "block" && cfg.Mode != "monitor" {
-		handle.Log(shared.LogLevelError, "azure-content-safety: invalid mode %q, must be \"block\" or \"monitor\"", cfg.Mode)
-		return nil, fmt.Errorf("invalid mode %q", cfg.Mode)
-	}
-
 	logFunc := func(format string, args ...any) {
 		handle.Log(shared.LogLevelDebug, format, args...)
 	}
-	client := newAzureContentSafetyClient(cfg.Endpoint, apiKey, cfg.apiVersion(), logFunc)
 
+	config, client, err := parseConfig(unparsedConfig, logFunc)
+	if err != nil {
+		handle.Log(shared.LogLevelError, "azure-content-safety: %s", err.Error())
+		return nil, err
+	}
+
+	if config == nil {
+		handle.Log(shared.LogLevelInfo, "azure-content-safety: empty filter config")
+	}
+
+	// Define metrics even if config is empty because the route level config can be used at
+	// runtime.
 	var metrics contentSafetyMetrics
 	metricID, metricStatus := handle.DefineCounter("azure_content_safety_requests_total", "decision")
 	if metricStatus == shared.MetricsSuccess {
@@ -87,10 +105,24 @@ func (f *contentSafetyConfigFactory) Create(
 	}
 
 	return &contentSafetyFilterFactory{
-		config:  &cfg,
+		config:  config,
 		client:  client,
 		metrics: metrics,
 	}, nil
+}
+
+// CreatePerRoute parses per-route configuration for the Azure Content Safety filter.
+func (f *contentSafetyConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, error) {
+	config, client, err := parseConfig(unparsedConfig, nil)
+	if err != nil {
+		return nil, err
+	}
+	if config == nil || client == nil {
+		// It's not allowed to have empty route config because it doesn't make sense to have an
+		// empty config override the global config.
+		return nil, fmt.Errorf("azure-content-safety: per-route config is empty or invalid")
+	}
+	return &perRouteAzureContentSafetyConfig{config: config, client: client}, nil
 }
 
 // contentSafetyFilterFactory implements shared.HttpFilterFactory.
@@ -101,11 +133,29 @@ type contentSafetyFilterFactory struct {
 	metrics contentSafetyMetrics
 }
 
+// perRouteAzureContentSafetyConfig holds per-route configuration for the Azure Content Safety filter.
+type perRouteAzureContentSafetyConfig struct {
+	config *azureContentSafetyConfig
+	client *azureContentSafetyClient
+}
+
 func (f *contentSafetyFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
+	config, client := f.config, f.client
+	if perRoute := pkg.GetMostSpecificConfig[*perRouteAzureContentSafetyConfig](handle); perRoute != nil {
+		config = perRoute.config
+		client = perRoute.client
+	}
+
+	// If no any valid config is found, return an empty filter that just passes through the traffic.
+	if config == nil || client == nil {
+		handle.Log(shared.LogLevelInfo, "azure-content-safety: no config available and use empty filter")
+		return &shared.EmptyHttpFilter{}
+	}
+
 	return &contentSafetyFilter{
 		handle:  handle,
-		config:  f.config,
-		client:  f.client,
+		config:  config,
+		client:  client,
 		metrics: &f.metrics,
 	}
 }
