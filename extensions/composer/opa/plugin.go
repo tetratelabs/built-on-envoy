@@ -71,14 +71,14 @@ func (m opaMetrics) IncRequestsTotal(handle shared.HttpFilterHandle, decision st
 type opaParsedConfig struct {
 	opaConfig
 	preparedQuery rego.PreparedEvalQuery
-	metrics       opaMetrics
 }
 
 // opaHttpFilter is the per-request HTTP filter instance.
 type opaHttpFilter struct { //nolint:revive
 	shared.EmptyHttpFilter
-	handle shared.HttpFilterHandle
-	config *opaParsedConfig
+	handle  shared.HttpFilterHandle
+	config  *opaParsedConfig
+	metrics opaMetrics
 	// requestProcessed is set to true once the policy has been evaluated to prevent re-evaluation.
 	requestProcessed bool
 }
@@ -148,12 +148,12 @@ func (o *opaHttpFilter) evaluateAndDecide(headers shared.HeaderMap, parsedBody a
 	if err != nil {
 		if o.config.FailOpen {
 			o.handle.Log(shared.LogLevelError, "opa: policy evaluation error (fail_open enabled): %s", err.Error())
-			o.config.metrics.IncRequestsTotal(o.handle, decisionFailOpen)
+			o.metrics.IncRequestsTotal(o.handle, decisionFailOpen)
 			return true
 		}
 		o.handle.Log(shared.LogLevelError, "opa: policy evaluation error: %s", err.Error())
 		o.handle.SendLocalResponse(500, nil, []byte("Internal Server Error"), "opa_eval_error")
-		o.config.metrics.IncRequestsTotal(o.handle, decisionDenied)
+		o.metrics.IncRequestsTotal(o.handle, decisionDenied)
 		return false
 	}
 
@@ -162,7 +162,7 @@ func (o *opaHttpFilter) evaluateAndDecide(headers shared.HeaderMap, parsedBody a
 
 	if !allowed && o.config.DryRun {
 		o.handle.Log(shared.LogLevelInfo, "opa: dry-run decision: allowed=%v", allowed)
-		o.config.metrics.IncRequestsTotal(o.handle, decisionDryAllow)
+		o.metrics.IncRequestsTotal(o.handle, decisionDryAllow)
 		allowed = true
 	}
 
@@ -180,7 +180,7 @@ func (o *opaHttpFilter) evaluateAndDecide(headers shared.HeaderMap, parsedBody a
 			body = "Forbidden"
 		}
 		o.handle.Log(shared.LogLevelDebug, "opa: denying request with status %d", status)
-		o.config.metrics.IncRequestsTotal(o.handle, decisionDenied)
+		o.metrics.IncRequestsTotal(o.handle, decisionDenied)
 		o.handle.SendLocalResponse(
 			uint32(status), //nolint:gosec
 			responseHeaders,
@@ -197,7 +197,7 @@ func (o *opaHttpFilter) evaluateAndDecide(headers shared.HeaderMap, parsedBody a
 	}
 
 	if !o.config.DryRun {
-		o.config.metrics.IncRequestsTotal(o.handle, decisionAllowed)
+		o.metrics.IncRequestsTotal(o.handle, decisionAllowed)
 	}
 
 	return true
@@ -394,60 +394,55 @@ func interpretResult(rs rego.ResultSet) (bool, policyResponse) {
 // opaHttpFilterFactory creates filter instances per-request.
 type opaHttpFilterFactory struct { //nolint:revive
 	shared.EmptyHttpFilterFactory
-	config *opaParsedConfig
+	config  *opaParsedConfig
+	metrics opaMetrics
 }
 
 func (o *opaHttpFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
-	return &opaHttpFilter{handle: handle, config: o.config}
+	cfg := o.config
+	if perRoute := pkg.GetMostSpecificConfig[*opaParsedConfig](handle); perRoute != nil {
+		cfg = perRoute
+	}
+	if cfg == nil {
+		handle.Log(shared.LogLevelInfo, "opa: no config available and use empty filter")
+		return &shared.EmptyHttpFilter{}
+	}
+
+	return &opaHttpFilter{handle: handle, config: cfg, metrics: o.metrics}
 }
 
-// OPAHttpFilterConfigFactory is the configuration factory for the HTTP filter.
-type OPAHttpFilterConfigFactory struct { //nolint:revive
-	shared.EmptyHttpFilterConfigFactory
-}
-
-// Create parses the JSON configuration and creates a factory for the HTTP filter.
-func (o *OPAHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
+// parseConfig parses the raw JSON config bytes and returns a compiled *opaParsedConfig.
+func parseConfig(config []byte) (*opaParsedConfig, error) {
 	if len(config) == 0 {
-		handle.Log(shared.LogLevelError, "opa: empty config")
-		return nil, fmt.Errorf("empty config")
+		return nil, nil
 	}
 
 	cfg := opaConfig{}
 	if err := json.Unmarshal(config, &cfg); err != nil {
-		handle.Log(shared.LogLevelError, "opa: failed to parse config: %s", err.Error())
-		return nil, err
+		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
 	if len(cfg.Policies) == 0 {
-		handle.Log(shared.LogLevelError, "opa: no policies provided in config")
 		return nil, fmt.Errorf("no policies provided in config")
 	}
 
 	modules := make(map[string]string, len(cfg.Policies))
-
 	for i, p := range cfg.Policies {
 		content, err := p.Content()
 		if err != nil {
-			handle.Log(shared.LogLevelError, "opa: failed to load policy #%d: %s", i+1, err.Error())
 			return nil, fmt.Errorf("failed to load policy #%d: %w", i+1, err)
 		}
 		moduleName := p.File
 		if moduleName == "" {
 			moduleName = fmt.Sprintf("inline_policy_%d.rego", i+1)
 		}
-		handle.Log(shared.LogLevelDebug, "opa: loaded policy #%d (source=%s)", i+1, moduleName)
 		modules[moduleName] = string(content)
 	}
-
-	handle.Log(shared.LogLevelDebug, "opa: loaded %d policies (decision_path=%s, dry_run=%v, fail_open=%v)",
-		len(modules), cfg.DecisionPath, cfg.DryRun, cfg.FailOpen)
 
 	if cfg.DecisionPath == "" {
 		cfg.DecisionPath = defaultDecisionPath
 	}
 	query := "result = data." + cfg.DecisionPath
-	handle.Log(shared.LogLevelDebug, "opa: compiling query: %s", query)
 
 	opts := []func(*rego.Rego){rego.Query(query)}
 	for name, module := range modules {
@@ -457,11 +452,28 @@ func (o *OPAHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle
 
 	pq, err := r.PrepareForEval(context.Background())
 	if err != nil {
-		handle.Log(shared.LogLevelError, "opa: failed to compile policy: %s", err.Error())
 		return nil, fmt.Errorf("failed to compile policy: %w", err)
 	}
 
-	handle.Log(shared.LogLevelDebug, "opa: policy compiled successfully")
+	return &opaParsedConfig{opaConfig: cfg, preparedQuery: pq}, nil
+}
+
+// OPAHttpFilterConfigFactory is the configuration factory for the HTTP filter.
+type OPAHttpFilterConfigFactory struct { //nolint:revive
+	shared.EmptyHttpFilterConfigFactory
+}
+
+// Create parses the JSON configuration and creates a factory for the HTTP filter.
+func (o *OPAHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
+	parsed, err := parseConfig(config)
+	if err != nil {
+		handle.Log(shared.LogLevelError, "opa: %s", err.Error())
+		return nil, err
+	}
+
+	if parsed == nil {
+		handle.Log(shared.LogLevelInfo, "opa: empty filter config")
+	}
 
 	var metrics opaMetrics
 	metricID, metricStatus := handle.DefineCounter("opa_requests_total", "decision")
@@ -470,13 +482,21 @@ func (o *OPAHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle
 		metrics.enabled = true
 	}
 
-	parsed := &opaParsedConfig{
-		opaConfig:     cfg,
-		preparedQuery: pq,
-		metrics:       metrics,
-	}
+	return &opaHttpFilterFactory{config: parsed, metrics: metrics}, nil
+}
 
-	return &opaHttpFilterFactory{config: parsed}, nil
+// CreatePerRoute parses per-route configuration for the OPA filter.
+func (o *OPAHttpFilterConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, error) {
+	cfg, err := parseConfig(unparsedConfig)
+	if err != nil {
+		return nil, err
+	}
+	if cfg == nil {
+		// It's not allowed to have empty route config because it doesn't make sense to have an
+		// empty config override the global config.
+		return nil, fmt.Errorf("opa: per-route config is empty or invalid")
+	}
+	return cfg, nil
 }
 
 // ExtensionName is the name of the extension that will be used in the

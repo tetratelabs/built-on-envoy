@@ -81,11 +81,15 @@ func TestConfigFactory_Create_EmptyConfig(t *testing.T) {
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().DefineCounter("opa_requests_total", "decision").Return(shared.MetricID(1), shared.MetricsSuccess)
 
 	filterFactory, err := factory.Create(mockHandle, []byte{})
-	require.Error(t, err)
-	require.Nil(t, filterFactory)
-	require.Contains(t, err.Error(), "empty config")
+	require.NoError(t, err)
+	require.NotNil(t, filterFactory)
+
+	mockHTTPHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
+	filter := filterFactory.Create(mockHTTPHandle)
+	require.IsType(t, &shared.EmptyHttpFilter{}, filter)
 }
 
 func TestConfigFactory_Create_InvalidJSON(t *testing.T) {
@@ -226,6 +230,7 @@ func createTestFilter(t *testing.T, cfg opaConfig) (*opaHttpFilter, *mocks.MockH
 
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:5000"), true).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDDestinationAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:80"), true).AnyTimes()
@@ -404,6 +409,7 @@ func createTestFilterWithMetricExpectation(t *testing.T, cfg opaConfig, expected
 
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:5000"), true).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDDestinationAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:80"), true).AnyTimes()
@@ -539,6 +545,7 @@ allow := true
 
 	mockFilterHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	mockFilterHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockFilterHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 	mockFilterHandle.EXPECT().GetAttributeString(gomock.Any()).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
 	mockFilterHandle.EXPECT().GetAttributeBool(gomock.Any()).Return(false, false).AnyTimes()
 	mockFilterHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), "allowed").Return(shared.MetricsSuccess)
@@ -575,6 +582,7 @@ allow := false
 
 	mockFilterHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	mockFilterHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockFilterHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 	mockFilterHandle.EXPECT().GetAttributeString(gomock.Any()).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
 	mockFilterHandle.EXPECT().GetAttributeBool(gomock.Any()).Return(false, false).AnyTimes()
 	mockFilterHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "opa_denied")
@@ -691,6 +699,7 @@ default allow := true
 
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/2"), true).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:5000"), true).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDDestinationAddress).Return(pkg.UnsafeBufferFromString("10.0.0.2:443"), true).AnyTimes()
@@ -759,6 +768,7 @@ allow if {
 	// Test with trusted SPIFFE identity - should allow.
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/2"), true).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:5000"), true).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDDestinationAddress).Return(pkg.UnsafeBufferFromString("10.0.0.2:443"), true).AnyTimes()
@@ -809,6 +819,7 @@ allow if {
 	// Test with untrusted SPIFFE identity - should deny.
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/2"), true).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:5000"), true).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDDestinationAddress).Return(pkg.UnsafeBufferFromString("10.0.0.2:443"), true).AnyTimes()
@@ -871,6 +882,7 @@ default allow := false
 	require.NoError(t, err)
 
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().GetMostSpecificConfig().Return(nil)
 	filter := filterFactory.Create(mockHandle)
 
 	require.NotNil(t, filter)
@@ -1105,15 +1117,12 @@ result := 1 / 0
 			FailOpen:     failOpen,
 		},
 		preparedQuery: pq,
-		metrics: opaMetrics{
-			requestsTotal: shared.MetricID(1),
-			enabled:       true,
-		},
 	}
 
 	ctrl := gomock.NewController(t)
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:5000"), true).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDDestinationAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:80"), true).AnyTimes()
@@ -1124,7 +1133,11 @@ result := 1 / 0
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionTlsVersion).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
 
-	filter := &opaHttpFilter{handle: mockHandle, config: parsed}
+	filter := &opaHttpFilter{
+		handle:  mockHandle,
+		config:  parsed,
+		metrics: opaMetrics{requestsTotal: shared.MetricID(1), enabled: true},
+	}
 	return filter, mockHandle
 }
 
@@ -1437,6 +1450,7 @@ default allow := true
 
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(gomock.Any()).Return(pkg.UnsafeBufferFromString(""), false).AnyTimes()
 	mockHandle.EXPECT().GetAttributeBool(gomock.Any()).Return(false, false).AnyTimes()
 
@@ -1499,4 +1513,129 @@ default allow := true
 	dm, ok := input["dynamic_metadata"].(map[string]any)
 	require.True(t, ok)
 	require.Empty(t, dm)
+}
+
+func newPluginHandleWithoutPerRouteConfig(ctrl *gomock.Controller) *mocks.MockHttpFilterHandle {
+	h := mocks.NewMockHttpFilterHandle(ctrl)
+	h.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
+	h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	return h
+}
+
+func newPluginHandleWithPerRouteConfig(ctrl *gomock.Controller, perRouteConfig any) *mocks.MockHttpFilterHandle {
+	h := mocks.NewMockHttpFilterHandle(ctrl)
+	h.EXPECT().GetMostSpecificConfig().Return(perRouteConfig).AnyTimes()
+	h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	return h
+}
+
+func Test_CreatePerRoute(t *testing.T) {
+	f := &OPAHttpFilterConfigFactory{}
+	policy := `package envoy.authz
+import rego.v1
+default allow := true
+`
+
+	t.Run("valid config", func(t *testing.T) {
+		cfg := map[string]any{
+			"policies": []map[string]any{{"inline": policy}},
+		}
+		b, _ := json.Marshal(cfg)
+		result, err := f.CreatePerRoute(b)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		perRoute, ok := result.(*opaParsedConfig)
+		require.True(t, ok)
+		require.Equal(t, defaultDecisionPath, perRoute.DecisionPath)
+	})
+
+	t.Run("empty config returns error", func(t *testing.T) {
+		result, err := f.CreatePerRoute([]byte{})
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
+
+	t.Run("no policies returns error", func(t *testing.T) {
+		cfg := map[string]any{"policies": []any{}}
+		b, _ := json.Marshal(cfg)
+		result, err := f.CreatePerRoute(b)
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
+
+	t.Run("invalid JSON returns error", func(t *testing.T) {
+		result, err := f.CreatePerRoute([]byte(`{invalid`))
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
+
+	t.Run("invalid rego returns error", func(t *testing.T) {
+		cfg := map[string]any{
+			"policies": []map[string]any{{"inline": "not valid rego!!!"}},
+		}
+		b, _ := json.Marshal(cfg)
+		result, err := f.CreatePerRoute(b)
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
+}
+
+func Test_PerRouteConfigOverride(t *testing.T) {
+	basePolicy := `package envoy.authz
+import rego.v1
+default allow := true
+`
+	routePolicy := `package envoy.authz
+import rego.v1
+default allow := false
+`
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockConfigHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockConfigHandle.EXPECT().DefineCounter("opa_requests_total", "decision").Return(shared.MetricID(1), shared.MetricsSuccess).AnyTimes()
+
+	configJSON, _ := json.Marshal(opaConfig{Policies: []pkg.DataSource{{Inline: basePolicy}}})
+	baseFilterFactory, err := (&OPAHttpFilterConfigFactory{}).Create(mockConfigHandle, configJSON)
+	require.NoError(t, err)
+	baseFactory := baseFilterFactory.(*opaHttpFilterFactory)
+
+	t.Run("per-route config overrides factory config", func(t *testing.T) {
+		perRouteJSON, _ := json.Marshal(opaConfig{
+			Policies:     []pkg.DataSource{{Inline: routePolicy}},
+			DecisionPath: "envoy.authz.allow",
+		})
+		perRouteResult, err := (&OPAHttpFilterConfigFactory{}).CreatePerRoute(perRouteJSON)
+		require.NoError(t, err)
+		perRoute := perRouteResult.(*opaParsedConfig)
+
+		handle := newPluginHandleWithPerRouteConfig(ctrl, perRoute)
+		filter := baseFactory.Create(handle)
+		f, ok := filter.(*opaHttpFilter)
+		require.True(t, ok)
+		require.Equal(t, baseFactory.metrics, f.metrics)
+
+		rs, err := f.config.preparedQuery.Eval(context.Background(), rego.EvalInput(map[string]any{}))
+		require.NoError(t, err)
+		allowed, _ := interpretResult(rs)
+		require.False(t, allowed)
+	})
+
+	t.Run("nil per-route config uses factory config", func(t *testing.T) {
+		handle := newPluginHandleWithoutPerRouteConfig(ctrl)
+		filter := baseFactory.Create(handle)
+		f, ok := filter.(*opaHttpFilter)
+		require.True(t, ok)
+		require.Equal(t, baseFactory.config, f.config)
+	})
+
+	t.Run("wrong type per-route config uses factory config", func(t *testing.T) {
+		handle := newPluginHandleWithPerRouteConfig(ctrl, "not-a-per-route-config")
+		filter := baseFactory.Create(handle)
+		f, ok := filter.(*opaHttpFilter)
+		require.True(t, ok)
+		require.Equal(t, baseFactory.config, f.config)
+	})
 }
