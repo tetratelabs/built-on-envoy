@@ -3,6 +3,7 @@ package impl
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 )
@@ -56,7 +57,11 @@ type customHttpFilterFactory struct {
 }
 
 func (f *customHttpFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
-	return &customHttpFilter{handle: handle, config: f.config}
+	cfg := f.config
+	if perRoute := getMostSpecificConfig[*customHttpFilterConfig](handle); perRoute != nil {
+		cfg = perRoute
+	}
+	return &customHttpFilter{handle: handle, config: cfg}
 }
 
 // This is the configuration factory for the HTTP filter.
@@ -65,19 +70,18 @@ type CustomHttpFilterConfigFactory struct { //nolint:revive
 }
 
 func (f *CustomHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
-	// Parse JSON configuration
-	// TODO: To implement your own configuration parsing and validation logic here.
-	cfg := &customHttpFilterConfig{
-		HeaderValue: "example",
-	}
-	if len(config) > 0 {
-		if err := json.Unmarshal(config, cfg); err != nil {
-			handle.Log(shared.LogLevelError, "{{ .Name }}: failed to parse config: "+err.Error())
-			return nil, err
-		}
+	cfg, err := parseConfig(config)
+	if err != nil {
+		handle.Log(shared.LogLevelError, "{{ .Name }}: "+err.Error())
+		return nil, err
 	}
 	handle.Log(shared.LogLevelInfo, "{{ .Name }}: loaded config with header_value="+cfg.HeaderValue)
 	return &customHttpFilterFactory{config: cfg}, nil
+}
+
+// CreatePerRoute parses per-route configuration for the {{ .Name }} filter.
+func (f *CustomHttpFilterConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, error) {
+	return parseConfig(unparsedConfig)
 }
 
 // WellKnownHttpFilterConfigFactories is used to load the plugin.
@@ -85,4 +89,33 @@ func WellKnownHttpFilterConfigFactories() map[string]shared.HttpFilterConfigFact
 	return map[string]shared.HttpFilterConfigFactory{
 		"{{ .Name }}": &CustomHttpFilterConfigFactory{},
 	}
+}
+
+// parseConfig parses the JSON config bytes into customHttpFilterConfig.
+func parseConfig(config []byte) (*customHttpFilterConfig, error) {
+	// TODO: To implement your own configuration parsing and validation logic here.
+	cfg := &customHttpFilterConfig{
+		HeaderValue: "example",
+	}
+	if len(config) != 0 {
+		if err := json.Unmarshal(config, cfg); err != nil {
+			return nil, fmt.Errorf("{{ .Name }}: failed to parse config: %w", err)
+		}
+	}
+	return cfg, nil
+}
+
+// getMostSpecificConfig returns the per-route config of type T from the filter handle, or the zero value.
+func getMostSpecificConfig[T any](handle shared.HttpFilterHandle) T { //nolint:revive
+	var zero T
+	c := handle.GetMostSpecificConfig()
+	if c == nil {
+		return zero
+	}
+	cfg, ok := c.(T)
+	if !ok {
+		handle.Log(shared.LogLevelDebug, "{{ .Name }}: most specific config is not of expected type")
+		return zero
+	}
+	return cfg
 }

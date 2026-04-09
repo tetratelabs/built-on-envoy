@@ -6,6 +6,7 @@
 use envoy_proxy_dynamic_modules_rust_sdk::*;
 use ipnet::IpNet;
 use serde::{Deserialize, Serialize};
+use std::any::Any;
 use std::collections::HashSet;
 use std::net::IpAddr;
 use std::str::FromStr;
@@ -92,6 +93,23 @@ impl FilterConfig {
     }
 }
 
+// The per-route filter config that can override the global config for specific routes.
+#[derive(Debug, Clone)]
+pub struct PerRouteFilterConfig {
+    config: Arc<FilterConfigImpl>,
+}
+
+impl PerRouteFilterConfig {
+    pub fn new(_name: &str, config: &[u8]) -> Option<Box<dyn Any>> {
+        if config.is_empty() {
+            return None;
+        }
+        let config_str = std::str::from_utf8(config).unwrap_or("");
+        FilterConfig::new(config_str)
+            .map(|fc| Box::new(PerRouteFilterConfig { config: fc.config }) as Box<dyn Any>)
+    }
+}
+
 /// Returns true if `ip` matches any exact address or CIDR range in the given sets.
 fn matches(ip: &IpAddr, exact: &HashSet<IpAddr>, cidrs: &[IpNet]) -> bool {
     exact.contains(ip) || cidrs.iter().any(|net| net.contains(ip))
@@ -115,6 +133,18 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for Filter {
         envoy_filter: &mut EHF,
         _end_stream: bool,
     ) -> abi::envoy_dynamic_module_type_on_http_filter_request_headers_status {
+        // Determine effective config: per-route overrides global.
+        let effective_config =
+            if let Some(route_cfg) = envoy_filter.get_most_specific_route_config() {
+                if let Some(per_route) = route_cfg.downcast_ref::<PerRouteFilterConfig>() {
+                    per_route.config.clone()
+                } else {
+                    self.filter_config.config.clone()
+                }
+            } else {
+                self.filter_config.config.clone()
+            };
+
         let downstream_addr = envoy_filter
             .get_attribute_string(abi::envoy_dynamic_module_type_attribute_id::SourceAddress);
         let downstream_port =
@@ -174,7 +204,7 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for Filter {
             }
         };
 
-        let cfg = &self.filter_config.config;
+        let cfg = &effective_config;
 
         // Check if the downstream addr is in the allowed list.
         if (!cfg.allow_addresses_exact.is_empty() || !cfg.allow_addresses_cidr.is_empty())
@@ -220,7 +250,15 @@ fn new_http_filter_config_fn<EC: EnvoyHttpFilterConfig, EHF: EnvoyHttpFilter>(
     }
 }
 
-declare_init_functions!(init, new_http_filter_config_fn);
+#[allow(dead_code)]
+fn new_http_filter_per_route_config_fn(name: &str, config: &[u8]) -> Option<Box<dyn Any>> {
+    match name {
+        "ip-restriction" => PerRouteFilterConfig::new(name, config),
+        _ => panic!("Unknown filter name: {name}"),
+    }
+}
+
+declare_init_functions!(init, new_http_filter_config_fn, new_http_filter_per_route_config_fn);
 
 #[cfg(test)]
 mod tests {
@@ -326,6 +364,9 @@ mod tests {
             envoy_proxy_dynamic_modules_rust_sdk::MockEnvoyHttpFilter::new();
 
         mock_envoy_filter
+            .expect_get_most_specific_route_config()
+            .returning(|| None);
+        mock_envoy_filter
             .expect_get_attribute_string()
             .times(1)
             .returning(|_| None);
@@ -364,6 +405,9 @@ mod tests {
             envoy_proxy_dynamic_modules_rust_sdk::MockEnvoyHttpFilter::new();
 
         mock_envoy_filter
+            .expect_get_most_specific_route_config()
+            .returning(|| None);
+        mock_envoy_filter
             .expect_get_attribute_string()
             .times(1)
             .returning(|_| Some(EnvoyBuffer::new("127.0.0.1:80")));
@@ -377,6 +421,9 @@ mod tests {
             abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::Continue
         );
 
+        mock_envoy_filter
+            .expect_get_most_specific_route_config()
+            .returning(|| None);
         mock_envoy_filter
             .expect_get_attribute_string()
             .times(1)
@@ -415,6 +462,9 @@ mod tests {
             envoy_proxy_dynamic_modules_rust_sdk::MockEnvoyHttpFilter::new();
 
         mock_envoy_filter
+            .expect_get_most_specific_route_config()
+            .returning(|| None);
+        mock_envoy_filter
             .expect_get_attribute_string()
             .times(1)
             .returning(|_| Some(EnvoyBuffer::new("192.168.1.1:80")));
@@ -432,6 +482,9 @@ mod tests {
             abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::StopIteration
         );
 
+        mock_envoy_filter
+            .expect_get_most_specific_route_config()
+            .returning(|| None);
         mock_envoy_filter
             .expect_get_attribute_string()
             .times(1)
@@ -466,6 +519,9 @@ mod tests {
         let mut mock_envoy_filter =
             envoy_proxy_dynamic_modules_rust_sdk::MockEnvoyHttpFilter::new();
         mock_envoy_filter
+            .expect_get_most_specific_route_config()
+            .returning(|| None);
+        mock_envoy_filter
             .expect_get_attribute_string()
             .times(1)
             .returning(|_| Some(EnvoyBuffer::new("192.168.1.100:8080")));
@@ -479,6 +535,9 @@ mod tests {
         );
 
         // IP outside the CIDR range should be blocked.
+        mock_envoy_filter
+            .expect_get_most_specific_route_config()
+            .returning(|| None);
         mock_envoy_filter
             .expect_get_attribute_string()
             .times(1)
@@ -516,6 +575,9 @@ mod tests {
         let mut mock_envoy_filter =
             envoy_proxy_dynamic_modules_rust_sdk::MockEnvoyHttpFilter::new();
         mock_envoy_filter
+            .expect_get_most_specific_route_config()
+            .returning(|| None);
+        mock_envoy_filter
             .expect_get_attribute_string()
             .times(1)
             .returning(|_| Some(EnvoyBuffer::new("10.42.1.5:12345")));
@@ -533,6 +595,9 @@ mod tests {
         );
 
         // IP outside the denied CIDR range should be allowed.
+        mock_envoy_filter
+            .expect_get_most_specific_route_config()
+            .returning(|| None);
         mock_envoy_filter
             .expect_get_attribute_string()
             .times(1)
@@ -567,6 +632,9 @@ mod tests {
         let mut mock_envoy_filter =
             envoy_proxy_dynamic_modules_rust_sdk::MockEnvoyHttpFilter::new();
         mock_envoy_filter
+            .expect_get_most_specific_route_config()
+            .returning(|| None);
+        mock_envoy_filter
             .expect_get_attribute_string()
             .times(1)
             .returning(|_| Some(EnvoyBuffer::new("127.0.0.1:9000")));
@@ -581,6 +649,9 @@ mod tests {
 
         // IP within CIDR range.
         mock_envoy_filter
+            .expect_get_most_specific_route_config()
+            .returning(|| None);
+        mock_envoy_filter
             .expect_get_attribute_string()
             .times(1)
             .returning(|_| Some(EnvoyBuffer::new("10.100.200.1:9000")));
@@ -594,6 +665,9 @@ mod tests {
         );
 
         // IP not in exact or CIDR.
+        mock_envoy_filter
+            .expect_get_most_specific_route_config()
+            .returning(|| None);
         mock_envoy_filter
             .expect_get_attribute_string()
             .times(1)
@@ -631,6 +705,9 @@ mod tests {
         let mut mock_envoy_filter =
             envoy_proxy_dynamic_modules_rust_sdk::MockEnvoyHttpFilter::new();
         mock_envoy_filter
+            .expect_get_most_specific_route_config()
+            .returning(|| None);
+        mock_envoy_filter
             .expect_get_attribute_string()
             .times(1)
             .returning(|_| Some(EnvoyBuffer::new("[2001:db8::1]:80")));
@@ -644,6 +721,9 @@ mod tests {
         );
 
         // IPv6 address outside the CIDR range should be blocked.
+        mock_envoy_filter
+            .expect_get_most_specific_route_config()
+            .returning(|| None);
         mock_envoy_filter
             .expect_get_attribute_string()
             .times(1)
@@ -720,5 +800,61 @@ mod tests {
         )
         .unwrap();
         assert!(!compiled.is_valid(&unknown));
+    }
+
+    // Tests for per-route config
+
+    #[test]
+    fn test_new_per_route_filter_config_valid() {
+        let result = PerRouteFilterConfig::new(
+            "ip-restriction",
+            br#"{"allow_addresses": ["127.0.0.1"]}"#,
+        );
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_new_per_route_filter_config_empty() {
+        let result = PerRouteFilterConfig::new("ip-restriction", b"");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_new_per_route_filter_config_invalid() {
+        let result = PerRouteFilterConfig::new("ip-restriction", b"{invalid");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_filter_per_route_overrides_global() {
+        // Global config denies 192.168.1.1.
+        let global_config = FilterConfig::new(r#"{"deny_addresses": ["192.168.1.1"]}"#).unwrap();
+        let mut filter = Filter {
+            filter_config: global_config,
+        };
+
+        // Per-route config allows 192.168.1.1 (only it is in the allow list).
+        let mut mock_envoy_filter =
+            envoy_proxy_dynamic_modules_rust_sdk::MockEnvoyHttpFilter::new();
+        mock_envoy_filter
+            .expect_get_most_specific_route_config()
+            .returning(|| {
+                FilterConfig::new(r#"{"allow_addresses": ["192.168.1.1"]}"#).map(|fc| {
+                    Arc::new(PerRouteFilterConfig { config: fc.config }) as Arc<dyn Any>
+                })
+            });
+        mock_envoy_filter
+            .expect_get_attribute_string()
+            .times(1)
+            .returning(|_| Some(EnvoyBuffer::new("192.168.1.1:80")));
+        mock_envoy_filter
+            .expect_get_attribute_int()
+            .times(1)
+            .returning(|_| Some(80));
+
+        assert_eq!(
+            filter.on_request_headers(&mut mock_envoy_filter, true),
+            abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::Continue
+        );
     }
 }

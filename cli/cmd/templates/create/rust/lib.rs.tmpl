@@ -5,6 +5,8 @@
 
 use envoy_proxy_dynamic_modules_rust_sdk::*;
 use serde::{Deserialize, Serialize};
+use std::any::Any;
+use std::sync::Arc;
 
 // The raw filter config that will be deserialized from the JSON configuration.
 #[derive(Serialize, Deserialize, Debug)]
@@ -46,6 +48,31 @@ impl FilterConfig {
     }
 }
 
+// The per-route filter config that can override the global config for specific routes.
+#[derive(Debug, Clone)]
+pub struct PerRouteFilterConfig {
+    pub(crate) header_value: String,
+}
+
+impl PerRouteFilterConfig {
+    pub fn new(_name: &str, config: &[u8]) -> Option<Box<dyn Any>> {
+        if config.is_empty() {
+            return None;
+        }
+        let config_str = std::str::from_utf8(config).unwrap_or("");
+        let raw: RawFilterConfig = match serde_json::from_str(config_str) {
+            Ok(cfg) => cfg,
+            Err(err) => {
+                eprintln!("Error parsing per-route filter config: {err}");
+                return None;
+            }
+        };
+        Some(Box::new(PerRouteFilterConfig {
+            header_value: raw.header_value,
+        }))
+    }
+}
+
 impl<EHF: EnvoyHttpFilter> HttpFilterConfig<EHF> for FilterConfig {
     fn new_http_filter(&self, _envoy: &mut EHF) -> Box<dyn HttpFilter<EHF>> {
         Box::new(Filter {
@@ -65,7 +92,16 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for Filter {
         _end_stream: bool,
     ) -> abi::envoy_dynamic_module_type_on_http_filter_request_headers_status {
         // TODO: Implement your own custom logic here.
-        envoy_filter.set_request_header("x-{{ .Name }}", self.filter_config.header_value.as_bytes());
+        let header_value = if let Some(route_cfg) = envoy_filter.get_most_specific_route_config() {
+            if let Some(per_route) = route_cfg.downcast_ref::<PerRouteFilterConfig>() {
+                per_route.header_value.clone()
+            } else {
+                self.filter_config.header_value.clone()
+            }
+        } else {
+            self.filter_config.header_value.clone()
+        };
+        envoy_filter.set_request_header("x-{{ .Name }}", header_value.as_bytes());
         envoy_log_info!("{{ .Name }}: OnRequestHeaders called");
         abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::Continue
     }
@@ -91,7 +127,16 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for Filter {
         _end_stream: bool,
     ) -> abi::envoy_dynamic_module_type_on_http_filter_response_headers_status {
         // TODO: Implement your own custom logic here.
-        envoy_filter.set_response_header("x-{{ .Name }}", self.filter_config.header_value.as_bytes());
+        let header_value = if let Some(route_cfg) = envoy_filter.get_most_specific_route_config() {
+            if let Some(per_route) = route_cfg.downcast_ref::<PerRouteFilterConfig>() {
+                per_route.header_value.clone()
+            } else {
+                self.filter_config.header_value.clone()
+            }
+        } else {
+            self.filter_config.header_value.clone()
+        };
+        envoy_filter.set_response_header("x-{{ .Name }}", header_value.as_bytes());
         envoy_log_info!("{{ .Name }}: OnResponseHeaders called");
         abi::envoy_dynamic_module_type_on_http_filter_response_headers_status::Continue
     }
@@ -135,7 +180,15 @@ fn new_http_filter_config_fn<EC: EnvoyHttpFilterConfig, EHF: EnvoyHttpFilter>(
     }
 }
 
-declare_init_functions!(init, new_http_filter_config_fn);
+#[allow(dead_code)]
+fn new_http_filter_per_route_config_fn(name: &str, config: &[u8]) -> Option<Box<dyn Any>> {
+    match name {
+        "{{ .Name }}" => PerRouteFilterConfig::new(name, config),
+        _ => panic!("Unknown filter name: {name}"),
+    }
+}
+
+declare_init_functions!(init, new_http_filter_config_fn, new_http_filter_per_route_config_fn);
 
 #[cfg(test)]
 mod tests {
@@ -157,5 +210,125 @@ mod tests {
         let filter_config = FilterConfig::new("");
         assert!(filter_config.is_some());
         assert_eq!(filter_config.unwrap().header_value, "example");
+    }
+
+    #[test]
+    fn test_new_per_route_filter_config() {
+        let result = PerRouteFilterConfig::new(
+            "{{ .Name }}",
+            br#"{"header_value": "per-route"}"#,
+        );
+        assert!(result.is_some());
+        let per_route = result.unwrap();
+        let per_route = per_route.downcast_ref::<PerRouteFilterConfig>().unwrap();
+        assert_eq!(per_route.header_value, "per-route");
+    }
+
+    #[test]
+    fn test_new_per_route_filter_config_empty() {
+        let result = PerRouteFilterConfig::new("{{ .Name }}", b"");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_new_per_route_filter_config_invalid_json() {
+        let result = PerRouteFilterConfig::new("{{ .Name }}", b"{invalid");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_on_request_headers_per_route_override() {
+        let filter_config = FilterConfig::new(r#"{"header_value": "global"}"#).unwrap();
+        let mut filter = Filter { filter_config };
+
+        let mut mock_envoy_filter = envoy_proxy_dynamic_modules_rust_sdk::MockEnvoyHttpFilter::new();
+        mock_envoy_filter
+            .expect_get_most_specific_route_config()
+            .times(1)
+            .returning(|| {
+                Some(Arc::new(PerRouteFilterConfig {
+                    header_value: "per-route".to_string(),
+                }) as Arc<dyn Any>)
+            });
+        mock_envoy_filter
+            .expect_set_request_header()
+            .times(1)
+            .returning(|key, value| {
+                assert_eq!(key, "x-{{ .Name }}");
+                assert_eq!(value, b"per-route");
+                true
+            });
+
+        filter.on_request_headers(&mut mock_envoy_filter, false);
+    }
+
+    #[test]
+    fn test_on_request_headers_no_per_route() {
+        let filter_config = FilterConfig::new(r#"{"header_value": "global"}"#).unwrap();
+        let mut filter = Filter { filter_config };
+
+        let mut mock_envoy_filter = envoy_proxy_dynamic_modules_rust_sdk::MockEnvoyHttpFilter::new();
+        mock_envoy_filter
+            .expect_get_most_specific_route_config()
+            .times(1)
+            .returning(|| None);
+        mock_envoy_filter
+            .expect_set_request_header()
+            .times(1)
+            .returning(|key, value| {
+                assert_eq!(key, "x-{{ .Name }}");
+                assert_eq!(value, b"global");
+                true
+            });
+
+        filter.on_request_headers(&mut mock_envoy_filter, false);
+    }
+
+    #[test]
+    fn test_on_response_headers_per_route_override() {
+        let filter_config = FilterConfig::new(r#"{"header_value": "global"}"#).unwrap();
+        let mut filter = Filter { filter_config };
+
+        let mut mock_envoy_filter = envoy_proxy_dynamic_modules_rust_sdk::MockEnvoyHttpFilter::new();
+        mock_envoy_filter
+            .expect_get_most_specific_route_config()
+            .times(1)
+            .returning(|| {
+                Some(Arc::new(PerRouteFilterConfig {
+                    header_value: "per-route".to_string(),
+                }) as Arc<dyn Any>)
+            });
+        mock_envoy_filter
+            .expect_set_response_header()
+            .times(1)
+            .returning(|key, value| {
+                assert_eq!(key, "x-{{ .Name }}");
+                assert_eq!(value, b"per-route");
+                true
+            });
+
+        filter.on_response_headers(&mut mock_envoy_filter, false);
+    }
+
+    #[test]
+    fn test_on_response_headers_no_per_route() {
+        let filter_config = FilterConfig::new(r#"{"header_value": "global"}"#).unwrap();
+        let mut filter = Filter { filter_config };
+
+        let mut mock_envoy_filter = envoy_proxy_dynamic_modules_rust_sdk::MockEnvoyHttpFilter::new();
+        mock_envoy_filter
+            .expect_get_most_specific_route_config()
+            .times(1)
+            .returning(|| None);
+        mock_envoy_filter
+            .expect_set_response_header()
+            .times(1)
+            .returning(|key, value| {
+                assert_eq!(key, "x-{{ .Name }}");
+                assert_eq!(value, b"global");
+                true
+            });
+
+        filter.on_response_headers(&mut mock_envoy_filter, false);
     }
 }

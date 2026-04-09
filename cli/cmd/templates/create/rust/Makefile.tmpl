@@ -69,6 +69,10 @@ MULTI_OCI_ANNOTATIONS := \
 	$(subst --annotation ",--annotation "index$(comma)manifest:,$(BASE_OCI_ANNOTATIONS)) \
 	--annotation "index,manifest:io.tetratelabs.built-on-envoy.extension.artifact=binary"
 
+.PHONY: test
+test:
+	cargo test
+
 BUILDER_NAME := boe-builder
 .PHONY: create_builder
 create_builder:

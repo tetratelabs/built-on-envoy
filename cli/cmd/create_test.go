@@ -83,6 +83,7 @@ func TestCreateGo_Run(t *testing.T) {
 
 		files := []string{
 			"plugin.go",
+			"plugin_test.go",
 			"manifest.yaml",
 			"Makefile",
 			"go.mod",

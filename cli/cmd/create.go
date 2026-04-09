@@ -62,6 +62,7 @@ func createGoExtension(logger *slog.Logger, dirs *xdg.Directories, path, name st
 	// Map of output filename to template filename
 	files := map[string]string{
 		"plugin.go":          "templates/create/plugin.go.tmpl",
+		"plugin_test.go":     "templates/create/plugin_test.go.tmpl",
 		"manifest.yaml":      "templates/create/manifest.yaml.tmpl",
 		"Makefile":           "templates/create/Makefile.tmpl",
 		"go.mod":             "templates/create/go.mod.tmpl",

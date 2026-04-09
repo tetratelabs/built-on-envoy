@@ -1,0 +1,222 @@
+// Package impl contains tests for the {{ .Name }} extension.
+package impl
+
+import (
+	"testing"
+
+	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
+	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/fake"
+	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+)
+
+// Tests for CustomHttpFilterConfigFactory.Create
+
+func TestConfigFactory_Create_ValidConfig(t *testing.T) {
+	factory := &CustomHttpFilterConfigFactory{}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any()).AnyTimes()
+
+	filterFactory, err := factory.Create(mockHandle, []byte(`{"header_value":"test"}`))
+	require.NoError(t, err)
+	require.NotNil(t, filterFactory)
+
+	handle := newFilterHandleWithoutPerRouteConfig(ctrl)
+	filter, ok := filterFactory.Create(handle).(*customHttpFilter)
+	require.True(t, ok)
+	require.Equal(t, "test", filter.config.HeaderValue)
+}
+
+func TestConfigFactory_Create_EmptyConfig(t *testing.T) {
+	factory := &CustomHttpFilterConfigFactory{}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any()).AnyTimes()
+
+	filterFactory, err := factory.Create(mockHandle, []byte{})
+	require.NoError(t, err)
+	require.NotNil(t, filterFactory)
+}
+
+func TestConfigFactory_Create_InvalidJSON(t *testing.T) {
+	factory := &CustomHttpFilterConfigFactory{}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any()).AnyTimes()
+
+	filterFactory, err := factory.Create(mockHandle, []byte(`{invalid`))
+	require.Error(t, err)
+	require.Nil(t, filterFactory)
+}
+
+// Tests for CustomHttpFilterConfigFactory.CreatePerRoute
+
+func Test_CreatePerRoute_ValidConfig(t *testing.T) {
+	factory := &CustomHttpFilterConfigFactory{}
+
+	result, err := factory.CreatePerRoute([]byte(`{"header_value":"per-route-value"}`))
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	perRoute, ok := result.(*customHttpFilterConfig)
+	require.True(t, ok)
+	require.Equal(t, "per-route-value", perRoute.HeaderValue)
+}
+
+func Test_CreatePerRoute_EmptyConfig(t *testing.T) {
+	factory := &CustomHttpFilterConfigFactory{}
+
+	result, err := factory.CreatePerRoute([]byte{})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+}
+
+func Test_CreatePerRoute_InvalidJSON(t *testing.T) {
+	factory := &CustomHttpFilterConfigFactory{}
+
+	result, err := factory.CreatePerRoute([]byte(`{invalid`))
+	require.Error(t, err)
+	require.Nil(t, result)
+}
+
+// Tests for customHttpFilterFactory.Create (per-route config override)
+
+func Test_PerRouteConfigOverride(t *testing.T) {
+	baseConfig := &customHttpFilterConfig{HeaderValue: "global"}
+	baseFactory := &customHttpFilterFactory{config: baseConfig}
+
+	t.Run("per-route config overrides factory config", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		perRoute := &customHttpFilterConfig{HeaderValue: "per-route"}
+		handle := newFilterHandleWithPerRouteConfig(ctrl, perRoute)
+		filter := baseFactory.Create(handle)
+
+		f, ok := filter.(*customHttpFilter)
+		require.True(t, ok)
+		require.Equal(t, "per-route", f.config.HeaderValue)
+	})
+
+	t.Run("nil per-route config uses factory config", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		handle := newFilterHandleWithoutPerRouteConfig(ctrl)
+		filter := baseFactory.Create(handle)
+
+		f, ok := filter.(*customHttpFilter)
+		require.True(t, ok)
+		require.Equal(t, "global", f.config.HeaderValue)
+	})
+
+	t.Run("wrong type per-route config uses factory config", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		handle := newFilterHandleWithPerRouteConfig(ctrl, "not-a-config")
+		filter := baseFactory.Create(handle)
+
+		f, ok := filter.(*customHttpFilter)
+		require.True(t, ok)
+		require.Equal(t, "global", f.config.HeaderValue)
+	})
+}
+
+// Tests for customHttpFilter.OnRequestHeaders
+
+func Test_OnRequestHeaders(t *testing.T) {
+	t.Run("adds header with config value", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		handle := newFilterHandleWithoutPerRouteConfig(ctrl)
+		filter := &customHttpFilter{
+			handle: handle,
+			config: &customHttpFilterConfig{HeaderValue: "test-value"},
+		}
+
+		headers := fake.NewFakeHeaderMap(map[string][]string{})
+		status := filter.OnRequestHeaders(headers, false)
+
+		require.Equal(t, shared.HeadersStatusContinue, status)
+		require.Equal(t, "test-value", headers.GetOne("x-{{ .Name }}").ToUnsafeString())
+	})
+
+	t.Run("per-route config value is used", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		perRoute := &customHttpFilterConfig{HeaderValue: "per-route-value"}
+		handle := newFilterHandleWithPerRouteConfig(ctrl, perRoute)
+		factory := &customHttpFilterFactory{config: &customHttpFilterConfig{HeaderValue: "global-value"}}
+		filter := factory.Create(handle).(*customHttpFilter)
+
+		headers := fake.NewFakeHeaderMap(map[string][]string{})
+		status := filter.OnRequestHeaders(headers, false)
+
+		require.Equal(t, shared.HeadersStatusContinue, status)
+		require.Equal(t, "per-route-value", headers.GetOne("x-{{ .Name }}").ToUnsafeString())
+	})
+}
+
+// Tests for customHttpFilter.OnResponseHeaders
+
+func Test_OnResponseHeaders(t *testing.T) {
+	t.Run("adds header with config value", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		handle := newFilterHandleWithoutPerRouteConfig(ctrl)
+		filter := &customHttpFilter{
+			handle: handle,
+			config: &customHttpFilterConfig{HeaderValue: "test-value"},
+		}
+
+		headers := fake.NewFakeHeaderMap(map[string][]string{})
+		status := filter.OnResponseHeaders(headers, false)
+
+		require.Equal(t, shared.HeadersStatusContinue, status)
+		require.Equal(t, "test-value", headers.GetOne("x-{{ .Name }}").ToUnsafeString())
+	})
+
+	t.Run("per-route config value is used", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		perRoute := &customHttpFilterConfig{HeaderValue: "per-route-value"}
+		handle := newFilterHandleWithPerRouteConfig(ctrl, perRoute)
+		factory := &customHttpFilterFactory{config: &customHttpFilterConfig{HeaderValue: "global-value"}}
+		filter := factory.Create(handle).(*customHttpFilter)
+
+		headers := fake.NewFakeHeaderMap(map[string][]string{})
+		status := filter.OnResponseHeaders(headers, false)
+
+		require.Equal(t, shared.HeadersStatusContinue, status)
+		require.Equal(t, "per-route-value", headers.GetOne("x-{{ .Name }}").ToUnsafeString())
+	})
+}
+
+// Helpers
+
+func newFilterHandleWithoutPerRouteConfig(ctrl *gomock.Controller) *mocks.MockHttpFilterHandle {
+	h := mocks.NewMockHttpFilterHandle(ctrl)
+	h.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
+	h.EXPECT().Log(gomock.Any(), gomock.Any()).AnyTimes()
+	return h
+}
+
+func newFilterHandleWithPerRouteConfig(ctrl *gomock.Controller, perRouteConfig any) *mocks.MockHttpFilterHandle {
+	h := mocks.NewMockHttpFilterHandle(ctrl)
+	h.EXPECT().GetMostSpecificConfig().Return(perRouteConfig).AnyTimes()
+	h.EXPECT().Log(gomock.Any(), gomock.Any()).AnyTimes()
+	return h
+}

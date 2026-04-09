@@ -69,6 +69,10 @@ create_builder:
 			--driver docker-container --driver-opt network=host \
 			--buildkitd-flags '--allow-insecure-entitlement network.host' --use
 
+.PHONY: test
+test:
+	go test ./...
+
 .PHONY: build
 build:
 	go build -buildmode=plugin -o plugin.so ./standalone
