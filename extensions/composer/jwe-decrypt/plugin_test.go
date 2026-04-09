@@ -15,6 +15,7 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/fake"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
 	"github.com/lestrrat-go/jwx/v3/jwa"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
@@ -57,6 +58,24 @@ func createTestJWEWithSymmetricKey(t *testing.T, payload string) string {
 	require.NoError(t, err)
 
 	return string(encrypted)
+}
+
+// newPluginHandleWithoutPerRouteConfig creates a mock HttpFilterHandle with default expectations including
+// GetMostSpecificConfig returning nil (no per-route config).
+func newPluginHandleWithoutPerRouteConfig(ctrl *gomock.Controller) *mocks.MockHttpFilterHandle {
+	pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	pluginHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
+	return pluginHandle
+}
+
+// newPluginHandleWithPerRouteConfig creates a mock HttpFilterHandle that returns
+// the given per-route config from GetMostSpecificConfig.
+func newPluginHandleWithPerRouteConfig(ctrl *gomock.Controller, perRouteConfig any) *mocks.MockHttpFilterHandle {
+	pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	pluginHandle.EXPECT().GetMostSpecificConfig().Return(perRouteConfig).AnyTimes()
+	return pluginHandle
 }
 
 // Tests for OnRequestHeaders method
@@ -673,7 +692,7 @@ func TestJweDecryptHttpFilterFactory_Create(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 
 	filter := factory.Create(mockHandle)
 
@@ -682,6 +701,90 @@ func TestJweDecryptHttpFilterFactory_Create(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, mockHandle, jweFilter.handle)
 	require.Equal(t, config, jweFilter.config)
+}
+
+func Test_CreatePerRoute(t *testing.T) {
+	t.Run("valid config", func(t *testing.T) {
+		config := jweDecryptConfig{
+			PrivateKey:  pkg.DataSource{File: getTestKeyPath()},
+			Algorithm:   "RSA-OAEP",
+			InputHeader: "x-jwe-token",
+		}
+		configJSON, err := json.Marshal(config)
+		require.NoError(t, err)
+
+		result, err := (&JWEDecryptHttpFilterConfigFactory{}).CreatePerRoute(configJSON)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		perRoute, ok := result.(*jweDecryptConfig)
+		require.True(t, ok)
+		assert.Equal(t, "x-jwe-token", perRoute.InputHeader)
+		assert.NotNil(t, perRoute.privateKey)
+	})
+
+	t.Run("empty config returns error", func(t *testing.T) {
+		result, err := (&JWEDecryptHttpFilterConfigFactory{}).CreatePerRoute([]byte{})
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
+
+	t.Run("invalid JSON returns error", func(t *testing.T) {
+		result, err := (&JWEDecryptHttpFilterConfigFactory{}).CreatePerRoute([]byte(`{invalid`))
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
+
+	t.Run("missing algorithm returns error", func(t *testing.T) {
+		config := jweDecryptConfig{
+			PrivateKey: pkg.DataSource{File: getTestKeyPath()},
+		}
+		configJSON, err := json.Marshal(config)
+		require.NoError(t, err)
+
+		result, err := (&JWEDecryptHttpFilterConfigFactory{}).CreatePerRoute(configJSON)
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
+}
+
+func Test_PerRouteConfigOverride(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	baseConfig := &jweDecryptConfig{
+		InputHeader:  "Authorization",
+		OutputHeader: "x-base",
+	}
+	baseFactory := &jweDecryptHttpFilterFactory{config: baseConfig}
+
+	t.Run("per-route config overrides factory config", func(t *testing.T) {
+		perRouteConfig := &jweDecryptConfig{
+			InputHeader:  "x-jwe-override",
+			OutputHeader: "x-override",
+		}
+		perRoute := perRouteConfig
+		mockHandle := newPluginHandleWithPerRouteConfig(ctrl, perRoute)
+		filter := baseFactory.Create(mockHandle)
+		jweFilter, ok := filter.(*jweDecryptHttpFilter)
+		require.True(t, ok)
+		assert.Equal(t, "x-jwe-override", jweFilter.config.InputHeader)
+	})
+
+	t.Run("nil per-route config uses factory config", func(t *testing.T) {
+		mockHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
+		filter := baseFactory.Create(mockHandle)
+		jweFilter, ok := filter.(*jweDecryptHttpFilter)
+		require.True(t, ok)
+		assert.Equal(t, "Authorization", jweFilter.config.InputHeader)
+	})
+
+	t.Run("non-matching per-route config type uses factory config", func(t *testing.T) {
+		mockHandle := newPluginHandleWithPerRouteConfig(ctrl, "not-a-per-route-config")
+		filter := baseFactory.Create(mockHandle)
+		jweFilter, ok := filter.(*jweDecryptHttpFilter)
+		require.True(t, ok)
+		assert.Equal(t, "Authorization", jweFilter.config.InputHeader)
+	})
 }
 
 // Tests for JWEDecryptHttpFilterConfigFactory
@@ -775,13 +878,16 @@ func TestJWEDecryptHttpFilterConfigFactory_Create_EmptyConfig(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
-	mockHandle.EXPECT().Log(shared.LogLevelError, gomock.Any(), gomock.Any())
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any())
 
 	filterFactory, err := factory.Create(mockHandle, []byte{})
 
-	require.Error(t, err)
-	require.Nil(t, filterFactory)
-	require.Contains(t, err.Error(), "empty config")
+	require.NoError(t, err)
+	require.NotNil(t, filterFactory)
+
+	mockHTTPHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
+	filter := filterFactory.Create(mockHTTPHandle)
+	require.IsType(t, &shared.EmptyHttpFilter{}, filter)
 }
 
 func TestJWEDecryptHttpFilterConfigFactory_Create_InvalidJSON(t *testing.T) {

@@ -107,7 +107,19 @@ type jweDecryptHttpFilterFactory struct { //nolint:revive
 }
 
 func (f *jweDecryptHttpFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
-	return &jweDecryptHttpFilter{handle: handle, config: f.config}
+	config := f.config
+
+	// Check for per-route config and override if present.
+	if perRoute := pkg.GetMostSpecificConfig[*jweDecryptConfig](handle); perRoute != nil {
+		config = perRoute
+	}
+
+	if config == nil {
+		handle.Log(shared.LogLevelInfo, "jwe-decrypt: no config available and use empty filter")
+		return &shared.EmptyHttpFilter{}
+	}
+
+	return &jweDecryptHttpFilter{handle: handle, config: config}
 }
 
 // JWEDecryptHttpFilterConfigFactory is the configuration factory for the HTTP filter.
@@ -115,53 +127,71 @@ type JWEDecryptHttpFilterConfigFactory struct { //nolint:revive
 	shared.EmptyHttpFilterConfigFactory
 }
 
-// Create parses the JSON configuration and creates a factory for the HTTP filter.
-func (f *JWEDecryptHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
+func parseConfig(config []byte) (*jweDecryptConfig, error) {
 	if len(config) == 0 {
-		handle.Log(shared.LogLevelError, "jwe-decrypt: empty config")
-		return nil, fmt.Errorf("empty config")
+		return nil, nil
 	}
 
 	cfg := jweDecryptConfig{}
 	if err := json.Unmarshal(config, &cfg); err != nil {
-		handle.Log(shared.LogLevelError, "jwe-decrypt: failed to parse config: "+err.Error())
-		return nil, err
+		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
 	if err := cfg.PrivateKey.Validate(); err != nil {
-		handle.Log(shared.LogLevelError, "jwe-decrypt: invalid key config: "+err.Error())
-		return nil, err
+		return nil, fmt.Errorf("invalid key config: %w", err)
 	}
 
 	if cfg.Algorithm == "" {
-		handle.Log(shared.LogLevelError, "jwe-decrypt: missing algorithm in key config")
 		return nil, fmt.Errorf("missing algorithm in key config")
 	}
 
-	// Parse private key from config (either from file or inline)
 	k, err := cfg.getKey()
 	if err != nil {
-		handle.Log(shared.LogLevelError, "jwe-decrypt: failed to get decryption key set: "+err.Error())
-		return nil, err
+		return nil, fmt.Errorf("failed to get decryption key set: %w", err)
 	}
 	cfg.privateKey = k
 
-	// Default input header to "Authorization" if not specified
 	if cfg.InputHeader == "" {
 		cfg.InputHeader = "Authorization"
 	}
-	// Default metadata namespace if not specified
 	if cfg.OutputMetadata != nil {
 		if cfg.OutputMetadata.Namespace == "" {
 			cfg.OutputMetadata.Namespace = defaultMetadataNamespace
 		}
 		if err := cfg.OutputMetadata.Validate(); err != nil {
-			handle.Log(shared.LogLevelError, "jwe-decrypt: invalid output metadata config: "+err.Error())
-			return nil, err
+			return nil, fmt.Errorf("invalid output metadata config: %w", err)
 		}
 	}
 
-	return &jweDecryptHttpFilterFactory{config: &cfg}, nil
+	return &cfg, nil
+}
+
+// Create parses the JSON configuration and creates a factory for the HTTP filter.
+func (f *JWEDecryptHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
+	cfg, err := parseConfig(config)
+	if err != nil {
+		handle.Log(shared.LogLevelError, "jwe-decrypt: %s", err.Error())
+		return nil, err
+	}
+	if cfg == nil {
+		handle.Log(shared.LogLevelInfo, "jwe-decrypt: empty filter config")
+	}
+
+	return &jweDecryptHttpFilterFactory{config: cfg}, nil
+}
+
+// CreatePerRoute parses the per-route configuration.
+func (f *JWEDecryptHttpFilterConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, error) {
+	cfg, err := parseConfig(unparsedConfig)
+	if err != nil {
+		return nil, err
+	}
+	if cfg == nil {
+		// It's not allowed to have empty route config because it doesn't make sense to have an
+		// empty config override the global config.
+		return nil, fmt.Errorf("jwe-decrypt: per-route config is empty or invalid")
+	}
+	return cfg, nil
 }
 
 // WellKnownHttpFilterConfigFactories is used to load the plugin.
