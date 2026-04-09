@@ -13,6 +13,8 @@ import (
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/utility"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 const defaultMetadataNamespace = "io.builtonenvoy.openai"
@@ -29,21 +31,32 @@ type decoderConfigFactory struct {
 	shared.EmptyHttpFilterConfigFactory
 }
 
-func (d *decoderConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
+func parseConfig(config []byte) (*chatCompletionsDecoderConfig, error) {
 	var cfg chatCompletionsDecoderConfig
 	if len(config) > 0 {
 		if err := json.Unmarshal(config, &cfg); err != nil {
-			handle.Log(shared.LogLevelError, "chat-completions-decoder: failed to parse config: %s", err.Error())
-			return nil, err
+			return nil, fmt.Errorf("failed to parse config: %w", err)
 		}
 	}
 	if cfg.MetadataNamespace == "" {
 		cfg.MetadataNamespace = defaultMetadataNamespace
 	}
+	return &cfg, nil
+}
 
+func (d *decoderConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
+	cfg, err := parseConfig(config)
+	if err != nil {
+		handle.Log(shared.LogLevelError, "chat-completions-decoder: %s", err.Error())
+		return nil, err
+	}
 	handle.Log(shared.LogLevelInfo, "chat-completions-decder: using metadata namespace %q", cfg.MetadataNamespace)
+	return &decoderFilterFactory{config: cfg}, nil
+}
 
-	return &decoderFilterFactory{config: &cfg}, nil
+// CreatePerRoute parses the per-route configuration.
+func (d *decoderConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, error) {
+	return parseConfig(unparsedConfig)
 }
 
 // decoderFilterFactory implements shared.HttpFilterFactory.
@@ -53,7 +66,14 @@ type decoderFilterFactory struct {
 }
 
 func (d *decoderFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
-	return &decoderFilter{handle: handle, config: d.config}
+	config := d.config
+
+	// Check for per-route config and override if present.
+	if perRoute := pkg.GetMostSpecificConfig[*chatCompletionsDecoderConfig](handle); perRoute != nil {
+		config = perRoute
+	}
+
+	return &decoderFilter{handle: handle, config: config}
 }
 
 // decoderFilter implements shared.HttpFilter.
