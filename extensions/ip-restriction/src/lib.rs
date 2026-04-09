@@ -258,7 +258,11 @@ fn new_http_filter_per_route_config_fn(name: &str, config: &[u8]) -> Option<Box<
     }
 }
 
-declare_init_functions!(init, new_http_filter_config_fn, new_http_filter_per_route_config_fn);
+declare_init_functions!(
+    init,
+    new_http_filter_config_fn,
+    new_http_filter_per_route_config_fn
+);
 
 #[cfg(test)]
 mod tests {
@@ -806,10 +810,8 @@ mod tests {
 
     #[test]
     fn test_new_per_route_filter_config_valid() {
-        let result = PerRouteFilterConfig::new(
-            "ip-restriction",
-            br#"{"allow_addresses": ["127.0.0.1"]}"#,
-        );
+        let result =
+            PerRouteFilterConfig::new("ip-restriction", br#"{"allow_addresses": ["127.0.0.1"]}"#);
         assert!(result.is_some());
     }
 
@@ -839,9 +841,8 @@ mod tests {
         mock_envoy_filter
             .expect_get_most_specific_route_config()
             .returning(|| {
-                FilterConfig::new(r#"{"allow_addresses": ["192.168.1.1"]}"#).map(|fc| {
-                    Arc::new(PerRouteFilterConfig { config: fc.config }) as Arc<dyn Any>
-                })
+                FilterConfig::new(r#"{"allow_addresses": ["192.168.1.1"]}"#)
+                    .map(|fc| Arc::new(PerRouteFilterConfig { config: fc.config }) as Arc<dyn Any>)
             });
         mock_envoy_filter
             .expect_get_attribute_string()
