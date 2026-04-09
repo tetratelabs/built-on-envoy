@@ -14,6 +14,7 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/fake"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -58,6 +59,24 @@ func createTestFilter(t *testing.T, ctrl *gomock.Controller, tmpDir string) (*fi
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	filter := &fileServerHttpFilter{handle: mockHandle, config: testConfig(tmpDir)}
 	return filter, mockHandle
+}
+
+// newPluginHandleWithoutPerRouteConfig creates a mock HttpFilterHandle with default expectations including
+// GetMostSpecificConfig returning nil (no per-route config).
+func newPluginHandleWithoutPerRouteConfig(ctrl *gomock.Controller) *mocks.MockHttpFilterHandle {
+	pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	pluginHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
+	return pluginHandle
+}
+
+// newPluginHandleWithPerRouteConfig creates a mock HttpFilterHandle that returns
+// the given per-route config from GetMostSpecificConfig.
+func newPluginHandleWithPerRouteConfig(ctrl *gomock.Controller, perRouteConfig any) *mocks.MockHttpFilterHandle {
+	pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	pluginHandle.EXPECT().GetMostSpecificConfig().Return(perRouteConfig).AnyTimes()
+	return pluginHandle
 }
 
 func findHeaderValue(headers [][2]string, key string) (string, bool) {
@@ -885,7 +904,7 @@ func TestFileServerFilterFactory_Create(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 
 	filter := factory.Create(mockHandle)
 	require.NotNil(t, filter)
@@ -893,6 +912,89 @@ func TestFileServerFilterFactory_Create(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, mockHandle, fsFilter.handle)
 	require.Equal(t, config, fsFilter.config)
+}
+
+func Test_CreatePerRoute(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	t.Run("valid config", func(t *testing.T) {
+		cfg := map[string]any{
+			"path_mappings": []map[string]any{
+				{"request_path_prefix": "/static", "file_path_prefix": tmpDir},
+			},
+		}
+		cfgJSON, err := json.Marshal(cfg)
+		require.NoError(t, err)
+
+		result, err := (&FileServerHttpFilterConfigFactory{}).CreatePerRoute(cfgJSON)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		perRoute, ok := result.(*fileServerConfig)
+		require.True(t, ok)
+		assert.Len(t, perRoute.PathMappings, 1)
+		assert.Equal(t, "/static", perRoute.PathMappings[0].RequestPathPrefix)
+	})
+
+	t.Run("empty config returns empty config", func(t *testing.T) {
+		result, err := (&FileServerHttpFilterConfigFactory{}).CreatePerRoute([]byte{})
+		require.NoError(t, err)
+		perRoute, ok := result.(*fileServerConfig)
+		require.True(t, ok)
+		assert.Empty(t, perRoute.PathMappings)
+	})
+
+	t.Run("invalid JSON returns error", func(t *testing.T) {
+		result, err := (&FileServerHttpFilterConfigFactory{}).CreatePerRoute([]byte(`{invalid`))
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
+
+	t.Run("invalid config returns error", func(t *testing.T) {
+		cfgJSON := []byte(`{"path_mappings":[{"request_path_prefix":"","file_path_prefix":"/tmp"}]}`)
+		result, err := (&FileServerHttpFilterConfigFactory{}).CreatePerRoute(cfgJSON)
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
+}
+
+func Test_PerRouteConfigOverride(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	baseConfig := &fileServerConfig{
+		PathMappings: []pathMapping{{RequestPathPrefix: "/base", FilePathPrefix: "/base/path"}},
+	}
+	baseFactory := &fileServerHttpFilterFactory{config: baseConfig}
+
+	t.Run("per-route config overrides factory config", func(t *testing.T) {
+		perRouteConfig := &fileServerConfig{
+			PathMappings: []pathMapping{{RequestPathPrefix: "/override", FilePathPrefix: tmpDir}},
+		}
+		perRoute := perRouteConfig
+		mockHandle := newPluginHandleWithPerRouteConfig(ctrl, perRoute)
+		filter := baseFactory.Create(mockHandle)
+		fsFilter, ok := filter.(*fileServerHttpFilter)
+		require.True(t, ok)
+		assert.Equal(t, perRouteConfig, fsFilter.config)
+	})
+
+	t.Run("nil per-route config uses factory config", func(t *testing.T) {
+		mockHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
+		filter := baseFactory.Create(mockHandle)
+		fsFilter, ok := filter.(*fileServerHttpFilter)
+		require.True(t, ok)
+		assert.Equal(t, baseConfig, fsFilter.config)
+	})
+
+	t.Run("non-matching per-route config type uses factory config", func(t *testing.T) {
+		mockHandle := newPluginHandleWithPerRouteConfig(ctrl, "not-a-per-route-config")
+		filter := baseFactory.Create(mockHandle)
+		fsFilter, ok := filter.(*fileServerHttpFilter)
+		require.True(t, ok)
+		assert.Equal(t, baseConfig, fsFilter.config)
+	})
 }
 
 // Tests for WellKnownHttpFilterConfigFactories

@@ -18,6 +18,8 @@ import (
 	"strings"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 // pathMapping maps a request URL prefix to a filesystem path prefix.
@@ -340,7 +342,14 @@ type fileServerHttpFilterFactory struct { //nolint:revive
 }
 
 func (f *fileServerHttpFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
-	return &fileServerHttpFilter{handle: handle, config: f.config}
+	config := f.config
+
+	// Check for per-route config and override if present.
+	if perRoute := pkg.GetMostSpecificConfig[*fileServerConfig](handle); perRoute != nil {
+		config = perRoute
+	}
+
+	return &fileServerHttpFilter{handle: handle, config: config}
 }
 
 // FileServerHttpFilterConfigFactory is the configuration factory for the HTTP filter.
@@ -348,25 +357,37 @@ type FileServerHttpFilterConfigFactory struct { //nolint:revive
 	shared.EmptyHttpFilterConfigFactory
 }
 
+func parseConfig(config []byte) (*fileServerConfig, error) {
+	cfg := &fileServerConfig{}
+	if len(config) > 0 {
+		if err := json.Unmarshal(config, cfg); err != nil {
+			return nil, fmt.Errorf("failed to parse config: %w", err)
+		}
+		if err := cfg.validate(); err != nil {
+			return nil, fmt.Errorf("invalid config: %w", err)
+		}
+	}
+	return cfg, nil
+}
+
 // Create parses the JSON configuration and creates a factory for the HTTP filter.
 // When config is nil or empty the filter starts as a no-op pass-through.
 func (f *FileServerHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
-	cfg := &fileServerConfig{}
 	if len(config) == 0 {
 		handle.Log(shared.LogLevelWarn, "file-server: no config provided, filter will pass through all requests")
-	} else {
-		if err := json.Unmarshal(config, cfg); err != nil {
-			handle.Log(shared.LogLevelError, "file-server: failed to parse config: "+err.Error())
-			return nil, err
-		}
-		if err := cfg.validate(); err != nil {
-			handle.Log(shared.LogLevelError, "file-server: invalid config: "+err.Error())
-			return nil, err
-		}
 	}
-
+	cfg, err := parseConfig(config)
+	if err != nil {
+		handle.Log(shared.LogLevelError, "file-server: %s", err.Error())
+		return nil, err
+	}
 	handle.Log(shared.LogLevelInfo, fmt.Sprintf("file-server: loaded config with %d path mapping(s)", len(cfg.PathMappings)))
 	return &fileServerHttpFilterFactory{config: cfg}, nil
+}
+
+// CreatePerRoute parses the per-route configuration.
+func (f *FileServerHttpFilterConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, error) {
+	return parseConfig(unparsedConfig)
 }
 
 // WellKnownHttpFilterConfigFactories is used to load the plugin.
