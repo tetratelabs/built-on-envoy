@@ -365,8 +365,6 @@ func TestOnRequestBody(t *testing.T) {
 		defer ctrl.Finish()
 
 		mockHandle := newMockFilterHandle(ctrl)
-		// Use empty buffers because FakeBodyBuffer.Drain has a bug when draining
-		// the full buffer size (missing return after clearing).
 		bufferedBody := fake.NewFakeBodyBuffer(nil)
 		body := fake.NewFakeBodyBuffer(nil)
 		requestHeaders := fake.NewFakeHeaderMap(map[string][]string{

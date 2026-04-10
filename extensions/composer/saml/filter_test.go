@@ -235,6 +235,7 @@ func TestOnRequestBody_ACS_InvalidSAMLResponse(t *testing.T) {
 	handle.EXPECT().BufferedRequestBody().Return(bufferedBody)
 	// Simulate the case where the buffered body is the same as the received body.
 	handle.EXPECT().ReceivedRequestBody().Return(bufferedBody)
+	handle.EXPECT().ReceivedBufferedRequestBody().Return(true)
 
 	body := fake.NewFakeBodyBuffer(nil)
 	status := f.OnRequestBody(body, true)
@@ -397,6 +398,7 @@ func TestMetrics_AssertionsValidated_Failure(t *testing.T) {
 	handle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 	handle.EXPECT().BufferedRequestBody().Return(bufferedBody)
 	handle.EXPECT().ReceivedRequestBody().Return(receivedBody)
+	handle.EXPECT().ReceivedBufferedRequestBody().Return(false)
 
 	// Expect assertionsValidated counter (metric ID 2) to be incremented with "failure" tag.
 	handle.EXPECT().IncrementCounterValue(shared.MetricID(2), uint64(1), "failure").Return(shared.MetricsSuccess)
@@ -421,6 +423,7 @@ func TestMetrics_AssertionsValidated_Failure_WithTrailers(t *testing.T) {
 	handle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 	handle.EXPECT().BufferedRequestBody().Return(bufferedBody)
 	handle.EXPECT().ReceivedRequestBody().Return(receivedBody)
+	handle.EXPECT().ReceivedBufferedRequestBody().Return(false)
 
 	// Expect assertionsValidated counter (metric ID 2) to be incremented with "failure" tag.
 	handle.EXPECT().IncrementCounterValue(shared.MetricID(2), uint64(1), "failure").Return(shared.MetricsSuccess)

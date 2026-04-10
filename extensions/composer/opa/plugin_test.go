@@ -1270,6 +1270,7 @@ allow if { input.body.user == "admin" }
 	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBody)
 	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBody)
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true)
 
 	bodyStatus := filter.OnRequestBody(fakeBody, true)
 	require.Equal(t, shared.BodyStatusContinue, bodyStatus)
@@ -1301,6 +1302,7 @@ allow if { input.body.user == "admin" }
 	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBody)
 	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBody)
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true)
 	mockHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), []byte("Forbidden"), "opa_denied")
 
 	bodyStatus := filter.OnRequestBody(fakeBody, true)
@@ -1391,6 +1393,7 @@ allow if { input.body.user == "admin" }
 	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fullBody)
 	mockHandle.EXPECT().ReceivedRequestBody().Return(fullBody)
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true)
 
 	trailers := fake.NewFakeHeaderMap(map[string][]string{})
 	trailersStatus := filter.OnRequestTrailers(trailers)

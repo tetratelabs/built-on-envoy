@@ -517,6 +517,7 @@ func TestOnRequestBody_ValidJsonBody(t *testing.T) {
 	// Simulate the ReceivedRequestBody being the same as BufferedRequestBody,
 	// which can happen due to Envoy's buffering logic.
 	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBody)
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true)
 
 	bodyStatus := filter.OnRequestBody(fakeBody, true)
 	require.Equal(t, shared.BodyStatusContinue, bodyStatus)
@@ -544,6 +545,7 @@ func TestOnRequestBody_InvalidJsonBody(t *testing.T) {
 	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBody)
 	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBody)
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true)
 	mockHandle.EXPECT().SendLocalResponse(
 		uint32(400),
 		gomock.Any(),
@@ -601,6 +603,7 @@ func TestOnRequestBody_WithTrailers(t *testing.T) {
 	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBuffered)
 	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBuffered)
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true)
 
 	trailers := fake.NewFakeHeaderMap(map[string][]string{})
 	trailersStatus := filter.OnRequestTrailers(trailers)
@@ -661,6 +664,7 @@ func TestOnRequestBody_NoBodyLimit(t *testing.T) {
 	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBody)
 	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBody)
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true)
 	bodyStatus := filter.OnRequestBody(fakeBody, true)
 	require.Equal(t, shared.BodyStatusContinue, bodyStatus)
 }
@@ -709,6 +713,7 @@ func TestOnRequestBody_DryRunAllowsInvalidBody(t *testing.T) {
 	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBufferedBody)
 	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeReceivedBody)
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(false)
 
 	bodyStatus := filter.OnRequestBody(fakeReceivedBody, true)
 	require.Equal(t, shared.BodyStatusContinue, bodyStatus)

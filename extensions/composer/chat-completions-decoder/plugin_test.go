@@ -14,33 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
-
-	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
-
-// testBodyBuffer is a test implementation of shared.BodyBuffer.
-type testBodyBuffer struct {
-	body []byte
-}
-
-func newTestBodyBuffer(data []byte) *testBodyBuffer {
-	b := make([]byte, len(data))
-	copy(b, data)
-	return &testBodyBuffer{body: b}
-}
-
-func (b *testBodyBuffer) GetChunks() []shared.UnsafeEnvoyBuffer {
-	return []shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromBytes(b.body)}
-}
-func (b *testBodyBuffer) GetSize() uint64 { return uint64(len(b.body)) }
-func (b *testBodyBuffer) Drain(size uint64) {
-	if size >= uint64(len(b.body)) {
-		b.body = nil
-		return
-	}
-	b.body = b.body[size:]
-}
-func (b *testBodyBuffer) Append(data []byte) { b.body = append(b.body, data...) }
 
 // defaultCfg returns a config with the default namespace set (simulates what Create does).
 func defaultCfg() *chatCompletionsDecoderConfig {
@@ -250,7 +224,7 @@ func TestOnRequestBody_NotEndOfStream(t *testing.T) {
 	mockHandle := newMockHTTPFilterHandle(ctrl)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
-	result := filter.OnRequestBody(newTestBodyBuffer([]byte("data")), false)
+	result := filter.OnRequestBody(fake.NewFakeBodyBuffer([]byte("data")), false)
 	require.Equal(t, shared.BodyStatusStopAndBuffer, result)
 }
 
@@ -259,12 +233,12 @@ func TestOnRequestBody_EmptyBody(t *testing.T) {
 	defer ctrl.Finish()
 	mockHandle := newMockHTTPFilterHandle(ctrl)
 
-	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer([]byte{})).AnyTimes()
+	mockHandle.EXPECT().BufferedRequestBody().Return(fake.NewFakeBodyBuffer([]byte{})).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
 	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
-	result := filter.OnRequestBody(newTestBodyBuffer([]byte{}), true)
+	result := filter.OnRequestBody(fake.NewFakeBodyBuffer([]byte{}), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
 
@@ -274,13 +248,13 @@ func TestOnRequestBody_InvalidJSON(t *testing.T) {
 	mockHandle := newMockHTTPFilterHandle(ctrl)
 
 	body := []byte(`{invalid json}`)
-	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
+	mockHandle.EXPECT().BufferedRequestBody().Return(fake.NewFakeBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
 	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any(), gomock.Any()).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
-	result := filter.OnRequestBody(newTestBodyBuffer(body), true)
+	result := filter.OnRequestBody(fake.NewFakeBodyBuffer(body), true)
 	// Even with invalid JSON, we continue (graceful degradation)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
@@ -297,7 +271,7 @@ func TestOnRequestBody_ValidRequest_SetsMetadata(t *testing.T) {
 			{"role": "user", "content": "What is the weather?"}
 		]
 	}`)
-	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
+	mockHandle.EXPECT().BufferedRequestBody().Return(fake.NewFakeBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
 	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 
@@ -311,7 +285,7 @@ func TestOnRequestBody_ValidRequest_SetsMetadata(t *testing.T) {
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.openai", "llm.tools.count", 0).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
-	result := filter.OnRequestBody(newTestBodyBuffer(body), true)
+	result := filter.OnRequestBody(fake.NewFakeBodyBuffer(body), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
 
@@ -327,7 +301,7 @@ func TestOnRequestBody_WithTools_SetsMetadata(t *testing.T) {
 			{"type": "function", "function": {"name": "my_func", "description": "A function"}}
 		]
 	}`)
-	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
+	mockHandle.EXPECT().BufferedRequestBody().Return(fake.NewFakeBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
 	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 
@@ -341,7 +315,7 @@ func TestOnRequestBody_WithTools_SetsMetadata(t *testing.T) {
 		`{"type":"function","function":{"name":"my_func","description":"A function"}}`).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
-	result := filter.OnRequestBody(newTestBodyBuffer(body), true)
+	result := filter.OnRequestBody(fake.NewFakeBodyBuffer(body), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
 
@@ -359,7 +333,7 @@ func TestOnRequestBody_WithToolCalls_SetsMetadata(t *testing.T) {
 			]}
 		]
 	}`)
-	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
+	mockHandle.EXPECT().BufferedRequestBody().Return(fake.NewFakeBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
 	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 
@@ -377,7 +351,7 @@ func TestOnRequestBody_WithToolCalls_SetsMetadata(t *testing.T) {
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.openai", "llm.tools.count", 0).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
-	result := filter.OnRequestBody(newTestBodyBuffer(body), true)
+	result := filter.OnRequestBody(fake.NewFakeBodyBuffer(body), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
 
@@ -390,7 +364,7 @@ func TestOnRequestBody_CustomNamespace(t *testing.T) {
 		"model": "gpt-4o",
 		"messages": [{"role": "user", "content": "Hello"}]
 	}`)
-	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
+	mockHandle.EXPECT().BufferedRequestBody().Return(fake.NewFakeBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
 	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 
@@ -405,7 +379,7 @@ func TestOnRequestBody_CustomNamespace(t *testing.T) {
 		handle: mockHandle,
 		config: &chatCompletionsDecoderConfig{MetadataNamespace: "my-namespace"},
 	}
-	result := filter.OnRequestBody(newTestBodyBuffer(body), true)
+	result := filter.OnRequestBody(fake.NewFakeBodyBuffer(body), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
 
@@ -420,7 +394,7 @@ func TestOnRequestTrailers_SetsMetadata(t *testing.T) {
 		"model": "gpt-4o",
 		"messages": [{"role": "user", "content": "Hello"}]
 	}`)
-	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
+	mockHandle.EXPECT().BufferedRequestBody().Return(fake.NewFakeBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
 	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 
@@ -495,7 +469,7 @@ func TestOnResponseBody_NotEndOfStream_NonStreaming(t *testing.T) {
 	mockHandle := newMockHTTPFilterHandle(ctrl)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
-	result := filter.OnResponseBody(newTestBodyBuffer([]byte("data")), false)
+	result := filter.OnResponseBody(fake.NewFakeBodyBuffer([]byte("data")), false)
 	require.Equal(t, shared.BodyStatusStopAndBuffer, result)
 }
 
@@ -506,7 +480,7 @@ func TestOnResponseBody_NotEndOfStream_Streaming(t *testing.T) {
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	filter.sseAcc = newSSEAccumulator(t.Logf)
-	result := filter.OnResponseBody(newTestBodyBuffer([]byte("data: {}\n\n")), false)
+	result := filter.OnResponseBody(fake.NewFakeBodyBuffer([]byte("data: {}\n\n")), false)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
 
@@ -515,12 +489,12 @@ func TestOnResponseBody_EmptyBody(t *testing.T) {
 	defer ctrl.Finish()
 	mockHandle := newMockHTTPFilterHandle(ctrl)
 
-	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer([]byte{})).AnyTimes()
+	mockHandle.EXPECT().BufferedResponseBody().Return(fake.NewFakeBodyBuffer([]byte{})).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
-	result := filter.OnResponseBody(newTestBodyBuffer([]byte{}), true)
+	result := filter.OnResponseBody(fake.NewFakeBodyBuffer([]byte{}), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
 
@@ -530,13 +504,13 @@ func TestOnResponseBody_InvalidJSON(t *testing.T) {
 	mockHandle := newMockHTTPFilterHandle(ctrl)
 
 	body := []byte(`{invalid json}`)
-	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
+	mockHandle.EXPECT().BufferedResponseBody().Return(fake.NewFakeBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).Times(1)
 	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any(), gomock.Any()).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
-	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
+	result := filter.OnResponseBody(fake.NewFakeBodyBuffer(body), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
 
@@ -559,7 +533,7 @@ func TestOnResponseBody_ValidResponse_SetsMetadata(t *testing.T) {
 			"total_tokens": 30
 		}
 	}`)
-	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
+	mockHandle.EXPECT().BufferedResponseBody().Return(fake.NewFakeBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).Times(1)
 
@@ -571,7 +545,7 @@ func TestOnResponseBody_ValidResponse_SetsMetadata(t *testing.T) {
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.openai", "llm.token_count.total", 30).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
-	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
+	result := filter.OnResponseBody(fake.NewFakeBodyBuffer(body), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
 
@@ -585,7 +559,7 @@ func TestOnResponseBody_NoUsage_SetsMetadataWithoutTokenCounts(t *testing.T) {
 			{"index": 0, "message": {"role": "assistant", "content": "Hello!"}, "finish_reason": "stop"}
 		]
 	}`)
-	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
+	mockHandle.EXPECT().BufferedResponseBody().Return(fake.NewFakeBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).Times(1)
 
@@ -595,7 +569,7 @@ func TestOnResponseBody_NoUsage_SetsMetadataWithoutTokenCounts(t *testing.T) {
 	// No token count calls expected when usage is absent
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
-	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
+	result := filter.OnResponseBody(fake.NewFakeBodyBuffer(body), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
 
@@ -615,7 +589,7 @@ func TestOnResponseBody_WithCompletionTokensDetails(t *testing.T) {
 			"completion_tokens_details": {"reasoning_tokens": 40, "audio_tokens": 10}
 		}
 	}`)
-	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
+	mockHandle.EXPECT().BufferedResponseBody().Return(fake.NewFakeBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).Times(1)
 
@@ -629,7 +603,7 @@ func TestOnResponseBody_WithCompletionTokensDetails(t *testing.T) {
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.openai", "llm.token_count.completion_details.audio", 10).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
-	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
+	result := filter.OnResponseBody(fake.NewFakeBodyBuffer(body), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
 
@@ -653,7 +627,7 @@ func TestOnResponseBody_WithOutputToolCalls_SetsMetadata(t *testing.T) {
 			}
 		]
 	}`)
-	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
+	mockHandle.EXPECT().BufferedResponseBody().Return(fake.NewFakeBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).Times(1)
 
@@ -666,7 +640,7 @@ func TestOnResponseBody_WithOutputToolCalls_SetsMetadata(t *testing.T) {
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.openai", "llm.output_messages.0.message.tool_calls.0.tool_call.function.arguments", `{"loc":"NYC"}`).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
-	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
+	result := filter.OnResponseBody(fake.NewFakeBodyBuffer(body), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
 
@@ -680,7 +654,7 @@ func TestOnResponseBody_CustomNamespace(t *testing.T) {
 			{"index": 0, "message": {"role": "assistant", "content": "Hi"}, "finish_reason": "stop"}
 		]
 	}`)
-	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
+	mockHandle.EXPECT().BufferedResponseBody().Return(fake.NewFakeBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).Times(1)
 
@@ -692,7 +666,7 @@ func TestOnResponseBody_CustomNamespace(t *testing.T) {
 		handle: mockHandle,
 		config: &chatCompletionsDecoderConfig{MetadataNamespace: "my-ns"},
 	}
-	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
+	result := filter.OnResponseBody(fake.NewFakeBodyBuffer(body), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
 
@@ -709,7 +683,7 @@ func TestOnResponseTrailers_SetsMetadata(t *testing.T) {
 		],
 		"usage": {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8}
 	}`)
-	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
+	mockHandle.EXPECT().BufferedResponseBody().Return(fake.NewFakeBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
 	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).Times(1)
 
@@ -761,10 +735,10 @@ func TestOnResponseBody_StreamingResponse_SetsMetadata(t *testing.T) {
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	filter.OnResponseHeaders(sseHeaders(), false)
 
-	result := filter.OnResponseBody(newTestBodyBuffer(chunk1), false)
+	result := filter.OnResponseBody(fake.NewFakeBodyBuffer(chunk1), false)
 	require.Equal(t, shared.BodyStatusContinue, result)
 
-	result = filter.OnResponseBody(newTestBodyBuffer(chunk2), true)
+	result = filter.OnResponseBody(fake.NewFakeBodyBuffer(chunk2), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
 
@@ -793,7 +767,7 @@ func TestOnResponseBody_StreamingResponse_SingleChunk(t *testing.T) {
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	filter.OnResponseHeaders(sseHeaders(), false)
 
-	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
+	result := filter.OnResponseBody(fake.NewFakeBodyBuffer(body), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
 
@@ -816,7 +790,7 @@ func TestOnResponseBody_StreamingResponse_NoUsage(t *testing.T) {
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	filter.OnResponseHeaders(sseHeaders(), false)
 
-	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
+	result := filter.OnResponseBody(fake.NewFakeBodyBuffer(body), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
 
@@ -849,7 +823,7 @@ func TestOnResponseBody_StreamingResponse_WithToolCalls(t *testing.T) {
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	filter.OnResponseHeaders(sseHeaders(), false)
 
-	result := filter.OnResponseBody(newTestBodyBuffer(body), true)
+	result := filter.OnResponseBody(fake.NewFakeBodyBuffer(body), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
 
@@ -871,9 +845,9 @@ func TestOnResponseBody_StreamingResponse_ChunkSplitMidLine(t *testing.T) {
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	filter.OnResponseHeaders(sseHeaders(), false)
 
-	result := filter.OnResponseBody(newTestBodyBuffer(chunk1), false)
+	result := filter.OnResponseBody(fake.NewFakeBodyBuffer(chunk1), false)
 	require.Equal(t, shared.BodyStatusContinue, result)
 
-	result = filter.OnResponseBody(newTestBodyBuffer(chunk2), true)
+	result = filter.OnResponseBody(fake.NewFakeBodyBuffer(chunk2), true)
 	require.Equal(t, shared.BodyStatusContinue, result)
 }
