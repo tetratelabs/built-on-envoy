@@ -764,8 +764,10 @@ mod tests {
 
     #[test]
     fn test_new_per_route_filter_config_valid() {
-        let result =
-            PerRouteFilterConfig::create("ip-restriction", br#"{"allow_addresses": ["127.0.0.1"]}"#);
+        let result = PerRouteFilterConfig::create(
+            "ip-restriction",
+            br#"{"allow_addresses": ["127.0.0.1"]}"#,
+        );
         assert!(result.is_some());
     }
 

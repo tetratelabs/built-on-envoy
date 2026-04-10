@@ -6,6 +6,7 @@
 use envoy_proxy_dynamic_modules_rust_sdk::*;
 use serde::{Deserialize, Serialize};
 use std::any::Any;
+use std::sync::Arc;
 
 // The raw filter config that will be deserialized from the JSON configuration.
 #[derive(Serialize, Deserialize, Debug)]
@@ -22,14 +23,19 @@ impl Default for RawFilterConfig {
     }
 }
 
+#[derive(Debug)]
+pub struct FilterConfigImpl {
+    header_value: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct FilterConfig {
-    header_value: String,
+    config: Arc<FilterConfigImpl>,
 }
 
 impl FilterConfig {
     pub fn new(filter_config: &str) -> Option<Self> {
-        let config: RawFilterConfig = if filter_config.is_empty() {
+        let raw: RawFilterConfig = if filter_config.is_empty() {
             RawFilterConfig::default()
         } else {
             match serde_json::from_str(filter_config) {
@@ -42,7 +48,9 @@ impl FilterConfig {
         };
 
         Some(FilterConfig {
-            header_value: config.header_value,
+            config: Arc::new(FilterConfigImpl {
+                header_value: raw.header_value,
+            }),
         })
     }
 }
@@ -50,7 +58,7 @@ impl FilterConfig {
 // The per-route filter config that can override the global config for specific routes.
 #[derive(Debug, Clone)]
 pub struct PerRouteFilterConfig {
-    pub(crate) header_value: String,
+    config: Arc<FilterConfigImpl>,
 }
 
 impl PerRouteFilterConfig {
@@ -59,37 +67,29 @@ impl PerRouteFilterConfig {
             return None;
         }
         let config_str = std::str::from_utf8(config).unwrap_or("");
-        let raw: RawFilterConfig = match serde_json::from_str(config_str) {
-            Ok(cfg) => cfg,
-            Err(err) => {
-                eprintln!("Error parsing per-route filter config: {err}");
-                return None;
-            }
-        };
-        Some(Box::new(PerRouteFilterConfig {
-            header_value: raw.header_value,
-        }))
+        FilterConfig::new(config_str)
+            .map(|fc| Box::new(PerRouteFilterConfig { config: fc.config }) as Box<dyn Any>)
     }
 }
 
 impl<EHF: EnvoyHttpFilter> HttpFilterConfig<EHF> for FilterConfig {
     fn new_http_filter(&self, envoy: &mut EHF) -> Box<dyn HttpFilter<EHF>> {
         // Resolve the effective config at filter creation time: per-route overrides global.
-        let header_value = if let Some(route_cfg) = envoy.get_most_specific_route_config() {
+        let config = if let Some(route_cfg) = envoy.get_most_specific_route_config() {
             if let Some(per_route) = route_cfg.downcast_ref::<PerRouteFilterConfig>() {
-                per_route.header_value.clone()
+                per_route.config.clone()
             } else {
-                self.header_value.clone()
+                self.config.clone()
             }
         } else {
-            self.header_value.clone()
+            self.config.clone()
         };
-        Box::new(Filter { header_value })
+        Box::new(Filter { config })
     }
 }
 
 pub struct Filter {
-    header_value: String,
+    config: Arc<FilterConfigImpl>,
 }
 
 impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for Filter {
@@ -99,7 +99,7 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for Filter {
         _end_stream: bool,
     ) -> abi::envoy_dynamic_module_type_on_http_filter_request_headers_status {
         // TODO: Implement your own custom logic here.
-        envoy_filter.set_request_header("x-{{ .Name }}", self.header_value.as_bytes());
+        envoy_filter.set_request_header("x-{{ .Name }}", self.config.header_value.as_bytes());
         envoy_log_info!("{{ .Name }}: OnRequestHeaders called");
         abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::Continue
     }
@@ -125,7 +125,7 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for Filter {
         _end_stream: bool,
     ) -> abi::envoy_dynamic_module_type_on_http_filter_response_headers_status {
         // TODO: Implement your own custom logic here.
-        envoy_filter.set_response_header("x-{{ .Name }}", self.header_value.as_bytes());
+        envoy_filter.set_response_header("x-{{ .Name }}", self.config.header_value.as_bytes());
         envoy_log_info!("{{ .Name }}: OnResponseHeaders called");
         abi::envoy_dynamic_module_type_on_http_filter_response_headers_status::Continue
     }
@@ -182,7 +182,6 @@ declare_init_functions!(init, new_http_filter_config_fn, new_http_filter_per_rou
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
 
     #[test]
     fn test_new_filter_config() {
@@ -192,14 +191,14 @@ mod tests {
             }"#,
         );
         assert!(filter_config.is_some());
-        assert_eq!(filter_config.unwrap().header_value, "test");
+        assert_eq!(filter_config.unwrap().config.header_value, "test");
     }
 
     #[test]
     fn test_new_filter_config_default() {
         let filter_config = FilterConfig::new("");
         assert!(filter_config.is_some());
-        assert_eq!(filter_config.unwrap().header_value, "example");
+        assert_eq!(filter_config.unwrap().config.header_value, "example");
     }
 
     #[test]
@@ -211,7 +210,7 @@ mod tests {
         assert!(result.is_some());
         let per_route = result.unwrap();
         let per_route = per_route.downcast_ref::<PerRouteFilterConfig>().unwrap();
-        assert_eq!(per_route.header_value, "per-route");
+        assert_eq!(per_route.config.header_value, "per-route");
     }
 
     #[test]
@@ -235,9 +234,8 @@ mod tests {
             .expect_get_most_specific_route_config()
             .once()
             .returning(|| {
-                Some(Arc::new(PerRouteFilterConfig {
-                    header_value: "per-route".to_string(),
-                }) as Arc<dyn Any>)
+                FilterConfig::new(r#"{"header_value": "per-route"}"#)
+                    .map(|fc| Arc::new(PerRouteFilterConfig { config: fc.config }) as Arc<dyn Any>)
             });
         mock_envoy_filter
             .expect_set_request_header()
@@ -256,7 +254,7 @@ mod tests {
     fn test_on_request_headers_no_per_route() {
         let filter_config = FilterConfig::new(r#"{"header_value": "global"}"#).unwrap();
         let mut filter = Filter {
-            header_value: filter_config.header_value,
+            config: filter_config.config,
         };
 
         let mut mock_envoy_filter = envoy_proxy_dynamic_modules_rust_sdk::MockEnvoyHttpFilter::new();
@@ -281,9 +279,8 @@ mod tests {
             .expect_get_most_specific_route_config()
             .once()
             .returning(|| {
-                Some(Arc::new(PerRouteFilterConfig {
-                    header_value: "per-route".to_string(),
-                }) as Arc<dyn Any>)
+                FilterConfig::new(r#"{"header_value": "per-route"}"#)
+                    .map(|fc| Arc::new(PerRouteFilterConfig { config: fc.config }) as Arc<dyn Any>)
             });
         mock_envoy_filter
             .expect_set_response_header()
@@ -302,7 +299,7 @@ mod tests {
     fn test_on_response_headers_no_per_route() {
         let filter_config = FilterConfig::new(r#"{"header_value": "global"}"#).unwrap();
         let mut filter = Filter {
-            header_value: filter_config.header_value,
+            config: filter_config.config,
         };
 
         let mut mock_envoy_filter = envoy_proxy_dynamic_modules_rust_sdk::MockEnvoyHttpFilter::new();
