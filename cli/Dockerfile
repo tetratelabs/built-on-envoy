@@ -41,7 +41,7 @@ ENV GOMODCACHE=/var/boe/go/pkg/mod \
 
 ARG TARGETOS
 ARG TARGETARCH
-ARG GO_VERSION=1.26.1
+ARG GO_VERSION=1.26.2
 
 # Install Go
 RUN curl -fsSL https://go.dev/dl/go${GO_VERSION}.${TARGETOS}-${TARGETARCH}.tar.gz \
