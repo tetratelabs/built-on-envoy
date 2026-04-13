@@ -33,9 +33,8 @@ boe download composer --platform linux/amd64
 ```
 
 <Callout type="tip" title="Go extensions">
-Built On Envoy provides the `composer` Dynamic Module that packages all the Go extensions, so there is no need to download Go
-extensions individually. The [Dynamic Modules and Go](#dynamic-modules-and-go) section further expands on the nuances of Go Dynamic
-Modules in Envoy.
+Built On Envoy provides the `composer` Dynamic Module that packages **all the Go extensions**. The [Dynamic Modules and Go](#dynamic-modules-and-go)
+section further expands on the nuances of Go Dynamic Modules in Envoy.
 </Callout>
 
 Once the extensions are downloaded, you need to make the `.so` files available to Envoy. This could be a shared Kubernetes
@@ -115,7 +114,7 @@ Running Go-based Dynamic Modules in Envoy has some limitations. Envoy only suppo
 using Go-based Dynamic Modules needs some careful considerations.
 
 <Callout type="danger" title="Go runtime limitations">
-Envoy only supports loading one Go runtime in-process. This means, effectively, that only one `lib<module>.so` file can be loaded by Envoy safely.
+Envoy only supports loading one Go runtime in-process. This means, effectively, that **only one Go-based `lib<module>.so` file can be loaded by Envoy safely**.
 </Callout>
 
 Built On Envoy makes it easier to overcome this limitation while providing maximum flexibility by providing:
