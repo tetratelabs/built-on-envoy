@@ -220,7 +220,7 @@ func addDummyDependencyToExtension(t *testing.T, path string) {
 	// of the extension are not subset of the composer's dependencies.
 
 	goModContent := `module inner
-go 1.26.1
+go 1.26.2
 `
 
 	goFileContent := `package inner
