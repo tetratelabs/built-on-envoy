@@ -68,6 +68,14 @@ ENV GODEBUG=cgocheck=0
 To configure the Dynamic Modules you can follow the [Envoy documentation](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/dynamic_modules).
 You basically need to inject the Dynamic Module filter in your HTTP filter chain.
 
+<Callout type="note" title="Required environment variables">
+The following environment variables need to be exported:
+```shell
+ENVOY_DYNAMIC_MODULES_SEARCH_PATH=/path/to/extensions  # Path where the Dynamic Module `.so` files are
+GODEBUG=cgocheck=0  # Needed to disable the cgo pointer checks as Envoy may hold pointers to Go memory
+```
+</Callout>
+
 **Rust Dynamic Module configuration example:**
 
 ```yaml
