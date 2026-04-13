@@ -1,0 +1,152 @@
+---
+layout: ../../layouts/DocsLayout.astro
+title: Packaging and using extensions in prod
+description: Packaging the Dynamic Modules extensions to use them in Production
+---
+
+import ToC from '../../components/ToC.astro';
+import Callout from '../../components/Callout.astro';
+
+# Using the Dynamic Modules extensions in Production
+
+Built On Envoy already provides the extensions compiled as Envoy [Dynamic Modules](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/dynamic_modules)
+for `linux/amd64` and `linux/arm64`. Extensions are packaged as OCI artifacts in the
+[Built On Envoy registry](https://github.com/orgs/tetratelabs/packages?repo_name=built-on-envoy).
+
+<ToC maxDepth="3"/>
+
+## Preparing the extensions to be used in Production
+
+There are two main approaches to use the precompiled Dynamic Modules:
+
+1. Download the extensions manually and make them available to Envoy. For example, in Kubernetes, extensions can be stored
+   in a volume Envoy can mount to access the extension files.
+2. Create a custom Envoy Docker image with the extensions.
+
+### Option 1: Download extensions manually
+
+Extensions can be easily downloaded using the [bow download](/docs/cli/download) command:
+
+```bash
+boe download ip-restriction --platform linux/amd64
+```
+
+Once the extensions are downloaded, you need to make the `.so` files available to Envoy. This could be a shared Kubernetes
+volume, a custom Envoy image, or any approach that is convenient.
+
+### Option 2: Build a custom Envoy image
+
+Building a custom image of Envoy is straightforward, as extensions are packaged in OCI artifacts that can be used directly
+in the `Dockerfile`. The following example creates a custom Envoy image with all the Go extensions and the Rust
+`ip-restriction` extension:
+
+```dockerfile
+# Reference all extensions that will be added to the image
+FROM ghcr.io/tetratelabs/built-on-envoy/composer:0.5.0-dev AS all_go_extensions
+FROM ghcr.io/tetratelabs/built-on-envoy/extension-ip-restriction:0.2.0 AS ip_restriction
+
+FROM envoyproxy/envoy:v1.37.1
+
+# Copy the extension files
+COPY --from=all_go_extensions /libcomposer.so /var/boe/extensions/
+COPY --from=ip_restriction /libip-restriction.so /var/boe/extensions/
+
+# Setup the env vars Envoy needs to find the extensions and safely run the Go Dynamic Modules
+ENV ENVOY_DYNAMIC_MODULES_SEARCH_PATH=/var/boe/extensions
+ENV GODEBUG=cgocheck=0
+```
+
+<Callout type="tip" title="Go extensions">
+Built On Envoy provides the `composer` Dynamic Module that packages all the Go extensions. The [Dynamic Modules and Go](#dynamic-modules-and-go)
+section further expands on the nuances of Go Dynamic Modules in Envoy.
+</Callout>
+
+## Configuring the Dynamic Modules
+
+To configure the Dynamic Modules you can follow the [Envoy documentation](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/dynamic_modules).
+You basically need to inject the Dynamic Module filter in your HTTP filter chain.
+
+**Rust Dynamic Module configuration example:**
+
+```yaml
+- name: ip-restriction
+  typed_config:
+    '@type': type.googleapis.com/envoy.extensions.filters.http.dynamic_modules.v3.DynamicModuleFilter
+    dynamic_module_config:
+      name: ip-restriction
+    filter_name: ip-restriction
+    filter_config:
+      '@type': type.googleapis.com/google.protobuf.StringValue
+      value: '{"deny_addresses": ["127.0.0.1"]}'
+```
+
+**Go Dynamic Module configuration example:**
+
+```yaml
+- name: chat-completions-decoder
+  typed_config:
+    '@type': type.googleapis.com/envoy.extensions.filters.http.dynamic_modules.v3.DynamicModuleFilter
+    dynamic_module_config:
+      load_globally: true
+      name: composer
+    filter_name: chat-completions-decoder
+    filter_config:
+      '@type': type.googleapis.com/google.protobuf.StringValue
+      value: '{"metadata_namespace":"llm-request"}'
+```
+
+<Callout type="note" title="Go Dynamic Modules">
+For Go Dynamic modules we use `composer` as the Dynamic Module name and set the extension name in the `filter_name` property. This is done bacause
+Built On Envoy packages all Go extensions into the `composer` Dynamic Module.
+</Callout>
+
+## Dynamic Modules and Go
+
+Envoy has some limitations when it comes to loading and running Dynamic Modules that have been written in Go. Currently Envoy only supports
+loading one Go runtime in-process, and that presents several limitations that may result in undefined behavior depending on how the loaded
+Dynamic Modules are configured. As a rule of thumb for safe Go Dynamic modules:
+
+* All loaded Go Dynamic Modules must have been compiled with the same version of Go.
+* The transitive dependencies for all loaded Go Dynamic Modules must be the same version across the Dynamic modules.
+
+<Callout type="danger" title="Runtime constraints">
+Failing to meet these constraints may result in undefined behavior when Envoy runs the Go Dynamic Modules.
+</Callout>
+
+Built On Envoy is designed to favour satisfying these constraints by providing a code structure for the extensions that can be safely used to compile
+multiple Go extensions into a single Go Dynamic Module that can be safely loaded and used in Envoy.
+
+### Using all the Built On Envoy Go Extensions (recommended, works out-of-the-box)
+
+Built On Envoy provides the `composer` Dynamic Module that already embeds all Go extensions. By pulling the composer Dynamic Module and loading
+it into Envoy, you can use any Go extension in the Built On Envoy extension catalog. At the time of writing, the `composer` Dynamic Module is ~60MB.
+
+### Building your own Dynamic Module with a subset of extensions
+
+You can also easily build your own Go Dynamic Module with a subset of extensions. All Built On Envoy extensions can be go-imported, so it is trivial
+to create your own extension bundles. The following code shows an example to create a custom Go Dynamic module with two extensions:
+
+```go
+package main
+
+import (
+	// Importthe Dynamic module SDK
+	_ "github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/abi"
+
+	// Import the desired extensions
+	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/opa/embedded"
+	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/saml/embedded"
+)
+
+func main() {} // main is required to build as a C shared library.
+```
+
+If you have your own custom Go extensions (created with [boe create](/docs/cli/create), for example), you could import them here as well.
+The Dynamic Module can be compiled as follows:
+
+```shell
+CGO_ENABLED=1 go build -buildmode=c-shared -o libmyboe.so main.go
+```
+
+This will produce a Go Dynamic Module with all the configured extensions that can be safely loaded into Envoy without having to worry about
+the Envoy Go runtime limitations.
