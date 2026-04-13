@@ -97,7 +97,6 @@ GODEBUG=cgocheck=0  # Needed to disable the cgo pointer checks as Envoy may hold
   typed_config:
     '@type': type.googleapis.com/envoy.extensions.filters.http.dynamic_modules.v3.DynamicModuleFilter
     dynamic_module_config:
-      load_globally: true
       name: composer
     filter_name: chat-completions-decoder
     filter_config:
@@ -106,35 +105,126 @@ GODEBUG=cgocheck=0  # Needed to disable the cgo pointer checks as Envoy may hold
 ```
 
 <Callout type="note" title="Go Dynamic Modules">
-For Go Dynamic modules we use `composer` as the Dynamic Module name and set the extension name in the `filter_name` property. This is done bacause
+For Go Dynamic modules we use `composer` as the Dynamic Module name and set the extension name in the `filter_name` property. This is done because
 Built On Envoy packages all Go extensions into the `composer` Dynamic Module.
 </Callout>
 
 ## Dynamic Modules and Go
 
-Envoy has some limitations when it comes to loading and running Dynamic Modules that have been written in Go. Currently Envoy only supports
-loading one Go runtime in-process, and that presents several limitations that may result in undefined behavior depending on how the loaded
-Dynamic Modules are configured. As a rule of thumb for safe Go Dynamic modules:
+Running Go-based Dynamic Modules in Envoy has some limitations. Envoy only supports **loading one Go runtime in-process**, and that means that
+using Go-based Dynamic Modules needs some careful considerations.
 
-* All loaded Go Dynamic Modules must have been compiled with the same version of Go.
-* The transitive dependencies for all loaded Go Dynamic Modules must be the same version across the Dynamic modules.
-
-<Callout type="danger" title="Runtime constraints">
-Failing to meet these constraints may result in undefined behavior when Envoy runs the Go Dynamic Modules.
+<Callout type="danger" title="Go runtime limitations">
+Envoy only supports loading one Go runtime in-process. This means, effectively, that only one `lib<module>.so` file can be loaded by Envoy safely.
 </Callout>
 
-Built On Envoy is designed to favour satisfying these constraints by providing a code structure for the extensions that can be safely used to compile
-multiple Go extensions into a single Go Dynamic Module that can be safely loaded and used in Envoy.
+Built On Envoy makes it easier to overcome this limitation while providing maximum flexibility by providing:
 
-### Using all the Built On Envoy Go Extensions (recommended, works out-of-the-box)
+* The `composer` Dynamic Module that bundles all Go extensions. This can be safely loaded in Envoy to leverage any of the provided Go extensions.
+* A `goplugin-loader` special Dynamic Module that can load extensions compiled as [Go Plugins](https://pkg.go.dev/plugin).
+
+### Using the `composer` Dynamic Module (recommended)
 
 Built On Envoy provides the `composer` Dynamic Module that already embeds all Go extensions. By pulling the composer Dynamic Module and loading
 it into Envoy, you can use any Go extension in the Built On Envoy extension catalog. At the time of writing, the `composer` Dynamic Module is ~60MB.
 
-### Building your own Dynamic Module with a subset of extensions
+The configuration to use the `composer` Dynamic Module is the one showed [in the previous section](#configuring-the-dynamic-modules):
 
-You can also easily build your own Go Dynamic Module with a subset of extensions. All Built On Envoy extensions can be go-imported, so it is trivial
-to create your own extension bundles. The following code shows an example to create a custom Go Dynamic module with two extensions:
+```yaml
+- name: chat-completions-decoder
+  typed_config:
+    '@type': type.googleapis.com/envoy.extensions.filters.http.dynamic_modules.v3.DynamicModuleFilter
+    dynamic_module_config:
+      name: composer
+    filter_name: chat-completions-decoder
+    filter_config:
+      '@type': type.googleapis.com/google.protobuf.StringValue
+      value: '{"metadata_namespace":"llm-request"}'
+```
+
+### Dynamically loading Go Plugin extensions (alpha, not recommended for prod)
+
+Apart from the `composer` Dynamic Module that bundles all extensions, Built On Envoy also provides precompiled packages for each individual
+Go extension compiled as a [Go Plugin](https://pkg.go.dev/plugin). These extensions can be dynamically loaded by the special `goplugin-loader`
+Dynamic Module.
+
+<Callout type="danger" title="Dependency limitations">
+When loading extensions dynamically with the plugin loader, it is important to keep in mind that Envoy loads **a single Go runtime**. To make
+sure extensions compiled as Go plugins can be safely loaded, it is important that:
+
+* All have been compiled with the same Go version.
+* If different extensions use the same dependencies, all of them must use the same version of the common dependencies.
+
+**All Built On Envoy extensions are guaranteed to meet these constraints and are safe to use.**
+</Callout>
+
+To use this approach, you can pull the `composer-lite` extension, which is a Dynamic Module that only contains the plugin loading functionality.
+Using the `composer-lite`. At the time of writing, the composer Dynamic Module is ~19MB.
+
+#### Option 1: Download extensions manually
+
+Extensions can be easily downloaded using the [bow download](/docs/cli/download) command:
+
+```bash
+boe download composer-lite --platform linux/amd64             # Download the `lite` version
+boe download chat-completions-decoder --platform linux/amd64  # Download the Go Plugin artifact
+```
+
+#### Option 2: Build a custom Envoy image
+
+The following example creates a custom Envoy image with all the Go extensions and the `chat-completions-decoder` extension:
+
+```dockerfile
+# Reference all extensions that will be added to the image
+FROM ghcr.io/tetratelabs/built-on-envoy/composer-lite:0.5.0-dev AS go_loader_dym
+FROM ghcr.io/tetratelabs/built-on-envoy/extension-chat-completions-decoder:0.5.0-dev AS chat-completions-decoder
+
+FROM envoyproxy/envoy:v1.37.1
+
+# Copy the extension files
+COPY --from=go_loader_dym /libcomposer.so /var/boe/dym/
+COPY --from=chat-completions-decoder /plugin.so /var/boe/goplugins/
+
+# Setup the env vars Envoy needs to find the extensions and safely run the Go Dynamic Modules
+ENV ENVOY_DYNAMIC_MODULES_SEARCH_PATH=/var/boe/dym/
+ENV GODEBUG=cgocheck=0
+```
+
+<Callout type="note">
+To avoid confusion we're copying the `lite` Dynamic Module with the Go plugin loader in `/var/boe/dym/` and configuring that
+as the Envoy lookup path for Dynamic Modules, and that we're putting the individual Go extensions in `/var/boe/goplugins/`, as those
+extensions are compiled as Go Plugins, not Dynamic Modules.
+</Callout>
+
+#### Configuring the `goplugin-loader` Dynamic Module
+
+```yaml
+- name: chat-completions-decoder
+  typed_config:
+    '@type': type.googleapis.com/envoy.extensions.filters.http.dynamic_modules.v3.DynamicModuleFilter
+    dynamic_module_config:
+      load_globally: true            # It is recommended to load all symbols globally when using the `goplugin-loader`
+      name: composer                 # This is the `composer-lite`
+      filter_name: goplugin-loader   # We use the `goplugin-loader` to Dynamically load the Go plugin
+    filter_config:
+      '@type': type.googleapis.com/google.protobuf.StringValue
+      value: '{"name":"chat-completions-decoder","strict_check":false,"url":"file:///var/boe/goplugins/chat-completions-decoder.so","config":{ ... }}'
+```
+
+When dynamically loading extensions compiled as Go plugins:
+
+* Use the `goplugin-loader` as the name of the filter.
+* The configuration consists of:
+  * `name`: Name of the extension to load.
+  * `strict_check`: Whether to check for dependency incompatibilities and fail early.
+  * `url`: URL (or path) to the Go plugin file to load.
+  * `config`: Configuration that will be passed "as-is" to the plugin.
+
+### Appendix: Building your own Dynamic Module with a subset of extensions
+
+If you don't plan to use all Go extensions but don't want to use the alpha dynamic loading approach, you can build your own Dynamic Module with
+your desired set of extensions. All Built On Envoy extensions can be go-imported, so it is trivial to create your own extension bundles. The following
+code shows an example to create a custom Go Dynamic module with two extensions:
 
 ```go
 package main
@@ -166,10 +256,13 @@ the Envoy Go runtime limitations. Then you can use it the same way, but using `m
   typed_config:
     '@type': type.googleapis.com/envoy.extensions.filters.http.dynamic_modules.v3.DynamicModuleFilter
     dynamic_module_config:
-      load_globally: true
-      name: myboe               # Note we use the name of the Dynamic Module we just compiled
+      name: myboe
     filter_name: opa
     filter_config:
       '@type': type.googleapis.com/google.protobuf.StringValue
       value: '{ ... }'
 ```
+
+<Callout type="note">
+Remember that when using native Go Dynamic Modules only one can be loaded by Envoy, so you'll have to bundle all desired extensions in it.
+</Callout>
