@@ -29,7 +29,14 @@ Extensions can be easily downloaded using the [bow download](/docs/cli/download)
 
 ```bash
 boe download ip-restriction --platform linux/amd64
+boe download composer --platform linux/amd64
 ```
+
+<Callout type="tip" title="Go extensions">
+Built On Envoy provides the `composer` Dynamic Module that packages all the Go extensions, so there is no need to download Go
+extensions individually. The [Dynamic Modules and Go](#dynamic-modules-and-go) section further expands on the nuances of Go Dynamic
+Modules in Envoy.
+</Callout>
 
 Once the extensions are downloaded, you need to make the `.so` files available to Envoy. This could be a shared Kubernetes
 volume, a custom Envoy image, or any approach that is convenient.
@@ -55,11 +62,6 @@ COPY --from=ip_restriction /libip-restriction.so /var/boe/extensions/
 ENV ENVOY_DYNAMIC_MODULES_SEARCH_PATH=/var/boe/extensions
 ENV GODEBUG=cgocheck=0
 ```
-
-<Callout type="tip" title="Go extensions">
-Built On Envoy provides the `composer` Dynamic Module that packages all the Go extensions. The [Dynamic Modules and Go](#dynamic-modules-and-go)
-section further expands on the nuances of Go Dynamic Modules in Envoy.
-</Callout>
 
 ## Configuring the Dynamic Modules
 
@@ -149,4 +151,17 @@ CGO_ENABLED=1 go build -buildmode=c-shared -o libmyboe.so main.go
 ```
 
 This will produce a Go Dynamic Module with all the configured extensions that can be safely loaded into Envoy without having to worry about
-the Envoy Go runtime limitations.
+the Envoy Go runtime limitations. Then you can use it the same way, but using `myboe` as the name of the Dynamic Module:
+
+```yaml
+- name: my-boe-extensions
+  typed_config:
+    '@type': type.googleapis.com/envoy.extensions.filters.http.dynamic_modules.v3.DynamicModuleFilter
+    dynamic_module_config:
+      load_globally: true
+      name: myboe               # Note we use the name of the Dynamic Module we just compiled
+    filter_name: opa
+    filter_config:
+      '@type': type.googleapis.com/google.protobuf.StringValue
+      value: '{ ... }'
+```
