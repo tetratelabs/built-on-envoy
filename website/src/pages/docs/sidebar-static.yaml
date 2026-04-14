@@ -14,11 +14,13 @@ sections:
         href: /docs/writing-go-extensions
       - title: Writing Rust extensions
         href: /docs/writing-rust-extensions
+      - title: Exporting config and extensions
+        href: /docs/custom-envoy-config
   - title: Moving to Prod
     items:
       - title: Using a custom registry
         href: /docs/custom-registry
-      - title: Exporting config and extensions
-        href: /docs/custom-envoy-config
+      - title: Packaging and using extensions in prod
+        href: /docs/packaging-prod
       - title: Security considerations
         href: /docs/security-considerations

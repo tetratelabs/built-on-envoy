@@ -5,6 +5,7 @@ description: Exporting the boe generated Envoy config and the compiled extension
 ---
 
 import ToC from '../../components/ToC.astro';
+import Callout from '../../components/Callout.astro';
 
 # Exporting the Envoy config and extensions for external use
 
@@ -63,8 +64,10 @@ This will export the Envoy configuration to the configured output directory (`/t
 and copy the Envoy Dynamic Module library files to that same directory to facilitate configuring the
 [Envoy Dynamic Module search path](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/dynamic_modules#module-discovery).
 
-> ⚠️ Make sure you export the `GODEBUG` environment variable. It is needed to disable the cgo pointer checks as
-> Envoy may hold pointers to Go memory.
+<Callout type="warning">
+Make sure you export the `GODEBUG` environment variable. It is needed to disable the cgo pointer checks as
+Envoy may hold pointers to Go memory.
+</Callout>
 
-Onve ready, follow the instructions in the output and Envoy start & run with the extensions
+Once ready, follow the instructions in the output and Envoy start & run with the extensions
 configured. You can change and customize the Envoy configuration at your convenience.

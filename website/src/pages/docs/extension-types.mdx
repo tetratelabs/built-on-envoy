@@ -5,6 +5,7 @@ description: Overview of the different Built On Envoy extension types and when t
 ---
 
 import ToC from '../../components/ToC.astro';
+import Callout from '../../components/Callout.astro';
 
 # Extension Types
 
@@ -51,10 +52,11 @@ Go extensions are compiled HTTP filters that run inside Envoy through the
 They offer full access to the Dynamic Modules Go SDK and support advanced operations such as metrics,
 body modification, metadata, and local replies.
 
-> 🚧 There are some limitations related to how the Go runtime loads dependencies that affect how different Go
-> extensions can be loaded in the same Envoy process. To overcome these, a
-> [special dynamic module](https://github.com/tetratelabs/built-on-envoy/tree/main/extensions/composer/goplugin-loader)
-> is used to load the Go extensions at runtime.
+<Callout type="warning">
+There are some limitations related to how the Go runtime loads dependencies that affect how different Go
+extensions can be loaded in the same Envoy process. Refer to the [Dynamic Modules and Go](/docs/packaging-prod/#dynamic-modules-and-go)
+page for further details.
+</Callout>
 
 **Manifest type:** `go`
 

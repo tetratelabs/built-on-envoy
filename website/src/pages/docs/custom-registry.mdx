@@ -5,6 +5,7 @@ description: Configure boe to use a private or internal OCI registry for extensi
 ---
 
 import ToC from '../../components/ToC.astro';
+import Callout from '../../components/Callout.astro';
 
 # Using a custom registry
 
@@ -61,9 +62,11 @@ Extensions are packaged as standard OCI artifacts, so any OCI-compliant registry
 The extension scaffolding generates `Makefiles` that automate building and pushing extension artifacts.
 Set the `BOE_REGISTRY` variable when invoking `make` to target your registry.
 
-> ⚠️ It is important to use the provided `Makefiles` to push the extensions. They will take care of
-> setting a set of **annotations and metadata that are needed by the `boe` tool**. If the annotations
-> are not properly configured in the pushed artifacts, the `boe` cli may not work as expected.
+<Callout type="warning">
+It is important to use the provided `Makefiles` to push the extensions. They will take care of
+setting a set of **annotations and metadata that are needed by the `boe` tool**. If the annotations
+are not properly configured in the pushed artifacts, the `boe` cli may not work as expected.
+</Callout>
 
 ```bash
 export BOE_REGISTRY=registry.internal.example.com/envoy-extensions
@@ -78,8 +81,10 @@ make push_image   # Push the extension image
 make push_code    # Push the extension source code
 ```
 
-> 💡 You can use tools like `skopeo`, `crane` or `docker` to synchronize the official images from the
-> official extension registry to your custom one.
+<Callout type="note">
+You can use tools like `skopeo`, `crane` or `docker` to synchronize the official images from the
+official extension registry to your custom one.
+</Callout>
 
 ## Environment variables reference
 

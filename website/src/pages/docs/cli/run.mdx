@@ -4,6 +4,8 @@ title: run
 description: Run Envoy with extensions
 ---
 
+import Callout from '../../../components/Callout.astro';
+
 # boe run
 
 The run command starts an Envoy proxy with the specified extensions enabled.
@@ -14,10 +16,12 @@ You can enable multiple extensions using the `--extension` flag, and also load e
 local directories using `--local` for development and testing purposes. The command manages
 all runtime files, logs, and the Envoy admin interface automatically.
 
-> ⚠️ `boe run` will try to download Envoy for your operating system and platform, but Envoy does
-> not provide packages for all platforms. If there are no Envoy binaries for your platform, `boe`
-> can transparently run Envoy in Docker. Just use `boe run --docker` or set the `BOE_RUN_DOCKER=true`
-> environment variable.
+<Callout type="warning">
+`boe run` will try to download Envoy for your operating system and platform, but Envoy does
+not provide packages for all platforms. If there are no Envoy binaries for your platform, `boe`
+can transparently run Envoy in Docker. Just use `boe run --docker` or set the `BOE_RUN_DOCKER=true`
+environment variable.
+</Callout>
 
 ## Examples
 

@@ -16,7 +16,7 @@ List all available extensions:
 The output shows a table with the extension name, version, type, and a brief description:
 
     ```
-    NAME          VERSION  TYPE  DESCRIPTION
+    NAME                      VERSION  TYPE  DESCRIPTION
     chat-completions-decoder  0.3.0    go    Decodes OpenAI Chat Completion requests and responses and...
     example-lua               1.0.0    lua   Comprehensive example demonstrating Envoy Lua HTTP filter...
     ip-restriction            0.1.1    rust  IP-based access control using allowlists or denylists
