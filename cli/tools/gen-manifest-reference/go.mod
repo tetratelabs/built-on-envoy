@@ -1,6 +1,6 @@
 module github.com/tetratelabs/built-on-envoy/cli/tools/gen-manifest-reference
 
-go 1.26.1
+go 1.26.2
 
 require (
 	github.com/tetratelabs/built-on-envoy v0.0.0
