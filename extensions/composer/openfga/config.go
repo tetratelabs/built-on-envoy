@@ -188,8 +188,11 @@ func parseConfig(data []byte) (*parsedConfig, error) {
 		return nil, fmt.Errorf("openfga: %w", errors.Join(errs...))
 	}
 
+	// Accumulate all remaining validation errors so the user sees every problem at once.
+	errs = nil
+
 	if err := validateConsistency(cfg.Consistency); err != nil {
-		return nil, err
+		errs = append(errs, err)
 	}
 
 	if cfg.TimeoutMs == 0 {
@@ -200,41 +203,52 @@ func parseConfig(data []byte) (*parsedConfig, error) {
 	if denyStatus == 0 {
 		denyStatus = 403
 	}
+	denyStatusValid := true
 	if denyStatus < 100 || denyStatus > 599 {
-		return nil, fmt.Errorf("openfga: deny_status must be between 100 and 599, got %d", denyStatus)
+		errs = append(errs, fmt.Errorf("openfga: deny_status must be between 100 and 599, got %d", denyStatus))
+		denyStatusValid = false
 	}
 	denyBody := cfg.DenyBody
 	if denyBody == "" {
 		denyBody = "Forbidden"
 	}
-	deny := pkg.LocalResponse{Status: denyStatus, Body: denyBody}
-	if err := deny.Validate(); err != nil {
-		return nil, fmt.Errorf("openfga: %w", err)
-	}
-	denyHeaders := buildDenyHeaders(deny)
-
-	if cfg.Metadata != nil {
-		if err := cfg.Metadata.Validate(); err != nil {
-			return nil, fmt.Errorf("openfga: invalid metadata config: %w", err)
+	var deny pkg.LocalResponse
+	var denyHeaders [][2]string
+	if denyStatusValid {
+		deny = pkg.LocalResponse{Status: denyStatus, Body: denyBody}
+		if err := deny.Validate(); err != nil {
+			errs = append(errs, fmt.Errorf("openfga: %w", err))
+		} else {
+			denyHeaders = buildDenyHeaders(deny)
 		}
 	}
 
-	rules, err := buildRules(cfg)
-	if err != nil {
-		return nil, err
+	if cfg.Metadata != nil {
+		if err := cfg.Metadata.Validate(); err != nil {
+			errs = append(errs, fmt.Errorf("openfga: invalid metadata config: %w", err))
+		}
+	}
+
+	rules, rulesErr := buildRules(cfg)
+	if rulesErr != nil {
+		errs = append(errs, rulesErr)
+	}
+
+	ctxTuples, ctxTuplesErr := buildContextualTuples(cfg.ContextualTuples)
+	if ctxTuplesErr != nil {
+		errs = append(errs, ctxTuplesErr)
+	}
+
+	ctxMap, ctxMapErr := buildContext(cfg.Context)
+	if ctxMapErr != nil {
+		errs = append(errs, ctxMapErr)
+	}
+
+	if len(errs) > 0 {
+		return nil, fmt.Errorf("openfga: %w", errors.Join(errs...))
 	}
 
 	checkPath := "/stores/" + cfg.StoreID + "/check"
-
-	ctxTuples, err := buildContextualTuples(cfg.ContextualTuples)
-	if err != nil {
-		return nil, err
-	}
-
-	ctxMap, err := buildContext(cfg.Context)
-	if err != nil {
-		return nil, err
-	}
 
 	calloutHeaders := [][2]string{
 		{":method", "POST"},
@@ -420,18 +434,6 @@ func buildDenyHeaders(deny pkg.LocalResponse) [][2]string {
 	return headers
 }
 
-// sendDeny sends a local response using the configured deny status, body, and headers.
-func (c *parsedConfig) sendDeny(handle shared.HttpFilterHandle, grpcStatus string) {
-	// Status is validated to 100-599 in parseConfig.
-	handle.SendLocalResponse(uint32(c.deny.Status), c.denyHeaders, c.denyBodyBytes, grpcStatus) //nolint:gosec
-}
-
-// writeMetadata writes the authorization decision to dynamic metadata if configured.
-func (c *parsedConfig) writeMetadata(handle shared.HttpFilterHandle, decision string) {
-	if c.metadata != nil {
-		handle.SetMetadata(c.metadata.Namespace, c.metadata.Key, decision)
-	}
-}
 
 // buildContextualTuples validates and prepares contextual tuple sources.
 func buildContextualTuples(tuples []contextualTupleCfg) ([]parsedContextualTuple, error) {

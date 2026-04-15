@@ -7,6 +7,7 @@
 package openfga
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -295,14 +296,14 @@ func (c *openfgaCallback) handleCallbackError(logFormat, detail string, response
 func (c *openfgaCallback) OnHttpCalloutDone(_ uint64, result shared.HttpCalloutResult, headers [][2]shared.UnsafeEnvoyBuffer, body []shared.UnsafeEnvoyBuffer) { //nolint:revive
 	c.metrics.recordDuration(c.handle, time.Since(c.startTime))
 
-	fullBody := pkg.JoinCalloutBody(body)
+	fullBody := joinCalloutBody(body)
 
 	if result != shared.HttpCalloutSuccess {
 		c.handleCallbackError("openfga: callout failed, result=%v", "openfga_callout_error", errorBodyAPI, result)
 		return
 	}
 
-	statusCode := pkg.CalloutHeaderValue(headers, ":status")
+	statusCode := calloutHeaderValue(headers, ":status")
 	if statusCode != httpStatusOKStr {
 		// Attempt to parse OpenFGA structured error for better diagnostics.
 		var errResp struct {
@@ -377,4 +378,31 @@ func writeMetadata(handle shared.HttpFilterHandle, cfg *parsedConfig, decision s
 	if cfg.metadata != nil {
 		handle.SetMetadata(cfg.metadata.Namespace, cfg.metadata.Key, decision)
 	}
+}
+
+// joinCalloutBody concatenates the body chunks from an HTTP callout response
+// into a single byte slice. Returns nil for an empty body.
+func joinCalloutBody(body []shared.UnsafeEnvoyBuffer) []byte {
+	if len(body) == 0 {
+		return nil
+	}
+	if len(body) == 1 {
+		return body[0].ToUnsafeBytes()
+	}
+	buffers := make([][]byte, len(body))
+	for i, b := range body {
+		buffers[i] = b.ToUnsafeBytes()
+	}
+	return bytes.Join(buffers, nil)
+}
+
+// calloutHeaderValue returns the first value for a key in an HTTP callout
+// response header list.
+func calloutHeaderValue(headers [][2]shared.UnsafeEnvoyBuffer, key string) string {
+	for _, h := range headers {
+		if h[0].ToUnsafeString() == key {
+			return h[1].ToUnsafeString()
+		}
+	}
+	return ""
 }

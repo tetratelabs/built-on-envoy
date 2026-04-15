@@ -717,6 +717,29 @@ func TestBuildCheckBody_JSONSafety(t *testing.T) {
 	require.False(t, hasModelID)
 }
 
+func TestParseConfig_AccumulatesErrors(t *testing.T) {
+	cfg := openfgaConfig{
+		Cluster:     "openfga",
+		OpenFGAHost: "openfga:8080",
+		StoreID:     "store1",
+		Consistency: "INVALID_CONSISTENCY",
+		DenyStatus:  99,
+		Context: map[string]valueSource{
+			"bad_field": {}, // invalid: no source set
+		},
+	}
+	data, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	_, err = parseConfig(data)
+	require.Error(t, err)
+	errStr := err.Error()
+	// All three independent errors must be reported in a single error.
+	require.Contains(t, errStr, "invalid consistency")
+	require.Contains(t, errStr, "deny_status must be between")
+	require.Contains(t, errStr, "context[bad_field]")
+}
+
 func BenchmarkBuildCheckBody(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_, _ = buildCheckBody("user:alice", "can_use", "model:gpt-4", "model-123", "HIGHER_CONSISTENCY", nil, nil)

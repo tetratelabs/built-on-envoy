@@ -1213,3 +1213,55 @@ func TestWriteMetadata(t *testing.T) {
 		writeMetadata(mockHandle, cfg, decisionAllowed)
 	})
 }
+
+func TestJoinCalloutBody(t *testing.T) {
+	t.Run("empty body returns nil", func(t *testing.T) {
+		require.Nil(t, joinCalloutBody(nil))
+		require.Nil(t, joinCalloutBody([]shared.UnsafeEnvoyBuffer{}))
+	})
+
+	t.Run("single chunk returns that chunk", func(t *testing.T) {
+		body := []shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromString(`{"allowed":true}`)}
+		result := joinCalloutBody(body)
+		require.Equal(t, `{"allowed":true}`, string(result))
+	})
+
+	t.Run("multiple chunks are joined", func(t *testing.T) {
+		body := []shared.UnsafeEnvoyBuffer{
+			pkg.UnsafeBufferFromString(`{"allowed":`),
+			pkg.UnsafeBufferFromString(`true}`),
+		}
+		result := joinCalloutBody(body)
+		require.Equal(t, `{"allowed":true}`, string(result))
+	})
+
+	t.Run("three chunks are joined", func(t *testing.T) {
+		body := []shared.UnsafeEnvoyBuffer{
+			pkg.UnsafeBufferFromString(`{"a`),
+			pkg.UnsafeBufferFromString(`ll`),
+			pkg.UnsafeBufferFromString(`owed":true}`),
+		}
+		result := joinCalloutBody(body)
+		require.Equal(t, `{"allowed":true}`, string(result))
+	})
+}
+
+func TestCalloutHeaderValue(t *testing.T) {
+	headers := [][2]shared.UnsafeEnvoyBuffer{
+		{pkg.UnsafeBufferFromString(":status"), pkg.UnsafeBufferFromString("200")},
+		{pkg.UnsafeBufferFromString("content-type"), pkg.UnsafeBufferFromString("application/json")},
+	}
+
+	t.Run("existing key returns value", func(t *testing.T) {
+		require.Equal(t, "200", calloutHeaderValue(headers, ":status"))
+		require.Equal(t, "application/json", calloutHeaderValue(headers, "content-type"))
+	})
+
+	t.Run("missing key returns empty string", func(t *testing.T) {
+		require.Empty(t, calloutHeaderValue(headers, "x-missing"))
+	})
+
+	t.Run("nil headers returns empty string", func(t *testing.T) {
+		require.Empty(t, calloutHeaderValue(nil, ":status"))
+	})
+}
