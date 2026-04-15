@@ -7,12 +7,14 @@
 package openfga
 
 import (
-	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 const (
@@ -45,8 +47,9 @@ func (m *openfgaMetrics) inc(handle shared.HttpFilterHandle, decision string) {
 	}
 }
 
-func (m *openfgaMetrics) recordDuration(handle shared.HttpFilterHandle, ms uint64) {
+func (m *openfgaMetrics) recordDuration(handle shared.HttpFilterHandle, d time.Duration) {
 	if m.hasCheckDur {
+		ms := uint64(max(0, d.Milliseconds())) //nolint:gosec
 		handle.RecordHistogramValue(m.checkDuration, ms)
 	}
 }
@@ -59,7 +62,15 @@ type openfgaFilterFactory struct {
 }
 
 func (f *openfgaFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
-	return &openfgaFilter{handle: handle, config: f.config, metrics: f.metrics}
+	cfg := f.config
+	if perRoute := pkg.GetMostSpecificConfig[*parsedConfig](handle); perRoute != nil {
+		cfg = perRoute
+	}
+	if cfg == nil {
+		handle.Log(shared.LogLevelInfo, "openfga: no config available, using empty filter")
+		return &shared.EmptyHttpFilter{}
+	}
+	return &openfgaFilter{handle: handle, config: cfg, metrics: f.metrics}
 }
 
 // OpenFGAHttpFilterConfigFactory is the configuration factory for this filter.
@@ -97,6 +108,18 @@ func (f *OpenFGAHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHa
 	return &openfgaFilterFactory{config: cfg, metrics: metrics}, nil
 }
 
+// CreatePerRoute parses per-route configuration for the openfga filter.
+func (f *OpenFGAHttpFilterConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, error) {
+	cfg, err := parseConfig(unparsedConfig)
+	if err != nil {
+		return nil, err
+	}
+	if cfg == nil {
+		return nil, fmt.Errorf("openfga: per-route config is empty or invalid")
+	}
+	return cfg, nil
+}
+
 // WellKnownHttpFilterConfigFactories registers the extension.
 func WellKnownHttpFilterConfigFactories() map[string]shared.HttpFilterConfigFactory { //nolint:revive
 	return map[string]shared.HttpFilterConfigFactory{
@@ -126,17 +149,10 @@ func (f *openfgaFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) share
 	object := rule.object.resolve(headers)
 
 	if user == "" || relation == "" || object == "" {
-		f.handle.Log(shared.LogLevelWarn, "openfga: missing check parameters for %s %s user=%q relation=%q object=%q", method, path, user, relation, object)
-		if f.config.failOpen {
-			f.handle.Log(shared.LogLevelWarn, "openfga: fail_open enabled, allowing request with missing parameters")
-			f.config.writeMetadata(f.handle, decisionFailOpen)
-			f.metrics.inc(f.handle, decisionFailOpen)
-			return shared.HeadersStatusContinue
-		}
-		f.config.writeMetadata(f.handle, decisionDenied)
-		f.config.sendDeny(f.handle, "openfga_missing_params")
-		f.metrics.inc(f.handle, decisionDenied)
-		return shared.HeadersStatusStop
+		return f.handleDeny(shared.LogLevelWarn,
+			"openfga: missing check parameters for %s %s user=%q relation=%q object=%q",
+			"openfga_missing_params", decisionDenied,
+			method, path, user, relation, object)
 	}
 
 	// Resolve contextual tuples from request headers.
@@ -195,29 +211,41 @@ func (f *openfgaFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) share
 	return shared.HeadersStatusStopAllAndBuffer
 }
 
-// handleDeny handles a deny case: log, then fail-open or send deny response.
-func (f *openfgaFilter) handleDeny(logLevel shared.LogLevel, logFormat, grpcStatus, metricDecision string, logArgs ...any) shared.HeadersStatus {
+// handleDeny handles a deny case: log, then dry-run allow, fail-open, or send deny response.
+func (f *openfgaFilter) handleDeny(logLevel shared.LogLevel, logFormat, detail, metricDecision string, logArgs ...any) shared.HeadersStatus {
 	f.handle.Log(logLevel, logFormat, logArgs...)
+	if f.config.dryRun {
+		f.handle.Log(shared.LogLevelInfo, "openfga: dry_run mode, would have denied: %s", detail)
+		writeMetadata(f.handle, f.config, decisionDryAllow)
+		f.metrics.inc(f.handle, decisionDryAllow)
+		return shared.HeadersStatusContinue
+	}
 	if f.config.failOpen {
-		f.config.writeMetadata(f.handle, decisionFailOpen)
+		writeMetadata(f.handle, f.config, decisionFailOpen)
 		f.metrics.inc(f.handle, decisionFailOpen)
 		return shared.HeadersStatusContinue
 	}
-	f.config.writeMetadata(f.handle, metricDecision)
-	f.config.sendDeny(f.handle, grpcStatus)
+	writeMetadata(f.handle, f.config, metricDecision)
+	sendDeny(f.handle, f.config, detail)
 	f.metrics.inc(f.handle, metricDecision)
 	return shared.HeadersStatusStop
 }
 
-// handleCalloutError handles callout init failure: log, then fail-open or send 502.
+// handleCalloutError handles callout init failure: log, then dry-run allow, fail-open, or send 502.
 func (f *openfgaFilter) handleCalloutError(logMsg string, args ...any) shared.HeadersStatus {
 	f.handle.Log(shared.LogLevelError, logMsg, args...)
+	if f.config.dryRun {
+		f.handle.Log(shared.LogLevelInfo, "openfga: dry_run mode, would have errored: openfga_callout_failed")
+		writeMetadata(f.handle, f.config, decisionDryAllow)
+		f.metrics.inc(f.handle, decisionDryAllow)
+		return shared.HeadersStatusContinue
+	}
 	if f.config.failOpen {
-		f.config.writeMetadata(f.handle, decisionFailOpen)
+		writeMetadata(f.handle, f.config, decisionFailOpen)
 		f.metrics.inc(f.handle, decisionFailOpen)
 		return shared.HeadersStatusContinue
 	}
-	f.config.writeMetadata(f.handle, decisionError)
+	writeMetadata(f.handle, f.config, decisionError)
 	f.handle.SendLocalResponse(http.StatusBadGateway, errorResponseHeaders, errorBodyCallout, "openfga_callout_failed")
 	f.metrics.inc(f.handle, decisionError)
 	return shared.HeadersStatusStop
@@ -241,34 +269,40 @@ type openfgaCallback struct {
 	startTime time.Time
 }
 
-// handleCallbackError handles callout/API/parse errors: log, then fail-open or send 502.
-func (c *openfgaCallback) handleCallbackError(logFormat, grpcStatus string, responseBody []byte, logArgs ...any) {
+// handleCallbackError handles callout/API/parse errors: log, then dry-run allow, fail-open, or send 502.
+func (c *openfgaCallback) handleCallbackError(logFormat, detail string, responseBody []byte, logArgs ...any) {
 	c.handle.Log(shared.LogLevelError, logFormat, logArgs...)
+	if c.config.dryRun {
+		c.handle.Log(shared.LogLevelInfo, "openfga: dry_run mode, would have errored: %s", detail)
+		writeMetadata(c.handle, c.config, decisionDryAllow)
+		c.metrics.inc(c.handle, decisionDryAllow)
+		c.handle.ContinueRequest()
+		return
+	}
 	if c.config.failOpen {
 		c.handle.Log(shared.LogLevelWarn, "openfga: fail_open enabled, allowing request after error")
-		c.config.writeMetadata(c.handle, decisionFailOpen)
+		writeMetadata(c.handle, c.config, decisionFailOpen)
 		c.metrics.inc(c.handle, decisionFailOpen)
 		c.handle.ContinueRequest()
 		return
 	}
-	c.config.writeMetadata(c.handle, decisionError)
+	writeMetadata(c.handle, c.config, decisionError)
 	c.metrics.inc(c.handle, decisionError)
-	c.handle.SendLocalResponse(http.StatusBadGateway, errorResponseHeaders, responseBody, grpcStatus)
+	c.handle.SendLocalResponse(http.StatusBadGateway, errorResponseHeaders, responseBody, detail)
 }
 
 // OnHttpCalloutDone processes the Check API response and continues or denies the request.
 func (c *openfgaCallback) OnHttpCalloutDone(_ uint64, result shared.HttpCalloutResult, headers [][2]shared.UnsafeEnvoyBuffer, body []shared.UnsafeEnvoyBuffer) { //nolint:revive
-	elapsed := max(0, time.Since(c.startTime).Milliseconds())
-	c.metrics.recordDuration(c.handle, uint64(elapsed)) //nolint:gosec // elapsed is non-negative ms
+	c.metrics.recordDuration(c.handle, time.Since(c.startTime))
 
-	fullBody := joinCalloutBody(body)
+	fullBody := pkg.JoinCalloutBody(body)
 
 	if result != shared.HttpCalloutSuccess {
 		c.handleCallbackError("openfga: callout failed, result=%v", "openfga_callout_error", errorBodyAPI, result)
 		return
 	}
 
-	statusCode := calloutHeaderValue(headers, ":status")
+	statusCode := pkg.CalloutHeaderValue(headers, ":status")
 	if statusCode != httpStatusOKStr {
 		// Attempt to parse OpenFGA structured error for better diagnostics.
 		var errResp struct {
@@ -302,7 +336,7 @@ func (c *openfgaCallback) OnHttpCalloutDone(_ uint64, result shared.HttpCalloutR
 
 	if !checkResp.Allowed && c.config.dryRun {
 		c.handle.Log(shared.LogLevelInfo, "openfga: dry_run mode, would have denied request")
-		c.config.writeMetadata(c.handle, decisionDryAllow)
+		writeMetadata(c.handle, c.config, decisionDryAllow)
 		c.metrics.inc(c.handle, decisionDryAllow)
 		c.handle.ContinueRequest()
 		return
@@ -310,40 +344,16 @@ func (c *openfgaCallback) OnHttpCalloutDone(_ uint64, result shared.HttpCalloutR
 
 	if !checkResp.Allowed {
 		c.handle.Log(shared.LogLevelDebug, "openfga: denying request with status %d", c.config.deny.Status)
-		c.config.writeMetadata(c.handle, decisionDenied)
+		writeMetadata(c.handle, c.config, decisionDenied)
 		c.metrics.inc(c.handle, decisionDenied)
-		c.config.sendDeny(c.handle, "openfga_denied")
+		sendDeny(c.handle, c.config, "openfga_denied")
 		return
 	}
 
-	c.config.writeMetadata(c.handle, decisionAllowed)
+	c.handle.Log(shared.LogLevelDebug, "openfga: allowing request")
+	writeMetadata(c.handle, c.config, decisionAllowed)
 	c.metrics.inc(c.handle, decisionAllowed)
 	c.handle.ContinueRequest()
-}
-
-// joinCalloutBody returns the callout response body as a single byte slice.
-func joinCalloutBody(body []shared.UnsafeEnvoyBuffer) []byte {
-	if len(body) == 0 {
-		return nil
-	}
-	if len(body) == 1 {
-		return body[0].ToUnsafeBytes()
-	}
-	buffers := make([][]byte, len(body))
-	for i, b := range body {
-		buffers[i] = b.ToUnsafeBytes()
-	}
-	return bytes.Join(buffers, nil)
-}
-
-// calloutHeaderValue returns the first value for a key in a callout response header list.
-func calloutHeaderValue(headers [][2]shared.UnsafeEnvoyBuffer, key string) string {
-	for _, h := range headers {
-		if h[0].ToUnsafeString() == key {
-			return h[1].ToUnsafeString()
-		}
-	}
-	return ""
 }
 
 // headerValue returns the first value for a key in an outbound HttpCallout request header list.
@@ -354,4 +364,17 @@ func headerValue(headers [][2]string, key string) string {
 		}
 	}
 	return ""
+}
+
+// sendDeny sends a local response using the configured deny status, body, and headers.
+func sendDeny(handle shared.HttpFilterHandle, cfg *parsedConfig, detail string) {
+	// Status is validated to 100-599 in parseConfig.
+	handle.SendLocalResponse(uint32(cfg.deny.Status), cfg.denyHeaders, cfg.denyBodyBytes, detail) //nolint:gosec
+}
+
+// writeMetadata writes the authorization decision to dynamic metadata if configured.
+func writeMetadata(handle shared.HttpFilterHandle, cfg *parsedConfig, decision string) {
+	if cfg.metadata != nil {
+		handle.SetMetadata(cfg.metadata.Namespace, cfg.metadata.Key, decision)
+	}
 }
