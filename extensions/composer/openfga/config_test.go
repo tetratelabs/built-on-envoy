@@ -173,6 +173,26 @@ func TestParseConfig_MissingCluster(t *testing.T) {
 	require.Contains(t, err.Error(), "missing required field: cluster")
 }
 
+func TestParseConfig_AccumulatesAllErrors(t *testing.T) {
+	cfg := openfgaConfig{
+		// Missing cluster, openfga_host, store_id — plus invalid consistency.
+		Consistency: "BOGUS",
+		User:        valueSource{Header: "x-user-id"},
+		Relation:    valueSource{Value: "reader"},
+		Object:      valueSource{Header: "x-resource"},
+	}
+	data, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	_, err = parseConfig(data)
+	require.Error(t, err)
+	msg := err.Error()
+	require.Contains(t, msg, "missing required field: cluster")
+	require.Contains(t, msg, "missing required field: openfga_host")
+	require.Contains(t, msg, "missing required field: store_id")
+	require.Contains(t, msg, "consistency")
+}
+
 func TestParseConfig_MissingHost(t *testing.T) {
 	cfg := openfgaConfig{
 		Cluster:  "openfga",

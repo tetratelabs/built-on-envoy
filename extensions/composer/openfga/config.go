@@ -184,13 +184,6 @@ func parseConfig(data []byte) (*parsedConfig, error) {
 	if cfg.StoreID == "" {
 		errs = append(errs, fmt.Errorf("missing required field: store_id"))
 	}
-	if len(errs) > 0 {
-		return nil, fmt.Errorf("openfga: %w", errors.Join(errs...))
-	}
-
-	// Accumulate all remaining validation errors so the user sees every problem at once.
-	errs = nil
-
 	if err := validateConsistency(cfg.Consistency); err != nil {
 		errs = append(errs, err)
 	}
