@@ -707,7 +707,7 @@ func TestSendDeny(t *testing.T) {
 
 	cfg := testConfig(t)
 	mockHandle.EXPECT().SendLocalResponse(
-		uint32(cfg.deny.Status), cfg.denyHeaders, cfg.denyBodyBytes, "openfga_denied",
+		uint32(403), cfg.denyHeaders, cfg.denyBodyBytes, "openfga_denied",
 	)
 
 	sendDeny(mockHandle, cfg, "openfga_denied")

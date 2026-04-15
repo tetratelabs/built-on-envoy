@@ -427,7 +427,6 @@ func buildDenyHeaders(deny pkg.LocalResponse) [][2]string {
 	return headers
 }
 
-
 // buildContextualTuples validates and prepares contextual tuple sources.
 func buildContextualTuples(tuples []contextualTupleCfg) ([]parsedContextualTuple, error) {
 	if len(tuples) == 0 {
