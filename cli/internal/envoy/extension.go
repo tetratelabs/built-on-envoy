@@ -13,9 +13,11 @@ import (
 
 	clusterv3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	listenerv3 "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
 	dymv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/dynamic_modules/v3"
 	dymhttpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/dynamic_modules/v3"
 	luav3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/lua/v3"
+	dymnetv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/dynamic_modules/v3"
 	hcmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -44,8 +46,9 @@ type (
 
 	// ExtensionResources holds the resources created by an extension.
 	ExtensionResources struct {
-		HTTPFilters []*hcmv3.HttpFilter
-		Clusters    []*clusterv3.Cluster
+		HTTPFilters    []*hcmv3.HttpFilter
+		Clusters       []*clusterv3.Cluster
+		NetworkFilters []*listenerv3.Filter
 		// TODO(huabing): may need to add more resources
 	}
 )
@@ -147,31 +150,56 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 
 	// Use the library name (with underscores) as the dynamic module config name.
 	// This is the identifier Envoy uses to reference the loaded module.
-	protoConfig := &dymhttpv3.DynamicModuleFilter{
-		DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-			Name:         manifest.Name,
-			LoadGlobally: false,
-			// TODO(nacx): configure a meaningful metrics namespace when
-			// the changes in https://github.com/envoyproxy/envoy/pull/43266 are available.
-			// Currently defaults to `dynamicmodulescustom`.
-		},
-		FilterName:   manifest.Name,
-		FilterConfig: anyConfig,
+	moduleConfig := &dymv3.DynamicModuleConfig{
+		Name:         manifest.Name,
+		LoadGlobally: false,
+		// TODO(nacx): configure a meaningful metrics namespace when
+		// the changes in https://github.com/envoyproxy/envoy/pull/43266 are available.
+		// Currently defaults to `dynamicmodulescustom`.
 	}
-	dynamicModuleAny, err := anypb.New(protoConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal dynamic module filter to Any: %w", err)
+
+	var httpFilters []*hcmv3.HttpFilter
+	var networkFilters []*listenerv3.Filter
+
+	switch manifest.FilterType {
+	case extensions.FilterTypeNetwork:
+		protoConfig := &dymnetv3.DynamicModuleNetworkFilter{
+			DynamicModuleConfig: moduleConfig,
+			FilterName:          manifest.Name,
+			FilterConfig:        anyConfig,
+		}
+		dynamicModuleAny, err := anypb.New(protoConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal dynamic module network filter to Any: %w", err)
+		}
+		networkFilters = []*listenerv3.Filter{
+			{
+				Name:       manifest.Name,
+				ConfigType: &listenerv3.Filter_TypedConfig{TypedConfig: dynamicModuleAny},
+			},
+		}
+
+	default:
+		protoConfig := &dymhttpv3.DynamicModuleFilter{
+			DynamicModuleConfig: moduleConfig,
+			FilterName:          manifest.Name,
+			FilterConfig:        anyConfig,
+		}
+		dynamicModuleAny, err := anypb.New(protoConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal dynamic module filter to Any: %w", err)
+		}
+		httpFilters = []*hcmv3.HttpFilter{
+			{
+				Name:       manifest.Name,
+				ConfigType: &hcmv3.HttpFilter_TypedConfig{TypedConfig: dynamicModuleAny},
+			},
+		}
 	}
 
 	return &ExtensionResources{
-		HTTPFilters: []*hcmv3.HttpFilter{
-			{
-				Name: manifest.Name,
-				ConfigType: &hcmv3.HttpFilter_TypedConfig{
-					TypedConfig: dynamicModuleAny,
-				},
-			},
-		},
+		HTTPFilters:    httpFilters,
+		NetworkFilters: networkFilters,
 	}, nil
 }
 

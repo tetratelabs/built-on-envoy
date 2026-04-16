@@ -33,18 +33,19 @@ type (
 		// When set, the version field can be omitted.
 		Parent string `yaml:"parent,omitempty" json:"parent,omitempty"`
 		// ExtensionSet indicates this manifest defines a set of extensions.
-		ExtensionSet    bool      `yaml:"extensionSet,omitempty" json:"extensionSet,omitempty"`
-		Categories      []string  `yaml:"categories" json:"categories"`
-		Author          string    `yaml:"author" json:"author"`
-		Featured        bool      `yaml:"featured" json:"featured,omitempty"`
-		Description     string    `yaml:"description" json:"description"`
-		LongDescription string    `yaml:"longDescription" json:"longDescription"`
-		Type            Type      `yaml:"type" json:"type"`
-		Tags            []string  `yaml:"tags" json:"tags"`
-		License         string    `yaml:"license" json:"license"`
-		Examples        []Example `yaml:"examples" json:"examples"`
-		MinEnvoyVersion string    `yaml:"minEnvoyVersion,omitempty" json:"minEnvoyVersion,omitempty"`
-		MaxEnvoyVersion string    `yaml:"maxEnvoyVersion,omitempty" json:"maxEnvoyVersion,omitempty"`
+		ExtensionSet    bool       `yaml:"extensionSet,omitempty" json:"extensionSet,omitempty"`
+		Categories      []string   `yaml:"categories" json:"categories"`
+		Author          string     `yaml:"author" json:"author"`
+		Featured        bool       `yaml:"featured" json:"featured,omitempty"`
+		Description     string     `yaml:"description" json:"description"`
+		LongDescription string     `yaml:"longDescription" json:"longDescription"`
+		Type            Type       `yaml:"type" json:"type"`
+		FilterType      FilterType `yaml:"filterType,omitempty" json:"filterType,omitempty"`
+		Tags            []string   `yaml:"tags" json:"tags"`
+		License         string     `yaml:"license" json:"license"`
+		Examples        []Example  `yaml:"examples" json:"examples"`
+		MinEnvoyVersion string     `yaml:"minEnvoyVersion,omitempty" json:"minEnvoyVersion,omitempty"`
+		MaxEnvoyVersion string     `yaml:"maxEnvoyVersion,omitempty" json:"maxEnvoyVersion,omitempty"`
 
 		// ComposerVersion specifies the compatible Composer dynamic module version
 		// for Composer go plugins.
@@ -73,6 +74,9 @@ type (
 
 	// Type represents the type of an Envoy extension.
 	Type string
+
+	// FilterType represents which Envoy filter chain an extension plugs into (i.e. HTTP, network, UDP listener).
+	FilterType string
 
 	// Lua configuration for manifests that define Lua extensions
 	Lua struct {
@@ -127,6 +131,13 @@ const (
 	// TypeComposer represents a Composer extension that bundles together
 	// multiple Go extensions.
 	TypeComposer Type = "composer"
+
+	// FilterTypeHTTP represents an HTTP filter extension (default).
+	FilterTypeHTTP FilterType = "http"
+	// FilterTypeNetwork represents a network filter extension.
+	FilterTypeNetwork FilterType = "network"
+	// FilterTypeUDPListener represents a UDP listener filter extension.
+	FilterTypeUDPListener FilterType = "udp_listener"
 
 	schemaURL = "manifest.schema.json"
 )

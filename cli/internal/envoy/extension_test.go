@@ -12,9 +12,11 @@ import (
 	"testing"
 
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	listenerv3 "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
 	dymv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/dynamic_modules/v3"
 	dymhttpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/dynamic_modules/v3"
 	luav3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/lua/v3"
+	dymnetv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/dynamic_modules/v3"
 	hcmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -131,7 +133,7 @@ end
 	}
 }
 
-func TestDynamicModuleFilterGenerator(t *testing.T) {
+func TestDynamicModuleFilterGeneratorHTTP(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 	dirs := &xdg.Directories{DataHome: t.TempDir()}
 	manifest := &extensions.Manifest{
@@ -141,7 +143,7 @@ func TestDynamicModuleFilterGenerator(t *testing.T) {
 		Remote:  true,
 	}
 
-	// Case 1: Generate config for Rust dynamic module
+	// Case 1: Generate config for HTTP Filter written as Rust dynamic module
 	got, err := GenerateFilterConfig(logger, manifest, dirs, "")
 	require.NoError(t, err)
 
@@ -169,7 +171,7 @@ func TestDynamicModuleFilterGenerator(t *testing.T) {
 
 	checkProtos(t, want.HTTPFilters, got.HTTPFilters)
 
-	// Case 2: Success with config
+	// Case 2: Success with config for HTTP Filter written as Rust dynamic module
 	configJSON := `{"key":"value","nested":{"foo":"bar"}}`
 	got, err = GenerateFilterConfig(logger, manifest, dirs, configJSON)
 	require.NoError(t, err, "GenerateFilterConfig with config failed")
@@ -202,6 +204,82 @@ func TestDynamicModuleFilterGenerator(t *testing.T) {
 	}
 
 	checkProtos(t, wantWithConfig.HTTPFilters, got.HTTPFilters)
+}
+
+func TestDynamicModuleFilterGeneratorNetwork(t *testing.T) {
+	logger := internaltesting.NewTLogger(t)
+	dirs := &xdg.Directories{DataHome: t.TempDir()}
+	manifest := &extensions.Manifest{
+		Name:       "test-network-module",
+		Type:       extensions.TypeRust,
+		FilterType: extensions.FilterTypeNetwork,
+		Version:    "v1.0.0",
+		Remote:     true,
+	}
+
+	// Case 1: Generate config for Network Filter written as Rust dynamic module
+	got, err := GenerateFilterConfig(logger, manifest, dirs, "")
+	require.NoError(t, err)
+	require.Empty(t, got.HTTPFilters, "network filter should not produce HTTP filters")
+
+	want := &ExtensionResources{
+		NetworkFilters: []*listenerv3.Filter{
+			{
+				Name: manifest.Name,
+				ConfigType: &listenerv3.Filter_TypedConfig{
+					TypedConfig: func() *anypb.Any {
+						dymConfig := &dymnetv3.DynamicModuleNetworkFilter{
+							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
+								Name:         manifest.Name,
+								LoadGlobally: false,
+							},
+							FilterName: manifest.Name,
+						}
+						cfg, anypbErr := anypb.New(dymConfig)
+						require.NoError(t, anypbErr)
+						return cfg
+					}(),
+				},
+			},
+		},
+	}
+
+	checkProtos(t, want.NetworkFilters, got.NetworkFilters)
+
+	// Case 2: Success with config for Network Filter written as Rust dynamic module
+	configJSON := `{"key":"value","nested":{"foo":"bar"}}`
+	got, err = GenerateFilterConfig(logger, manifest, dirs, configJSON)
+	require.NoError(t, err, "GenerateFilterConfig with config failed")
+	require.Empty(t, got.HTTPFilters, "network filter should not produce HTTP filters")
+
+	wantWithConfig := &ExtensionResources{
+		NetworkFilters: []*listenerv3.Filter{
+			{
+				Name: manifest.Name,
+				ConfigType: &listenerv3.Filter_TypedConfig{
+					TypedConfig: func() *anypb.Any {
+						dymConfig := &dymnetv3.DynamicModuleNetworkFilter{
+							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
+								Name:         manifest.Name,
+								LoadGlobally: false,
+							},
+							FilterName: manifest.Name,
+							FilterConfig: func() *anypb.Any {
+								cfg, err := anypb.New(wrapperspb.String(configJSON))
+								require.NoError(t, err, "marshal StringValue to Any failed")
+								return cfg
+							}(),
+						}
+						cfg, err := anypb.New(dymConfig)
+						require.NoError(t, err, "marshal DynamicModuleNetworkFilter to Any failed")
+						return cfg
+					}(),
+				},
+			},
+		},
+	}
+
+	checkProtos(t, wantWithConfig.NetworkFilters, got.NetworkFilters)
 }
 
 func TestComposerFilterGenerator(t *testing.T) {

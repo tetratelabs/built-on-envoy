@@ -67,6 +67,8 @@ const defaultTestUpstreamHost = "httpbin.org"
 type GeneratedConfigResources struct {
 	// HTTPFilters are the generated HTTP filters to be included in the Envoy configuration.
 	HTTPFilters []*hcmv3.HttpFilter
+	// NetworkFilters are the generated network filters to be included in the Envoy listener filter chain.
+	NetworkFilters []*listenerv3.Filter
 	// Clusters are the generated clusters to be included in the Envoy configuration.
 	Clusters []*clusterv3.Cluster
 }
@@ -126,7 +128,7 @@ func FullConfigRenderer(params *ConfigGenerationParams, gen GeneratedConfigResou
 		hostRewrite = testUpstreamHost
 	}
 
-	cfg, err := buildFullConfig(params.AdminPort, params.ListenerPort, clusterName, hostRewrite, newCluster, gen.HTTPFilters, gen.Clusters)
+	cfg, err := buildFullConfig(params.AdminPort, params.ListenerPort, clusterName, hostRewrite, newCluster, gen.HTTPFilters, gen.NetworkFilters, gen.Clusters)
 	if err != nil {
 		return "", fmt.Errorf("failed to build config: %w", err)
 	}
@@ -141,15 +143,25 @@ func FullConfigRenderer(params *ConfigGenerationParams, gen GeneratedConfigResou
 func MinimalConfigRenderer(params *ConfigGenerationParams, gen GeneratedConfigResources) (string, error) {
 	params.Logger.Info("rendering minimal Envoy config")
 
-	filterConfigs, err := protoListToAny(gen.HTTPFilters)
+	httpFilterConfigs, err := protoListToAny(gen.HTTPFilters)
 	if err != nil {
 		return "", fmt.Errorf("failed to serialize filter configs: %w", err)
 	}
-
-	payload := map[string]any{"http_filters": filterConfigs}
+	networkFilterConfigs, err := protoListToAny(gen.NetworkFilters)
+	if err != nil {
+		return "", fmt.Errorf("failed to serialize network filter configs: %w", err)
+	}
 	clusterConfigs, err := protoListToAny(gen.Clusters)
 	if err != nil {
 		return "", fmt.Errorf("failed to serialize cluster configs: %w", err)
+	}
+
+	payload := map[string]any{}
+	if len(httpFilterConfigs) > 0 {
+		payload["http_filters"] = httpFilterConfigs
+	}
+	if len(networkFilterConfigs) > 0 {
+		payload["network_filters"] = networkFilterConfigs
 	}
 	if len(clusterConfigs) > 0 {
 		payload["clusters"] = clusterConfigs
@@ -164,7 +176,8 @@ func MinimalConfigRenderer(params *ConfigGenerationParams, gen GeneratedConfigRe
 
 // generateConfig generates the Envoy configuration resources for the given extensions and parameters.
 func generateConfig(params *ConfigGenerationParams) (GeneratedConfigResources, error) {
-	filters := make([]*hcmv3.HttpFilter, 0, len(params.Extensions))
+	httpFilters := make([]*hcmv3.HttpFilter, 0, len(params.Extensions))
+	networkFilters := make([]*listenerv3.Filter, 0)
 	clusters := make([]*clusterv3.Cluster, 0)
 	for i, ext := range params.Extensions {
 		var config string
@@ -175,7 +188,8 @@ func generateConfig(params *ConfigGenerationParams) (GeneratedConfigResources, e
 		if err != nil {
 			return GeneratedConfigResources{}, fmt.Errorf("failed to generate filter config for extension %q: %w", ext.Name, err)
 		}
-		filters = append(filters, resources.HTTPFilters...)
+		httpFilters = append(httpFilters, resources.HTTPFilters...)
+		networkFilters = append(networkFilters, resources.NetworkFilters...)
 		clusters = append(clusters, resources.Clusters...)
 	}
 
@@ -204,8 +218,9 @@ func generateConfig(params *ConfigGenerationParams) (GeneratedConfigResources, e
 	}
 
 	return GeneratedConfigResources{
-		HTTPFilters: filters,
-		Clusters:    clusters,
+		HTTPFilters:    httpFilters,
+		NetworkFilters: networkFilters,
+		Clusters:       clusters,
 	}, nil
 }
 
@@ -252,8 +267,8 @@ func parseCluster(shortSpec string, tls bool) (*clusterv3.Cluster, error) {
 // and allows us to use the proto marshalling functions. Otherwise, we would have to create a wrapper
 // proto on our own, or marshal the config manually.
 // TODO(nacx): Is there a wrapper for `admin` and `static_resources` we could use other than Bootstrap?
-func buildFullConfig(adminPort, listenerPort uint32, testUpstreamClusterName, testUpstreamHostRewrite string, newCluster *clusterv3.Cluster, filters []*hcmv3.HttpFilter, clusters []*clusterv3.Cluster) (*bootstrapv3.Bootstrap, error) {
-	hcm, err := buildHTTPConnectionManager(filters, testUpstreamClusterName, testUpstreamHostRewrite)
+func buildFullConfig(adminPort, listenerPort uint32, testUpstreamClusterName, testUpstreamHostRewrite string, newCluster *clusterv3.Cluster, httpFilters []*hcmv3.HttpFilter, networkFilters []*listenerv3.Filter, clusters []*clusterv3.Cluster) (*bootstrapv3.Bootstrap, error) {
+	hcm, err := buildHTTPConnectionManager(httpFilters, testUpstreamClusterName, testUpstreamHostRewrite)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build HTTP connection manager: %w", err)
 	}
@@ -262,6 +277,13 @@ func buildFullConfig(adminPort, listenerPort uint32, testUpstreamClusterName, te
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal HTTP connection manager to Any: %w", err)
 	}
+
+	networkFilters = append(networkFilters, &listenerv3.Filter{
+		Name: "envoy.filters.network.http_connection_manager",
+		ConfigType: &listenerv3.Filter_TypedConfig{
+			TypedConfig: hcmAny,
+		},
+	})
 
 	listener := &listenerv3.Listener{
 		Name: "main",
@@ -277,14 +299,7 @@ func buildFullConfig(adminPort, listenerPort uint32, testUpstreamClusterName, te
 		},
 		FilterChains: []*listenerv3.FilterChain{
 			{
-				Filters: []*listenerv3.Filter{
-					{
-						Name: "envoy.filters.network.http_connection_manager",
-						ConfigType: &listenerv3.Filter_TypedConfig{
-							TypedConfig: hcmAny,
-						},
-					},
-				},
+				Filters: networkFilters,
 			},
 		},
 	}
