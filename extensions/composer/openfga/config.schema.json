@@ -29,11 +29,11 @@
     },
     "relation": {
       "$ref": "#/$defs/ValueSource",
-      "description": "How to extract the relation for the Check call (single-rule mode)."
+      "description": "How to extract the relation for the Check call. Required when not using rules."
     },
     "object": {
       "$ref": "#/$defs/ValueSource",
-      "description": "How to extract the object for the Check call (single-rule mode)."
+      "description": "How to extract the object for the Check call. Required when not using rules."
     },
     "rules": {
       "type": "array",
@@ -79,14 +79,14 @@
     },
     "contextual_tuples": {
       "type": "array",
-      "description": "Contextual tuples included in the Check request for request-scoped relationships.",
+      "description": "Contextual tuples included in the Check request for request-scoped relationships. Tuples with unresolvable fields are silently skipped.",
       "items": {
         "$ref": "#/$defs/ContextualTuple"
       }
     },
     "context": {
       "type": "object",
-      "description": "ABAC condition context values. Maps field names to ValueSource objects.",
+      "description": "ABAC condition context values. Maps field names to ValueSource objects. Fields that resolve to an empty value are omitted.",
       "additionalProperties": {
         "$ref": "#/$defs/ValueSource"
       }

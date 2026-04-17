@@ -110,43 +110,6 @@ longDescription: |
   }
   ```
 
-  ### Configuration Reference
-
-  | Field | Type | Required | Default | Description |
-  |-------|------|----------|---------|-------------|
-  | `cluster` | string | yes | | Envoy cluster name routing to the OpenFGA server |
-  | `openfga_host` | string | yes | | Hostname for the `Host` header in callouts |
-  | `store_id` | string | yes | | OpenFGA store ID |
-  | `authorization_model_id` | string | no | | OpenFGA authorization model ID (uses latest if omitted) |
-  | `consistency` | string | no | | OpenFGA Check `consistency`: `UNSPECIFIED`, `MINIMIZE_LATENCY`, or `HIGHER_CONSISTENCY` ([docs](https://openfga.dev/docs/interacting/consistency)). Omit for default behavior. |
-  | `user` | valueSource | yes* | | How to extract the user for the Check call (*required when using `rules`) |
-  | `relation` | valueSource | yes* | | How to extract the relation (*when not using `rules`) |
-  | `object` | valueSource | yes* | | How to extract the object (*when not using `rules`) |
-  | `rules` | array | no | | Multi-rule config; each rule has `match`, `relation`, `object`, optional `user` |
-  | `match` | object | no | | Per-rule: `headers` map (header name → `"*"` or exact value) |
-  | `fail_open` | bool | no | `false` | Allow requests through when the filter would otherwise deny due to OpenFGA errors, missing check inputs, or no matching rule (see Metrics) |
-  | `dry_run` | bool | no | `false` | Log decisions without enforcing them |
-  | `timeout_ms` | int | no | `5000` | HTTP callout timeout in milliseconds |
-  | `deny_status` | int | no | `403` | HTTP status code for denied requests |
-  | `deny_body` | string | no | `"Forbidden"` | Response body for denied requests |
-  | `callout_headers` | object | no | | Additional headers to include in callouts to OpenFGA (e.g., `{"authorization": "Bearer <token>"}`) |
-  | `contextual_tuples` | array | no | | Temporary tuples included in the Check request for request-scoped context ([docs](https://openfga.dev/docs/interacting/contextual-tuples)). Each entry has `user`, `relation`, `object` as valueSource objects. Tuples with unresolvable fields are silently skipped. |
-  | `context` | object | no | | ABAC condition context values for the Check request ([docs](https://openfga.dev/docs/modeling/conditions)). Maps field names to valueSource objects. Empty values are omitted. |
-  | `metadata` | object | no | | Optional. When set, writes the authorization decision to dynamic metadata for downstream filters. Requires `namespace` and `key`. |
-
-  ### valueSource Reference
-
-  Each of `user`, `relation`, and `object` (and per-rule overrides) is a `valueSource` object.
-  Exactly one of `value`, `header`, `path_segment`, or `query_param` must be set.
-
-  | Field | Type | Description |
-  |-------|------|-------------|
-  | `value` | string | Static value used as-is |
-  | `header` | string | Read value from this request header |
-  | `path_segment` | int | Extract the URL path segment at this 0-based index. Negative values count from the end: `-1` is the last segment. The query string is stripped before indexing. |
-  | `query_param` | string | Extract the first value of this named query parameter from the URL. URL-encoding is decoded automatically. |
-  | `prefix` | string | Prepend this string to the extracted value |
-
   ## Filter Chain Ordering
 
   When deploying with Envoy AI Gateway, filter chain order determines which headers are
@@ -406,6 +369,17 @@ examples:
     description: |
       Authenticate callouts to an OpenFGA server that requires an API token.
       Use `callout_headers` to add an `Authorization` header to every Check request.
+
+      OpenFGA supports two authentication modes (see [OpenFGA authentication setup](https://openfga.dev/docs/getting-started/setup-openfga/configure-openfga#authentication)):
+      - **Preshared key** — pass the configured key directly as `Bearer <key>`.
+      - **OIDC (client credentials)** — obtain a short-lived access token from your
+        IdP's token endpoint using the `client_credentials` grant, then pass it as
+        `Bearer <token>`. OpenFGA will validate the token against the configured
+        issuer and audience.
+
+      The filter does not refresh OIDC tokens itself; set up token rotation in the
+      identity provider or the surrounding platform and update `callout_headers`
+      accordingly.
     code: |
       boe run --extension openfga \
         --config '{
