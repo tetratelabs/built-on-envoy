@@ -25,9 +25,10 @@ var templateFS embed.FS
 
 // Create is a command to create a new extension template.
 type Create struct {
-	Type string `help:"Type of the extension (go, rust)." default:"go" enum:"go,rust"`
-	Name string `arg:"" help:"Name of the extension."`
-	Path string `help:"Output directory for the extension. Defaults to the extension name." type:"path"`
+	Type       string `help:"Type of the extension (go, rust)." default:"go" enum:"go,rust"`
+	FilterType string `help:"Filter type (http, network). Network filters are only supported for rust." default:"http" enum:"http,network"`
+	Name       string `arg:"" help:"Name of the extension."`
+	Path       string `help:"Output directory for the extension. Defaults to the extension name." type:"path"`
 }
 
 //go:embed create_help.md
@@ -35,6 +36,14 @@ var createHelp string
 
 // Help returns the help message for the create command.
 func (c *Create) Help() string { return createHelp }
+
+// Validate is called by Kong after parsing to validate the command arguments.
+func (c *Create) Validate() error {
+	if c.Type == "go" && c.FilterType == "network" {
+		return fmt.Errorf("network filter scaffolding is not supported for Go extensions; use --type rust")
+	}
+	return nil
+}
 
 // Run executes the create command.
 func (c *Create) Run(dirs *xdg.Directories, logger *slog.Logger) error {
@@ -44,7 +53,7 @@ func (c *Create) Run(dirs *xdg.Directories, logger *slog.Logger) error {
 	case "go":
 		return createGoExtension(logger, dirs, c.Path, c.Name)
 	case "rust":
-		return createRustExtension(logger, c.Path, c.Name)
+		return createRustExtension(logger, c.Path, c.Name, c.FilterType)
 	default:
 		return fmt.Errorf("unsupported extension type: %s", c.Type)
 	}
@@ -129,7 +138,7 @@ func createFilesFromTemplate(files map[string]string, data map[string]string, re
 	return nil
 }
 
-func createRustExtension(logger *slog.Logger, path, name string) error {
+func createRustExtension(logger *slog.Logger, path, name, filterType string) error {
 	repoPath := filepath.Join(path, name)
 
 	data := map[string]string{
@@ -138,11 +147,18 @@ func createRustExtension(logger *slog.Logger, path, name string) error {
 		"LibName": extensions.RustLibNameFromName(name),
 	}
 
+	libTemplate := "templates/create/rust/lib_http.rs.tmpl"
+	manifestTemplate := "templates/create/rust/manifest_http.yaml.tmpl"
+	if filterType == "network" {
+		libTemplate = "templates/create/rust/lib_network.rs.tmpl"
+		manifestTemplate = "templates/create/rust/manifest_network.yaml.tmpl"
+	}
+
 	// Map of output filename to template filename
 	files := map[string]string{
-		"src/lib.rs":         "templates/create/rust/lib.rs.tmpl",
+		"src/lib.rs":         libTemplate,
 		"Cargo.toml":         "templates/create/rust/Cargo.toml.tmpl",
-		"manifest.yaml":      "templates/create/rust/manifest.yaml.tmpl",
+		"manifest.yaml":      manifestTemplate,
 		".gitignore":         "templates/create/rust/gitignore.tmpl",
 		".dockerignore":      "templates/create/rust/dockerignore.tmpl",
 		".cargo/config.toml": "templates/create/rust/cargo-config.toml.tmpl",
@@ -151,7 +167,8 @@ func createRustExtension(logger *slog.Logger, path, name string) error {
 		"Makefile":           "templates/create/rust/Makefile.tmpl",
 	}
 
-	logger.Info("creating Rust dynamic module extension", "name", name, "path", repoPath, "files", slices.Collect(maps.Keys(files)))
+	logger.Info("creating Rust dynamic module extension",
+		"name", name, "path", repoPath, "filterType", filterType, "files", slices.Collect(maps.Keys(files)))
 
 	return createFilesFromTemplate(files, data, repoPath)
 }

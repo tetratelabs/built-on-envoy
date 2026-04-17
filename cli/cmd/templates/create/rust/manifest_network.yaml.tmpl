@@ -1,0 +1,48 @@
+name: {{ .Name }}
+version: 0.1.0
+categories:
+  - Misc
+author: Unknown
+description: A custom Rust network (L4) extension.
+longDescription: |
+  A custom Rust network filter built with Envoy's dynamic module framework.
+
+  ## Features
+
+  * **Connection logging**: Logs a tag on every new TCP connection
+  * **Configurable**: Configure the log tag via JSON config
+
+  ## Configuration
+
+  Configure the extension with a JSON object:
+  - `log_tag`: The tag to log on new connections (default: "example")
+
+  ## Building
+
+  This is a Rust dynamic module that must be compiled to a shared library.
+
+  ```bash
+  cargo build --release
+  ```
+
+  The compiled library will be at `target/release/lib{{ .LibName }}.{so,dylib}`
+tags:
+  - rust
+  - dynamic-module
+  - network
+  - filter
+license: Apache-2.0
+type: rust
+filterType: network
+examples:
+  - title: Basic Usage
+    description: Run the extension with default configuration
+    code: |
+      boe run --extension {{ .Name }}
+  - title: Custom Log Tag
+    description: Configure a custom log tag
+    code: |
+      boe run --extension {{ .Name }} --config '
+        {
+          "log_tag": "my-custom-tag"
+        }'

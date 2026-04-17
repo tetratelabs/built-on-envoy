@@ -16,8 +16,10 @@ import (
 	dymv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/dynamic_modules/v3"
 	dymhttpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/dynamic_modules/v3"
 	luav3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/lua/v3"
+	dymlistv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/listener/dynamic_modules/v3"
 	dymnetv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/dynamic_modules/v3"
 	hcmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
+	dymudpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/udp/dynamic_modules/v3"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -280,6 +282,162 @@ func TestDynamicModuleFilterGeneratorNetwork(t *testing.T) {
 	}
 
 	checkProtos(t, wantWithConfig.NetworkFilters, got.NetworkFilters)
+}
+
+func TestDynamicModuleFilterGeneratorListener(t *testing.T) {
+	logger := internaltesting.NewTLogger(t)
+	dirs := &xdg.Directories{DataHome: t.TempDir()}
+	manifest := &extensions.Manifest{
+		Name:       "test-listener-module",
+		Type:       extensions.TypeRust,
+		FilterType: extensions.FilterTypeListener,
+		Version:    "v1.0.0",
+		Remote:     true,
+	}
+
+	// Case 1: Generate config for Listener Filter written as Rust dynamic module
+	got, err := GenerateFilterConfig(logger, manifest, dirs, "")
+	require.NoError(t, err)
+	require.Empty(t, got.HTTPFilters, "listener filter should not produce HTTP filters")
+	require.Empty(t, got.NetworkFilters, "listener filter should not produce network filters")
+
+	want := &ExtensionResources{
+		ListenerFilters: []*listenerv3.ListenerFilter{
+			{
+				Name: manifest.Name,
+				ConfigType: &listenerv3.ListenerFilter_TypedConfig{
+					TypedConfig: func() *anypb.Any {
+						dymConfig := &dymlistv3.DynamicModuleListenerFilter{
+							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
+								Name:         manifest.Name,
+								LoadGlobally: false,
+							},
+							FilterName: manifest.Name,
+						}
+						cfg, anypbErr := anypb.New(dymConfig)
+						require.NoError(t, anypbErr)
+						return cfg
+					}(),
+				},
+			},
+		},
+	}
+
+	checkProtos(t, want.ListenerFilters, got.ListenerFilters)
+
+	// Case 2: Success with config for Listener Filter written as Rust dynamic module
+	configJSON := `{"key":"value","nested":{"foo":"bar"}}`
+	got, err = GenerateFilterConfig(logger, manifest, dirs, configJSON)
+	require.NoError(t, err, "GenerateFilterConfig with config failed")
+	require.Empty(t, got.HTTPFilters, "listener filter should not produce HTTP filters")
+	require.Empty(t, got.NetworkFilters, "listener filter should not produce network filters")
+
+	wantWithConfig := &ExtensionResources{
+		ListenerFilters: []*listenerv3.ListenerFilter{
+			{
+				Name: manifest.Name,
+				ConfigType: &listenerv3.ListenerFilter_TypedConfig{
+					TypedConfig: func() *anypb.Any {
+						dymConfig := &dymlistv3.DynamicModuleListenerFilter{
+							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
+								Name:         manifest.Name,
+								LoadGlobally: false,
+							},
+							FilterName: manifest.Name,
+							FilterConfig: func() *anypb.Any {
+								cfg, err := anypb.New(wrapperspb.String(configJSON))
+								require.NoError(t, err, "marshal StringValue to Any failed")
+								return cfg
+							}(),
+						}
+						cfg, err := anypb.New(dymConfig)
+						require.NoError(t, err, "marshal DynamicModuleListenerFilter to Any failed")
+						return cfg
+					}(),
+				},
+			},
+		},
+	}
+
+	checkProtos(t, wantWithConfig.ListenerFilters, got.ListenerFilters)
+}
+
+func TestDynamicModuleFilterGeneratorUDPListener(t *testing.T) {
+	logger := internaltesting.NewTLogger(t)
+	dirs := &xdg.Directories{DataHome: t.TempDir()}
+	manifest := &extensions.Manifest{
+		Name:       "test-udp-listener-module",
+		Type:       extensions.TypeRust,
+		FilterType: extensions.FilterTypeUDPListener,
+		Version:    "v1.0.0",
+		Remote:     true,
+	}
+
+	// Case 1: Generate config for UDP Listener Filter written as Rust dynamic module
+	got, err := GenerateFilterConfig(logger, manifest, dirs, "")
+	require.NoError(t, err)
+	require.Empty(t, got.HTTPFilters, "UDP listener filter should not produce HTTP filters")
+	require.Empty(t, got.NetworkFilters, "UDP listener filter should not produce network filters")
+
+	want := &ExtensionResources{
+		ListenerFilters: []*listenerv3.ListenerFilter{
+			{
+				Name: manifest.Name,
+				ConfigType: &listenerv3.ListenerFilter_TypedConfig{
+					TypedConfig: func() *anypb.Any {
+						dymConfig := &dymudpv3.DynamicModuleUdpListenerFilter{
+							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
+								Name:         manifest.Name,
+								LoadGlobally: false,
+							},
+							FilterName: manifest.Name,
+						}
+						cfg, anypbErr := anypb.New(dymConfig)
+						require.NoError(t, anypbErr)
+						return cfg
+					}(),
+				},
+			},
+		},
+	}
+
+	checkProtos(t, want.ListenerFilters, got.ListenerFilters)
+
+	// Case 2: Success with config for UDP Listener Filter written as Rust dynamic module
+	configJSON := `{"key":"value","nested":{"foo":"bar"}}`
+	got, err = GenerateFilterConfig(logger, manifest, dirs, configJSON)
+	require.NoError(t, err, "GenerateFilterConfig with config failed")
+	require.Empty(t, got.HTTPFilters, "UDP listener filter should not produce HTTP filters")
+	require.Empty(t, got.NetworkFilters, "UDP listener filter should not produce network filters")
+
+	wantWithConfig := &ExtensionResources{
+		ListenerFilters: []*listenerv3.ListenerFilter{
+			{
+				Name: manifest.Name,
+				ConfigType: &listenerv3.ListenerFilter_TypedConfig{
+					TypedConfig: func() *anypb.Any {
+						dymConfig := &dymudpv3.DynamicModuleUdpListenerFilter{
+							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
+								Name:         manifest.Name,
+								LoadGlobally: false,
+							},
+							FilterName: manifest.Name,
+							FilterConfig: func() *anypb.Any {
+								cfg, err := anypb.New(wrapperspb.String(configJSON))
+								require.NoError(t, err, "marshal StringValue to Any failed")
+								return cfg
+							}(),
+						}
+						cfg, err := anypb.New(dymConfig)
+						require.NoError(t, err, "marshal DynamicModuleUdpListenerFilter to Any failed")
+						return cfg
+					}(),
+				},
+			},
+		},
+	}
+
+	checkProtos(t, wantWithConfig.ListenerFilters, got.ListenerFilters)
 }
 
 func TestComposerFilterGenerator(t *testing.T) {

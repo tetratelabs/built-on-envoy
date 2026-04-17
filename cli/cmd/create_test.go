@@ -45,11 +45,13 @@ Arguments:
   <name>    Name of the extension.
 
 Flags:
-  -h, --help           Show context-sensitive help.
+  -h, --help                  Show context-sensitive help.
 
-      --type="go"      Type of the extension (go, rust).
-      --path=STRING    Output directory for the extension. Defaults to the
-                       extension name.
+      --type="go"             Type of the extension (go, rust).
+      --filter-type="http"    Filter type (http, network). Network filters are
+                              only supported for rust.
+      --path=STRING           Output directory for the extension. Defaults to
+                              the extension name.
 `, internaltesting.WrapHelp(createHelp))
 	require.Equal(t, expected, buf.String())
 }
@@ -177,4 +179,53 @@ func TestUnsupportedType(t *testing.T) {
 	err := c.Run(&xdg.Directories{}, internaltesting.NewTLogger(t))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported extension type")
+}
+
+func TestCreateRust_NetworkFilter_Run(t *testing.T) {
+	tmpDir := t.TempDir()
+	name := "my-tcp-extension"
+
+	c := &Create{
+		Type:       "rust",
+		FilterType: "network",
+		Name:       name,
+		Path:       tmpDir,
+	}
+
+	err := c.Run(&xdg.Directories{}, internaltesting.NewTLogger(t))
+	require.NoError(t, err)
+
+	repoPath := filepath.Join(tmpDir, name)
+	require.DirExists(t, repoPath)
+
+	// verify manifest.yaml content
+	// #nosec G304
+	manifest, err := os.ReadFile(filepath.Join(repoPath, "manifest.yaml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(manifest), "name: "+name)
+	assert.Contains(t, string(manifest), "type: rust")
+	assert.Contains(t, string(manifest), "filterType: network")
+
+	// verify src/lib.rs contains network filter constructs, not HTTP.
+	// #nosec G304
+	libRs, err := os.ReadFile(filepath.Join(repoPath, "src/lib.rs"))
+	require.NoError(t, err)
+	assert.Contains(t, string(libRs), "declare_network_filter_init_functions!")
+	assert.Contains(t, string(libRs), "NetworkFilterConfig")
+	assert.Contains(t, string(libRs), "fn on_new_connection")
+	assert.NotContains(t, string(libRs), "declare_init_functions!")
+	assert.NotContains(t, string(libRs), "HttpFilterConfig")
+}
+
+func TestCreateGo_NetworkFilter_Unsupported(t *testing.T) {
+	c := &Create{
+		Type:       "go",
+		FilterType: "network",
+		Name:       "test-extension",
+	}
+
+	err := c.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "network filter")
+	assert.Contains(t, err.Error(), "Go")
 }

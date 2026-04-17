@@ -1,0 +1,144 @@
+// Copyright Built On Envoy
+// SPDX-License-Identifier: Apache-2.0
+// The full text of the Apache license is available in the LICENSE file at
+// the root of the repo.
+
+use envoy_proxy_dynamic_modules_rust_sdk::*;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
+// The raw filter config that will be deserialized from the JSON configuration.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct RawFilterConfig {
+    #[serde(default)]
+    log_tag: String,
+}
+
+impl Default for RawFilterConfig {
+    fn default() -> Self {
+        RawFilterConfig {
+            log_tag: "example".to_string(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct FilterConfigImpl {
+    log_tag: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct FilterConfig {
+    config: Arc<FilterConfigImpl>,
+}
+
+impl FilterConfig {
+    pub fn new(filter_config: &str) -> Option<Self> {
+        let raw: RawFilterConfig = if filter_config.is_empty() {
+            RawFilterConfig::default()
+        } else {
+            match serde_json::from_str(filter_config) {
+                Ok(cfg) => cfg,
+                Err(err) => {
+                    eprintln!("Error parsing filter config: {err}");
+                    return None;
+                }
+            }
+        };
+
+        Some(FilterConfig {
+            config: Arc::new(FilterConfigImpl {
+                log_tag: raw.log_tag,
+            }),
+        })
+    }
+}
+
+impl<ENF: EnvoyNetworkFilter> NetworkFilterConfig<ENF> for FilterConfig {
+    fn new_network_filter(&self, _envoy: &mut ENF) -> Box<dyn NetworkFilter<ENF>> {
+        Box::new(Filter {
+            config: self.config.clone(),
+        })
+    }
+}
+
+pub struct Filter {
+    config: Arc<FilterConfigImpl>,
+}
+
+impl<ENF: EnvoyNetworkFilter> NetworkFilter<ENF> for Filter {
+    fn on_new_connection(
+        &mut self,
+        _envoy_filter: &mut ENF,
+    ) -> abi::envoy_dynamic_module_type_on_network_filter_data_status {
+        // TODO: Implement your own custom logic here.
+        envoy_log_info!("{{ .Name }}: OnNewConnection tag={}", self.config.log_tag);
+        abi::envoy_dynamic_module_type_on_network_filter_data_status::Continue
+    }
+
+    fn on_read(
+        &mut self,
+        _envoy_filter: &mut ENF,
+        _data_length: usize,
+        _end_stream: bool,
+    ) -> abi::envoy_dynamic_module_type_on_network_filter_data_status {
+        abi::envoy_dynamic_module_type_on_network_filter_data_status::Continue
+    }
+
+    fn on_write(
+        &mut self,
+        _envoy_filter: &mut ENF,
+        _data_length: usize,
+        _end_stream: bool,
+    ) -> abi::envoy_dynamic_module_type_on_network_filter_data_status {
+        abi::envoy_dynamic_module_type_on_network_filter_data_status::Continue
+    }
+}
+
+fn init() -> bool {
+    true
+}
+
+fn new_network_filter_config_fn<EC: EnvoyNetworkFilterConfig, ENF: EnvoyNetworkFilter>(
+    _envoy_filter_config: &mut EC,
+    filter_name: &str,
+    filter_config: &[u8],
+) -> Option<Box<dyn NetworkFilterConfig<ENF>>> {
+    let filter_config = std::str::from_utf8(filter_config).unwrap_or("");
+    match filter_name {
+        "{{ .Name }}" => FilterConfig::new(filter_config)
+            .map(|config| Box::new(config) as Box<dyn NetworkFilterConfig<ENF>>),
+        _ => panic!("Unknown filter name: {filter_name}"),
+    }
+}
+
+declare_network_filter_init_functions!(init, new_network_filter_config_fn);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_new_filter_config() {
+        let filter_config = FilterConfig::new(
+            r#"{
+                "log_tag": "test"
+            }"#,
+        );
+        assert!(filter_config.is_some());
+        assert_eq!(filter_config.unwrap().config.log_tag, "test");
+    }
+
+    #[test]
+    fn test_new_filter_config_default() {
+        let filter_config = FilterConfig::new("");
+        assert!(filter_config.is_some());
+        assert_eq!(filter_config.unwrap().config.log_tag, "example");
+    }
+
+    #[test]
+    fn test_new_filter_config_invalid_json() {
+        let filter_config = FilterConfig::new("{invalid");
+        assert!(filter_config.is_none());
+    }
+}
