@@ -121,6 +121,17 @@ func TestPluginConfigFactoryCreate(t *testing.T) {
 		assert.False(t, pf.statsCollector.hasHistogramMetric)
 		assert.False(t, pf.statsCollector.hasHistogramMetricWithTags)
 	})
+
+	t.Run("per route configuration", func(t *testing.T) {
+		factory := &PluginConfigFactory{}
+		result, err := factory.CreatePerRoute([]byte(`{}`))
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		perRouteConfig, ok := result.(*emptyPerRouteConfig)
+		require.True(t, ok)
+		assert.NotNil(t, perRouteConfig)
+	})
 }
 
 func TestPluginFactoryCreate(t *testing.T) {

@@ -313,6 +313,13 @@ func (f *PluginConfigFactory) Create(handle shared.HttpFilterConfigHandle,
 	return &PluginFactory{statsCollector: stats}, nil
 }
 
+type emptyPerRouteConfig struct{}
+
+// CreatePerRoute creates an empty per-route config. This can be extended to parse and return route-specific configuration.
+func (f *PluginConfigFactory) CreatePerRoute(_ []byte) (any, error) {
+	return &emptyPerRouteConfig{}, nil
+}
+
 // ExtensionName is the name of the extension that will be used in the
 // `run` command to refer to this plugin.
 const ExtensionName = "example-go"
