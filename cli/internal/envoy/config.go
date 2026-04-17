@@ -76,7 +76,7 @@ type GeneratedConfigResources struct {
 }
 
 // ConfigRenderer is a function type that renders the Envoy configuration based on the provided parameters and generated resources.
-type ConfigRenderer func(*ConfigGenerationParams, GeneratedConfigResources) (string, error)
+type ConfigRenderer func(*ConfigGenerationParams, *GeneratedConfigResources) (string, error)
 
 // RenderConfig renders the Envoy configuration with the given parameters.
 // The ouyput is a YAML string that is passed to func-e to run Envoy.
@@ -85,7 +85,7 @@ func RenderConfig(params *ConfigGenerationParams, renderer ConfigRenderer) (stri
 	if err != nil {
 		return "", fmt.Errorf("failed to generate config resources: %w", err)
 	}
-	rendered, err := renderer(params, gen)
+	rendered, err := renderer(params, &gen)
 	if err != nil {
 		return "", fmt.Errorf("failed to render config: %w", err)
 	}
@@ -94,7 +94,7 @@ func RenderConfig(params *ConfigGenerationParams, renderer ConfigRenderer) (stri
 }
 
 // FullConfigRenderer is a default ConfigRenderer that generates the full Envoy configuration with listeners, clusters, and admin interface.
-func FullConfigRenderer(params *ConfigGenerationParams, gen GeneratedConfigResources) (string, error) {
+func FullConfigRenderer(params *ConfigGenerationParams, gen *GeneratedConfigResources) (string, error) {
 	params.Logger.Info("rendering full Envoy config")
 
 	var (
@@ -142,7 +142,7 @@ func FullConfigRenderer(params *ConfigGenerationParams, gen GeneratedConfigResou
 }
 
 // MinimalConfigRenderer is a ConfigRenderer that generates a minimal Envoy configuration containing only the generated HTTP filters and clusters.
-func MinimalConfigRenderer(params *ConfigGenerationParams, gen GeneratedConfigResources) (string, error) {
+func MinimalConfigRenderer(params *ConfigGenerationParams, gen *GeneratedConfigResources) (string, error) {
 	params.Logger.Info("rendering minimal Envoy config")
 
 	httpFilterConfigs, err := protoListToAny(gen.HTTPFilters)
