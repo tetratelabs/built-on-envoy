@@ -55,13 +55,14 @@ func (l *List) Run(logger *slog.Logger) error {
 
 	// Create a tabwriter for nicely formatted table output
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(w, "NAME\tVERSION\tTYPE\tDESCRIPTION")
+	_, _ = fmt.Fprintln(w, "NAME\tVERSION\tTYPE\tFILTER_TYPE\tDESCRIPTION")
 
 	for _, m := range index {
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
 			m.Name,
 			m.Version,
 			m.Type,
+			m.FilterType,
 			truncateDescription(m.Description, 60),
 		)
 	}

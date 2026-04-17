@@ -61,8 +61,8 @@ func TestListCommand(t *testing.T) {
 	lines := strings.Split(output, "\n")
 
 	headers := strings.Fields(lines[0])
-	require.Len(t, headers, 4)
-	require.Equal(t, []string{"NAME", "VERSION", "TYPE", "DESCRIPTION"}, headers)
+	require.Len(t, headers, 5)
+	require.Equal(t, []string{"NAME", "VERSION", "TYPE", "FILTER_TYPE", "DESCRIPTION"}, headers)
 
 	// Verify all extensions are listed
 	names := make(map[string]struct{})
@@ -70,12 +70,12 @@ func TestListCommand(t *testing.T) {
 		if line == "" {
 			continue
 		}
-		fields := fieldsN(line, 4)
+		fields := fieldsN(line, 5)
 		m, ok := extensions.Manifests[fields[0]]
 
 		require.Truef(t, ok, "extension %s not found in manifests", fields[0])
 		require.Equal(t,
-			[]string{m.Name, m.Version, string(m.Type), truncateDescription(m.Description, 60)},
+			[]string{m.Name, m.Version, string(m.Type), string(m.FilterType), truncateDescription(m.Description, 60)},
 			fields,
 		)
 
