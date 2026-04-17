@@ -57,6 +57,7 @@ testoverride:
     # Rules working, tests excluded for different expected output
     "920270-4": "Log contains 920270. Test has log_contains disabled."
     "922130-*": "Tests need a Coraza-specific override. See upstream Coraza FTW overrides."
+    "920274-1": "Host validation. Apache expects status 400. Coraza correctly triggers the rule. Move to overrides"
 
     # Coraza related issues
     "920171-2": "Rule 920171 not detected. GET or HEAD with body. Coraza side"
@@ -67,13 +68,8 @@ testoverride:
     "934120-25": "Rule 934120 partially detected. With HTTP/1.1 Envoy returns 400. With HTTP/2 enclosed alphanumerics are not detected"
     "934120-26": "Rule 934120 partially detected. With HTTP/1.1 Envoy returns 400. With HTTP/2 enclosed alphanumerics are not detected"
     "934120-39": "Rule 934120 partially detected. With HTTP/1.1 Envoy returns 400. With HTTP/2 enclosed alphanumerics are not detected"
-    "941120-8": "Coraza or CRS side. 51-character on* token still matches 941120"
-    "930110-7": "Coraza or CRS side. See https://github.com/corazawaf/coraza/pull/1081"
-    "920274-1": "Failing on Coraza upstream as well"
     "920290-4": "Failing on Coraza upstream as well"
-    "941310-1": "upstream issue, see https://github.com/corazawaf/coraza/pull/1580"
-    "941310-3": "upstream issue, see https://github.com/corazawaf/coraza/pull/1580"
-    "941310-12": "upstream issue, see https://github.com/corazawaf/coraza/pull/1580"
+    "941120-8": "Coraza or CRS side. 51-character on* token still matches 941120"
 
     # Excluding individual failing tests probably not compatible with Envoy
     "920180-1": ""
