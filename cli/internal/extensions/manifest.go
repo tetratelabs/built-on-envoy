@@ -136,6 +136,8 @@ const (
 	FilterTypeHTTP FilterType = "http"
 	// FilterTypeNetwork represents a network filter extension.
 	FilterTypeNetwork FilterType = "network"
+	// FilterTypeListener represents a listener filter extension.
+	FilterTypeListener FilterType = "listener"
 	// FilterTypeUDPListener represents a UDP listener filter extension.
 	FilterTypeUDPListener FilterType = "udp_listener"
 

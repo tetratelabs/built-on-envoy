@@ -69,12 +69,14 @@ type GeneratedConfigResources struct {
 	HTTPFilters []*hcmv3.HttpFilter
 	// NetworkFilters are the generated network filters to be included in the Envoy listener filter chain.
 	NetworkFilters []*listenerv3.Filter
+	// ListenerFilters are the generated listener filters to be included in the Envoy listener filter chain.
+	ListenerFilters []*listenerv3.ListenerFilter
 	// Clusters are the generated clusters to be included in the Envoy configuration.
 	Clusters []*clusterv3.Cluster
 }
 
 // ConfigRenderer is a function type that renders the Envoy configuration based on the provided parameters and generated resources.
-type ConfigRenderer func(*ConfigGenerationParams, GeneratedConfigResources) (string, error)
+type ConfigRenderer func(*ConfigGenerationParams, *GeneratedConfigResources) (string, error)
 
 // RenderConfig renders the Envoy configuration with the given parameters.
 // The ouyput is a YAML string that is passed to func-e to run Envoy.
@@ -83,7 +85,7 @@ func RenderConfig(params *ConfigGenerationParams, renderer ConfigRenderer) (stri
 	if err != nil {
 		return "", fmt.Errorf("failed to generate config resources: %w", err)
 	}
-	rendered, err := renderer(params, gen)
+	rendered, err := renderer(params, &gen)
 	if err != nil {
 		return "", fmt.Errorf("failed to render config: %w", err)
 	}
@@ -92,7 +94,7 @@ func RenderConfig(params *ConfigGenerationParams, renderer ConfigRenderer) (stri
 }
 
 // FullConfigRenderer is a default ConfigRenderer that generates the full Envoy configuration with listeners, clusters, and admin interface.
-func FullConfigRenderer(params *ConfigGenerationParams, gen GeneratedConfigResources) (string, error) {
+func FullConfigRenderer(params *ConfigGenerationParams, gen *GeneratedConfigResources) (string, error) {
 	params.Logger.Info("rendering full Envoy config")
 
 	var (
@@ -128,7 +130,7 @@ func FullConfigRenderer(params *ConfigGenerationParams, gen GeneratedConfigResou
 		hostRewrite = testUpstreamHost
 	}
 
-	cfg, err := buildFullConfig(params.AdminPort, params.ListenerPort, clusterName, hostRewrite, newCluster, gen.HTTPFilters, gen.NetworkFilters, gen.Clusters)
+	cfg, err := buildFullConfig(params.AdminPort, params.ListenerPort, clusterName, hostRewrite, newCluster, gen.HTTPFilters, gen.NetworkFilters, gen.ListenerFilters, gen.Clusters)
 	if err != nil {
 		return "", fmt.Errorf("failed to build config: %w", err)
 	}
@@ -140,7 +142,7 @@ func FullConfigRenderer(params *ConfigGenerationParams, gen GeneratedConfigResou
 }
 
 // MinimalConfigRenderer is a ConfigRenderer that generates a minimal Envoy configuration containing only the generated HTTP filters and clusters.
-func MinimalConfigRenderer(params *ConfigGenerationParams, gen GeneratedConfigResources) (string, error) {
+func MinimalConfigRenderer(params *ConfigGenerationParams, gen *GeneratedConfigResources) (string, error) {
 	params.Logger.Info("rendering minimal Envoy config")
 
 	httpFilterConfigs, err := protoListToAny(gen.HTTPFilters)
@@ -150,6 +152,10 @@ func MinimalConfigRenderer(params *ConfigGenerationParams, gen GeneratedConfigRe
 	networkFilterConfigs, err := protoListToAny(gen.NetworkFilters)
 	if err != nil {
 		return "", fmt.Errorf("failed to serialize network filter configs: %w", err)
+	}
+	listenerFilterConfigs, err := protoListToAny(gen.ListenerFilters)
+	if err != nil {
+		return "", fmt.Errorf("failed to serialize listener filter configs: %w", err)
 	}
 	clusterConfigs, err := protoListToAny(gen.Clusters)
 	if err != nil {
@@ -162,6 +168,9 @@ func MinimalConfigRenderer(params *ConfigGenerationParams, gen GeneratedConfigRe
 	}
 	if len(networkFilterConfigs) > 0 {
 		payload["network_filters"] = networkFilterConfigs
+	}
+	if len(listenerFilterConfigs) > 0 {
+		payload["listener_filters"] = listenerFilterConfigs
 	}
 	if len(clusterConfigs) > 0 {
 		payload["clusters"] = clusterConfigs
@@ -178,6 +187,7 @@ func MinimalConfigRenderer(params *ConfigGenerationParams, gen GeneratedConfigRe
 func generateConfig(params *ConfigGenerationParams) (GeneratedConfigResources, error) {
 	httpFilters := make([]*hcmv3.HttpFilter, 0, len(params.Extensions))
 	networkFilters := make([]*listenerv3.Filter, 0)
+	listenerFilters := make([]*listenerv3.ListenerFilter, 0)
 	clusters := make([]*clusterv3.Cluster, 0)
 	for i, ext := range params.Extensions {
 		var config string
@@ -190,6 +200,7 @@ func generateConfig(params *ConfigGenerationParams) (GeneratedConfigResources, e
 		}
 		httpFilters = append(httpFilters, resources.HTTPFilters...)
 		networkFilters = append(networkFilters, resources.NetworkFilters...)
+		listenerFilters = append(listenerFilters, resources.ListenerFilters...)
 		clusters = append(clusters, resources.Clusters...)
 	}
 
@@ -218,9 +229,10 @@ func generateConfig(params *ConfigGenerationParams) (GeneratedConfigResources, e
 	}
 
 	return GeneratedConfigResources{
-		HTTPFilters:    httpFilters,
-		NetworkFilters: networkFilters,
-		Clusters:       clusters,
+		HTTPFilters:     httpFilters,
+		NetworkFilters:  networkFilters,
+		ListenerFilters: listenerFilters,
+		Clusters:        clusters,
 	}, nil
 }
 
@@ -267,7 +279,7 @@ func parseCluster(shortSpec string, tls bool) (*clusterv3.Cluster, error) {
 // and allows us to use the proto marshalling functions. Otherwise, we would have to create a wrapper
 // proto on our own, or marshal the config manually.
 // TODO(nacx): Is there a wrapper for `admin` and `static_resources` we could use other than Bootstrap?
-func buildFullConfig(adminPort, listenerPort uint32, testUpstreamClusterName, testUpstreamHostRewrite string, newCluster *clusterv3.Cluster, httpFilters []*hcmv3.HttpFilter, networkFilters []*listenerv3.Filter, clusters []*clusterv3.Cluster) (*bootstrapv3.Bootstrap, error) {
+func buildFullConfig(adminPort, listenerPort uint32, testUpstreamClusterName, testUpstreamHostRewrite string, newCluster *clusterv3.Cluster, httpFilters []*hcmv3.HttpFilter, networkFilters []*listenerv3.Filter, listenerFilters []*listenerv3.ListenerFilter, clusters []*clusterv3.Cluster) (*bootstrapv3.Bootstrap, error) {
 	hcm, err := buildHTTPConnectionManager(httpFilters, testUpstreamClusterName, testUpstreamHostRewrite)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build HTTP connection manager: %w", err)
@@ -302,6 +314,7 @@ func buildFullConfig(adminPort, listenerPort uint32, testUpstreamClusterName, te
 				Filters: networkFilters,
 			},
 		},
+		ListenerFilters: listenerFilters,
 	}
 
 	admin := &bootstrapv3.Admin{

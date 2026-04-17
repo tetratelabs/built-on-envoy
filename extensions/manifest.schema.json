@@ -94,7 +94,9 @@
       "description": "Envoy filter type. Defaults to `http` if not specified.",
       "enum": [
         "http",
-        "network"
+        "network",
+        "listener",
+        "udp_listener"
       ],
       "default": "http"
     },
