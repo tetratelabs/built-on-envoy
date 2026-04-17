@@ -17,8 +17,10 @@ import (
 	dymv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/dynamic_modules/v3"
 	dymhttpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/dynamic_modules/v3"
 	luav3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/lua/v3"
+	dymlistv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/listener/dynamic_modules/v3"
 	dymnetv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/dynamic_modules/v3"
 	hcmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
+	dymudpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/udp/dynamic_modules/v3"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -46,9 +48,10 @@ type (
 
 	// ExtensionResources holds the resources created by an extension.
 	ExtensionResources struct {
-		HTTPFilters    []*hcmv3.HttpFilter
-		Clusters       []*clusterv3.Cluster
-		NetworkFilters []*listenerv3.Filter
+		HTTPFilters     []*hcmv3.HttpFilter
+		Clusters        []*clusterv3.Cluster
+		NetworkFilters  []*listenerv3.Filter
+		ListenerFilters []*listenerv3.ListenerFilter
 		// TODO(huabing): may need to add more resources
 	}
 )
@@ -160,6 +163,7 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 
 	var httpFilters []*hcmv3.HttpFilter
 	var networkFilters []*listenerv3.Filter
+	var listenerFilters []*listenerv3.ListenerFilter
 
 	switch manifest.FilterType {
 	case extensions.FilterTypeNetwork:
@@ -178,7 +182,38 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 				ConfigType: &listenerv3.Filter_TypedConfig{TypedConfig: dynamicModuleAny},
 			},
 		}
-
+	case extensions.FilterTypeListener:
+		protoConfig := &dymlistv3.DynamicModuleListenerFilter{
+			DynamicModuleConfig: moduleConfig,
+			FilterName:          manifest.Name,
+			FilterConfig:        anyConfig,
+		}
+		dynamicModuleAny, err := anypb.New(protoConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal dynamic module listener filter to Any: %w", err)
+		}
+		listenerFilters = []*listenerv3.ListenerFilter{
+			{
+				Name:       manifest.Name,
+				ConfigType: &listenerv3.ListenerFilter_TypedConfig{TypedConfig: dynamicModuleAny},
+			},
+		}
+	case extensions.FilterTypeUDPListener:
+		protoConfig := &dymudpv3.DynamicModuleUdpListenerFilter{
+			DynamicModuleConfig: moduleConfig,
+			FilterName:          manifest.Name,
+			FilterConfig:        anyConfig,
+		}
+		dynamicModuleAny, err := anypb.New(protoConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal dynamic module UDP listener filter to Any: %w", err)
+		}
+		listenerFilters = []*listenerv3.ListenerFilter{
+			{
+				Name:       manifest.Name,
+				ConfigType: &listenerv3.ListenerFilter_TypedConfig{TypedConfig: dynamicModuleAny},
+			},
+		}
 	default:
 		protoConfig := &dymhttpv3.DynamicModuleFilter{
 			DynamicModuleConfig: moduleConfig,
@@ -198,8 +233,9 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 	}
 
 	return &ExtensionResources{
-		HTTPFilters:    httpFilters,
-		NetworkFilters: networkFilters,
+		HTTPFilters:     httpFilters,
+		NetworkFilters:  networkFilters,
+		ListenerFilters: listenerFilters,
 	}, nil
 }
 
