@@ -1,0 +1,47 @@
+name: {{ .Name }}
+version: 0.1.0
+categories:
+  - Misc
+author: Unknown
+description: A custom Rust extension.
+longDescription: |
+  A custom Rust extension built with Envoy's dynamic module framework.
+
+  ## Features
+
+  * **Custom Header**: Adds a custom header to requests and responses
+  * **Configurable**: Configure the header value via JSON config
+
+  ## Configuration
+
+  Configure the extension with a JSON object:
+  - `header_value`: The value to set in the custom header (default: "example")
+
+  ## Building
+
+  This is a Rust dynamic module that must be compiled to a shared library.
+
+  ```bash
+  cargo build --release
+  ```
+
+  The compiled library will be at `target/release/lib{{ .LibName }}.{so,dylib}`
+tags:
+  - rust
+  - dynamic-module
+  - http
+  - filter
+license: Apache-2.0
+type: rust
+examples:
+  - title: Basic Usage
+    description: Run the extension with default configuration
+    code: |
+      boe run --extension {{ .Name }}
+  - title: Custom Header Value
+    description: Configure a custom header value
+    code: |
+      boe run --extension {{ .Name }} --config '
+        {
+          "header_value": "my-custom-value"
+        }'

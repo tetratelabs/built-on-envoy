@@ -37,23 +37,23 @@ var createHelp string
 // Help returns the help message for the create command.
 func (c *Create) Help() string { return createHelp }
 
+// Validate is called by Kong after parsing to validate the command arguments.
+func (c *Create) Validate() error {
+	if c.Type == "go" && c.FilterType == "network" {
+		return fmt.Errorf("network filter scaffolding is not supported for Go extensions; use --type rust")
+	}
+	return nil
+}
+
 // Run executes the create command.
 func (c *Create) Run(dirs *xdg.Directories, logger *slog.Logger) error {
 	logger.Debug("handling create command", "cmd", c)
 
-	filterType := c.FilterType
-	if filterType == "" {
-		filterType = "http"
-	}
-
 	switch c.Type {
 	case "go":
-		if filterType == "network" {
-			return fmt.Errorf("network filter scaffolding is not supported for Go extensions; use --type rust")
-		}
 		return createGoExtension(logger, dirs, c.Path, c.Name)
 	case "rust":
-		return createRustExtension(logger, c.Path, c.Name, filterType)
+		return createRustExtension(logger, c.Path, c.Name, c.FilterType)
 	default:
 		return fmt.Errorf("unsupported extension type: %s", c.Type)
 	}
@@ -144,20 +144,21 @@ func createRustExtension(logger *slog.Logger, path, name, filterType string) err
 	data := map[string]string{
 		"Name": name,
 		// Convert name to lib_name (replace hyphens with underscores for Rust crate name)
-		"LibName":    extensions.RustLibNameFromName(name),
-		"FilterType": filterType,
+		"LibName": extensions.RustLibNameFromName(name),
 	}
 
-	libTemplate := "templates/create/rust/lib.rs.tmpl"
+	libTemplate := "templates/create/rust/lib_http.rs.tmpl"
+	manifestTemplate := "templates/create/rust/manifest_http.yaml.tmpl"
 	if filterType == "network" {
 		libTemplate = "templates/create/rust/lib_network.rs.tmpl"
+		manifestTemplate = "templates/create/rust/manifest_network.yaml.tmpl"
 	}
 
 	// Map of output filename to template filename
 	files := map[string]string{
 		"src/lib.rs":         libTemplate,
 		"Cargo.toml":         "templates/create/rust/Cargo.toml.tmpl",
-		"manifest.yaml":      "templates/create/rust/manifest.yaml.tmpl",
+		"manifest.yaml":      manifestTemplate,
 		".gitignore":         "templates/create/rust/gitignore.tmpl",
 		".dockerignore":      "templates/create/rust/dockerignore.tmpl",
 		".cargo/config.toml": "templates/create/rust/cargo-config.toml.tmpl",

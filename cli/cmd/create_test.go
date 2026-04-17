@@ -224,7 +224,7 @@ func TestCreateGo_NetworkFilter_Unsupported(t *testing.T) {
 		Name:       "test-extension",
 	}
 
-	err := c.Run(&xdg.Directories{}, internaltesting.NewTLogger(t))
+	err := c.Validate()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "network filter")
 	assert.Contains(t, err.Error(), "Go")
