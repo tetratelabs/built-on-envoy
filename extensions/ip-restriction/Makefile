@@ -23,5 +23,7 @@ test:
 
 .PHONY: test-coverage
 test-coverage:
-	@cargo llvm-cov --lcov --output-path lcov.info --fail-under-lines $(COVERAGE_THRESHOLD)
-	@cargo llvm-cov report --summary-only
+	@cargo llvm-cov --lcov --output-path lcov.info --fail-under-lines $(COVERAGE_THRESHOLD); \
+		status=$$?; \
+		cargo llvm-cov report --summary-only; \
+		exit $$status
