@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/composer/openfga/config.schema.json",
+  "title": "OpenFGA Authorization Configuration",
+  "description": "Configuration for the OpenFGA authorization extension. Checks authorization via the OpenFGA Check API through Envoy's async HTTP callout mechanism.",
+  "type": "object",
+  "required": ["cluster", "openfga_host", "store_id"],
+  "additionalProperties": false,
+  "properties": {
+    "cluster": {
+      "type": "string",
+      "description": "Envoy cluster name routing to the OpenFGA server."
+    },
+    "openfga_host": {
+      "type": "string",
+      "description": "Hostname for the Host header in callouts to OpenFGA."
+    },
+    "store_id": {
+      "type": "string",
+      "description": "OpenFGA store ID."
+    },
+    "authorization_model_id": {
+      "type": "string",
+      "description": "OpenFGA authorization model ID. Uses the store's latest model if omitted."
+    },
+    "user": {
+      "$ref": "#/$defs/ValueSource",
+      "description": "How to extract the user for the Check call. Required when using rules."
+    },
+    "relation": {
+      "$ref": "#/$defs/ValueSource",
+      "description": "How to extract the relation for the Check call. Required when not using rules."
+    },
+    "object": {
+      "$ref": "#/$defs/ValueSource",
+      "description": "How to extract the object for the Check call. Required when not using rules."
+    },
+    "rules": {
+      "type": "array",
+      "description": "Multi-rule config evaluated in order; first match wins. A rule with no match is a catch-all and must be last.",
+      "items": {
+        "$ref": "#/$defs/CheckRule"
+      }
+    },
+    "fail_open": {
+      "type": "boolean",
+      "description": "Allow requests when the filter cannot enforce a decision. Defaults to false."
+    },
+    "dry_run": {
+      "type": "boolean",
+      "description": "Log authorization decisions without enforcing them. Defaults to false."
+    },
+    "timeout_ms": {
+      "type": "integer",
+      "description": "HTTP callout timeout in milliseconds. Defaults to 5000.",
+      "minimum": 1
+    },
+    "deny_status": {
+      "type": "integer",
+      "description": "HTTP status code for denied requests. Defaults to 403.",
+      "minimum": 100,
+      "maximum": 599
+    },
+    "deny_body": {
+      "type": "string",
+      "description": "Response body for denied requests. Defaults to 'Forbidden'."
+    },
+    "consistency": {
+      "type": "string",
+      "description": "OpenFGA Check consistency preference.",
+      "enum": ["UNSPECIFIED", "MINIMIZE_LATENCY", "HIGHER_CONSISTENCY"]
+    },
+    "callout_headers": {
+      "type": "object",
+      "description": "Additional headers to include in callouts to OpenFGA (e.g. Authorization).",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "contextual_tuples": {
+      "type": "array",
+      "description": "Contextual tuples included in the Check request for request-scoped relationships. Tuples with unresolvable fields are silently skipped.",
+      "items": {
+        "$ref": "#/$defs/ContextualTuple"
+      }
+    },
+    "context": {
+      "type": "object",
+      "description": "ABAC condition context values. Maps field names to ValueSource objects. Fields that resolve to an empty value are omitted.",
+      "additionalProperties": {
+        "$ref": "#/$defs/ValueSource"
+      }
+    },
+    "metadata": {
+      "$ref": "#/$defs/MetadataKey",
+      "description": "When set, writes the authorization decision to dynamic metadata for downstream filters."
+    }
+  },
+  "$defs": {
+    "ValueSource": {
+      "type": "object",
+      "description": "Extracts a value from the request. Exactly one of value, header, path_segment, or query_param must be set.",
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": "string",
+          "description": "Static value used as-is."
+        },
+        "header": {
+          "type": "string",
+          "description": "Read value from this request header."
+        },
+        "path_segment": {
+          "type": "integer",
+          "description": "Extract the URL path segment at this 0-based index. Negative values count from the end."
+        },
+        "query_param": {
+          "type": "string",
+          "description": "Extract the first value of this named query parameter."
+        },
+        "prefix": {
+          "type": "string",
+          "description": "Prepend this string to the extracted value."
+        }
+      }
+    },
+    "CheckRule": {
+      "type": "object",
+      "description": "A rule defining how to build the Check tuple for a matched request.",
+      "required": ["relation", "object"],
+      "additionalProperties": false,
+      "properties": {
+        "match": {
+          "$ref": "#/$defs/RuleMatch",
+          "description": "Conditions for this rule to match. Omit for a catch-all rule."
+        },
+        "user": {
+          "$ref": "#/$defs/ValueSource",
+          "description": "Per-rule user override. Falls back to top-level user if omitted."
+        },
+        "relation": {
+          "$ref": "#/$defs/ValueSource",
+          "description": "How to extract the relation for this rule."
+        },
+        "object": {
+          "$ref": "#/$defs/ValueSource",
+          "description": "How to extract the object for this rule."
+        }
+      }
+    },
+    "RuleMatch": {
+      "type": "object",
+      "description": "Conditions for a rule to match. All specified headers must match.",
+      "additionalProperties": false,
+      "properties": {
+        "headers": {
+          "type": "object",
+          "description": "Header name to match value. Use \"*\" to require the header to be present with any non-empty value.",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "ContextualTuple": {
+      "type": "object",
+      "description": "A contextual tuple with user, relation, and object value sources.",
+      "required": ["user", "relation", "object"],
+      "additionalProperties": false,
+      "properties": {
+        "user": {
+          "$ref": "#/$defs/ValueSource"
+        },
+        "relation": {
+          "$ref": "#/$defs/ValueSource"
+        },
+        "object": {
+          "$ref": "#/$defs/ValueSource"
+        }
+      }
+    },
+    "MetadataKey": {
+      "type": "object",
+      "description": "Dynamic metadata configuration for writing authorization decisions.",
+      "required": ["namespace", "key"],
+      "additionalProperties": false,
+      "properties": {
+        "namespace": {
+          "type": "string",
+          "description": "Filter-state namespace for the metadata entry."
+        },
+        "key": {
+          "type": "string",
+          "description": "Key under which the decision is stored within the namespace."
+        }
+      }
+    }
+  }
+}
