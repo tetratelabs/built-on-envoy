@@ -39,5 +39,5 @@ jobs:
       - uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: extensions/${{ matrix.extension.path }}/target/lcov.info
+          files: extensions/${{ matrix.extension.path }}/lcov.info
           flags: extensions
