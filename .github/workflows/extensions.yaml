@@ -104,6 +104,7 @@ jobs:
     uses: ./.github/workflows/extensions-rust.yaml
     with:
       extensions: ${{ needs.discover.outputs.rust-extensions }}
+    secrets: inherit
 
   go-checks:
     needs: discover
