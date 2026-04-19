@@ -83,6 +83,7 @@ func TestOCIAnnotationsForManifest(t *testing.T) {
 		Author:      "Test Author",
 		License:     "Apache-2.0",
 		Type:        TypeLua,
+		FilterType:  FilterTypeNetwork,
 	}
 
 	annotations := OCIAnnotationsForManifest(manifest)
@@ -93,26 +94,54 @@ func TestOCIAnnotationsForManifest(t *testing.T) {
 	require.Equal(t, "Test Author", annotations[ocispec.AnnotationAuthors])
 	require.Equal(t, "Apache-2.0", annotations[ocispec.AnnotationLicenses])
 	require.Equal(t, "lua", annotations[OCIAnnotationExtensionType])
+	require.Equal(t, "network", annotations[OCIAnnotationFilterType])
 }
 
 func TestManifestFromOCI(t *testing.T) {
-	ociManifest := &ocispec.Manifest{
-		Annotations: map[string]string{
-			ocispec.AnnotationTitle:       "test-extension",
-			ocispec.AnnotationDescription: "A test extension",
-			ocispec.AnnotationVersion:     "1.0.0",
-			ocispec.AnnotationAuthors:     "Test Author",
-			ocispec.AnnotationLicenses:    "Apache-2.0",
-			OCIAnnotationExtensionType:    "lua",
-		},
-	}
+	t.Run("with all annotations", func(t *testing.T) {
+		ociManifest := &ocispec.Manifest{
+			Annotations: map[string]string{
+				ocispec.AnnotationTitle:       "test-extension",
+				ocispec.AnnotationDescription: "A test extension",
+				ocispec.AnnotationVersion:     "1.0.0",
+				ocispec.AnnotationAuthors:     "Test Author",
+				ocispec.AnnotationLicenses:    "Apache-2.0",
+				OCIAnnotationExtensionType:    "lua",
+				OCIAnnotationFilterType:       "network",
+			},
+		}
 
-	manifest := ManifestFromOCI(ociManifest)
+		manifest := ManifestFromOCI(ociManifest)
 
-	require.Equal(t, "test-extension", manifest.Name)
-	require.Equal(t, "A test extension", manifest.Description)
-	require.Equal(t, "1.0.0", manifest.Version)
-	require.Equal(t, "Test Author", manifest.Author)
-	require.Equal(t, "Apache-2.0", manifest.License)
-	require.Equal(t, TypeLua, manifest.Type)
+		require.Equal(t, "test-extension", manifest.Name)
+		require.Equal(t, "A test extension", manifest.Description)
+		require.Equal(t, "1.0.0", manifest.Version)
+		require.Equal(t, "Test Author", manifest.Author)
+		require.Equal(t, "Apache-2.0", manifest.License)
+		require.Equal(t, TypeLua, manifest.Type)
+		require.Equal(t, FilterTypeNetwork, manifest.FilterType)
+	})
+
+	t.Run("without filter type", func(t *testing.T) {
+		ociManifest := &ocispec.Manifest{
+			Annotations: map[string]string{
+				ocispec.AnnotationTitle:       "test-extension",
+				ocispec.AnnotationDescription: "A test extension",
+				ocispec.AnnotationVersion:     "1.0.0",
+				ocispec.AnnotationAuthors:     "Test Author",
+				ocispec.AnnotationLicenses:    "Apache-2.0",
+				OCIAnnotationExtensionType:    "lua",
+			},
+		}
+
+		manifest := ManifestFromOCI(ociManifest)
+
+		require.Equal(t, "test-extension", manifest.Name)
+		require.Equal(t, "A test extension", manifest.Description)
+		require.Equal(t, "1.0.0", manifest.Version)
+		require.Equal(t, "Test Author", manifest.Author)
+		require.Equal(t, "Apache-2.0", manifest.License)
+		require.Equal(t, TypeLua, manifest.Type)
+		require.Equal(t, FilterTypeHTTP, manifest.FilterType) // Default filter type
+	})
 }

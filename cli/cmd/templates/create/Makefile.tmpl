@@ -20,6 +20,7 @@ BOE_DATA_HOME ?= {{ .DataHome }}
 NAME             := $(shell grep "^name:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
 VERSION          := $(shell grep "^version:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
 TYPE             := $(shell grep "^type:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+FILTER_TYPE      := $(shell grep "^filterType:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
 DESCRIPTION      := $(shell grep "^description:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
 TIMESTAMP        := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 COMMIT_SHA       := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
@@ -49,6 +50,7 @@ BASE_OCI_ANNOTATIONS := \
 	--annotation "org.opencontainers.image.revision=$(COMMIT_SHA)" \
 	--annotation "org.opencontainers.image.authors=$(AUTHOR)" \
 	--annotation "io.tetratelabs.built-on-envoy.extension.type=$(TYPE)" \
+	--annotation "io.tetratelabs.built-on-envoy.extension.filter_type=$(FILTER_TYPE)" \
 	--annotation "io.tetratelabs.built-on-envoy.extension.composer_version=$(COMPOSER_VERSION)"
 
 # Artifact type annotations

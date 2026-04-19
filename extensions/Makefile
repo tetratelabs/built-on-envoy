@@ -27,6 +27,7 @@ endif
 NAME             := $(shell grep "^name:" ./$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
 VERSION          := $(shell grep "^version:" ./$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
 TYPE             := $(shell grep "^type:" ./$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+FILTER_TYPE      := $(shell grep "^filterType:" ./$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
 DESCRIPTION      := $(shell grep "^description:" ./$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
 TIMESTAMP        := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 COMMIT_SHA       := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
@@ -56,6 +57,7 @@ BASE_OCI_ANNOTATIONS := \
 	--annotation "org.opencontainers.image.revision=$(COMMIT_SHA)" \
 	--annotation "org.opencontainers.image.authors=$(AUTHOR)" \
 	--annotation "io.tetratelabs.built-on-envoy.extension.type=$(TYPE)" \
+	--annotation "io.tetratelabs.built-on-envoy.extension.filter_type=$(FILTER_TYPE)" \
 	--annotation "io.tetratelabs.built-on-envoy.extension.version=$(VERSION)"
 
 # Artifact type annotations
