@@ -90,7 +90,7 @@ jobs:
           rust_extensions=$(echo "$extensions" | jq -c '[.[] | select(.language == "rust")]')
 
           # Filter ExtProc extensions
-          extproc_extensions=$(echo "$extensions" | jq -c '[.[] | select(.type == "extproc")]')
+          extproc_extensions=$(echo "$extensions" | jq -c '[.[] | select(.type == "ext_proc")]')
           
           # Check if composer extension exists
           has_composer=$(echo "$extensions" | jq '[.[] | select(.name == "composer")] | length > 0')

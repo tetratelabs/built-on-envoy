@@ -169,7 +169,7 @@ func TestCreateExtProc_Run(t *testing.T) {
 	// #nosec G304
 	mainGo, err := os.ReadFile(filepath.Join(repoPath, "main.go"))
 	require.NoError(t, err)
-	assert.Contains(t, string(mainGo), "extprocv3.RegisterExternalProcessorServer(srv, &processor{})")
+	assert.Contains(t, string(mainGo), "extprocv3.RegisterExternalProcessorServer(srv, processor)")
 }
 
 func TestCreateRust_Run(t *testing.T) {

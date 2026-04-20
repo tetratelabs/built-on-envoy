@@ -84,7 +84,7 @@ func (d *Downloader) DownloadExtension(ctx context.Context, name, version string
 		return DownloadedExtension{}, err
 	}
 
-	// If the Download dir contains the manifest (lua extensions or downloaded source), load it to get
+	// If the Download dir contains the manifest (lua extensions, ext_proc, or downloaded source), load it to get
 	// the full manifest with all extension data.
 	// Composer extensions are different as the manifest is the uber-manifest and we don't want to read that.
 	if !artifact.ComposerBundle {
