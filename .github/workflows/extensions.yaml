@@ -40,6 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       rust-extensions: ${{ steps.discover.outputs.rust-extensions }}
+      extproc-extensions: ${{ steps.discover.outputs.extproc-extensions }}
       has-composer: ${{ steps.discover.outputs.has-composer }}
     steps:
       - uses: actions/checkout@v6
