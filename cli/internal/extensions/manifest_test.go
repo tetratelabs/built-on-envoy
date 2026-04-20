@@ -483,6 +483,7 @@ func TestLoadLocalManifest(t *testing.T) {
 			Description:     "A test extension",
 			LongDescription: "This is a longer description of the test extension.\n",
 			Type:            TypeWasm,
+			FilterType:      FilterTypeHTTP,
 			Tags:            []string{"test"},
 			License:         "Apache-2.0",
 			Examples: []Example{
