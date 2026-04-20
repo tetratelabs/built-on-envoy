@@ -119,6 +119,13 @@ func (m *Manifest) EnvoyConstraints() string {
 	return constraints
 }
 
+// ApplyDefaults applies default values to the manifest fields.
+func (m *Manifest) ApplyDefaults() {
+	if m.FilterType == "" {
+		m.FilterType = FilterTypeHTTP
+	}
+}
+
 const (
 	// TypeLua represents a Lua extension.
 	TypeLua Type = "lua"
@@ -242,6 +249,8 @@ func loadManifest(fsys fs.FS, path string, validate bool) (*Manifest, error) {
 	if err := yaml.Unmarshal(data, &m); err != nil {
 		return nil, fmt.Errorf("%w: %s", ErrParseManifestFile, path)
 	}
+
+	m.ApplyDefaults()
 
 	if validate {
 		if err := ValidateManifest(&m); err != nil {
