@@ -41,3 +41,4 @@ Thumbs.db
 **/Cargo.lock
 **/*.dylib
 **/.rustc_info.json
+**/lcov.info
