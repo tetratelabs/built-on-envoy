@@ -110,6 +110,60 @@ Short title for the example.
 
 
 
+## extProc
+
+External processor (ext_proc) configuration.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+| **Required when** | `type` is `ext_proc` |
+
+
+
+### extProc.failureModeAllow
+
+Whether to allow requests through if the ext_proc server is unavailable or times out.
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+
+
+### extProc.grpcPort
+
+Port the ext_proc gRPC server listens on.
+
+| | |
+|---|---|
+| **Type** | `integer` |
+| **Required** | No |
+
+
+### extProc.messageTimeout
+
+Per-message timeout (e.g. '200ms'). Envoy waits this long for each ProcessingResponse.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+
+### extProc.processingMode
+
+Controls which HTTP phases are forwarded to the ext_proc server.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+
+
+
+
 ## extensionSet
 
 Whether this manifest defines a set of extensions.
@@ -278,7 +332,7 @@ Type of the extension.
 |---|---|
 | **Type** | `string` |
 | **Required** | Yes |
-| **Allowed values** | `lua`, `wasm`, `rust`, `go`, `composer` |
+| **Allowed values** | `lua`, `wasm`, `rust`, `go`, `composer`, `ext_proc` |
 
 
 
