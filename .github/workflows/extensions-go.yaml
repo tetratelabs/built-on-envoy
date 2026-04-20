@@ -25,20 +25,16 @@ jobs:
           go-version-file: extensions/composer/go.mod
           cache-dependency-path: extensions/composer/go.sum
 
-      - name: Format and lint
-        run: make format lint
-
-      - name: Build
-        run: make build
-
-      - name: Build plugins
-        run: make build_plugins
-
-      - name: Run tests
-        run: make test-coverage
+      - run: make format lint
+      - run: make build
+      - run: make build_plugins
+      - run: make test-coverage
+      
       - uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          disable_search: true
+          files: extensions/composer/out/go-test-coverage.out
           flags: extensions
 
       - name: Log in to GHCR

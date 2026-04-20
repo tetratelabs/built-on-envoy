@@ -108,6 +108,29 @@ test-go-coverage:
 		--config ../.testcoverage.yml \
 		--profile ./out/go-test-coverage.out
 
+.PHONY: format-rust
+format-rust:
+	@cd $(EXTENSION_PATH) &&  cargo fmt --check
+
+.PHONY: lint-rust
+lint-rust:
+	@cd $(EXTENSION_PATH) && cargo clippy -- -D warnings
+
+.PHONY: build-rust
+build-rust:
+	@cd $(EXTENSION_PATH) && cargo build --release
+
+.PHONY: test-rust
+test-rust:
+	@cd $(EXTENSION_PATH) && cargo test
+
+.PHONY: test-rust-coverage
+test-rust-coverage:
+	@cd $(EXTENSION_PATH) && cargo llvm-cov --lcov --output-path lcov.info --fail-under-lines 80; \
+		status=$$?; \
+		cargo llvm-cov report --summary-only; \
+		exit $$status
+
 BUILDER_NAME := boe-builder
 .PHONY: create_builder
 create_builder:

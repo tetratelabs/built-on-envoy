@@ -35,4 +35,6 @@ jobs:
       - uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          disable_search: true
+          files: extensions/${{ matrix.extension.path }}/out/go-test/coverage.out
           flags: extensions
