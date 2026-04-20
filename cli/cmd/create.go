@@ -25,7 +25,7 @@ var templateFS embed.FS
 
 // Create is a command to create a new extension template.
 type Create struct {
-	Type       string `help:"Type of the extension (go, rust)." default:"go" enum:"go,rust"`
+	Type       string `help:"Type of the extension (go, rust, ext_proc)." default:"go" enum:"go,rust,ext_proc"`
 	FilterType string `help:"Filter type (http, network). Network filters are only supported for rust." default:"http" enum:"http,network"`
 	Name       string `arg:"" help:"Name of the extension."`
 	Path       string `help:"Output directory for the extension. Defaults to the extension name." type:"path"`
@@ -40,7 +40,10 @@ func (c *Create) Help() string { return createHelp }
 // Validate is called by Kong after parsing to validate the command arguments.
 func (c *Create) Validate() error {
 	if c.Type == "go" && c.FilterType == "network" {
-		return fmt.Errorf("network filter scaffolding is not supported for Go extensions; use --type rust")
+		return fmt.Errorf("network filter scaffolding is not supported for %q extensions; use --type rust", c.Type)
+	}
+	if c.Type == "ext_proc" && c.FilterType == "network" {
+		return fmt.Errorf("network filter scaffolding is not supported for %q extensions", c.Type)
 	}
 	return nil
 }
@@ -54,6 +57,8 @@ func (c *Create) Run(dirs *xdg.Directories, logger *slog.Logger) error {
 		return createGoExtension(logger, dirs, c.Path, c.Name)
 	case "rust":
 		return createRustExtension(logger, c.Path, c.Name, c.FilterType)
+	case "ext_proc":
+		return createExtProcExtension(logger, c.Path, c.Name)
 	default:
 		return fmt.Errorf("unsupported extension type: %s", c.Type)
 	}
@@ -70,16 +75,16 @@ func createGoExtension(logger *slog.Logger, dirs *xdg.Directories, path, name st
 
 	// Map of output filename to template filename
 	files := map[string]string{
-		"plugin.go":          "templates/create/plugin.go.tmpl",
-		"plugin_test.go":     "templates/create/plugin_test.go.tmpl",
-		"manifest.yaml":      "templates/create/manifest.yaml.tmpl",
-		"Makefile":           "templates/create/Makefile.tmpl",
-		"go.mod":             "templates/create/go.mod.tmpl",
-		"Dockerfile":         "templates/create/Dockerfile.tmpl",
-		"Dockerfile.code":    "templates/create/Dockerfile.code.tmpl",
-		".dockerignore":      "templates/create/.dockerignore.tmpl",
-		"embedded/host.go":   "templates/create/host.go.tmpl",
-		"standalone/main.go": "templates/create/main.go.tmpl",
+		"plugin.go":          "templates/create/go/plugin.go.tmpl",
+		"plugin_test.go":     "templates/create/go/plugin_test.go.tmpl",
+		"manifest.yaml":      "templates/create/go/manifest.yaml.tmpl",
+		"Makefile":           "templates/create/go/Makefile.tmpl",
+		"go.mod":             "templates/create/go/go.mod.tmpl",
+		"Dockerfile":         "templates/create/go/Dockerfile.tmpl",
+		"Dockerfile.code":    "templates/create/go/Dockerfile.code.tmpl",
+		".dockerignore":      "templates/create/go/dockerignore.tmpl",
+		"embedded/host.go":   "templates/create/go/host.go.tmpl",
+		"standalone/main.go": "templates/create/go/main.go.tmpl",
 	}
 
 	logger.Info("creating Go extension", "name", name, "path", repoPath, "files", slices.Collect(maps.Keys(files)))
@@ -134,6 +139,41 @@ func createFilesFromTemplate(files map[string]string, data map[string]string, re
 			return fmt.Errorf("failed to execute template for %s: %w", outputName, err)
 		}
 		fmt.Printf("Created %s\n", outputPath)
+	}
+	return nil
+}
+
+func createExtProcExtension(logger *slog.Logger, path, name string) error {
+	repoPath := filepath.Join(path, name)
+
+	data := map[string]string{
+		"Name": name,
+	}
+
+	files := map[string]string{
+		"main.go":           "templates/create/ext_proc/main.go.tmpl",
+		"main_test.go":      "templates/create/ext_proc/main_test.go.tmpl",
+		"processor.go":      "templates/create/ext_proc/processor.go.tmpl",
+		"processor_test.go": "templates/create/ext_proc/processor_test.go.tmpl",
+		"manifest.yaml":     "templates/create/ext_proc/manifest.yaml.tmpl",
+		"go.mod":            "templates/create/ext_proc/go.mod.tmpl",
+		"Dockerfile":        "templates/create/ext_proc/Dockerfile.tmpl",
+		"Dockerfile.code":   "templates/create/ext_proc/Dockerfile.code.tmpl",
+		".dockerignore":     "templates/create/ext_proc/dockerignore.tmpl",
+		"Makefile":          "templates/create/ext_proc/Makefile.tmpl",
+	}
+
+	logger.Info("creating ext_proc extension", "name", name, "path", repoPath, "files", slices.Collect(maps.Keys(files)))
+
+	if err := createFilesFromTemplate(files, data, repoPath); err != nil {
+		return err
+	}
+
+	cmd := exec.Command("go", "mod", "tidy")
+	cmd.Dir = repoPath
+	logger.Info("running 'go mod tidy' to initialize the module dependencies")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to run 'go mod tidy': %w\n%s", err, string(output))
 	}
 	return nil
 }

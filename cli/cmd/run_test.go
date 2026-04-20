@@ -497,7 +497,7 @@ func TestValidateEnvoyCompat(t *testing.T) {
 	}
 }
 
-func TestRunIncomaptibleEnvoyVersion(t *testing.T) {
+func TestRunIncompatibleEnvoyVersion(t *testing.T) {
 	r := &Run{
 		EnvoyVersion: "1.37.0",
 		Local:        []string{"./testdata/input_lua_inline"},
@@ -623,6 +623,23 @@ func TestDownloadExtensions(t *testing.T) {
 		require.Len(t, manifests, 1)
 		require.Equal(t, "my-dym", manifests[0].Name)
 		require.Equal(t, extensions.TypeRust, manifests[0].Type)
+	})
+
+	t.Run("binary ExtProc extension", func(t *testing.T) {
+		mock := &mockOCIClient{
+			annotations: map[string]string{
+				ocispec.AnnotationTitle:               "my-ext-proc",
+				extensions.OCIAnnotationExtensionType: string(extensions.TypeExtProc),
+				extensions.OCIAnnotationArtifact:      extensions.ArtifactBinary,
+			},
+		}
+		d := newTestDownloader(t, t.TempDir(), mock)
+
+		manifests, err := downloadExtensions(t.Context(), d, []string{"my-ext-proc:2.0.0"}, false)
+		require.NoError(t, err)
+		require.Len(t, manifests, 1)
+		require.Equal(t, "my-ext-proc", manifests[0].Name)
+		require.Equal(t, extensions.TypeExtProc, manifests[0].Type)
 	})
 
 	t.Run("binary Go extension", func(t *testing.T) {

@@ -88,14 +88,19 @@ jobs:
           
           # Filter Rust extensions
           rust_extensions=$(echo "$extensions" | jq -c '[.[] | select(.language == "rust")]')
+
+          # Filter ExtProc extensions
+          extproc_extensions=$(echo "$extensions" | jq -c '[.[] | select(.type == "extproc")]')
           
           # Check if composer extension exists
           has_composer=$(echo "$extensions" | jq '[.[] | select(.name == "composer")] | length > 0')
           
           echo "rust-extensions=$rust_extensions" >> $GITHUB_OUTPUT
+          echo "extproc-extensions=$extproc_extensions" >> $GITHUB_OUTPUT
           echo "has-composer=$has_composer" >> $GITHUB_OUTPUT
           
           echo "Rust extensions: $rust_extensions"
+          echo "ExtProc extensions: $extproc_extensions"
           echo "Has composer: $has_composer"
 
   rust-checks:
@@ -112,6 +117,14 @@ jobs:
     uses: ./.github/workflows/extensions-go.yaml
     secrets: inherit
 
+  extproc-checks:
+    needs: discover
+    if: ${{ needs.discover.outputs.extproc-extensions != '[]' }}
+    uses: ./.github/workflows/extensions-extproc.yaml
+    with:
+      extensions: ${{ needs.discover.outputs.extproc-extensions }}
+    secrets: inherit
+
   # Aggregate all the required jobs and make it easier to customize CI required jobs
   extensions-checks:
     runs-on: ubuntu-latest
@@ -119,6 +132,7 @@ jobs:
       - discover
       - rust-checks
       - go-checks
+      - extproc-checks
     # We need this to run always to force-fail (and not skip) if any needed
     # job has failed. Otherwise, a skipped job will not fail the workflow.
     if: always()

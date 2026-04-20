@@ -86,7 +86,8 @@
         "wasm",
         "rust",
         "go",
-        "composer"
+        "composer",
+        "ext_proc"
       ]
     },
     "filterType": {
@@ -173,6 +174,53 @@
         { "required": ["inline"] }
       ]
     },
+    "extProc": {
+      "type": "object",
+      "description": "External processor (ext_proc) configuration.",
+      "additionalProperties": false,
+      "properties": {
+        "grpcPort": {
+          "type": "integer",
+          "description": "Port the ext_proc gRPC server listens on.",
+          "default": 50051
+        },
+        "failureModeAllow": {
+          "type": "boolean",
+          "description": "Whether to allow requests through if the ext_proc server is unavailable or times out."
+        },
+        "messageTimeout": {
+          "type": "string",
+          "description": "Per-message timeout (e.g. '200ms'). Envoy waits this long for each ProcessingResponse."
+        },
+        "processingMode": {
+          "type": "object",
+          "description": "Controls which HTTP phases are forwarded to the ext_proc server.",
+          "additionalProperties": false,
+          "properties": {
+            "requestHeaderMode": {
+              "type": "string",
+              "description": "Whether to send request headers to the processor.",
+              "enum": ["SEND", "SKIP", "DEFAULT"]
+            },
+            "responseHeaderMode": {
+              "type": "string",
+              "description": "Whether to send response headers to the processor.",
+              "enum": ["SEND", "SKIP", "DEFAULT"]
+            },
+            "requestBodyMode": {
+              "type": "string",
+              "description": "How to send the request body to the processor.",
+              "enum": ["NONE", "BUFFERED", "STREAMED", "BUFFERED_PARTIAL"]
+            },
+            "responseBodyMode": {
+              "type": "string",
+              "description": "How to send the response body to the processor.",
+              "enum": ["NONE", "BUFFERED", "STREAMED", "BUFFERED_PARTIAL"]
+            }
+          }
+        }
+      }
+    },
     "parent": {
       "type": "string",
       "description": "Parent extension set whose version will be used. When set, the `version` and `composerVersion` fields can't be set.",
@@ -197,6 +245,21 @@
       "else": {
         "properties": {
           "lua": false
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": { "const": "ext_proc" }
+        }
+      },
+      "then": {
+        "required": ["extProc"]
+      },
+      "else": {
+        "properties": {
+          "extProc": false
         }
       }
     },

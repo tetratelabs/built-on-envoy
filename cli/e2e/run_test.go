@@ -167,6 +167,41 @@ func TestRustLocalExtension(t *testing.T) {
 	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
 }
 
+func TestExtProcLocalExtension(t *testing.T) {
+	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin, "--log-level",
+		"ext_proc:debug", "--local", "../../extensions/example-ext-proc")
+
+	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
+	checkHeader := func(r *http.Response) bool {
+		return r.Header.Get("x-ext-proc") == "processed"
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	t.Cleanup(cancel)
+
+	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
+}
+
+func TestExtProcRemoteExtension(t *testing.T) {
+	internaltesting.SkipIfTestRegistryNotConfigured(t)
+
+	// Run the remote extension.
+	// This will resolve the latest tag of the extension, download it to
+	// the data directory, and execute it from there.
+	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin, "--log-level",
+		"ext_proc:debug", "--extension", "example-ext-proc")
+
+	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
+	checkHeader := func(r *http.Response) bool {
+		return r.Header.Get("x-ext-proc") == "processed"
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	t.Cleanup(cancel)
+
+	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
+}
+
 func TestLocalGoExtension(t *testing.T) {
 	// Local builds for Go will pull libcomposer from the remote registry. However, when we're doing changes to versions, etc, we don't want it to
 	// pull an obsolete version, so we'll just push the current composer source to the local registry and use that for the test.

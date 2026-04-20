@@ -169,6 +169,14 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 		return err
 	}
 
+	// Collect ext_proc binary paths for process management.
+	extProcBinaries := make(map[string]string)
+	for _, ext := range extensionsToRun {
+		if ext.Type == extensions.TypeExtProc {
+			extProcBinaries[ext.Name] = extensions.LocalCacheExtension(dirs, ext)
+		}
+	}
+
 	runner := &envoy.RunnerFuncE{
 		Logger:              logger,
 		EnvoyVersion:        r.EnvoyVersion,
@@ -185,6 +193,7 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 		ClustersJSON:        r.Clusters.JSONSpec,
 		TestUpstreamHost:    r.TestUpstreamHost,
 		TestUpstreamCluster: r.TestUpstreamCluster,
+		ExtProcBinaries:     extProcBinaries,
 	}
 
 	return runner.Run(ctx)
@@ -350,6 +359,12 @@ func loadLocalManifests(ctx context.Context, logger *slog.Logger, downloader *ex
 				downloader.Logger.Info("building local Rust extension", "name", manifest.Name, "version", manifest.Version)
 				// Build dynamic module (currently supports Rust)
 				if err := extensions.BuildDynamicModule(downloader.Logger, downloader.Dirs, manifest, path); err != nil {
+					return nil, err
+				}
+			case extensions.TypeExtProc:
+				fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, manifest.Name, internal.ANSIReset)
+				downloader.Logger.Info("building local ext_proc extension", "name", manifest.Name, "version", manifest.Version)
+				if err := extensions.BuildExtProcBinary(downloader.Logger, downloader.Dirs, manifest, path); err != nil {
 					return nil, err
 				}
 			}

@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -66,6 +67,8 @@ type RunnerFuncE struct {
 	// TestUpstreamCluster specifies the name of an existing configured cluster to use as the test upstream.
 	// Mutually exclusive with TestUpstreamHost.
 	TestUpstreamCluster string
+	// ExtProcBinaries maps ext_proc extension names to their binary paths.
+	ExtProcBinaries map[string]string
 }
 
 // Run starts Envoy using func-e as a library.
@@ -114,10 +117,20 @@ func (r *RunnerFuncE) Run(ctx context.Context) error {
 
 	r.Logger.Info("running Envoy with func-e", "envoy_version", r.EnvoyVersion, "extensions", names)
 
+	// ext-proc servers will be started once Envoy starts. func-e assumes that the first child process
+	// is the envoy process, and starting the ext_proc servers before may cause issues.
+	var extProcCmds []*exec.Cmd
+	defer stopExtProcServers(r.Logger, extProcCmds)
+
 	// Define startup hook that will be called when Envoy admin is ready
 	start := time.Now()
 	startupHook := func(_ context.Context, adminClient admin.AdminClient, _ string) error {
+		extProcCmds, err = startExtProcServers(ctx, r.Logger, params.Extensions, r.ExtProcBinaries)
+		if err != nil {
+			return fmt.Errorf("failed to start ext_proc servers: %w", err)
+		}
 		startDuration := time.Since(start).Round(100 * time.Millisecond)
+
 		_, _ = fmt.Fprintf(os.Stderr, `
 %[4]s✓ Envoy is ready after %[3]v%[5]s
   → %[4]sProxy:%[5]s http://localhost:%[1]d
@@ -217,6 +230,94 @@ func setupDynamicModuleSearchPath(params *ConfigGenerationParams) (string, func(
 	params.Logger.Debug("setting up dynamic module search path", "path", tempDir)
 
 	return tempDir, func() {}, nil
+}
+
+// extProcServerReadyTimeout is how long to wait for an ext_proc server to accept connections.
+const extProcServerReadyTimeout = 10 * time.Second
+
+// startExtProcServers starts ext_proc server processes for all ext_proc extensions.
+// It waits for each server to be ready before returning.
+func startExtProcServers(ctx context.Context, logger *slog.Logger, exts []*extensions.Manifest, binaries map[string]string) ([]*exec.Cmd, error) {
+	var cmds []*exec.Cmd
+
+	for _, ext := range exts {
+		if ext.Type != extensions.TypeExtProc {
+			continue
+		}
+
+		binPath, ok := binaries[ext.Name]
+		if !ok {
+			return nil, fmt.Errorf("ext_proc binary not found for extension %s", ext.Name)
+		}
+
+		port := ext.ExtProc.GRPCPort
+		if port == 0 {
+			port = 50051
+		}
+
+		// #nosec G204
+		cmd := exec.CommandContext(ctx, binPath, "--port", fmt.Sprintf("%d", port))
+		cmd.Stdout = &prefixedWriter{prefix: fmt.Sprintf("[%s] ", ext.Name), w: os.Stderr}
+		cmd.Stderr = &prefixedWriter{prefix: fmt.Sprintf("[%s] ", ext.Name), w: os.Stderr}
+
+		logger.Debug("starting ext_proc server", "extension", ext.Name, "port", port, "binary", binPath)
+
+		if err := cmd.Start(); err != nil {
+			stopExtProcServers(logger, cmds)
+			return nil, fmt.Errorf("failed to start ext_proc server for %s: %w", ext.Name, err)
+		}
+
+		cmds = append(cmds, cmd)
+
+		_, _ = fmt.Fprintf(os.Stderr, "→ %sStarting ext_proc server for %s on port %d...%s\n",
+			internal.ANSIBold, ext.Name, port, internal.ANSIReset)
+
+		addr := fmt.Sprintf("127.0.0.1:%d", port)
+		if err := waitForTCPReady(addr, extProcServerReadyTimeout); err != nil {
+			stopExtProcServers(logger, cmds)
+			return nil, fmt.Errorf("ext_proc server for %s did not become ready: %w", ext.Name, err)
+		}
+
+		logger.Debug("ext_proc server is ready", "extension", ext.Name, "port", port)
+	}
+
+	return cmds, nil
+}
+
+// stopExtProcServers sends SIGTERM to all ext_proc server processes.
+func stopExtProcServers(logger *slog.Logger, cmds []*exec.Cmd) {
+	for _, cmd := range cmds {
+		if cmd.Process == nil {
+			continue
+		}
+		logger.Debug("stopping ext_proc server", "pid", cmd.Process.Pid)
+		_ = cmd.Process.Signal(syscall.SIGTERM)
+	}
+}
+
+// waitForTCPReady polls addr until a TCP connection succeeds or the timeout elapses.
+func waitForTCPReady(addr string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		conn, err := net.DialTimeout("tcp", addr, 200*time.Millisecond)
+		if err == nil {
+			_ = conn.Close()
+			return nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return fmt.Errorf("timed out waiting for %s to be ready after %s", addr, timeout)
+}
+
+// prefixedWriter writes to w with each write prefixed by prefix.
+type prefixedWriter struct {
+	prefix string
+	w      *os.File
+}
+
+func (p *prefixedWriter) Write(b []byte) (int, error) {
+	_, _ = fmt.Fprintf(p.w, "%s", p.prefix)
+	return p.w.Write(b)
 }
 
 const (

@@ -10,20 +10,26 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	clusterv3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	endpointv3 "github.com/envoyproxy/go-control-plane/envoy/config/endpoint/v3"
 	listenerv3 "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
 	dymv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/dynamic_modules/v3"
 	dymhttpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/dynamic_modules/v3"
+	extprocv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/ext_proc/v3"
 	luav3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/lua/v3"
 	dymlistv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/listener/dynamic_modules/v3"
 	dymnetv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/dynamic_modules/v3"
 	hcmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
 	dymudpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/udp/dynamic_modules/v3"
+	httpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/upstreams/http/v3"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
@@ -613,6 +619,151 @@ func TestComposerFilterGenerator(t *testing.T) {
 	}
 
 	checkProtos(t, wantOCI.HTTPFilters, got.HTTPFilters)
+}
+
+func TestExtProcFilterGenerator(t *testing.T) {
+	logger := internaltesting.NewTLogger(t)
+	dirs := &xdg.Directories{DataHome: t.TempDir()}
+
+	// Case 1: Invalid message timeout
+	manifest := &extensions.Manifest{
+		Name:    "test-ext-proc",
+		Type:    extensions.TypeExtProc,
+		Version: "v0.0.1",
+		ExtProc: &extensions.ExtProc{
+			GRPCPort:       50051,
+			MessageTimeout: "not-a-duration",
+		},
+	}
+	_, err := GenerateFilterConfig(logger, manifest, dirs, "")
+	require.ErrorContains(t, err, "invalid messageTimeout")
+
+	// Case 2: Minimal config (no processing mode, no timeout)
+	manifest = &extensions.Manifest{
+		Name:    "test-ext-proc",
+		Type:    extensions.TypeExtProc,
+		Version: "v0.0.1",
+		ExtProc: &extensions.ExtProc{
+			GRPCPort: 50051,
+		},
+	}
+	got, err := GenerateFilterConfig(logger, manifest, dirs, "")
+	require.NoError(t, err)
+
+	clusterName := manifest.Name + extProcClusterSuffix
+	wantMinimal := buildExtProcResources(t, manifest.Name, clusterName, 50051, false, nil, 0)
+	checkProtos(t, wantMinimal.HTTPFilters, got.HTTPFilters)
+	checkProtos(t, wantMinimal.Clusters, got.Clusters)
+
+	// Case 3: Full config (processing mode + message timeout + failureModeAllow)
+	manifest = &extensions.Manifest{
+		Name:    "test-ext-proc-full",
+		Type:    extensions.TypeExtProc,
+		Version: "v0.0.1",
+		ExtProc: &extensions.ExtProc{
+			GRPCPort:         50052,
+			FailureModeAllow: true,
+			MessageTimeout:   "500ms",
+			ProcessingMode: &extensions.ExtProcProcessingMode{
+				RequestHeaderMode:  "SEND",
+				ResponseHeaderMode: "SKIP",
+				RequestBodyMode:    "BUFFERED",
+				ResponseBodyMode:   "NONE",
+			},
+		},
+	}
+	got, err = GenerateFilterConfig(logger, manifest, dirs, "")
+	require.NoError(t, err)
+
+	clusterName = manifest.Name + extProcClusterSuffix
+	processingMode := &extprocv3.ProcessingMode{
+		RequestHeaderMode:  extprocv3.ProcessingMode_SEND,
+		ResponseHeaderMode: extprocv3.ProcessingMode_SKIP,
+		RequestBodyMode:    extprocv3.ProcessingMode_BUFFERED,
+		ResponseBodyMode:   extprocv3.ProcessingMode_NONE,
+	}
+	wantFull := buildExtProcResources(t, manifest.Name, clusterName, 50052, true, processingMode, 500*time.Millisecond)
+	checkProtos(t, wantFull.HTTPFilters, got.HTTPFilters)
+	checkProtos(t, wantFull.Clusters, got.Clusters)
+}
+
+// buildExtProcResources constructs the expected ExtensionResources for an ext_proc extension.
+func buildExtProcResources(t *testing.T, name, clusterName string, port int, failureModeAllow bool, processingMode *extprocv3.ProcessingMode, timeout time.Duration) *ExtensionResources {
+	t.Helper()
+
+	extProcFilter := &extprocv3.ExternalProcessor{
+		GrpcService: &corev3.GrpcService{
+			TargetSpecifier: &corev3.GrpcService_EnvoyGrpc_{
+				EnvoyGrpc: &corev3.GrpcService_EnvoyGrpc{
+					ClusterName: clusterName,
+				},
+			},
+		},
+		FailureModeAllow: failureModeAllow,
+		ProcessingMode:   processingMode,
+	}
+	if timeout > 0 {
+		extProcFilter.MessageTimeout = durationpb.New(timeout)
+	}
+	filterAny, err := anypb.New(extProcFilter)
+	require.NoError(t, err)
+
+	httpProtocolOptions := &httpv3.HttpProtocolOptions{
+		UpstreamProtocolOptions: &httpv3.HttpProtocolOptions_ExplicitHttpConfig_{
+			ExplicitHttpConfig: &httpv3.HttpProtocolOptions_ExplicitHttpConfig{
+				ProtocolConfig: &httpv3.HttpProtocolOptions_ExplicitHttpConfig_Http2ProtocolOptions{
+					Http2ProtocolOptions: &corev3.Http2ProtocolOptions{},
+				},
+			},
+		},
+	}
+	httpProtocolOptionsAny, err := anypb.New(httpProtocolOptions)
+	require.NoError(t, err)
+
+	cluster := &clusterv3.Cluster{
+		Name: clusterName,
+		ClusterDiscoveryType: &clusterv3.Cluster_Type{
+			Type: clusterv3.Cluster_STATIC,
+		},
+		TypedExtensionProtocolOptions: map[string]*anypb.Any{
+			"envoy.extensions.upstreams.http.v3.HttpProtocolOptions": httpProtocolOptionsAny,
+		},
+		LoadAssignment: &endpointv3.ClusterLoadAssignment{
+			ClusterName: clusterName,
+			Endpoints: []*endpointv3.LocalityLbEndpoints{
+				{
+					LbEndpoints: []*endpointv3.LbEndpoint{
+						{
+							HostIdentifier: &endpointv3.LbEndpoint_Endpoint{
+								Endpoint: &endpointv3.Endpoint{
+									Address: &corev3.Address{
+										Address: &corev3.Address_SocketAddress{
+											SocketAddress: &corev3.SocketAddress{
+												Address: "127.0.0.1",
+												PortSpecifier: &corev3.SocketAddress_PortValue{
+													PortValue: uint32(port), //nolint:gosec
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	return &ExtensionResources{
+		HTTPFilters: []*hcmv3.HttpFilter{
+			{
+				Name:       name,
+				ConfigType: &hcmv3.HttpFilter_TypedConfig{TypedConfig: filterAny},
+			},
+		},
+		Clusters: []*clusterv3.Cluster{cluster},
+	}
 }
 
 // checkProtosList checks if two lists of proto messages are equal and if not, prints their YAML representation

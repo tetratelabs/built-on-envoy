@@ -96,6 +96,47 @@ end
 	}
 }
 
+func TestValidateExtProcManifest(t *testing.T) {
+	wantFull := &ExtProc{
+		GRPCPort:         50051,
+		FailureModeAllow: true,
+		MessageTimeout:   "200ms",
+		ProcessingMode: &ExtProcProcessingMode{
+			RequestHeaderMode:  "SEND",
+			ResponseHeaderMode: "SKIP",
+			RequestBodyMode:    "BUFFERED",
+			ResponseBodyMode:   "NONE",
+		},
+	}
+	wantMinimal := &ExtProc{GRPCPort: 50051}
+
+	tests := []struct {
+		name    string
+		want    *ExtProc
+		wantErr bool
+	}{
+		{"ext_proc_valid_full.yaml", wantFull, false},
+		{"ext_proc_valid_minimal.yaml", wantMinimal, false},
+		{"ext_proc_missing_settings.yaml", nil, true},
+		{"ext_proc_in_wrong_type.yaml", nil, true},
+		{"ext_proc_invalid_header_mode.yaml", nil, true},
+		{"ext_proc_invalid_body_mode.yaml", nil, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			manifestPath := filepath.Join("testdata", tt.name)
+			localManifest, err := LoadLocalManifest(manifestPath)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tt.want, localManifest.ExtProc)
+			}
+		})
+	}
+}
+
 func TestManifestsForCatalog(t *testing.T) {
 	manifests := ManifestsIndex()
 	require.Less(t, len(manifests), len(Manifests))

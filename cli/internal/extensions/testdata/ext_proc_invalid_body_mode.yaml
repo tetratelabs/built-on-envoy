@@ -1,0 +1,24 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# Invalid: requestBodyMode value is not one of NONE, BUFFERED, STREAMED, BUFFERED_PARTIAL.
+
+name: test-extension
+version: 1.0.0
+categories:
+  - Security
+author: Test Author
+description: A test extension
+longDescription: |
+  This is a longer description of the test extension.
+type: ext_proc
+tags:
+  - test
+license: Apache-2.0
+examples: []
+extProc:
+  grpcPort: 50051
+  processingMode:
+    requestBodyMode: FULL

@@ -47,7 +47,7 @@ Arguments:
 Flags:
   -h, --help                  Show context-sensitive help.
 
-      --type="go"             Type of the extension (go, rust).
+      --type="go"             Type of the extension (go, rust, ext_proc).
       --filter-type="http"    Filter type (http, network). Network filters are
                               only supported for rust.
       --path=STRING           Output directory for the extension. Defaults to
@@ -113,6 +113,63 @@ func TestCreateGo_Run(t *testing.T) {
 		assert.Contains(t, string(plugin), "x-"+name)
 		assert.Contains(t, string(plugin), "WellKnownHttpFilterConfigFactories")
 	}
+}
+
+func TestCreateExtProc_Run(t *testing.T) {
+	// Ensure go is available as the command runs `go mod tidy`
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skip("go not found in PATH")
+	}
+
+	tmpDir := t.TempDir()
+	name := "my-extproc-extension"
+
+	c := &Create{
+		Type: "ext_proc",
+		Name: name,
+		Path: tmpDir,
+	}
+
+	err := c.Run(&xdg.Directories{}, internaltesting.NewTLogger(t))
+	require.NoError(t, err)
+
+	repoPath := filepath.Join(tmpDir, name)
+	require.DirExists(t, repoPath)
+
+	files := []string{
+		"main.go",
+		"main_test.go",
+		"processor.go",
+		"processor_test.go",
+		"manifest.yaml",
+		"go.mod",
+		"Dockerfile",
+		"Dockerfile.code",
+		".dockerignore",
+		"Makefile",
+	}
+	for _, f := range files {
+		require.FileExists(t, filepath.Join(repoPath, f), "expected file %s to exist", f)
+	}
+
+	// verify manifest.yaml content
+	// #nosec G304
+	manifest, err := os.ReadFile(filepath.Join(repoPath, "manifest.yaml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(manifest), "name: "+name)
+	assert.Contains(t, string(manifest), "type: ext_proc")
+
+	// verify go.mod content
+	// #nosec G304
+	goMod, err := os.ReadFile(filepath.Join(repoPath, "go.mod"))
+	require.NoError(t, err)
+	assert.Contains(t, string(goMod), `module `+name)
+
+	// verify main.go content
+	// #nosec G304
+	mainGo, err := os.ReadFile(filepath.Join(repoPath, "main.go"))
+	require.NoError(t, err)
+	assert.Contains(t, string(mainGo), "extprocv3.RegisterExternalProcessorServer(srv, &processor{})")
 }
 
 func TestCreateRust_Run(t *testing.T) {
@@ -218,14 +275,17 @@ func TestCreateRust_NetworkFilter_Run(t *testing.T) {
 }
 
 func TestCreateGo_NetworkFilter_Unsupported(t *testing.T) {
-	c := &Create{
-		Type:       "go",
-		FilterType: "network",
-		Name:       "test-extension",
-	}
+	for _, extensionType := range []string{"go", "ext_proc"} {
+		t.Run(extensionType, func(t *testing.T) {
+			c := &Create{
+				Type:       extensionType,
+				FilterType: "network",
+				Name:       "test-extension",
+			}
 
-	err := c.Validate()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "network filter")
-	assert.Contains(t, err.Error(), "Go")
+			err := c.Validate()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), fmt.Sprintf("network filter scaffolding is not supported for %q extensions", extensionType))
+		})
+	}
 }

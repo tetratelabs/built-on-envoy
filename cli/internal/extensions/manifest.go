@@ -49,8 +49,9 @@ type (
 
 		// ComposerVersion specifies the compatible Composer dynamic module version
 		// for Composer go plugins.
-		ComposerVersion string `yaml:"composerVersion,omitempty" json:"composerVersion,omitempty"`
-		Lua             *Lua   `yaml:"lua,omitempty" json:"lua,omitempty"`
+		ComposerVersion string   `yaml:"composerVersion,omitempty" json:"composerVersion,omitempty"`
+		Lua             *Lua     `yaml:"lua,omitempty" json:"lua,omitempty"`
+		ExtProc         *ExtProc `yaml:"extProc,omitempty" json:"extProc,omitempty"`
 
 		// Path to the manifest file in the local filesystem.
 		Path string `yaml:"-" json:"-"`
@@ -82,6 +83,26 @@ type (
 	Lua struct {
 		Inline string `yaml:"inline,omitempty" json:"inline,omitempty"`
 		Path   string `yaml:"path,omitempty" json:"path,omitempty"`
+	}
+
+	// ExtProc configuration for manifests that define ext_proc extensions.
+	ExtProc struct {
+		// GRPCPort is the port the ext_proc gRPC server listens on. Defaults to 50051.
+		GRPCPort int `yaml:"grpcPort,omitempty" json:"grpcPort,omitempty"`
+		// FailureModeAllow configures whether Envoy allows requests through on ext_proc failure.
+		FailureModeAllow bool `yaml:"failureModeAllow,omitempty" json:"failureModeAllow,omitempty"`
+		// MessageTimeout is the per-message timeout (e.g. "200ms").
+		MessageTimeout string `yaml:"messageTimeout,omitempty" json:"messageTimeout,omitempty"`
+		// ProcessingMode controls which phases are sent to the processor.
+		ProcessingMode *ExtProcProcessingMode `yaml:"processingMode,omitempty" json:"processingMode,omitempty"`
+	}
+
+	// ExtProcProcessingMode controls which HTTP phases are forwarded to the ext_proc server.
+	ExtProcProcessingMode struct {
+		RequestHeaderMode  string `yaml:"requestHeaderMode,omitempty" json:"requestHeaderMode,omitempty"`
+		ResponseHeaderMode string `yaml:"responseHeaderMode,omitempty" json:"responseHeaderMode,omitempty"`
+		RequestBodyMode    string `yaml:"requestBodyMode,omitempty" json:"requestBodyMode,omitempty"`
+		ResponseBodyMode   string `yaml:"responseBodyMode,omitempty" json:"responseBodyMode,omitempty"`
 	}
 
 	// ManifestIndexEntry represents manifest entry in the manifext index JSON that is used
@@ -133,6 +154,8 @@ const (
 	TypeWasm Type = "wasm"
 	// TypeRust represents a Rust extension.
 	TypeRust Type = "rust"
+	// TypeExtProc represents an ext_proc extension.
+	TypeExtProc Type = "ext_proc"
 	// TypeGo represents a Go extension.
 	TypeGo Type = "go"
 	// TypeComposer represents a Composer extension that bundles together

@@ -60,6 +60,14 @@ jobs:
           echo "Releasing Lua extension: ${{ matrix.extension.name }}"
           make -C extensions push_lua
 
+      - name: Release ExtProc Extension
+        if: matrix.extension.type == 'ext_proc'
+        env:
+          EXTENSION_PATH: ${{ matrix.extension.path }}
+        run: |
+          echo "Releasing ExtProc extension: ${{ matrix.extension.name }}"
+          make -C extensions push_ext_proc
+
       - name: Release Composer
         if: matrix.extension.name == 'composer'
         run: |

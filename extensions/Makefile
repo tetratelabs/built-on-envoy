@@ -23,6 +23,9 @@ ifeq ($(EXTENSION_PATH),)
   $(error "EXTENSION_PATH is not set. Please set it to the path of the extension.")
 endif
 
+ROOT    := $(shell git rev-parse --show-toplevel)
+GO_TOOL := go -C $(EXTENSION_PATH) tool -modfile=$(ROOT)/tools/go.mod
+
 # Labels for this lua extension image.
 NAME             := $(shell grep "^name:" ./$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
 VERSION          := $(shell grep "^version:" ./$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
@@ -70,6 +73,41 @@ MULTI_OCI_ANNOTATIONS := \
 	$(subst --annotation ",--annotation "index$(comma)manifest:,$(BASE_OCI_ANNOTATIONS)) \
 	--annotation "index,manifest:io.tetratelabs.built-on-envoy.extension.artifact=binary"
 
+
+.PHONY: build-extproc
+build-extproc:
+	@CGO_ENABLED=0 go -C $(EXTENSION_PATH) build -a -ldflags="-s -w" -o ./out/ext_proc-server .
+
+.PHONY: format-go
+format-go:
+	@echo "format => ./$(EXTENSION_PATH)/..."
+	@$(GO_TOOL) golangci-lint fmt
+	@echo "licenses => ./$(EXTENSION_PATH)/**"
+	@$(GO_TOOL) license-eye -c $(ROOT)/.licenserc.yaml header fix
+
+.PHONY: lint-go
+lint-go:
+	@echo "golangci-lint => ./$(EXTENSION_PATH)/..."
+	@$(GO_TOOL) golangci-lint run
+
+GO_TEST_ARGS ?=
+.PHONY: test-go
+test-go:
+	@go test -C $(EXTENSION_PATH) $(GO_TEST_ARGS) ./...
+
+.PHONY: test-coverage
+test-go-coverage:
+	@mkdir -p ./$(EXTENSION_PATH)/out
+	@$(MAKE) test-go GO_TEST_ARGS="-coverprofile=./out/go-test-coverage.out \
+		-covermode=atomic \
+		-coverpkg=github.com/tetratelabs/built-on-envoy/extensions/$(EXTENSION_PATH)/... \
+		-count=1 \
+		$(GO_TEST_ARGS)"
+# TODO: Increase these thresholds as we add more tests.
+	@$(GO_TOOL) go-test-coverage \
+		--config ../.testcoverage.yml \
+		--profile ./out/go-test-coverage.out
+
 BUILDER_NAME := boe-builder
 .PHONY: create_builder
 create_builder:
@@ -103,12 +141,25 @@ push_rust: create_builder
 		--tag $(IMAGE) $(DEV_TAG) \
 		--file Dockerfile.rust ./$(EXTENSION_PATH)
 
+.PHONY: push_extproc
+push_extproc: create_builder
+	@echo "Building and pushing ExtProc extension image for multiple architectures: $(IMAGE)"
+	@docker buildx build \
+		--builder $(BUILDER_NAME) \
+		--platform=$(PLATFORMS) \
+		--output type=registry,oci-mediatypes=true$(registry_output) \
+		--provenance=false \
+		$(MULTI_OCI_ANNOTATIONS) \
+		--tag $(IMAGE) $(DEV_TAG) \
+		--file Dockerfile.extproc ./$(EXTENSION_PATH)
+
 CODE_IMAGE := $(HUB)/extension-src-$(NAME):$(VERSION)$(IMAGE_NONCE)
 .PHONY: push_code
 push_code: create_builder
 	@echo "Building and pushing extension image (source code only): $(CODE_IMAGE)"
 # Make sure we don't include git-ignored build artifacts in the source images
 	@rm -rf ./${EXTENSION_PATH}/target
+	@rm -rf ./${EXTENSION_PATH}/out
 	@docker buildx build \
 		--builder $(BUILDER_NAME) \
 		--output type=registry,oci-mediatypes=true$(registry_output) \

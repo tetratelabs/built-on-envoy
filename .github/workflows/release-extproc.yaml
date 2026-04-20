@@ -3,13 +3,13 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-name: Release Rust Extension Manually
+name: Release ExtProc Extension Manually
 
 on:
   workflow_dispatch:
     inputs:
       extension:
-        description: 'Rust extension name (e.g., ip-restriction)'
+        description: 'ExtProc extension name (e.g., example-ext-proc)'
         required: true
         type: string
       nonce:
@@ -21,7 +21,7 @@ env:
   OCI_REGISTRY: ghcr.io/tetratelabs
 
 jobs:
-  release-rust:
+  release-extproc:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -39,10 +39,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and Push Rust Extension
+      - name: Build and Push ExtProc Extension
         env:
           EXTENSION_PATH: ${{ inputs.extension }}
           IMAGE_NONCE: ${{ inputs.nonce }}
         run: |
-          echo "Releasing Rust extension: ${{ inputs.extension }}"
-          make -C extensions push_rust
+          echo "Releasing ExtProc extension: ${{ inputs.extension }}"
+          make -C extensions push_ext_proc
