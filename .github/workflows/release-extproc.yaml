@@ -45,4 +45,4 @@ jobs:
           IMAGE_NONCE: ${{ inputs.nonce }}
         run: |
           echo "Releasing ExtProc extension: ${{ inputs.extension }}"
-          make -C extensions push_ext_proc
+          make -C extensions push_extproc
