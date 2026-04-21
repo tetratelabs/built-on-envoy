@@ -137,3 +137,38 @@ Lua extensions are a good fit when you need:
 **Limitations:** Lua extensions have access only to the APIs exposed by Envoy's Lua filter. For
 advanced features like custom metrics, body buffering, or tight performance requirements, consider
 a Go extension instead.
+
+## ExtProc extensions
+
+ExtProc extensions are Envoy [External Processing](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter)
+gRPC servers that run outside the main Envoy process. The gRPC offers methods to manipulate the request and response metadata and
+payloads, but is much more complex to use than the Dynamic Modules API.
+
+Using ExtProc extensions introduces latency and serialization overhead, but it is a good approach for extensions that are preferred to run outside
+the main Envoy process to make sure the extension code cannot affect the Envoy main process.
+
+**Manifest type:** `ext_proc`
+
+```yaml
+name: my-extproc-extension
+type: ext_proc
+version: 0.2.2
+extProc:
+  grpcPort: 50051
+  failureModeAllow: false
+  processingMode:
+    requestHeaderMode: SEND
+    responseHeaderMode: SEND
+    requestBodyMode: BUFFERED
+    responseBodyMode: NONE
+```
+
+### How it works
+
+1. Your extension implements the Envoy `ExternalProcessorServer` gRPC service interface.
+2. The extension is compiled into a standalone binary that is started in parallel to Envoy.
+3. Envoy is configured to forward requests and responses to the external processor server.
+
+You can see a full example in the
+[extensions/example-ext-proc](https://github.com/tetratelabs/built-on-envoy/tree/main/extensions/example-ext-proc)
+directory.
