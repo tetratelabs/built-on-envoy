@@ -22,6 +22,8 @@ import (
 func newTestFilter(t *testing.T) (*samlHTTPFilter, *mocks.MockHttpFilterHandle, *gomock.Controller) {
 	ctrl := gomock.NewController(t)
 	handle := mocks.NewMockHttpFilterHandle(ctrl)
+	handle.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
+	handle.EXPECT().ReceivedBufferedResponseBody().Return(true).AnyTimes()
 	spKP := generateTestKeyPair("sp.example.com")
 	idpKP := generateTestKeyPair("idp.example.com")
 	filterCfg, metrics := testFilterConfig(spKP, idpKP)

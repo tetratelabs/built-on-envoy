@@ -17,7 +17,7 @@ On OSX, it is easier to run Envoy locally outside Docker. You can install it wit
 tests as follows:
 
 ```shell
-make test ENVOY_IMAGE= ENVOY_VERSION=1.37.1
+make test ENVOY_IMAGE= ENVOY_VERSION=1.38.0
 ```
 
 * Setting the `ENVOY_IMAGE` to an empty string will fallback to running Envoy as a local process.

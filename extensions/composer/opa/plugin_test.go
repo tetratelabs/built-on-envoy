@@ -230,6 +230,8 @@ func createTestFilter(t *testing.T, cfg opaConfig) (*opaHttpFilter, *mocks.MockH
 
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).AnyTimes()
 	mockHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:5000"), true).AnyTimes()
@@ -409,6 +411,8 @@ func createTestFilterWithMetricExpectation(t *testing.T, cfg opaConfig, expected
 
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).AnyTimes()
 	mockHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true).AnyTimes()
 	mockHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:5000"), true).AnyTimes()

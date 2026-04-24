@@ -499,7 +499,7 @@ func TestValidateEnvoyCompat(t *testing.T) {
 
 func TestRunIncompatibleEnvoyVersion(t *testing.T) {
 	r := &Run{
-		EnvoyVersion: "1.37.0",
+		EnvoyVersion: "1.38.0",
 		Local:        []string{"./testdata/input_lua_inline"},
 	}
 

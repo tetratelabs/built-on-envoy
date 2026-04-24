@@ -90,10 +90,17 @@ func newMockAzureServer(t *testing.T, promptAttack bool, severities map[string]i
 
 var testMetrics = contentSafetyMetrics{requestsTotal: shared.MetricID(1), enabled: true}
 
+func newMockHttpFilterHandle(ctrl *gomock.Controller) *mocks.MockHttpFilterHandle {
+	h := mocks.NewMockHttpFilterHandle(ctrl)
+	h.EXPECT().ReceivedBufferedRequestBody().Return(false).AnyTimes()
+	h.EXPECT().ReceivedBufferedResponseBody().Return(false).AnyTimes()
+	return h
+}
+
 func newFilter(t *testing.T, server *httptest.Server, mode string) (*contentSafetyFilter, *mocks.MockHttpFilterHandle) {
 	t.Helper()
 	ctrl := gomock.NewController(t)
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), gomock.Any()).Return(shared.MetricsSuccess).AnyTimes()
 
@@ -117,7 +124,7 @@ func newFilter(t *testing.T, server *httptest.Server, mode string) (*contentSafe
 func newFilterWithConfig(t *testing.T, cfg *azureContentSafetyConfig) (*contentSafetyFilter, *mocks.MockHttpFilterHandle) {
 	t.Helper()
 	ctrl := gomock.NewController(t)
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), gomock.Any()).Return(shared.MetricsSuccess).AnyTimes()
 
@@ -1520,7 +1527,7 @@ func TestMetrics_RequestAllowed(t *testing.T) {
 	defer server.Close()
 
 	ctrl := gomock.NewController(t)
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), decisionAllowed).Return(shared.MetricsSuccess)
 
@@ -1544,7 +1551,7 @@ func TestMetrics_RequestBlocked(t *testing.T) {
 	defer server.Close()
 
 	ctrl := gomock.NewController(t)
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), decisionBlocked).Return(shared.MetricsSuccess)
 
@@ -1568,7 +1575,7 @@ func TestMetrics_RequestMonitored(t *testing.T) {
 	defer server.Close()
 
 	ctrl := gomock.NewController(t)
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), decisionMonitored).Return(shared.MetricsSuccess)
 
@@ -1595,7 +1602,7 @@ func TestMetrics_FailOpen(t *testing.T) {
 	defer server.Close()
 
 	ctrl := gomock.NewController(t)
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), decisionFailOpen).Return(shared.MetricsSuccess)
 
@@ -1622,7 +1629,7 @@ func TestMetrics_FailClosed(t *testing.T) {
 	defer server.Close()
 
 	ctrl := gomock.NewController(t)
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), decisionError).Return(shared.MetricsSuccess)
 
@@ -1646,7 +1653,7 @@ func TestMetrics_ResponseBlocked(t *testing.T) {
 	defer server.Close()
 
 	ctrl := gomock.NewController(t)
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), decisionBlocked).Return(shared.MetricsSuccess)
 
@@ -1670,7 +1677,7 @@ func TestMetrics_ResponseAllowed(t *testing.T) {
 	defer server.Close()
 
 	ctrl := gomock.NewController(t)
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1), decisionAllowed).Return(shared.MetricsSuccess)
 
@@ -1800,14 +1807,14 @@ func TestOnResponseTrailers_ProcessesBody_HarmfulContent(t *testing.T) {
 }
 
 func newFilterHandleWithoutPerRouteConfig(ctrl *gomock.Controller) *mocks.MockHttpFilterHandle {
-	h := mocks.NewMockHttpFilterHandle(ctrl)
+	h := newMockHttpFilterHandle(ctrl)
 	h.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 	h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	return h
 }
 
 func newFilterHandleWithPerRouteConfig(ctrl *gomock.Controller, perRouteConfig any) *mocks.MockHttpFilterHandle {
-	h := mocks.NewMockHttpFilterHandle(ctrl)
+	h := newMockHttpFilterHandle(ctrl)
 	h.EXPECT().GetMostSpecificConfig().Return(perRouteConfig).AnyTimes()
 	h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	return h

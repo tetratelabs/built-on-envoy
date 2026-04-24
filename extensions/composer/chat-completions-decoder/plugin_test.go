@@ -47,11 +47,20 @@ func defaultCfg() *chatCompletionsDecoderConfig {
 	return &chatCompletionsDecoderConfig{MetadataNamespace: defaultMetadataNamespace}
 }
 
+func newMockHttpFilterHandle(ctrl *gomock.Controller) *mocks.MockHttpFilterHandle {
+	h := mocks.NewMockHttpFilterHandle(ctrl)
+	h.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
+	h.EXPECT().ReceivedBufferedResponseBody().Return(true).AnyTimes()
+	return h
+}
+
 // newPluginHandleWithoutPerRouteConfig creates a mock HttpFilterHandle with default expectations including
 // GetMostSpecificConfig returning nil (no per-route config).
 func newPluginHandleWithoutPerRouteConfig(ctrl *gomock.Controller) *mocks.MockHttpFilterHandle {
-	pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	pluginHandle := newMockHttpFilterHandle(ctrl)
 	pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	pluginHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
+	pluginHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).AnyTimes()
 	pluginHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 	return pluginHandle
 }
@@ -59,8 +68,10 @@ func newPluginHandleWithoutPerRouteConfig(ctrl *gomock.Controller) *mocks.MockHt
 // newPluginHandleWithPerRouteConfig creates a mock HttpFilterHandle that returns
 // the given per-route config from GetMostSpecificConfig.
 func newPluginHandleWithPerRouteConfig(ctrl *gomock.Controller, perRouteConfig any) *mocks.MockHttpFilterHandle {
-	pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	pluginHandle := newMockHttpFilterHandle(ctrl)
 	pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	pluginHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
+	pluginHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).AnyTimes()
 	pluginHandle.EXPECT().GetMostSpecificConfig().Return(perRouteConfig).AnyTimes()
 	return pluginHandle
 }
@@ -221,7 +232,7 @@ func TestWellKnownHttpFilterConfigFactories(t *testing.T) {
 func TestOnRequestHeaders_EndOfStream(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnRequestHeaders(fake.NewFakeHeaderMap(map[string][]string{}), true)
@@ -231,7 +242,7 @@ func TestOnRequestHeaders_EndOfStream(t *testing.T) {
 func TestOnRequestHeaders_NotEndOfStream(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnRequestHeaders(fake.NewFakeHeaderMap(map[string][]string{}), false)
@@ -243,7 +254,7 @@ func TestOnRequestHeaders_NotEndOfStream(t *testing.T) {
 func TestOnRequestBody_NotEndOfStream(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnRequestBody(newTestBodyBuffer([]byte("data")), false)
@@ -253,10 +264,11 @@ func TestOnRequestBody_NotEndOfStream(t *testing.T) {
 func TestOnRequestBody_EmptyBody(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 
 	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer([]byte{})).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnRequestBody(newTestBodyBuffer([]byte{}), true)
@@ -266,11 +278,12 @@ func TestOnRequestBody_EmptyBody(t *testing.T) {
 func TestOnRequestBody_InvalidJSON(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 
 	body := []byte(`{invalid json}`)
 	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
 	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any(), gomock.Any()).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
@@ -282,7 +295,7 @@ func TestOnRequestBody_InvalidJSON(t *testing.T) {
 func TestOnRequestBody_ValidRequest_SetsMetadata(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 
 	body := []byte(`{
 		"model": "gpt-4o",
@@ -293,6 +306,7 @@ func TestOnRequestBody_ValidRequest_SetsMetadata(t *testing.T) {
 	}`)
 	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
 
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.openai", "llm.model_name", "gpt-4o").Times(1)
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.openai", "llm.system", "openai").Times(1)
@@ -311,7 +325,7 @@ func TestOnRequestBody_ValidRequest_SetsMetadata(t *testing.T) {
 func TestOnRequestBody_WithTools_SetsMetadata(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 
 	body := []byte(`{
 		"model": "gpt-4o",
@@ -322,6 +336,7 @@ func TestOnRequestBody_WithTools_SetsMetadata(t *testing.T) {
 	}`)
 	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
 
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.openai", "llm.model_name", "gpt-4o").Times(1)
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.openai", "llm.system", "openai").Times(1)
@@ -340,7 +355,7 @@ func TestOnRequestBody_WithTools_SetsMetadata(t *testing.T) {
 func TestOnRequestBody_WithToolCalls_SetsMetadata(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 
 	body := []byte(`{
 		"model": "gpt-4o",
@@ -353,6 +368,7 @@ func TestOnRequestBody_WithToolCalls_SetsMetadata(t *testing.T) {
 	}`)
 	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
 
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.openai", "llm.model_name", "gpt-4o").Times(1)
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.openai", "llm.system", "openai").Times(1)
@@ -375,7 +391,7 @@ func TestOnRequestBody_WithToolCalls_SetsMetadata(t *testing.T) {
 func TestOnRequestBody_CustomNamespace(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 
 	body := []byte(`{
 		"model": "gpt-4o",
@@ -383,6 +399,7 @@ func TestOnRequestBody_CustomNamespace(t *testing.T) {
 	}`)
 	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
 
 	mockHandle.EXPECT().SetMetadata("my-namespace", "llm.model_name", "gpt-4o").Times(1)
 	mockHandle.EXPECT().SetMetadata("my-namespace", "llm.system", "openai").Times(1)
@@ -404,7 +421,7 @@ func TestOnRequestBody_CustomNamespace(t *testing.T) {
 func TestOnRequestTrailers_SetsMetadata(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 
 	body := []byte(`{
 		"model": "gpt-4o",
@@ -412,6 +429,7 @@ func TestOnRequestTrailers_SetsMetadata(t *testing.T) {
 	}`)
 	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
 
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.openai", "llm.model_name", "gpt-4o").Times(1)
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.openai", "llm.system", "openai").Times(1)
@@ -430,7 +448,7 @@ func TestOnRequestTrailers_SetsMetadata(t *testing.T) {
 func TestOnResponseHeaders_EndOfStream(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnResponseHeaders(fake.NewFakeHeaderMap(map[string][]string{}), true)
@@ -440,7 +458,7 @@ func TestOnResponseHeaders_EndOfStream(t *testing.T) {
 func TestOnResponseHeaders_NotEndOfStream(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnResponseHeaders(fake.NewFakeHeaderMap(map[string][]string{}), false)
@@ -451,7 +469,7 @@ func TestOnResponseHeaders_NotEndOfStream(t *testing.T) {
 func TestOnResponseHeaders_SSEContentType(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any(), gomock.Any()).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
@@ -465,7 +483,7 @@ func TestOnResponseHeaders_SSEContentType(t *testing.T) {
 func TestOnResponseHeaders_SSEContentTypeWithCharset(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any(), gomock.Any()).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
@@ -481,7 +499,7 @@ func TestOnResponseHeaders_SSEContentTypeWithCharset(t *testing.T) {
 func TestOnResponseBody_NotEndOfStream_NonStreaming(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnResponseBody(newTestBodyBuffer([]byte("data")), false)
@@ -491,7 +509,7 @@ func TestOnResponseBody_NotEndOfStream_NonStreaming(t *testing.T) {
 func TestOnResponseBody_NotEndOfStream_Streaming(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	filter.sseAcc = newSSEAccumulator(t.Logf)
@@ -502,10 +520,11 @@ func TestOnResponseBody_NotEndOfStream_Streaming(t *testing.T) {
 func TestOnResponseBody_EmptyBody(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer([]byte{})).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).AnyTimes()
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnResponseBody(newTestBodyBuffer([]byte{}), true)
@@ -515,11 +534,12 @@ func TestOnResponseBody_EmptyBody(t *testing.T) {
 func TestOnResponseBody_InvalidJSON(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 
 	body := []byte(`{invalid json}`)
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).AnyTimes()
 	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any(), gomock.Any()).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
@@ -530,7 +550,7 @@ func TestOnResponseBody_InvalidJSON(t *testing.T) {
 func TestOnResponseBody_ValidResponse_SetsMetadata(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 
 	body := []byte(`{
 		"choices": [
@@ -548,6 +568,7 @@ func TestOnResponseBody_ValidResponse_SetsMetadata(t *testing.T) {
 	}`)
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).AnyTimes()
 
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.openai", "llm.output_messages.count", 1).Times(1)
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.openai", "llm.output_messages.0.message.role", "assistant").Times(1)
@@ -564,7 +585,7 @@ func TestOnResponseBody_ValidResponse_SetsMetadata(t *testing.T) {
 func TestOnResponseBody_NoUsage_SetsMetadataWithoutTokenCounts(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 
 	body := []byte(`{
 		"choices": [
@@ -573,6 +594,7 @@ func TestOnResponseBody_NoUsage_SetsMetadataWithoutTokenCounts(t *testing.T) {
 	}`)
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).AnyTimes()
 
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.openai", "llm.output_messages.count", 1).Times(1)
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.openai", "llm.output_messages.0.message.role", "assistant").Times(1)
@@ -587,7 +609,7 @@ func TestOnResponseBody_NoUsage_SetsMetadataWithoutTokenCounts(t *testing.T) {
 func TestOnResponseBody_WithCompletionTokensDetails(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 
 	body := []byte(`{
 		"choices": [
@@ -602,6 +624,7 @@ func TestOnResponseBody_WithCompletionTokensDetails(t *testing.T) {
 	}`)
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).AnyTimes()
 
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.openai", "llm.output_messages.count", 1).Times(1)
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.openai", "llm.output_messages.0.message.role", "assistant").Times(1)
@@ -620,7 +643,7 @@ func TestOnResponseBody_WithCompletionTokensDetails(t *testing.T) {
 func TestOnResponseBody_WithOutputToolCalls_SetsMetadata(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 
 	body := []byte(`{
 		"choices": [
@@ -639,6 +662,7 @@ func TestOnResponseBody_WithOutputToolCalls_SetsMetadata(t *testing.T) {
 	}`)
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).AnyTimes()
 
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.openai", "llm.output_messages.count", 1).Times(1)
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.openai", "llm.output_messages.0.message.role", "assistant").Times(1)
@@ -656,7 +680,7 @@ func TestOnResponseBody_WithOutputToolCalls_SetsMetadata(t *testing.T) {
 func TestOnResponseBody_CustomNamespace(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 
 	body := []byte(`{
 		"choices": [
@@ -665,6 +689,7 @@ func TestOnResponseBody_CustomNamespace(t *testing.T) {
 	}`)
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).AnyTimes()
 
 	mockHandle.EXPECT().SetMetadata("my-ns", "llm.output_messages.count", 1).Times(1)
 	mockHandle.EXPECT().SetMetadata("my-ns", "llm.output_messages.0.message.role", "assistant").Times(1)
@@ -683,7 +708,7 @@ func TestOnResponseBody_CustomNamespace(t *testing.T) {
 func TestOnResponseTrailers_SetsMetadata(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 
 	body := []byte(`{
 		"choices": [
@@ -693,6 +718,7 @@ func TestOnResponseTrailers_SetsMetadata(t *testing.T) {
 	}`)
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).AnyTimes()
 
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.openai", "llm.output_messages.count", 1).Times(1)
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.openai", "llm.output_messages.0.message.role", "assistant").Times(1)
@@ -718,7 +744,7 @@ func sseHeaders() shared.HeaderMap {
 func TestOnResponseBody_StreamingResponse_SetsMetadata(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any(), gomock.Any()).Times(1)
 
 	chunk1 := []byte(
@@ -752,7 +778,7 @@ func TestOnResponseBody_StreamingResponse_SetsMetadata(t *testing.T) {
 func TestOnResponseBody_StreamingResponse_SingleChunk(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any(), gomock.Any()).Times(1)
 
 	body := []byte(
@@ -781,7 +807,7 @@ func TestOnResponseBody_StreamingResponse_SingleChunk(t *testing.T) {
 func TestOnResponseBody_StreamingResponse_NoUsage(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any(), gomock.Any()).Times(1)
 
 	body := []byte(
@@ -804,7 +830,7 @@ func TestOnResponseBody_StreamingResponse_NoUsage(t *testing.T) {
 func TestOnResponseBody_StreamingResponse_WithToolCalls(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any(), gomock.Any()).Times(1)
 
 	body := []byte(
@@ -837,7 +863,7 @@ func TestOnResponseBody_StreamingResponse_WithToolCalls(t *testing.T) {
 func TestOnResponseBody_StreamingResponse_ChunkSplitMidLine(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle := newMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any(), gomock.Any()).Times(1)
 
 	// Split a data line in the middle to test buffering of partial lines.

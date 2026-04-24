@@ -353,8 +353,8 @@ func TestPrintExportSummary(t *testing.T) {
 
 	t.Run("with Envoy version", func(t *testing.T) {
 		var buf bytes.Buffer
-		printExportSummary(&buf, "/tmp/boe-export", []string{"envoy.yaml", "libcomposer.so"}, 10000, 9901, "1.37.0")
-		require.Equal(t, fmt.Sprintf(wantTemplate, internal.ANSIBold, internal.ANSIReset, "v1.37.0"), buf.String())
+		printExportSummary(&buf, "/tmp/boe-export", []string{"envoy.yaml", "libcomposer.so"}, 10000, 9901, "1.38.0")
+		require.Equal(t, fmt.Sprintf(wantTemplate, internal.ANSIBold, internal.ANSIReset, "v1.38.0"), buf.String())
 	})
 
 	t.Run("without Envoy version defaults to 'dev' for Docker", func(t *testing.T) {

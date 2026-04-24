@@ -18,6 +18,8 @@ func newPluginHandleWithoutPerRouteConfig(ctrl *gomock.Controller) *mocks.MockHt
 	h := mocks.NewMockHttpFilterHandle(ctrl)
 	h.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 	h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	h.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
+	h.EXPECT().ReceivedBufferedResponseBody().Return(true).AnyTimes()
 	return h
 }
 
@@ -25,6 +27,8 @@ func newPluginHandleWithPerRouteConfig(ctrl *gomock.Controller, perRouteConfig a
 	h := mocks.NewMockHttpFilterHandle(ctrl)
 	h.EXPECT().GetMostSpecificConfig().Return(perRouteConfig).AnyTimes()
 	h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	h.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
+	h.EXPECT().ReceivedBufferedResponseBody().Return(true).AnyTimes()
 	return h
 }
 
