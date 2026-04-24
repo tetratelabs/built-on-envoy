@@ -14,7 +14,7 @@ require (
 	github.com/corazawaf/coraza/v3 v3.7.0
 	github.com/crewjam/saml v0.5.1
 	github.com/docker/cli v29.4.1+incompatible
-	github.com/envoyproxy/envoy/source/extensions/dynamic_modules v0.0.0-20260311012303-5ef4e4cea57f
+	github.com/envoyproxy/envoy/source/extensions/dynamic_modules v0.0.0-20260423231439-f1dd21b16c24
 	github.com/getkin/kin-openapi v0.136.0
 	github.com/google/go-containerregistry v0.21.5
 	github.com/jcchavezs/mergefs v0.1.1

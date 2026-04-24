@@ -45,8 +45,8 @@ github.com/docker/docker-credential-helpers v0.9.3 h1:gAm/VtF9wgqJMoxzT3Gj5p4AqI
 github.com/docker/docker-credential-helpers v0.9.3/go.mod h1:x+4Gbw9aGmChi3qTLZj8Dfn0TD20M/fuWy0E5+WDeCo=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
-github.com/envoyproxy/envoy/source/extensions/dynamic_modules v0.0.0-20260311012303-5ef4e4cea57f h1:rpisTDZaajAZI42Mz+y0MvyG2b1MV1UWd4PZyu0VatY=
-github.com/envoyproxy/envoy/source/extensions/dynamic_modules v0.0.0-20260311012303-5ef4e4cea57f/go.mod h1:NpQosaDAX20s0ak0o/4b5dLOdvkbk15XqoakhSNX1Gg=
+github.com/envoyproxy/envoy/source/extensions/dynamic_modules v0.0.0-20260423231439-f1dd21b16c24 h1:NM/c/D2pvvSpEqmF2p8tWnZPbeiZ1B8gS5TPH764qao=
+github.com/envoyproxy/envoy/source/extensions/dynamic_modules v0.0.0-20260423231439-f1dd21b16c24/go.mod h1:NpQosaDAX20s0ak0o/4b5dLOdvkbk15XqoakhSNX1Gg=
 github.com/fortytw2/leaktest v1.3.0 h1:u8491cBMTQ8ft8aeV+adlcytMZylmA5nnwwkRZjI8vw=
 github.com/fortytw2/leaktest v1.3.0/go.mod h1:jDsjWgpAGjm2CA7WthBh/CdZYEPF31XHquHwclZch5g=
 github.com/foxcpp/go-mockdns v1.2.0 h1:omK3OrHRD1IWJz1FuFBCFquhXslXoF17OvBS6JPzZF0=
