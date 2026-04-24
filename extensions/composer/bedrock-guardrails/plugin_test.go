@@ -45,10 +45,7 @@ func (b *testBodyBuffer) Drain(size uint64) {
 func (b *testBodyBuffer) Append(data []byte) { b.body = append(b.body, data...) }
 
 func newMockHTTPFilterHandle(ctrl *gomock.Controller) *mocks.MockHttpFilterHandle {
-	h := mocks.NewMockHttpFilterHandle(ctrl)
-	h.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
-	h.EXPECT().ReceivedBufferedResponseBody().Return(true).AnyTimes()
-	return h
+	return mocks.NewMockHttpFilterHandle(ctrl)
 }
 
 // newPluginHandleWithoutPerRouteConfig creates a mock HttpFilterHandle with default expectations including
@@ -460,6 +457,7 @@ func TestOnRequestBody_EmptyBody(t *testing.T) {
 	emptyBuffer := newTestBodyBuffer([]byte{})
 	mockHandle.EXPECT().BufferedRequestBody().Return(emptyBuffer).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 
 	filter := &bedrockGuardrailsHTTPFilter{
 		handle: mockHandle,
@@ -482,6 +480,7 @@ func TestOnRequestBody_NoGuardrailsConfigured(t *testing.T) {
 	fakeBuffer := newTestBodyBuffer(bodyBytes)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBuffer).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 
 	filter := &bedrockGuardrailsHTTPFilter{
 		handle: mockHandle,
@@ -504,6 +503,7 @@ func TestOnRequestBody_ValidBody_CalloutSuccess(t *testing.T) {
 	fakeBuffer := newTestBodyBuffer(bodyBytes)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBuffer).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBuffer).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 
 	// RequestHeaders().Remove is called to remove content-length
 	fakeHeaders := fake.NewFakeHeaderMap(map[string][]string{"content-length": {"42"}})
@@ -549,6 +549,7 @@ func TestOnRequestBody_InvalidBody_GetCalloutHeadersError(t *testing.T) {
 	fakeBuffer := newTestBodyBuffer(invalidBody)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBuffer).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBuffer).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 
 	fakeHeaders := fake.NewFakeHeaderMap(map[string][]string{})
 	mockHandle.EXPECT().RequestHeaders().Return(fakeHeaders).AnyTimes()
@@ -583,6 +584,7 @@ func TestOnRequestBody_CalloutInitFailure(t *testing.T) {
 	fakeBuffer := newTestBodyBuffer(bodyBytes)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBuffer).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBuffer).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 
 	fakeHeaders := fake.NewFakeHeaderMap(map[string][]string{})
 	mockHandle.EXPECT().RequestHeaders().Return(fakeHeaders).AnyTimes()
@@ -626,6 +628,7 @@ func TestOnRequestBody_MultipleGuardrails_FirstTriggered(t *testing.T) {
 	fakeBuffer := newTestBodyBuffer(bodyBytes)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBuffer).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBuffer).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 
 	fakeHeaders := fake.NewFakeHeaderMap(map[string][]string{})
 	mockHandle.EXPECT().RequestHeaders().Return(fakeHeaders).AnyTimes()

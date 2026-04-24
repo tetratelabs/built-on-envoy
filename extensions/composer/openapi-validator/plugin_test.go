@@ -106,8 +106,6 @@ func createTestFilter(t *testing.T, spec string, cfg *openAPIValidatorConfig) (*
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	mockHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
-	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).AnyTimes()
 
 	filter := filterFactory.Create(mockHandle)
 	oaFilter, ok := filter.(*openAPIValidatorHttpFilter)
@@ -514,6 +512,7 @@ func TestOnRequestBody_ValidJsonBody(t *testing.T) {
 	fakeBody := fake.NewFakeBodyBuffer(body)
 
 	mockHandle.EXPECT().RequestHeaders().Return(headers).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBody)
 	// Simulate the ReceivedRequestBody being the same as BufferedRequestBody,
 	// which can happen due to Envoy's buffering logic.
@@ -542,6 +541,7 @@ func TestOnRequestBody_InvalidJsonBody(t *testing.T) {
 	fakeBody := fake.NewFakeBodyBuffer(body)
 
 	mockHandle.EXPECT().RequestHeaders().Return(headers).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBody)
 	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBody)
 	mockHandle.EXPECT().SendLocalResponse(
@@ -598,6 +598,7 @@ func TestOnRequestBody_WithTrailers(t *testing.T) {
 	// Process via trailers.
 	fakeBuffered := fake.NewFakeBodyBuffer(body)
 	mockHandle.EXPECT().RequestHeaders().Return(headers).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBuffered)
 	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBuffered)
 
@@ -657,6 +658,7 @@ func TestOnRequestBody_NoBodyLimit(t *testing.T) {
 	fakeBody := fake.NewFakeBodyBuffer(body)
 
 	mockHandle.EXPECT().RequestHeaders().Return(headers).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBody)
 	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBody)
 	bodyStatus := filter.OnRequestBody(fakeBody, true)
@@ -704,6 +706,7 @@ func TestOnRequestBody_DryRunAllowsInvalidBody(t *testing.T) {
 	fakeReceivedBody := fake.NewFakeBodyBuffer(receivedBody)
 
 	mockHandle.EXPECT().RequestHeaders().Return(headers).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBufferedBody)
 	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeReceivedBody)
 
@@ -903,8 +906,6 @@ func newPluginHandleWithoutPerRouteConfig(ctrl *gomock.Controller) *mocks.MockHt
 	h := mocks.NewMockHttpFilterHandle(ctrl)
 	h.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 	h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	h.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
-	h.EXPECT().ReceivedBufferedResponseBody().Return(true).AnyTimes()
 	return h
 }
 
@@ -912,8 +913,6 @@ func newPluginHandleWithPerRouteConfig(ctrl *gomock.Controller, perRouteConfig a
 	h := mocks.NewMockHttpFilterHandle(ctrl)
 	h.EXPECT().GetMostSpecificConfig().Return(perRouteConfig).AnyTimes()
 	h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	h.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
-	h.EXPECT().ReceivedBufferedResponseBody().Return(true).AnyTimes()
 	return h
 }
 

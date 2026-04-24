@@ -54,8 +54,6 @@ func expectStatsDefinitions(h *mocks.MockHttpFilterConfigHandle) {
 func newPluginHandleWithoutPerRouteConfig(ctrl *gomock.Controller) *mocks.MockHttpFilterHandle {
 	pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	pluginHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
-	pluginHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).AnyTimes()
 	pluginHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 	return pluginHandle
 }
@@ -65,8 +63,6 @@ func newPluginHandleWithoutPerRouteConfig(ctrl *gomock.Controller) *mocks.MockHt
 func newPluginHandleWithPerRouteConfig(ctrl *gomock.Controller, perRouteConfig any) *mocks.MockHttpFilterHandle {
 	pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	pluginHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
-	pluginHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).AnyTimes()
 	pluginHandle.EXPECT().GetMostSpecificConfig().Return(perRouteConfig).AnyTimes()
 	return pluginHandle
 }
@@ -363,7 +359,7 @@ func TestOnRequestBody_OpenAI_SetsMetadata(t *testing.T) {
 	body := []byte(`{"model":"gpt-4o","stream":false}`)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fake.NewFakeBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
-	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "kind", "openai").Times(1)
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "model", "gpt-4o").Times(1)
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "is_stream", false).Times(1)
@@ -394,7 +390,7 @@ func TestOnRequestBody_Anthropic_SetsMetadata(t *testing.T) {
 	body := []byte(`{"model":"claude-3-5-sonnet-20241022","stream":true}`)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fake.NewFakeBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
-	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "kind", "anthropic").Times(1)
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "model", "claude-3-5-sonnet-20241022").Times(1)
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "is_stream", true).Times(1)
@@ -420,7 +416,7 @@ func TestOnRequestBody_InvalidJSON_LogsDebug(t *testing.T) {
 	body := []byte(`{bad json}`)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fake.NewFakeBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
-	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any(), gomock.Any()).Times(1)
 	mockHandle.EXPECT().IncrementCounterValue(idRequestError, uint64(1), "", "").Return(shared.MetricsSuccess).Times(1)
 	mockHandle.EXPECT().IncrementCounterValue(idRequestTotal, uint64(1), "", "").Return(shared.MetricsSuccess).Times(1)
@@ -441,7 +437,7 @@ func TestOnRequestTrailers_NotProcessed_ParsesBody(t *testing.T) {
 	body := []byte(`{"model":"gpt-4o","stream":false}`)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fake.NewFakeBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
-	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "kind", "openai").Times(1)
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "model", "gpt-4o").Times(1)
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "is_stream", false).Times(1)
@@ -553,7 +549,7 @@ func TestOnResponseBody_OpenAI_SetsUsageMetadata(t *testing.T) {
 	body := []byte(`{"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":20,"total_tokens":30}}`)
 	mockHandle.EXPECT().BufferedResponseBody().Return(fake.NewFakeBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
-	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).Times(1)
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "input_tokens", uint32(10)).Times(1)
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "output_tokens", uint32(20)).Times(1)
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "total_tokens", uint32(30)).Times(1)
@@ -588,7 +584,7 @@ func TestOnResponseBody_Anthropic_SetsUsageMetadata(t *testing.T) {
 	body := []byte(`{"id":"m1","type":"message","usage":{"input_tokens":15,"output_tokens":5}}`)
 	mockHandle.EXPECT().BufferedResponseBody().Return(fake.NewFakeBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
-	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).Times(1)
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "input_tokens", uint32(15)).Times(1)
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "output_tokens", uint32(5)).Times(1)
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "total_tokens", uint32(20)).Times(1)
@@ -620,7 +616,7 @@ func TestOnResponseBody_NoUsageInResponse(t *testing.T) {
 	body := []byte(`{"choices":[]}`)
 	mockHandle.EXPECT().BufferedResponseBody().Return(fake.NewFakeBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
-	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).Times(1)
 	// onResponseSuccess always sets all three keys, even when they are zero.
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "input_tokens", uint32(0)).Times(1)
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "output_tokens", uint32(0)).Times(1)
@@ -748,7 +744,7 @@ func TestOnResponseTrailers_NonStreaming_ParsesBody(t *testing.T) {
 	body := []byte(`{"choices":[],"usage":{"prompt_tokens":2,"completion_tokens":3,"total_tokens":5}}`)
 	mockHandle.EXPECT().BufferedResponseBody().Return(fake.NewFakeBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
-	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).Times(1)
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "input_tokens", uint32(2)).Times(1)
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "output_tokens", uint32(3)).Times(1)
 	mockHandle.EXPECT().SetMetadata(defaultMetadataNamespace, "total_tokens", uint32(5)).Times(1)
@@ -783,7 +779,7 @@ func TestCustomAPIType_RequestParsedLikeOpenAI(t *testing.T) {
 	mockHandle.EXPECT().ReceivedRequestBody().Return(
 		fake.NewFakeBodyBuffer([]byte(`{"model":"my-model","messages":[]}`)),
 	).AnyTimes()
-	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(false).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(false).Times(1)
 	mockHandle.EXPECT().IncrementCounterValue(idRequestTotal, uint64(1), "custom", "my-model").Return(shared.MetricsSuccess).Times(1)
 
 	cfg := &llmProxyConfig{
@@ -873,8 +869,7 @@ func TestOnRequestBody_LLMModelHeader_SetsRequestHeader(t *testing.T) {
 	body := []byte(`{"model":"gpt-4o","stream":false}`)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fake.NewFakeBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
-	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
-	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 	mockHandle.EXPECT().SetMetadata(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	// The configured header key must be set to the extracted model name.
 	mockRequestHeaders := mocks.NewMockHeaderMap(ctrl)
@@ -908,8 +903,7 @@ func TestOnRequestBody_ClearRouteCache_CallsClearRouteCache(t *testing.T) {
 	body := []byte(`{"model":"gpt-4o","stream":false}`)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fake.NewFakeBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
-	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
-	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 	mockHandle.EXPECT().SetMetadata(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	mockHandle.EXPECT().ClearRouteCache().Times(1)
 	mockHandle.EXPECT().IncrementCounterValue(idRequestTotal, uint64(1), "openai", "gpt-4o").Return(shared.MetricsSuccess).Times(1)

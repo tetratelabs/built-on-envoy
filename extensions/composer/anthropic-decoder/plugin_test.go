@@ -48,10 +48,7 @@ func defaultCfg() *anthropicDecoderConfig {
 }
 
 func newMockHTTPFilterHandle(ctrl *gomock.Controller) *mocks.MockHttpFilterHandle {
-	h := mocks.NewMockHttpFilterHandle(ctrl)
-	h.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
-	h.EXPECT().ReceivedBufferedResponseBody().Return(true).AnyTimes()
-	return h
+	return mocks.NewMockHttpFilterHandle(ctrl)
 }
 
 // newPluginHandleWithoutPerRouteConfig creates a mock HttpFilterHandle with default expectations including
@@ -263,6 +260,7 @@ func TestOnRequestBody_EmptyBody(t *testing.T) {
 
 	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer([]byte{})).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnRequestBody(newTestBodyBuffer([]byte{}), true)
@@ -277,6 +275,7 @@ func TestOnRequestBody_InvalidJSON(t *testing.T) {
 	body := []byte(`{invalid json}`)
 	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any(), gomock.Any()).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
@@ -299,6 +298,7 @@ func TestOnRequestBody_ValidRequest_WithSystem_SetsMetadata(t *testing.T) {
 	}`)
 	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.model_name", "claude-sonnet-4-20250514").Times(1)
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.system", "anthropic").Times(1)
@@ -327,6 +327,7 @@ func TestOnRequestBody_ValidRequest_NoSystem_SetsMetadata(t *testing.T) {
 	}`)
 	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.model_name", "claude-sonnet-4-20250514").Times(1)
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.system", "anthropic").Times(1)
@@ -354,6 +355,7 @@ func TestOnRequestBody_WithTools_SetsMetadata(t *testing.T) {
 	}`)
 	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.model_name", "claude-sonnet-4-20250514").Times(1)
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.system", "anthropic").Times(1)
@@ -385,6 +387,7 @@ func TestOnRequestBody_WithToolUse_SetsMetadata(t *testing.T) {
 	}`)
 	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.model_name", "claude-sonnet-4-20250514").Times(1)
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.system", "anthropic").Times(1)
@@ -415,6 +418,7 @@ func TestOnRequestBody_CustomNamespace(t *testing.T) {
 	}`)
 	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 
 	mockHandle.EXPECT().SetMetadata("my-namespace", "llm.model_name", "claude-sonnet-4-20250514").Times(1)
 	mockHandle.EXPECT().SetMetadata("my-namespace", "llm.system", "anthropic").Times(1)
@@ -444,6 +448,7 @@ func TestOnRequestTrailers_SetsMetadata(t *testing.T) {
 	}`)
 	mockHandle.EXPECT().BufferedRequestBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.model_name", "claude-sonnet-4-20250514").Times(1)
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.system", "anthropic").Times(1)
@@ -538,6 +543,7 @@ func TestOnResponseBody_EmptyBody(t *testing.T) {
 
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer([]byte{})).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
 	result := filter.OnResponseBody(newTestBodyBuffer([]byte{}), true)
@@ -552,6 +558,7 @@ func TestOnResponseBody_InvalidJSON(t *testing.T) {
 	body := []byte(`{invalid json}`)
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).Times(1)
 	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any(), gomock.Any()).Times(1)
 
 	filter := &decoderFilter{handle: mockHandle, config: defaultCfg()}
@@ -578,6 +585,7 @@ func TestOnResponseBody_ValidResponse_SetsMetadata(t *testing.T) {
 	}`)
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).Times(1)
 
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.count", 1).Times(1)
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.role", "assistant").Times(1)
@@ -606,6 +614,7 @@ func TestOnResponseBody_NoUsage_SetsMetadataWithoutTokenCounts(t *testing.T) {
 	}`)
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).Times(1)
 
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.count", 1).Times(1)
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.role", "assistant").Times(1)
@@ -638,6 +647,7 @@ func TestOnResponseBody_WithCacheTokens_SetsMetadata(t *testing.T) {
 	}`)
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).Times(1)
 
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.count", 1).Times(1)
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.role", "assistant").Times(1)
@@ -668,6 +678,7 @@ func TestOnResponseBody_WithOutputToolCalls_SetsMetadata(t *testing.T) {
 	}`)
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).Times(1)
 
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.count", 1).Times(1)
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.role", "assistant").Times(1)
@@ -697,6 +708,7 @@ func TestOnResponseBody_CustomNamespace(t *testing.T) {
 	}`)
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).Times(1)
 
 	mockHandle.EXPECT().SetMetadata("my-ns", "llm.output_messages.count", 1).Times(1)
 	mockHandle.EXPECT().SetMetadata("my-ns", "llm.output_messages.0.message.role", "assistant").Times(1)
@@ -728,6 +740,7 @@ func TestOnResponseTrailers_SetsMetadata(t *testing.T) {
 	}`)
 	mockHandle.EXPECT().BufferedResponseBody().Return(newTestBodyBuffer(body)).AnyTimes()
 	mockHandle.EXPECT().ReceivedResponseBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedResponseBody().Return(true).Times(1)
 
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.count", 1).Times(1)
 	mockHandle.EXPECT().SetMetadata("io.builtonenvoy.anthropic", "llm.output_messages.0.message.role", "assistant").Times(1)
