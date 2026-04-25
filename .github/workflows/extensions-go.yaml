@@ -57,7 +57,6 @@ jobs:
       matrix:
         envoy_version:
           - distroless-dev
-          - v1.37.1
           - v1.38.0
     defaults:
       run:
