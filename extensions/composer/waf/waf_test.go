@@ -1747,12 +1747,13 @@ func Test_OnDestroyReleasesMemory(t *testing.T) {
 		ctrl.Finish()
 	}
 
-	const maxGrowthKB = int64(1024)
-	heapGrowth := (int64(heapAlloc()) - int64(baseline)) / 1024
+	const maxGrowthKB = uint64(1024)
+	after := heapAlloc()
+	heapGrowthKB := (max(after, baseline) - baseline) / 1024
 
 	// Without OnDestroy releasing memoized caches: 30 reloads × 2 WAFs × 50 unique
 	// regexes leaks ~11+ MB. With Close(), heap growth stays under 1 MB.
-	assert.LessOrEqual(t, heapGrowth, maxGrowthKB,
+	assert.LessOrEqual(t, heapGrowthKB, maxGrowthKB,
 		"heap grew %d KB after %d reloads, expected ≤ %d KB: OnDestroy must call Close() on all WAF instances to release Coraza's memoized regex cache",
-		heapGrowth, reloads, maxGrowthKB)
+		heapGrowthKB, reloads, maxGrowthKB)
 }
