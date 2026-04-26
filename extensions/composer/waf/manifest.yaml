@@ -147,7 +147,6 @@ examples:
       < date: Thu, 12 Feb 2026 10:28:16 GMT
       < server: envoy
       <
-      Request blocked by WAF
   - title: CRS plugin from local filesystem
     description: |
       The following example demonstrates how to load a CRS plugin from the local filesystem and run the WAF plugin
