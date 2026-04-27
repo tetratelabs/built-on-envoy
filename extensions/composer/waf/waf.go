@@ -521,7 +521,7 @@ func (p *wafPlugin) blockRequest(interruption *ctypes.Interruption, phase ctypes
 	p.handle.SendLocalResponse(
 		uint32(status), //nolint:gosec // status is validated to be non-zero
 		nil,
-		[]byte("Blocked by WAF"),
+		nil,
 		reason,
 	)
 }

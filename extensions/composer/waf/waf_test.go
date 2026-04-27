@@ -791,7 +791,7 @@ func Test_BlockRequestWaf(t *testing.T) {
 		).Return(shared.MetricsSuccess)
 		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 100001)
 		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestHeaders))
-		pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_request_headers_blocked")
+		pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, nil, "waf_request_headers_blocked")
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
@@ -831,7 +831,7 @@ func Test_BlockRequestWaf(t *testing.T) {
 		).Return(shared.MetricsSuccess)
 		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 100002)
 		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestBody))
-		pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_request_body_blocked")
+		pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, nil, "waf_request_body_blocked")
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
@@ -902,7 +902,7 @@ func Test_BlockRequestWaf(t *testing.T) {
 		).Return(shared.MetricsSuccess)
 		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 100003)
 		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseResponseBody))
-		pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_response_body_blocked")
+		pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, nil, "waf_response_body_blocked")
 
 		responseBody := fake.NewFakeBodyBuffer([]byte(`{"secret":"leaked-secret"}`))
 		bodyStatus := wafPlugin.OnResponseBody(responseBody, true)
@@ -942,7 +942,7 @@ func Test_BlockRequest(t *testing.T) {
 		).Return(shared.MetricsSuccess)
 		// Only block_phase metadata is set (no block_rule for internal errors).
 		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestBody))
-		pluginHandle.EXPECT().SendLocalResponse(uint32(500), nil, []byte("Blocked by WAF"), "waf_internal_error")
+		pluginHandle.EXPECT().SendLocalResponse(uint32(500), nil, nil, "waf_internal_error")
 
 		p.blockRequest(nil, ctypes.PhaseRequestBody, "waf_internal_error")
 	})
@@ -970,7 +970,7 @@ func Test_BlockRequest(t *testing.T) {
 		).Return(shared.MetricsSuccess)
 		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 12345)
 		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestHeaders))
-		pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_request_headers_blocked")
+		pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, nil, "waf_request_headers_blocked")
 
 		p.blockRequest(interruption, ctypes.PhaseRequestHeaders, "waf_request_headers_blocked")
 	})
@@ -998,7 +998,7 @@ func Test_BlockRequest(t *testing.T) {
 		).Return(shared.MetricsSuccess)
 		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 99999)
 		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseResponseBody))
-		pluginHandle.EXPECT().SendLocalResponse(uint32(429), nil, []byte("Blocked by WAF"), "waf_response_body_blocked")
+		pluginHandle.EXPECT().SendLocalResponse(uint32(429), nil, nil, "waf_response_body_blocked")
 
 		p.blockRequest(interruption, ctypes.PhaseResponseBody, "waf_response_body_blocked")
 	})
@@ -1048,7 +1048,7 @@ func Test_SecRequestBodyAccessOff(t *testing.T) {
 				).Return(shared.MetricsSuccess)
 				pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 100002)
 				pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestBody))
-				pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_request_body_blocked")
+				pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, nil, "waf_request_body_blocked")
 			}
 
 			wafPlugin, ok := wafPluginFactory.Create(pluginHandle).(*wafPlugin)
@@ -1122,7 +1122,7 @@ func Test_Phase2ArgsRuleWithSecRequestBodyAccessOff(t *testing.T) {
 			).Return(shared.MetricsSuccess)
 			pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 100002)
 			pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestBody))
-			pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_request_body_blocked")
+			pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, nil, "waf_request_body_blocked")
 
 			wafPlugin, ok := wafPluginFactory.Create(pluginHandle).(*wafPlugin)
 			require.True(t, ok, "failed to cast plugin to wafPlugin")
@@ -1211,7 +1211,7 @@ func Test_Phase2RulesOnHeaderOnlyRequest(t *testing.T) {
 			).Return(shared.MetricsSuccess)
 			pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, tc.ruleID)
 			pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestBody))
-			pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_request_body_blocked")
+			pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, nil, "waf_request_body_blocked")
 
 			wafPlugin, ok := wafPluginFactory.Create(pluginHandle).(*wafPlugin)
 			require.True(t, ok, "failed to cast plugin to wafPlugin")
@@ -1311,7 +1311,7 @@ func Test_Phase4RulesOnHeaderOnlyResponse(t *testing.T) {
 			).Return(shared.MetricsSuccess)
 			pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, tc.ruleID)
 			pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseResponseBody))
-			pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_response_body_blocked")
+			pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, nil, "waf_response_body_blocked")
 
 			wafPlugin, ok := wafPluginFactory.Create(pluginHandle).(*wafPlugin)
 			require.True(t, ok, "failed to cast plugin to wafPlugin")
@@ -1388,7 +1388,7 @@ func Test_SecResponseBodyAccessOff(t *testing.T) {
 				).Return(shared.MetricsSuccess)
 				pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 100003)
 				pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseResponseBody))
-				pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_response_body_blocked")
+				pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, nil, "waf_response_body_blocked")
 			}
 
 			wafPlugin, ok := wafPluginFactory.Create(pluginHandle).(*wafPlugin)
@@ -1463,7 +1463,7 @@ func Test_Phase4ResponseHeadersRuleWithSecResponseBodyAccessOff(t *testing.T) {
 			).Return(shared.MetricsSuccess)
 			pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 100003)
 			pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseResponseBody))
-			pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_response_body_blocked")
+			pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, nil, "waf_response_body_blocked")
 
 			wafPlugin, ok := wafPluginFactory.Create(pluginHandle).(*wafPlugin)
 			require.True(t, ok, "failed to cast plugin to wafPlugin")
@@ -1880,7 +1880,7 @@ func Test_PerRouteConfigBlocksRequest(t *testing.T) {
 	).Return(shared.MetricsSuccess)
 	pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 200001)
 	pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestHeaders))
-	pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_request_headers_blocked")
+	pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, nil, "waf_request_headers_blocked")
 
 	plugin := baseFactory.Create(pluginHandle)
 	wafPlugin, ok := plugin.(*wafPlugin)
