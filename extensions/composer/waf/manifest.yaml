@@ -29,6 +29,8 @@ longDescription: |
 
   The WAF comes with support for OWASP CRS, formerly known as ModSecurity Core Rule Set (CRS), as well as
   some recommended configurations and allows custom rule configuration for specific security requirements.
+  It is recommended to **review the provided configuration files** before deploying, to ensure they align with
+  the target environment and the expected security posture.
   To use the bundled rules, you can include them with the Coraza `Include` directives as shown in this example:
 
   ```json
@@ -147,7 +149,6 @@ examples:
       < date: Thu, 12 Feb 2026 10:28:16 GMT
       < server: envoy
       <
-      Request blocked by WAF
   - title: CRS plugin from local filesystem
     description: |
       The following example demonstrates how to load a CRS plugin from the local filesystem and run the WAF plugin
