@@ -9,11 +9,11 @@ on:
   push:
     branches:
       - main
-      - release-**
+      - release/**
   pull_request:
     branches:
       - main
-      - release-**
+      - release/**
 
 env:
   GOPROXY: https://proxy.golang.org
