@@ -625,3 +625,86 @@ examples: []
 		assert.Equal(t, "1.0.0", m.Version)
 	})
 }
+
+func TestValidateNativeHTTPFilters(t *testing.T) {
+	tests := []struct {
+		name       string
+		fixture    string
+		wantErr    bool
+		wantErrMsg string
+	}{
+		{
+			name:    "valid_go_with_mcp_before",
+			fixture: "native_http_filters_valid.yaml",
+		},
+		{
+			name:    "lua_with_stray_filter_type_is_accepted",
+			fixture: "native_http_filters_lua_with_stray_filter_type.yaml",
+		},
+		{
+			name:       "router_rejected",
+			fixture:    "native_http_filters_router_rejected.yaml",
+			wantErr:    true,
+			wantErrMsg: "envoy.filters.http.router",
+		},
+		{
+			name:       "mcp_router_rejected",
+			fixture:    "native_http_filters_mcp_router_rejected.yaml",
+			wantErr:    true,
+			wantErrMsg: "envoy.filters.http.mcp_router",
+		},
+		{
+			name:       "duplicate_name_rejected",
+			fixture:    "native_http_filters_duplicate_name.yaml",
+			wantErr:    true,
+			wantErrMsg: "duplicate name",
+		},
+		{
+			name:    "rust_network_type_rejected",
+			fixture: "native_http_filters_on_rust_network_type.yaml",
+			wantErr: true,
+		},
+		{
+			name:    "wasm_type_rejected",
+			fixture: "native_http_filters_on_wasm_type.yaml",
+			wantErr: true,
+		},
+		{
+			name:    "composer_type_rejected",
+			fixture: "native_http_filters_on_composer_type.yaml",
+			wantErr: true,
+		},
+		{
+			name:    "missing_name_rejected",
+			fixture: "native_http_filters_missing_name.yaml",
+			wantErr: true,
+		},
+		{
+			name:    "missing_typed_config_rejected",
+			fixture: "native_http_filters_missing_typed_config.yaml",
+			wantErr: true,
+		},
+		{
+			name:    "missing_at_type_rejected",
+			fixture: "native_http_filters_missing_at_type.yaml",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			manifestPath := filepath.Join("testdata", tt.fixture)
+			m, err := LoadLocalManifest(manifestPath)
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.wantErrMsg != "" {
+					require.Contains(t, err.Error(), tt.wantErrMsg)
+				}
+				return
+			}
+			require.NoError(t, err)
+			require.NotNil(t, m.NativeHTTPFilters)
+			require.NotEmpty(t, m.NativeHTTPFilters.Before)
+		})
+	}
+}

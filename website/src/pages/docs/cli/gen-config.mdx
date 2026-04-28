@@ -90,6 +90,7 @@ boe gen-config --help
 | `--local` | Path to a directory containing a local Extension to enable. | `[]string` | - | - | No |
 | `--dev` | Whether to allow downloading dev versions of extensions (with -dev suffix). By default, only stable versions are allowed. | `bool` | `false` | - | No |
 | `--config` | Optional JSON config string for extensions. Applied in order to combined --extension and --local flags. | `[]string` | - | - | No |
+| `--native-http-filter-before` | Optional YAML/JSON native HTTP filter list (or @filepath) per extension position. Overrides manifest nativeHttpFilters.before. | `[]string` | - | - | No |
 | `--cluster` | Optional additional Envoy cluster provided in the host:tlsPort pattern. | `[]string` | - | - | No |
 | `--cluster-insecure` | Optional additional Envoy cluster (with TLS transport disabled) provided in the host:port pattern. | `[]string` | - | - | No |
 | `--cluster-json` | Optional additional Envoy cluster providing the complete cluster config in JSON format. | `[]string` | - | - | No |

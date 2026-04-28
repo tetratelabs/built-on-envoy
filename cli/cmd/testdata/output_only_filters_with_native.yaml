@@ -1,0 +1,19 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+http_filters:
+- name: envoy.filters.http.mcp
+  typed_config:
+    '@type': type.googleapis.com/envoy.extensions.filters.http.mcp.v3.Mcp
+    request_storage_mode: DYNAMIC_METADATA_AND_FILTER_STATE
+    traffic_mode: REJECT_NO_MCP
+- name: test-lua-with-mcp
+  typed_config:
+    '@type': type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+    default_source_code:
+      inline_string: |
+        function envoy_on_request(request_handle)
+          request_handle:logInfo("hello after mcp")
+        end

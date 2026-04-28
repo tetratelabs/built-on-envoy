@@ -36,3 +36,4 @@ FROM scratch AS final
 
 # Copy the compiled library from builder
 COPY --from=builder /output/*.so /
+COPY --from=builder /workspace/manifest.yaml /
