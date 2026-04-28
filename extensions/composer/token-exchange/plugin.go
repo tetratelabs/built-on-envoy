@@ -14,6 +14,8 @@ import (
 	"strings"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 const (
@@ -41,7 +43,16 @@ type tokenExchangeFilterFactory struct {
 }
 
 func (f *tokenExchangeFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
-	return &tokenExchangeFilter{handle: handle, config: f.config, metrics: f.metrics}
+	cfg := f.config
+	if perRoute := pkg.GetMostSpecificConfig[*tokenExchangeConfig](handle); perRoute != nil {
+		cfg = perRoute
+	}
+	if cfg == nil {
+		handle.Log(shared.LogLevelInfo, "token-exchange: no config available and use empty filter")
+		return &shared.EmptyHttpFilter{}
+	}
+
+	return &tokenExchangeFilter{handle: handle, config: cfg, metrics: f.metrics}
 }
 
 // tokenExchangeHttpFilterConfigFactory is the configuration factory for the OAuth2 Token Exchange filter.
@@ -50,13 +61,19 @@ type tokenExchangeHttpFilterConfigFactory struct { //nolint:revive
 }
 
 // Create parses the configuration and returns a new filter factory.
-func (f *tokenExchangeHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
+func (f *tokenExchangeHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle,
+	config []byte,
+) (shared.HttpFilterFactory, error) {
 	cfg, err := parseConfig(config)
 	if err != nil {
-		handle.Log(shared.LogLevelError, err.Error())
 		return nil, err
 	}
-	handle.Log(shared.LogLevelDebug, "token-exchange: parsed config: %v", cfg)
+
+	if cfg == nil {
+		handle.Log(shared.LogLevelInfo, "token-exchange: empty filter config")
+	} else {
+		handle.Log(shared.LogLevelDebug, "token-exchange: parsed config: %v", cfg)
+	}
 
 	// Define metrics.
 	metrics := &tokenExchangeMetrics{}
@@ -69,9 +86,28 @@ func (f *tokenExchangeHttpFilterConfigFactory) Create(handle shared.HttpFilterCo
 		metrics.hasExchangeResults = true
 	}
 
-	handle.Log(shared.LogLevelInfo, "token-exchange: loaded token exchange config for cluster=%s url=%s",
-		cfg.Cluster, cfg.TokenExchangeURL)
+	if cfg != nil {
+		handle.Log(shared.LogLevelInfo,
+			"token-exchange: loaded token exchange config for cluster=%s url=%s",
+			cfg.Cluster,
+			cfg.TokenExchangeURL)
+	}
 	return &tokenExchangeFilterFactory{config: cfg, metrics: metrics}, nil
+}
+
+// CreatePerRoute parses per-route configuration for the token-exchange filter.
+func (f *tokenExchangeHttpFilterConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, error) {
+	cfg, err := parseConfig(unparsedConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	if cfg == nil {
+		// It's not allowed to have empty route config because it doesn't make sense to have an
+		// empty config override the global config.
+		return nil, fmt.Errorf("token-exchange: per-route config is empty or invalid")
+	}
+	return cfg, nil
 }
 
 // WellKnownHttpFilterConfigFactories is used to load the plugin.
@@ -83,18 +119,22 @@ func WellKnownHttpFilterConfigFactories() map[string]shared.HttpFilterConfigFact
 
 // joinBody returns the body as a single byte slice, avoiding to call bytes.Join
 // when there is only one chunk which always returns a copy.
-func joinBody(body [][]byte) []byte {
+func joinBody(body []shared.UnsafeEnvoyBuffer) []byte {
 	if len(body) == 1 {
-		return body[0]
+		return body[0].ToUnsafeBytes()
 	}
-	return bytes.Join(body, nil)
+	buffers := make([][]byte, len(body))
+	for i, b := range body {
+		buffers[i] = b.ToUnsafeBytes()
+	}
+	return bytes.Join(buffers, nil)
 }
 
-// headerValue returns the first value for a key in a [][2]string header list.
-func headerValue(headers [][2]string, key string) string {
+// headerValue returns the first value for a key in a [][2]shared.UnsafeEnvoyBuffer header list.
+func headerValue(headers [][2]shared.UnsafeEnvoyBuffer, key string) string {
 	for _, h := range headers {
-		if h[0] == key {
-			return h[1]
+		if h[0].ToUnsafeString() == key {
+			return h[1].ToUnsafeString()
 		}
 	}
 	return ""
@@ -136,7 +176,7 @@ func (c *tokenExchangeCallback) incrementExchangeResult(result string) {
 
 func (f *tokenExchangeFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) shared.HeadersStatus {
 	// Extract the bearer token from the Authorization header.
-	authHeader := headers.GetOne("authorization")
+	authHeader := headers.GetOne("authorization").ToUnsafeString()
 	if authHeader == "" {
 		return sendLocalRespError(f.handle, shared.LogLevelWarn, http.StatusUnauthorized, "missing Authorization header", nil)
 	}
@@ -173,7 +213,7 @@ type tokenExchangeCallback struct {
 
 // OnHttpCalloutDone is called when the STS response is received. It processes the response and either continues
 // the request with the new token replacing the original one or sends a local error response.
-func (c *tokenExchangeCallback) OnHttpCalloutDone(_ uint64, result shared.HttpCalloutResult, headers [][2]string, body [][]byte) { //nolint:revive
+func (c *tokenExchangeCallback) OnHttpCalloutDone(_ uint64, result shared.HttpCalloutResult, headers [][2]shared.UnsafeEnvoyBuffer, body []shared.UnsafeEnvoyBuffer) { //nolint:revive
 	fullBody := joinBody(body)
 
 	if result != shared.HttpCalloutSuccess {

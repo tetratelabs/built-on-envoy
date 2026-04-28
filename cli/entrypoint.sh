@@ -8,4 +8,12 @@
 # To make sure the 'boe' user has permissions to write to this directory, we change the ownership
 # of the directory to 'boe'.
 chown -R boe:boe /var/boe
-exec gosu boe "$@"
+
+exec setpriv \
+    --reuid boe \
+    --regid boe \
+    --clear-groups \
+    --inh-caps=-all \
+    --bounding-set=-all \
+    --no-new-privs \
+    -- "$@"

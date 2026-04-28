@@ -1,0 +1,59 @@
+---
+layout: ../../../layouts/DocsLayout.astro
+title: download
+description: Download extensions from the registry
+---
+
+import Callout from '../../../components/Callout.astro';
+
+# boe download
+
+The download command is used to download the contents of published extension
+packages for a specific platform to a given directory. By default it downloads
+the packages for the current platform.
+
+This command is mostly useful to download a compiled version of an extension to
+use it in production or other environments. Unlike the `gen-config` command, this
+one can be used to download compiled extensions for a concrete target paltform.
+
+Download extensions for a given platform:
+
+    ```shell
+    boe download ip-restriction --platform linux/amd64
+    boe download example-go --platform linux/amd64 --path /tmp/extensions
+    ```
+
+Download the composer dynamic module that bundles all Go extensions:
+
+    ```shell
+    boe download composer --platform linux/amd64
+    ```
+
+
+## Usage details
+
+```shell
+boe download <extension> [flags]
+boe download --help
+```
+
+
+## Arguments
+
+| Name | Description | Type | Required |
+|------|-------------|------|----------|
+| `extension` | The name of the extension to download. For example, 'example-go'. | `string` | Yes |
+
+
+## Flags
+
+| Name | Description | Type | Default | Env Var | Required |
+|------|-------------|------|---------|-----|----------|
+| `--platform` | The target platform for the extension in the format os/arch. For example, 'linux/amd64'. If not specified, it defaults to the current platform. | `string` | - | - | No |
+| `--dev` | Whether to allow downloading dev versions of extensions (with -dev suffix). By default, only stable versions are allowed. | `bool` | `false` | - | No |
+| `--path` | Directory to put the downloaded extension artifact into. Defaults to the current directory. | `string` | `.` | - | No |
+| `--registry` | OCI registry URL for the extensions. | `string` | `ghcr.io/tetratelabs/built-on-envoy` | `BOE_REGISTRY` | No |
+| `--insecure` | Allow connecting to an insecure (HTTP) registry. | `bool` | `false` | `BOE_REGISTRY_INSECURE` | No |
+| `--username` | Username for the OCI registry. | `string` | - | `BOE_REGISTRY_USERNAME` | No |
+| `--password` | Password for the OCI registry. | `string` | - | `BOE_REGISTRY_PASSWORD` | No |
+

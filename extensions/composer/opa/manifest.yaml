@@ -31,6 +31,8 @@ longDescription: |
   - **mTLS and SPIFFE identity**: Access client certificate attributes including SPIFFE IDs
     (URI SANs), DNS SANs, and certificate subject for identity-based authorization.
   - **Configurable decision path**: Query any rule path in the policy (default: `envoy.authz.allow`).
+  - **Request body inspection**: Optionally buffer the request body and expose it as parsed JSON
+    in the OPA input document under `input.body`. Only JSON bodies are supported.
 
   ## Input Document Structure
 
@@ -55,7 +57,7 @@ longDescription: |
         }
       },
       "source": {
-        "address": "10.0.0.1:5000",       // Client address (ip:port)
+        "address": "10.0.0.1:5000",        // Client address (ip:port)
         "certificate": {                   // Peer certificate (mTLS connections)
           "uri_san":       "spiffe://cluster.local/ns/default/sa/client",
           "dns_san":       "client.default.svc.cluster.local",
@@ -67,13 +69,24 @@ longDescription: |
         "address": "10.0.0.2:443"         // Server address (ip:port)
       },
       "connection": {
+        "mtls": true,                     // Whether the connection is mTLS
         "tls_version": "TLSv1.3"          // TLS version
       }
     },
+    "dynamic_metadata": {                 // Dynamic metadata from other filters
+      "envoy.filters.http.jwt_authn": {
+        "sub": "user-123",
+        "iss": "https://issuer.example.com"
+      },
+    },
     "parsed_path":  ["api", "v1", "resource"],  // Path segments
-    "parsed_query": {"key": ["value"]}          // Parsed query parameters
+    "parsed_query": {"key": ["value"]},         // Parsed query parameters
+    "body":  {"field": "value"}                 // Parsed JSON body (only when with_body: true)
   }
   ```
+
+  The `body` field is only present when `with_body` is enabled in the configuration
+  and the request body is valid JSON. Non-JSON bodies result in `body` being absent.
 
   ## Metrics
 
@@ -119,7 +132,7 @@ examples:
 
       # Run the extension
       boe run --extension opa --config '{
-        "policy_file": "/tmp/policy.rego"
+        "policies": [{"file": "/tmp/policy.rego"}]
       }'
 
       # Test allowed request
@@ -146,7 +159,7 @@ examples:
       EOF
 
       boe run --extension opa --config '{
-        "policy_file": "/tmp/policy.rego"
+        "policies": [{"file": "/tmp/policy.rego"}]
       }'
 
       # Test with a valid JWT
@@ -180,7 +193,7 @@ examples:
       EOF
 
       boe run --extension opa --config '{
-        "policy_file": "/tmp/policy.rego"
+        "policies": [{"file": "/tmp/policy.rego"}]
       }'
 
       # Test with a valid JWT
@@ -209,7 +222,19 @@ examples:
       EOF
 
       boe run --extension opa --config '{
-        "policy_file": "/tmp/policy.rego"
+        "policies": [{"file": "/tmp/policy.rego"}]
+      }'
+  - title: Inline Policy Configuration
+    description: |
+      Instead of loading policies from files, you can also specify inline Rego
+      policies directly in the configuration. This is useful for simple policies
+      or when you want to manage policies outside of the filesystem.
+    code: |
+      boe run --extension opa --config '{
+        "policies": [
+          {"inline": "package envoy.authz\ndefault allow := false\nallow if {\ninput.parsed_path[0] == \"public\"\n }"},
+          {"file": "/tmp/other_policy.rego"}
+        ]
       }'
   - title: Dry-Run Mode
     description: |
@@ -217,8 +242,17 @@ examples:
       Useful for testing new policies in production without blocking traffic.
     code: |
       boe run --extension opa --config '{
-        "policy_file": "/tmp/policy.rego",
+        "policies": [{"file": "/tmp/policy.rego"}],
         "dry_run": true
+      }'
+  - title: Include Envoy dynamic metadata in OPA input
+    description: |
+      Include Envoy dynamic metadata in the OPA input document under `input.metadata`.
+      This allows writing policies that make decisions based on dynamic metadata from Envoy.
+    code: |
+      boe run --extension opa --config '{
+        "policies": [{"file": "/tmp/policy.rego"}],
+        "metadata_namespaces": ["envoy.filters.http.jwt_authn"]
       }'
   - title: Fail-Open Mode
     description: |
@@ -228,6 +262,41 @@ examples:
       over enforcement.
     code: |
       boe run --extension opa --config '{
-        "policy_file": "/tmp/policy.rego",
+        "policies": [{"file": "/tmp/policy.rego"}],
         "fail_open": true
       }'
+  - title: Request Body Inspection
+    description: |
+      Enable `with_body` to buffer the request body and include it as
+      parsed JSON in the OPA input document under `input.body`. This allows
+      writing policies that inspect request body content. Only JSON bodies are
+      supported; non-JSON bodies result in `input.body` being absent.
+      Use Envoy's buffer filter or per-route buffer limits to cap body size.
+    code: |
+      cat > /tmp/policy.rego << 'EOF'
+      package envoy.authz
+
+      import rego.v1
+
+      default allow := false
+
+      # Allow only requests where the body contains a valid "role" field.
+      allow if {
+        input.body.role == "admin"
+      }
+      EOF
+
+      boe run --extension opa --config '{
+        "policies": [{"file": "/tmp/policy.rego"}],
+        "with_body": true
+      }'
+
+      # Test with allowed body
+      curl -X POST -H "Content-Type: application/json" \
+        -d '{"role": "admin"}' http://localhost:10000/api/resource
+      # => 200 OK
+
+      # Test with denied body
+      curl -X POST -H "Content-Type: application/json" \
+        -d '{"role": "guest"}' http://localhost:10000/api/resource
+      # => 403 Forbidden

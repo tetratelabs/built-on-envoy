@@ -6,20 +6,22 @@ You can enable multiple extensions using the `--extension` flag, and also load e
 local directories using `--local` for development and testing purposes. The command manages
 all runtime files, logs, and the Envoy admin interface automatically.
 
-> ⚠️ `boe run` will try to download Envoy for your operating system and platform, but Envoy does
-> not provide packages for all platforms. If there are no Envoy binaries for your platform, `boe`
-> can transparently run Envoy in Docker. Just use `boe run --docker` or set the `BOE_RUN_DOCKER=true`
-> environment variable.
+<Callout type="warning">
+`boe run` will try to download Envoy for your operating system and platform, but Envoy does
+not provide packages for all platforms. If there are no Envoy binaries for your platform, `boe`
+can transparently run Envoy in Docker. Just use `boe run --docker` or set the `BOE_RUN_DOCKER=true`
+environment variable.
+</Callout>
 
 ## Examples
 
-Run the `example-lua` extension from the default registry with `debug` logs enabled for Lua:
+Run the `example-go` extension from the default registry with `debug` logs enabled for Lua:
 
     ```shell
-    boe run --extension example-lua --log-level lua:debug
+    boe run --extension example-go --log-level dynamic_modules:debug
     ```
 
-Run a specific version of the `example-lua` extension from a custom OCI registry. This is useful if you are hosting the
+Run a specific version of the `example-go` extension from a custom OCI registry. This is useful if you are hosting the
 extensions in a corporate OCI registry.
 
     ```shell
@@ -27,14 +29,14 @@ extensions in a corporate OCI registry.
     export BOE_REGISTRY_USERNAME=username
     export BOE_REGISTRY_PASSWORD=password
 
-    boe run --extension example-lua:1.0.0 --log-level lua:debug
+    boe run --extension example-go:0.3.2 --log-level dynamic_modules:debug
     ```
 
 Run a local extension from a local directory. The directory must contain the extension `manifest.yaml`
 and all the files needed to execute the extension locally.
 
     ```shell
-    boe run --local ~/src/built-on-envoy/extensions/example-lua
+    boe run --local ~/src/built-on-envoy/extensions/composer/example
     ```
 
 Run extensions with custom JSON configuration strings. Configs are applied in order to the
@@ -53,4 +55,10 @@ If the extension needs to reach external services, you can provide additional En
     boe run --extension ext1 --cluster-insecure example.com:80
     # Configure a full cluster
     boe run --extension ext1 --cluster-json '{"name":"my-cluster","type":"STRICT_DNS","load_assignment":{"cluster_name":"my-cluster","endpoints":[{"lb_endpoints":[{"endpoint":{"address":{"socket_address":"address":"example.com","port_value":8081}}}}]}]}}'
+    ```
+
+Run the extensions against a custom upstream host instead of the default `httpbin.org`:
+
+    ```shell
+    boe run --extension chat-completions-decoder --test-upstream-host api.openai.com
     ```

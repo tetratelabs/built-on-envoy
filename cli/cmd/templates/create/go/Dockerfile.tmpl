@@ -1,0 +1,23 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# WARNING: This Dockerfile is auto-generated. Do not modify it directly.
+# If you need to customize the build process, consider creating a separate
+# Dockerfile (e.g., Dockerfile.custom) instead of editing this file.
+
+# Build the manager binary
+FROM golang:1.26.2 AS builder
+
+WORKDIR /workspace
+COPY . .
+
+RUN go mod download all
+
+# Build go plugin
+RUN CGO_ENABLED=1 go build -buildmode=plugin -o plugin.so ./standalone
+
+FROM scratch AS final
+
+COPY --from=builder /workspace/plugin.so /

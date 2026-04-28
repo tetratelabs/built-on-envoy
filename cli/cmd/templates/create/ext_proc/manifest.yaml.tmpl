@@ -1,0 +1,43 @@
+name: {{ .Name }}
+version: 0.1.0
+categories:
+  - Misc
+author: Unknown
+description: A custom ext_proc extension.
+longDescription: |
+  A custom ext_proc extension that runs as an out-of-process gRPC server.
+
+  ## Features
+
+  * **Header injection**: Adds a custom response header to every request
+
+  ## Building
+
+  ```bash
+  go build -o ext_proc-server .
+  ```
+
+  ## Running
+
+  ```bash
+  boe run --local .
+  ```
+type: ext_proc
+tags:
+  - ext-proc
+  - http
+  - filter
+license: Apache-2.0
+extProc:
+  grpcPort: 50051
+  failureModeAllow: false
+  processingMode:
+    requestHeaderMode: SKIP
+    responseHeaderMode: SEND
+    requestBodyMode: NONE
+    responseBodyMode: NONE
+examples:
+  - title: Basic Usage
+    description: Run the extension locally
+    code: |
+      boe run --local .

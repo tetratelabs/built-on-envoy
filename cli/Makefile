@@ -12,6 +12,11 @@ OCI_REGISTRY ?= $(or $(BOE_REGISTRY),ghcr.io/tetratelabs/built-on-envoy)
 TAG          ?= latest
 COMMIT_SHA   := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
 
+# This is the package that contains the version information for the build.
+VERSION_STRING:=$(shell git describe --tags --long)
+VERSION_PACKAGE := github.com/tetratelabs/built-on-envoy/cli/internal
+GO_LDFLAGS += -X $(VERSION_PACKAGE).version=$(VERSION_STRING)
+
 # Arguments for go test. This can be used, for example, to run specific tests via
 # `GO_TEST_ARGS="-run TestName/foo/etc -v -race"`
 GO_TEST_ARGS ?=
@@ -19,7 +24,7 @@ GO_TEST_ARGS ?=
 # Use a specific go tool invocation that uses the tools module for linters and other tools so that
 # the main go.mod is not polluted with tool dependencies.
 ROOT     := $(shell git rev-parse --show-toplevel)
-GO_TOOL  := go tool -modfile=$(ROOT)/cli/tools/go.mod
+GO_TOOL  := go tool -modfile=$(ROOT)/tools/go.mod
 
 # Base OCI image annotations (shared by all image types)
 BASE_OCI_ANNOTATIONS := \
@@ -53,7 +58,7 @@ build: gen-code  ## Build a binary for the given OS and architectures
 	@for goos in $(GOOS_LIST); do \
 		for goarch in $(GOARCH_LIST); do \
 			echo "-> Building for $$goos/$$goarch"; \
-			CGO_ENABLED=0 GOOS=$$goos GOARCH=$$goarch go build \
+			CGO_ENABLED=0 GOOS=$$goos GOARCH=$$goarch go build -ldflags "$(GO_LDFLAGS)" \
 				-o $(OUTPUT_DIR)/$(NAME)-$$goos-$$goarch .; \
 			echo "<- Built $(OUTPUT_DIR)/$(NAME)-$$goos-$$goarch"; \
 		done; \
@@ -76,9 +81,8 @@ test-integration: gen-code  ## Run the unit and integration tests
 	  go test -tags integration $(GO_TEST_ARGS) $$PKGS
 
 .PHONY: test-e2e
-test-e2e: GO_TEST_ARGS = -timeout 30m
+test-e2e: GO_TEST_ARGS += -timeout 30m
 test-e2e: gen-code  ## Run the end-to-end tests
-	@$(MAKE) -C $(ROOT)/extensions/composer install
 	@echo "Run e2e tests"
 	@go test $(GO_TEST_ARGS) ./e2e/...
 
@@ -175,7 +179,7 @@ format:  ## Format code.
 .PHONY: tidy
 tidy:  ## Run go mod tidy.
 	@echo "go mod tidy => ./..."
-	@find . -name go.mod -execdir go mod tidy \;
+	@find $(ROOT) -name go.mod -execdir go mod tidy \;
 
 .PHONY: check
 check: gen tidy format  ## Run all necessary steps to prepare for a commit and check for any differences in the codebase

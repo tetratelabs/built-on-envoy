@@ -37,13 +37,17 @@ type Run struct {
 	AdminPort    uint32   `help:"Port for Envoy admin interface." default:"9901"`
 	Extensions   []string `name:"extension" help:"Extensions to enable (in the format: \"name\" or \"name:version\")."`
 	Local        []string `name:"local" sep:"none" help:"Path to a directory containing a local Extension to enable." type:"existingdir"`
+	Dev          bool     `help:"Whether to allow downloading dev versions of extensions (with -dev suffix). By default, only stable versions are allowed." default:"false"`
 	// sep:"none" disables Kong's default comma-separated splitting for []string flags.
 	// JSON config values contain commas (e.g. {"a":"1","b":"2"}) which would otherwise
 	// be split into separate invalid fragments, causing protobuf unmarshal failures.
-	Configs  []string     `name:"config" sep:"none" help:"Optional JSON config string for extensions. Applied in order to combined --extension and --local flags."`
-	Clusters ClusterFlags `embed:""`
-	Docker   bool         `help:"Run Envoy as a Docker container instead of using func-e." default:"false" env:"BOE_RUN_DOCKER"`
-	OCI      OCIFlags     `embed:""`
+	Configs             []string     `name:"config" sep:"none" help:"Optional JSON config string for extensions. Applied in order to combined --extension and --local flags."`
+	Clusters            ClusterFlags `embed:""`
+	TestUpstreamHost    string       `name:"test-upstream-host" help:"Hostname for the test upstream cluster. Mutually exclusive with --test-upstream-cluster. Defaults to \"httpbin.org\"."`
+	TestUpstreamCluster string       `name:"test-upstream-cluster" help:"Name of an existing configured cluster to use as the test upstream. The cluster must be configured via --cluster, --cluster-insecure, or --cluster-json. Mutually exclusive with --test-upstream-host."`
+	Docker              bool         `help:"Run Envoy as a Docker container instead of using func-e." default:"false" env:"BOE_RUN_DOCKER"`
+	Pull                string       `name:"pull" help:"Pull policy for the BOE Docker image (missing, always, never). Only applicable when running with --docker." enum:"missing,always,never" default:"missing"`
+	OCI                 OCIFlags     `embed:""`
 
 	extensionPositions extensionPositions `kong:"-"` // Internal field: tracks the original position of extensions specified via both --extension and --local flags
 	defaultLogLevel    string             `kong:"-"` // Internal field: parsed defaut log level
@@ -95,6 +99,9 @@ func (r *Run) Validate() error {
 	if err != nil {
 		return err
 	}
+	if r.TestUpstreamHost != "" && r.TestUpstreamCluster != "" {
+		return fmt.Errorf("--test-upstream-host and --test-upstream-cluster are mutually exclusive")
+	}
 	return nil
 }
 
@@ -110,19 +117,21 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 			Dirs:            dirs,
 			Arch:            runtime.GOARCH,
 			LocalExtensions: r.Local,
+			Pull:            r.Pull,
 		}
 		return runner.Run(ctx)
 	}
 
 	downloader := &extensions.Downloader{
-		Logger:   logger,
-		Registry: r.OCI.Registry,
-		Username: r.OCI.Username,
-		Password: r.OCI.Password,
-		Insecure: r.OCI.Insecure,
-		Dirs:     dirs,
-		OS:       runtime.GOOS,
-		Arch:     runtime.GOARCH,
+		Logger:      logger,
+		Registry:    r.OCI.Registry,
+		Username:    r.OCI.Username,
+		Password:    r.OCI.Password,
+		Insecure:    r.OCI.Insecure,
+		Dirs:        dirs,
+		OS:          runtime.GOOS,
+		Arch:        runtime.GOARCH,
+		DevVersions: r.Dev,
 	}
 
 	downloaded, err := downloadExtensions(ctx, downloader, r.Extensions, true)
@@ -134,40 +143,57 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 	if err != nil {
 		return err
 	}
-	extensions, err := r.extensionPositions.sort(append(downloaded, local...))
+	extensionsToRun, err := r.extensionPositions.sort(append(downloaded, local...))
 	if err != nil {
 		return err
 	}
 
-	// TODO(nacx): Find a way to eagerly get from func-e the Envoy version that will
-	// be used when r.EnvoyVersion is empty, without starting the download or run.
-	if r.EnvoyVersion != "" {
+	// If no Envoy version is specified, check if the extensions have Envoy version constraints defined
+	// and if so, use them to determine a compatible Envoy version to run.
+	if r.EnvoyVersion == "" {
+		r.EnvoyVersion, err = extensions.ResolveMinimumCompatibleEnvoyVersion(extensionsToRun)
+		if err != nil {
+			return err
+		}
+		logger.Debug("resolved Envoy version from manifests", "envoy_version", r.EnvoyVersion)
+	} else {
 		logger.Debug("validating Envoy version compatibility for extensions", "envoy_version", r.EnvoyVersion)
-		if err = validateEnvoyCompat(r.EnvoyVersion, extensions); err != nil {
+		if err = validateEnvoyCompat(r.EnvoyVersion, extensionsToRun); err != nil {
 			return err
 		}
 	}
 
 	// Make sure all composer extensions use the same version of composer
 	logger.Debug("validating composer version compatibility for extensions")
-	if err = validateComposerCompat(extensions); err != nil {
+	if err = validateComposerCompat(extensionsToRun); err != nil {
 		return err
 	}
 
+	// Collect ext_proc binary paths for process management.
+	extProcBinaries := make(map[string]string)
+	for _, ext := range extensionsToRun {
+		if ext.Type == extensions.TypeExtProc {
+			extProcBinaries[ext.Name] = extensions.LocalCacheExtension(dirs, ext)
+		}
+	}
+
 	runner := &envoy.RunnerFuncE{
-		Logger:            logger,
-		EnvoyVersion:      r.EnvoyVersion,
-		DefaultLogLevel:   r.defaultLogLevel,
-		ComponentLogLevel: r.componentLogLevel,
-		Dirs:              dirs,
-		RunID:             r.RunID,
-		ListenPort:        r.ListenPort,
-		AdminPort:         r.AdminPort,
-		Extensions:        extensions,
-		Configs:           r.Configs,
-		Clusters:          r.Clusters.Secure,
-		ClustersInsecure:  r.Clusters.Insecure,
-		ClustersJSON:      r.Clusters.JSONSpec,
+		Logger:              logger,
+		EnvoyVersion:        r.EnvoyVersion,
+		DefaultLogLevel:     r.defaultLogLevel,
+		ComponentLogLevel:   r.componentLogLevel,
+		Dirs:                dirs,
+		RunID:               r.RunID,
+		ListenPort:          r.ListenPort,
+		AdminPort:           r.AdminPort,
+		Extensions:          extensionsToRun,
+		Configs:             r.Configs,
+		Clusters:            r.Clusters.Secure,
+		ClustersInsecure:    r.Clusters.Insecure,
+		ClustersJSON:        r.Clusters.JSONSpec,
+		TestUpstreamHost:    r.TestUpstreamHost,
+		TestUpstreamCluster: r.TestUpstreamCluster,
+		ExtProcBinaries:     extProcBinaries,
 	}
 
 	return runner.Run(ctx)
@@ -178,7 +204,7 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 	downloaded := make([]*extensions.Manifest, 0, len(refs))
 	for _, ext := range refs {
 		name, tag := splitRef(ext)
-		fmt.Printf("→ %sFetching %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)
+		_, _ = fmt.Fprintf(os.Stderr, "→ %sFetching %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)
 		artifact, err := downloader.DownloadExtension(ctx, name, tag)
 		if err != nil {
 			return nil, err
@@ -188,7 +214,7 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 		case extensions.ArtifactBinary:
 			if artifact.Manifest.Type == extensions.TypeGo {
 				// Ensure the composer is downloaded before running any extensions that may depend on it.
-				if err = extensions.CheckOrDownloadLibComposer(ctx, downloader, artifact.Manifest.ComposerVersion); err != nil {
+				if err = extensions.CheckOrDownloadLibComposer(ctx, downloader, artifact.Manifest.ComposerVersion, extensions.ComposerArtifactLite); err != nil {
 					return nil, fmt.Errorf("failed to download libcomposer %s for extension %s: %w",
 						artifact.Manifest.ComposerVersion, name, err)
 				}
@@ -212,13 +238,20 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 						name, extensionSrc, err)
 				}
 				manifest.Remote = true // Mark the manifest as remote since it is from a downloaded artifact
+				// Composer source artifacts contains manifests without version information (just the parent reference).
+				// We need to set the versions here.
+				manifest.Version = artifact.Manifest.Version
+				manifest.ComposerVersion = artifact.Manifest.ComposerVersion
 
 				if build {
 					fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)
-					downloader.Logger.Info("building downloaded Go extension", "name", manifest.Name, "version", manifest.Version)
-					if err = extensions.BuildLibComposer(downloader.Logger, downloader.Dirs, artifact.Path, manifest.ComposerVersion, false); err != nil {
-						return nil, fmt.Errorf("failed to build libcomposer %s for extension %s: %w",
-							artifact.Manifest.Version, name, err)
+					downloader.Logger.Info("building downloaded Go extension", "name", manifest.Name, "version", artifact.Manifest.Version)
+					// Build libcomposer from the downloaded source if it does not exist in the local cache.
+					if _, err = os.Stat(extensions.LocalCacheComposerLib(downloader.Dirs, artifact.Manifest.Version)); err != nil {
+						if err = extensions.BuildLibComposer(downloader.Logger, downloader.Dirs, artifact.Path, artifact.Manifest.Version, false); err != nil {
+							return nil, fmt.Errorf("failed to build libcomposer %s for extension %s: %w",
+								artifact.Manifest.Version, name, err)
+						}
 					}
 					if err = extensions.BuildExtensionFromPath(downloader.Logger, downloader.Dirs, manifest, extensionSrc); err != nil {
 						return nil, fmt.Errorf("failed to build Go extension %s from source artifact: %w", name, err)
@@ -297,11 +330,16 @@ var errFailedToLoadLocalManifest = errors.New("failed to load local manifest")
 // loadLocalManifests loads extension manifests from the specified local paths.
 func loadLocalManifests(ctx context.Context, logger *slog.Logger, downloader *extensions.Downloader, paths []string, build bool) ([]*extensions.Manifest, error) {
 	manifests := make([]*extensions.Manifest, 0, len(paths))
+
 	for _, path := range paths {
 		logger.Info("loading local extension manifest", "path", path)
 
 		manifest, err := extensions.LoadLocalManifest(path + "/manifest.yaml")
 		if err != nil {
+			return nil, fmt.Errorf("%w from %s: %w", errFailedToLoadLocalManifest, path, err)
+		}
+
+		if err := extensions.ResolveLocalVersions(manifest); err != nil {
 			return nil, fmt.Errorf("%w from %s: %w", errFailedToLoadLocalManifest, path, err)
 		}
 
@@ -313,7 +351,7 @@ func loadLocalManifests(ctx context.Context, logger *slog.Logger, downloader *ex
 				if err := extensions.BuildExtensionFromPath(downloader.Logger, downloader.Dirs, manifest, path); err != nil {
 					return nil, err
 				}
-				if err := extensions.CheckOrDownloadLibComposer(ctx, downloader, manifest.ComposerVersion); err != nil {
+				if err := extensions.DownloadLibComposerAndBuildIfNeeded(ctx, downloader, manifest.ComposerVersion, extensions.ComposerArtifactSource); err != nil {
 					return nil, err
 				}
 			case extensions.TypeRust:
@@ -321,6 +359,12 @@ func loadLocalManifests(ctx context.Context, logger *slog.Logger, downloader *ex
 				downloader.Logger.Info("building local Rust extension", "name", manifest.Name, "version", manifest.Version)
 				// Build dynamic module (currently supports Rust)
 				if err := extensions.BuildDynamicModule(downloader.Logger, downloader.Dirs, manifest, path); err != nil {
+					return nil, err
+				}
+			case extensions.TypeExtProc:
+				fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, manifest.Name, internal.ANSIReset)
+				downloader.Logger.Info("building local ext_proc extension", "name", manifest.Name, "version", manifest.Version)
+				if err := extensions.BuildExtProcBinary(downloader.Logger, downloader.Dirs, manifest, path); err != nil {
 					return nil, err
 				}
 			}

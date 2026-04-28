@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/composer/jwe-decrypt/config.schema.json",
+  "title": "JWE Decrypt Configuration",
+  "description": "Configuration for the JWE Decrypt extension. Decrypts JWE tokens and recovers the inner JWT for Envoy to process.",
+  "type": "object",
+  "required": ["private_key", "algorithm"],
+  "additionalProperties": false,
+  "properties": {
+    "private_key": {
+      "$ref": "#/$defs/DataSource",
+      "description": "PKCS8 private key used for JWE decryption."
+    },
+    "algorithm": {
+      "type": "string",
+      "description": "JWE key management algorithm (e.g. \"RSA-OAEP\", \"A256KW\", \"dir\")."
+    },
+    "input_header": {
+      "type": "string",
+      "description": "Request header containing the JWE token. Defaults to \"Authorization\"."
+    },
+    "prefix": {
+      "type": "string",
+      "description": "Prefix to strip from the header value before decryption (e.g. \"Bearer \")."
+    },
+    "output_header": {
+      "type": "string",
+      "description": "Request header where the decrypted JWT payload is placed."
+    },
+    "output_metadata": {
+      "$ref": "#/$defs/MetadataKey",
+      "description": "Envoy dynamic metadata location for the decrypted JWT payload. Namespace defaults to \"jwe-decrypt\"."
+    }
+  },
+  "$defs": {
+    "DataSource": {
+      "type": "object",
+      "description": "A data source provided either inline or as a file path. Exactly one must be set.",
+      "additionalProperties": false,
+      "properties": {
+        "inline": {
+          "type": "string",
+          "description": "Data provided directly as a string."
+        },
+        "file": {
+          "type": "string",
+          "description": "Path to a file containing the data."
+        }
+      },
+      "oneOf": [
+        { "required": ["inline"] },
+        { "required": ["file"] }
+      ]
+    },
+    "MetadataKey": {
+      "type": "object",
+      "description": "Identifies a location in Envoy dynamic metadata.",
+      "additionalProperties": false,
+      "required": ["key"],
+      "properties": {
+        "namespace": {
+          "type": "string",
+          "description": "Filter-state namespace for the metadata entry."
+        },
+        "key": {
+          "type": "string",
+          "description": "Key within the namespace."
+        }
+      }
+    }
+  }
+}

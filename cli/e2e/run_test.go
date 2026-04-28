@@ -82,10 +82,11 @@ func TestDockerRemoteExtension(t *testing.T) {
 
 	// Run the remote extension in Docker.
 	proc := internaltesting.RunCLI(t, cliBin, "run",
-		"--docker", "--envoy-version", "1.37.0",
+		"--docker",
 		"--listen-port", "11000",
+		"--dev",
 		"--log-level", "dynamic_modules:debug",
-		"--extension", "example-go")
+		"--extension", "example-go:0.3.0")
 
 	t.Cleanup(func() {
 		_ = proc.Signal(syscall.SIGTERM)
@@ -136,29 +137,7 @@ func TestRustRemoteExtension(t *testing.T) {
 }
 
 func TestRustLocalExtension(t *testing.T) {
-	extensionPath := "../../extensions/ip-restriction"
-	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin,
-		"--log-level", "dynamic_modules:debug",
-		"--local", extensionPath, "--config", `{"deny_addresses": ["192.168.1.50"]}`,
-	)
-
-	// Set X-Forwarded-For header to an IP address that should be denied by the ip-restriction extension.
-	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
-	checkDenied := func(r *http.Response) bool {
-		return r.StatusCode == http.StatusForbidden
-	}
-
-	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
-	t.Cleanup(cancel)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	require.NoError(t, err)
-	req.Header.Set("X-Forwarded-For", "192.168.1.50")
-
-	require.NoError(t, internaltesting.CheckRequest(req, checkDenied))
-}
-
-func TestRustCreateAndRun(t *testing.T) {
+	t.Setenv("TEST_BOE_RUN_ENVOY_TIMEOUT", "5m")
 	dataDir := t.TempDir()
 
 	// Create a brand new extension
@@ -188,7 +167,52 @@ func TestRustCreateAndRun(t *testing.T) {
 	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
 }
 
+func TestExtProcLocalExtension(t *testing.T) {
+	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin, "--log-level",
+		"ext_proc:debug", "--local", "../../extensions/example-ext-proc")
+
+	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
+	checkHeader := func(r *http.Response) bool {
+		return r.Header.Get("x-ext-proc") == "processed"
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	t.Cleanup(cancel)
+
+	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
+}
+
+func TestExtProcRemoteExtension(t *testing.T) {
+	internaltesting.SkipIfTestRegistryNotConfigured(t)
+
+	// Run the remote extension.
+	// This will resolve the latest tag of the extension, download it to
+	// the data directory, and execute it from there.
+	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin, "--log-level",
+		"ext_proc:debug", "--extension", "example-ext-proc")
+
+	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
+	checkHeader := func(r *http.Response) bool {
+		return r.Header.Get("x-ext-proc") == "processed"
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	t.Cleanup(cancel)
+
+	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
+}
+
 func TestLocalGoExtension(t *testing.T) {
+	// Local builds for Go will pull libcomposer from the remote registry. However, when we're doing changes to versions, etc, we don't want it to
+	// pull an obsolete version, so we'll just push the current composer source to the local registry and use that for the test.
+	t.Setenv("BOE_REGISTRY", registryAddr)
+	t.Setenv("BOE_REGISTRY_INSECURE", "true")
+	makeCmd := exec.CommandContext(t.Context(), "make", "push_code")
+	makeCmd.Dir = "../../extensions/composer"
+	output, err := makeCmd.CombinedOutput()
+	t.Logf("make push_code output: %s", string(output))
+	require.NoError(t, err)
+
 	dataDir := t.TempDir()
 
 	// Create a brand new extension
@@ -231,7 +255,7 @@ func addDummyDependencyToExtension(t *testing.T, path string) {
 	// of the extension are not subset of the composer's dependencies.
 
 	goModContent := `module inner
-go 1.25.7
+go 1.26.2
 `
 
 	goFileContent := `package inner

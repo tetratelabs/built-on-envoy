@@ -72,13 +72,25 @@ func NewWAFConfigFromBytes(configBytes []byte, l *zap.Logger) (coraza.WAF, WAFMo
 func NewWAFFromDirectives(directives string, l *zap.Logger) (coraza.WAF, error) {
 	conf := coraza.NewWAFConfig().
 		WithErrorCallback(newSlogError(l)).
-		WithRootFS(rulesFS{})
+		WithRootFS(combinedDirectivesFS)
 	return coraza.NewWAF(conf.WithDirectives(directives))
 }
 
 func newSlogError(l *zap.Logger) func(err ctypes.MatchedRule) {
 	return func(err ctypes.MatchedRule) {
 		msg := err.ErrorLog()
-		l.Error(msg, zap.String("severity", err.Rule().Severity().String()))
+		severity := strings.ToLower(err.Rule().Severity().String())
+		severityField := zap.String("severity", severity)
+
+		switch severity {
+		case "emergency", "alert", "critical", "error":
+			l.Error(msg, severityField)
+		case "warning":
+			l.Warn(msg, severityField)
+		default:
+			// Rules without an explicit severity "unknown" and informational severities ("notice", "info") are logged at Info level.
+			// The error callback is only invoked for triggered rules with the log action, so suppressing these at Debug level would silently drop intentional log entries.
+			l.Info(msg, severityField)
+		}
 	}
 }

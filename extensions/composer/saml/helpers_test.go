@@ -85,9 +85,9 @@ func testRawConfigJSON(spKP *testKeyPair, idpMetadataXML string) string {
 	return fmt.Sprintf(`{
 		"entity_id": "https://sp.example.com",
 		"acs_path": "/saml/acs",
-		"idp_metadata_xml": %q,
-		"sp_cert_pem": %q,
-		"sp_key_pem": %q
+		"idp_metadata_xml": {"inline": %q},
+		"sp_cert_pem": {"inline": %q},
+		"sp_key_pem": {"inline": %q}
 	}`, idpMetadataXML, spKP.CertPEM, spKP.KeyPEM)
 }
 
@@ -136,11 +136,11 @@ func testIDPMetadata(idpKP *testKeyPair) *IDPMetadata {
 }
 
 // testFilterConfig creates a samlFilterConfig for filter tests.
-func testFilterConfig(spKP, idpKP *testKeyPair) *samlFilterConfig {
+func testFilterConfig(spKP, idpKP *testKeyPair) (*samlFilterConfig, *samlMetrics) {
 	return &samlFilterConfig{
-		config:      testConfig(spKP, idpKP),
-		idpMetadata: testIDPMetadata(idpKP),
-		metrics: &samlMetrics{
+			config:      testConfig(spKP, idpKP),
+			idpMetadata: testIDPMetadata(idpKP),
+		}, &samlMetrics{
 			authnRequests:          shared.MetricID(1),
 			hasAuthnRequests:       true,
 			assertionsValidated:    shared.MetricID(2),
@@ -149,33 +149,7 @@ func testFilterConfig(spKP, idpKP *testKeyPair) *samlFilterConfig {
 			hasSessionsCreated:     true,
 			sessionsValidated:      shared.MetricID(4),
 			hasSessionsValidated:   true,
-		},
-	}
-}
-
-// testFilterConfigURLMode creates a samlFilterConfig configured for URL-based
-// metadata fetching (idpMetadata is nil, idpMetadataURL and idpMetadataCluster are set).
-func testFilterConfigURLMode(spKP *testKeyPair) *samlFilterConfig {
-	cfg := testConfig(spKP, generateTestKeyPair("idp.example.com"))
-	cfg.IDPMetadataXML = ""
-	cfg.IDPMetadataURL = "https://idp.example.com/metadata"
-	cfg.IDPMetadataCluster = "idp_cluster"
-	return &samlFilterConfig{
-		config:             cfg,
-		idpMetadata:        nil,
-		idpMetadataURL:     "https://idp.example.com/metadata",
-		idpMetadataCluster: "idp_cluster",
-		metrics: &samlMetrics{
-			authnRequests:          shared.MetricID(1),
-			hasAuthnRequests:       true,
-			assertionsValidated:    shared.MetricID(2),
-			hasAssertionsValidated: true,
-			sessionsCreated:        shared.MetricID(3),
-			hasSessionsCreated:     true,
-			sessionsValidated:      shared.MetricID(4),
-			hasSessionsValidated:   true,
-		},
-	}
+		}
 }
 
 var noopLog logger = noopLogger{}

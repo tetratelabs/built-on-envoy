@@ -45,11 +45,13 @@ Arguments:
   <name>    Name of the extension.
 
 Flags:
-  -h, --help           Show context-sensitive help.
+  -h, --help                  Show context-sensitive help.
 
-      --type="go"      Type of the extension (go, rust).
-      --path=STRING    Output directory for the extension. Defaults to the
-                       extension name.
+      --type="go"             Type of the extension (go, rust, ext_proc).
+      --filter-type="http"    Filter type (http, network). Network filters are
+                              only supported for rust.
+      --path=STRING           Output directory for the extension. Defaults to
+                              the extension name.
 `, internaltesting.WrapHelp(createHelp))
 	require.Equal(t, expected, buf.String())
 }
@@ -83,6 +85,7 @@ func TestCreateGo_Run(t *testing.T) {
 
 		files := []string{
 			"plugin.go",
+			"plugin_test.go",
 			"manifest.yaml",
 			"Makefile",
 			"go.mod",
@@ -110,6 +113,63 @@ func TestCreateGo_Run(t *testing.T) {
 		assert.Contains(t, string(plugin), "x-"+name)
 		assert.Contains(t, string(plugin), "WellKnownHttpFilterConfigFactories")
 	}
+}
+
+func TestCreateExtProc_Run(t *testing.T) {
+	// Ensure go is available as the command runs `go mod tidy`
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skip("go not found in PATH")
+	}
+
+	tmpDir := t.TempDir()
+	name := "my-extproc-extension"
+
+	c := &Create{
+		Type: "ext_proc",
+		Name: name,
+		Path: tmpDir,
+	}
+
+	err := c.Run(&xdg.Directories{}, internaltesting.NewTLogger(t))
+	require.NoError(t, err)
+
+	repoPath := filepath.Join(tmpDir, name)
+	require.DirExists(t, repoPath)
+
+	files := []string{
+		"main.go",
+		"main_test.go",
+		"processor.go",
+		"processor_test.go",
+		"manifest.yaml",
+		"go.mod",
+		"Dockerfile",
+		"Dockerfile.code",
+		".dockerignore",
+		"Makefile",
+	}
+	for _, f := range files {
+		require.FileExists(t, filepath.Join(repoPath, f), "expected file %s to exist", f)
+	}
+
+	// verify manifest.yaml content
+	// #nosec G304
+	manifest, err := os.ReadFile(filepath.Join(repoPath, "manifest.yaml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(manifest), "name: "+name)
+	assert.Contains(t, string(manifest), "type: ext_proc")
+
+	// verify go.mod content
+	// #nosec G304
+	goMod, err := os.ReadFile(filepath.Join(repoPath, "go.mod"))
+	require.NoError(t, err)
+	assert.Contains(t, string(goMod), `module `+name)
+
+	// verify main.go content
+	// #nosec G304
+	mainGo, err := os.ReadFile(filepath.Join(repoPath, "main.go"))
+	require.NoError(t, err)
+	assert.Contains(t, string(mainGo), "extprocv3.RegisterExternalProcessorServer(srv, processor)")
 }
 
 func TestCreateRust_Run(t *testing.T) {
@@ -176,4 +236,56 @@ func TestUnsupportedType(t *testing.T) {
 	err := c.Run(&xdg.Directories{}, internaltesting.NewTLogger(t))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported extension type")
+}
+
+func TestCreateRust_NetworkFilter_Run(t *testing.T) {
+	tmpDir := t.TempDir()
+	name := "my-tcp-extension"
+
+	c := &Create{
+		Type:       "rust",
+		FilterType: "network",
+		Name:       name,
+		Path:       tmpDir,
+	}
+
+	err := c.Run(&xdg.Directories{}, internaltesting.NewTLogger(t))
+	require.NoError(t, err)
+
+	repoPath := filepath.Join(tmpDir, name)
+	require.DirExists(t, repoPath)
+
+	// verify manifest.yaml content
+	// #nosec G304
+	manifest, err := os.ReadFile(filepath.Join(repoPath, "manifest.yaml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(manifest), "name: "+name)
+	assert.Contains(t, string(manifest), "type: rust")
+	assert.Contains(t, string(manifest), "filterType: network")
+
+	// verify src/lib.rs contains network filter constructs, not HTTP.
+	// #nosec G304
+	libRs, err := os.ReadFile(filepath.Join(repoPath, "src/lib.rs"))
+	require.NoError(t, err)
+	assert.Contains(t, string(libRs), "declare_network_filter_init_functions!")
+	assert.Contains(t, string(libRs), "NetworkFilterConfig")
+	assert.Contains(t, string(libRs), "fn on_new_connection")
+	assert.NotContains(t, string(libRs), "declare_init_functions!")
+	assert.NotContains(t, string(libRs), "HttpFilterConfig")
+}
+
+func TestCreateGo_NetworkFilter_Unsupported(t *testing.T) {
+	for _, extensionType := range []string{"go", "ext_proc"} {
+		t.Run(extensionType, func(t *testing.T) {
+			c := &Create{
+				Type:       extensionType,
+				FilterType: "network",
+				Name:       "test-extension",
+			}
+
+			err := c.Validate()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), fmt.Sprintf("network filter scaffolding is not supported for %q extensions", extensionType))
+		})
+	}
 }

@@ -9,11 +9,11 @@ on:
   push:
     branches:
       - main
-      - release-**
+      - release/**
   pull_request:
     branches:
       - main
-      - release-**
+      - release/**
 
 env:
   GOPROXY: https://proxy.golang.org
@@ -22,8 +22,8 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v4
         id: changes
         with:
           filters: |
@@ -40,9 +40,10 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       rust-extensions: ${{ steps.discover.outputs.rust-extensions }}
+      extproc-extensions: ${{ steps.discover.outputs.extproc-extensions }}
       has-composer: ${{ steps.discover.outputs.has-composer }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Discover extensions
         id: discover
         run: |
@@ -88,14 +89,19 @@ jobs:
           
           # Filter Rust extensions
           rust_extensions=$(echo "$extensions" | jq -c '[.[] | select(.language == "rust")]')
+
+          # Filter ExtProc extensions
+          extproc_extensions=$(echo "$extensions" | jq -c '[.[] | select(.type == "ext_proc")]')
           
           # Check if composer extension exists
           has_composer=$(echo "$extensions" | jq '[.[] | select(.name == "composer")] | length > 0')
           
           echo "rust-extensions=$rust_extensions" >> $GITHUB_OUTPUT
+          echo "extproc-extensions=$extproc_extensions" >> $GITHUB_OUTPUT
           echo "has-composer=$has_composer" >> $GITHUB_OUTPUT
           
           echo "Rust extensions: $rust_extensions"
+          echo "ExtProc extensions: $extproc_extensions"
           echo "Has composer: $has_composer"
 
   rust-checks:
@@ -104,11 +110,21 @@ jobs:
     uses: ./.github/workflows/extensions-rust.yaml
     with:
       extensions: ${{ needs.discover.outputs.rust-extensions }}
+    secrets: inherit
 
   go-checks:
     needs: discover
     if: ${{ needs.discover.outputs.has-composer == 'true' }}
     uses: ./.github/workflows/extensions-go.yaml
+    secrets: inherit
+
+  extproc-checks:
+    needs: discover
+    if: ${{ needs.discover.outputs.extproc-extensions != '[]' }}
+    uses: ./.github/workflows/extensions-extproc.yaml
+    with:
+      extensions: ${{ needs.discover.outputs.extproc-extensions }}
+    secrets: inherit
 
   # Aggregate all the required jobs and make it easier to customize CI required jobs
   extensions-checks:
@@ -117,6 +133,7 @@ jobs:
       - discover
       - rust-checks
       - go-checks
+      - extproc-checks
     # We need this to run always to force-fail (and not skip) if any needed
     # job has failed. Otherwise, a skipped job will not fail the workflow.
     if: always()

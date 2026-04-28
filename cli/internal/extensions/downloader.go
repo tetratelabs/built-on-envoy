@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
@@ -18,17 +19,21 @@ import (
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
+const devVersionTagSuffix = "-dev"
+
 // Downloader represents an extension downloader with authentication options.
 type Downloader struct {
 	Logger *slog.Logger
 
-	Registry string
-	Username string
-	Password string
-	Insecure bool
-	Dirs     *xdg.Directories
-	OS       string
-	Arch     string
+	Registry              string
+	Username              string
+	Password              string
+	Insecure              bool
+	Dirs                  *xdg.Directories
+	OS                    string
+	Arch                  string
+	DevVersions           bool // Whether to allow downloading dev versions (with -dev suffix). By default, only stable versions are allowed.
+	DisableSourceFallback bool // Whether to disable fallback to download source artifact when platform-specific artifact is not found. By default, the fallback is enabled.
 
 	// client factory function to allow mocking in tests.
 	newClient func(logger *slog.Logger, repository, username, password string, insecure bool) (oci.RepositoryClient, error)
@@ -49,9 +54,9 @@ type DownloadedExtension struct {
 }
 
 // DownloadComposer downloads the composer from the specified repository and version into the downloadDir.
-func (d *Downloader) DownloadComposer(ctx context.Context, version string) (DownloadedExtension, error) {
-	d.Logger.Info("downloading composer", "repository", d.Registry, "version", version)
-	return d.download(ctx, d.Registry+"/composer-lite", version, func(manifest *ocispec.Manifest) string {
+func (d *Downloader) DownloadComposer(ctx context.Context, version string, artifact string) (DownloadedExtension, error) {
+	d.Logger.Info("downloading composer", "repository", d.Registry, "artifact", artifact, "version", version)
+	return d.download(ctx, d.Registry+"/"+artifact, version, func(manifest *ocispec.Manifest) string {
 		extensionManifest := ManifestFromOCI(manifest)
 		if isComposerSourceArtifact(manifest) {
 			return LocalCacheComposerSourceArtifactDir(d.Dirs, extensionManifest)
@@ -79,9 +84,9 @@ func (d *Downloader) DownloadExtension(ctx context.Context, name, version string
 		return DownloadedExtension{}, err
 	}
 
-	// If the Download dir contains the manifest (lua extensinos or downloaded source), load it to get
+	// If the Download dir contains the manifest (lua extensions, ext_proc, or downloaded source), load it to get
 	// the full manifest with all extension data.
-	// Composer extensions are different as the manifest is the uber-manifest and we dont' want to read that.
+	// Composer extensions are different as the manifest is the uber-manifest and we don't want to read that.
 	if !artifact.ComposerBundle {
 		manifestPath := LocalCacheManifest(d.Dirs, artifact.Manifest)
 		if _, err = os.Stat(manifestPath); err == nil {
@@ -118,7 +123,7 @@ func (d *Downloader) download(
 	}
 
 	if version == "latest" {
-		version, err = getLatestTag(ctx, client, repository)
+		version, err = getLatestTag(ctx, client, repository, d.DevVersions)
 		if err != nil {
 			return DownloadedExtension{}, fmt.Errorf("failed to resolve latest tag for %q: %w", repository, err)
 		}
@@ -135,7 +140,7 @@ func (d *Downloader) download(
 
 	// Fetch the manifest first to read the annotations so that we can compute the right download directory
 	manifest, err := client.FetchManifest(ctx, version, platform)
-	if errors.Is(err, oci.ErrPlatformNotFound) {
+	if errors.Is(err, oci.ErrPlatformNotFound) && !d.DisableSourceFallback {
 		// If the manifest for the specific platform is not found, we can fallback to download
 		// the source artifact using the source repository.
 		extensionName := NameFromRepository(repository)
@@ -149,15 +154,16 @@ func (d *Downloader) download(
 		}
 
 		// Create a downloader for the source artifact without the platforms so it does not
-		// try to fetch a multiarch artifact.
+		// try to fetch a multi-arch artifact.
 		srcDownloader := &Downloader{
-			Logger:    d.Logger,
-			Registry:  d.Registry,
-			Username:  d.Username,
-			Password:  d.Password,
-			Insecure:  d.Insecure,
-			Dirs:      d.Dirs,
-			newClient: d.newClient,
+			Logger:      d.Logger,
+			Registry:    d.Registry,
+			Username:    d.Username,
+			Password:    d.Password,
+			Insecure:    d.Insecure,
+			Dirs:        d.Dirs,
+			DevVersions: d.DevVersions,
+			newClient:   d.newClient,
 		}
 
 		return srcDownloader.download(ctx, sourceRepo, version, getDownloadDir)
@@ -211,7 +217,7 @@ var (
 )
 
 // getLatestTag retrieves the latest tag for the given repository.
-func getLatestTag(ctx context.Context, client oci.RepositoryClient, repository string) (string, error) {
+func getLatestTag(ctx context.Context, client oci.RepositoryClient, repository string, allowDevVersions bool) (string, error) {
 	tags, err := client.Tags(ctx)
 	if err != nil {
 		return "", fmt.Errorf("%w %q: %w", errTagList, repository, err)
@@ -219,6 +225,13 @@ func getLatestTag(ctx context.Context, client oci.RepositoryClient, repository s
 	if len(tags) == 0 {
 		return "", fmt.Errorf("%w: %s", errNoTags, repository)
 	}
-	// TThe client returns tags in descending order, according to SemVer.
-	return tags[0], nil
+	// The client returns tags in descending order, according to SemVer.
+	// Return the first tag that is not a dev version unless allowDevVersions is true.
+	for _, tag := range tags {
+		if !allowDevVersions && strings.HasSuffix(tag, devVersionTagSuffix) {
+			continue
+		}
+		return tag, nil
+	}
+	return "", fmt.Errorf("%w: %s", errNoTags, repository)
 }

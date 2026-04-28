@@ -13,20 +13,22 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
+	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/utility"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/getkin/kin-openapi/routers"
 	"github.com/getkin/kin-openapi/routers/gorillamux"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 // openAPIValidatorConfig represents the JSON configuration for this filter.
 type openAPIValidatorConfig struct {
-	// SpecFile is the path to the OpenAPI specification file (YAML or JSON).
-	SpecFile string `json:"spec_file"`
+	// Spec is the OpenAPI specification, either inline or from a file.
+	Spec pkg.DataSource `json:"spec"`
 	// MaxBodyBytes is the maximum request body size in bytes to buffer for validation.
 	// 0 means no limit. If the body exceeds this limit, the request is rejected with 413.
 	MaxBodyBytes uint64 `json:"max_body_bytes"`
@@ -34,13 +36,9 @@ type openAPIValidatorConfig struct {
 	AllowUnmatchedPaths bool `json:"allow_unmatched_paths"`
 	// DryRun when true logs validation failures but always allows the request.
 	DryRun bool `json:"dry_run"`
-	// DenyStatus is the HTTP status code to return on validation failure (default: 400).
-	DenyStatus int `json:"deny_status"`
-	// DenyBody is the response body to return on validation failure.
-	// If empty, the validation error message is used.
-	DenyBody string `json:"deny_body"`
-	// DenyHeaders are additional headers to include in the deny response.
-	DenyHeaders map[string]string `json:"deny_headers"`
+	// DenyResponse is the local response to return on validation failure.
+	// Optional. Default status is 400; default body is the validation error message.
+	DenyResponse *pkg.LocalResponse `json:"deny_response,omitempty"`
 }
 
 // openAPIValidatorParsedConfig holds the parsed configuration and the compiled router.
@@ -73,10 +71,10 @@ type openAPIValidatorHttpFilter struct { //nolint:revive
 func (o *openAPIValidatorHttpFilter) buildHTTPRequest(body []byte) (*http.Request, error) {
 	headers := o.handle.RequestHeaders()
 
-	method := headers.GetOne(":method")
-	path := headers.GetOne(":path")
-	host := headers.GetOne(":authority")
-	scheme := headers.GetOne(":scheme")
+	method := headers.GetOne(":method").ToUnsafeString()
+	path := headers.GetOne(":path").ToUnsafeString()
+	host := headers.GetOne(":authority").ToUnsafeString()
+	scheme := headers.GetOne(":scheme").ToUnsafeString()
 	if scheme == "" {
 		scheme = "http"
 	}
@@ -93,8 +91,8 @@ func (o *openAPIValidatorHttpFilter) buildHTTPRequest(body []byte) (*http.Reques
 
 	// Copy non-pseudo headers.
 	for _, h := range headers.GetAll() {
-		if !strings.HasPrefix(h[0], ":") {
-			httpReq.Header.Add(h[0], h[1])
+		if !strings.HasPrefix(h[0].ToUnsafeString(), ":") {
+			httpReq.Header.Add(h[0].ToUnsafeString(), h[1].ToUnsafeString())
 		}
 	}
 	httpReq.Host = host
@@ -106,10 +104,10 @@ func (o *openAPIValidatorHttpFilter) buildHTTPRequest(body []byte) (*http.Reques
 }
 
 func (o *openAPIValidatorHttpFilter) OnRequestHeaders(headers shared.HeaderMap, endOfStream bool) shared.HeadersStatus {
-	method := headers.GetOne(":method")
-	path := headers.GetOne(":path")
-	host := headers.GetOne(":authority")
-	scheme := headers.GetOne(":scheme")
+	method := headers.GetOne(":method").ToUnsafeString()
+	path := headers.GetOne(":path").ToUnsafeString()
+	host := headers.GetOne(":authority").ToUnsafeString()
+	scheme := headers.GetOne(":scheme").ToUnsafeString()
 	if scheme == "" {
 		scheme = "http"
 	}
@@ -165,13 +163,11 @@ func (o *openAPIValidatorHttpFilter) OnRequestBody(body shared.BodyBuffer, endOf
 			return shared.BodyStatusStopNoBuffer
 		}
 		o.handle.Log(shared.LogLevelInfo, "openapi-validator: dry-run: would reject oversized body")
-		o.handle.ContinueRequest()
 		return shared.BodyStatusContinue
 	}
 
 	if endOfStream {
-		bodyBytes := o.readBufferedBody()
-		if o.validateRequest(bodyBytes) {
+		if o.validateRequest(utility.ReadWholeRequestBody(o.handle)) {
 			return shared.BodyStatusContinue
 		}
 		return shared.BodyStatusStopNoBuffer
@@ -187,32 +183,10 @@ func (o *openAPIValidatorHttpFilter) OnRequestTrailers(_ shared.HeaderMap) share
 
 	// Trailers mean endOfStream was never true in OnRequestBody.
 	// Read the full body and validate now.
-	bodyBytes := o.readBufferedBody()
-	if o.validateRequest(bodyBytes) {
+	if o.validateRequest(utility.ReadWholeRequestBody(o.handle)) {
 		return shared.TrailersStatusContinue
 	}
 	return shared.TrailersStatusStop
-}
-
-// readBufferedBody reads the full buffered request body from the handle.
-func (o *openAPIValidatorHttpFilter) readBufferedBody() []byte {
-	bufferedBody := o.handle.BufferedRequestBody()
-	if bufferedBody == nil {
-		return nil
-	}
-	chunks := bufferedBody.GetChunks()
-	if len(chunks) == 0 {
-		return nil
-	}
-	// If there is a single chunk, return it directly without copying.
-	if len(chunks) == 1 {
-		return chunks[0]
-	}
-	bodyBytes := make([]byte, 0, bufferedBody.GetSize())
-	for _, chunk := range chunks {
-		bodyBytes = append(bodyBytes, chunk...)
-	}
-	return bodyBytes
 }
 
 // validateRequest validates the request against the OpenAPI spec. Returns true if the
@@ -265,16 +239,12 @@ func (o *openAPIValidatorHttpFilter) denyRequest(err error) shared.HeadersStatus
 
 // sendDenyResponse sends a local response rejecting the request.
 func (o *openAPIValidatorHttpFilter) sendDenyResponse(validationErr error) {
-	status := o.config.DenyStatus
-	if status == 0 {
-		status = 400
-	}
-	body := o.config.DenyBody
+	body := o.config.DenyResponse.Body
 	if body == "" {
 		body = validationErr.Error()
 	}
 	o.handle.SendLocalResponse(
-		uint32(status), //nolint:gosec
+		uint32(o.config.DenyResponse.Status), //nolint:gosec
 		o.config.denyResponseHeaders,
 		[]byte(body),
 		"openapi_validation_failed",
@@ -288,7 +258,17 @@ type openAPIValidatorHttpFilterFactory struct { //nolint:revive
 }
 
 func (o *openAPIValidatorHttpFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
-	return &openAPIValidatorHttpFilter{handle: handle, config: o.config}
+	cfg := o.config
+	if perRouteConfig := pkg.GetMostSpecificConfig[*openAPIValidatorParsedConfig](handle); perRouteConfig != nil {
+		cfg = perRouteConfig
+	}
+
+	if cfg == nil {
+		handle.Log(shared.LogLevelInfo, "openapi-validator: no config available and use empty filter")
+		return &shared.EmptyHttpFilter{}
+	}
+
+	return &openAPIValidatorHttpFilter{handle: handle, config: cfg}
 }
 
 // OpenAPIValidatorHttpFilterConfigFactory is the configuration factory for the HTTP filter.
@@ -296,66 +276,93 @@ type OpenAPIValidatorHttpFilterConfigFactory struct { //nolint:revive
 	shared.EmptyHttpFilterConfigFactory
 }
 
-// Create parses the JSON configuration, loads the OpenAPI spec, and creates a factory.
-func (o *OpenAPIValidatorHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
+func parseConfig(config []byte) (*openAPIValidatorParsedConfig, error) {
 	if len(config) == 0 {
-		handle.Log(shared.LogLevelError, "openapi-validator: empty config")
-		return nil, fmt.Errorf("empty config")
+		return nil, nil
 	}
 
 	cfg := openAPIValidatorConfig{}
 	if err := json.Unmarshal(config, &cfg); err != nil {
-		handle.Log(shared.LogLevelError, "openapi-validator: failed to parse config: %s", err.Error())
-		return nil, err
+		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
-	if cfg.SpecFile == "" {
-		handle.Log(shared.LogLevelError, "openapi-validator: spec_file is required")
-		return nil, fmt.Errorf("spec_file is required")
+	if err := cfg.Spec.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid spec config: %w", err)
 	}
 
-	handle.Log(shared.LogLevelDebug, "openapi-validator: loading spec from %s (max_body_bytes=%d, dry_run=%v)",
-		cfg.SpecFile, cfg.MaxBodyBytes, cfg.DryRun)
-
-	specData, err := os.ReadFile(cfg.SpecFile)
+	specData, err := cfg.Spec.Content()
 	if err != nil {
-		handle.Log(shared.LogLevelError, "openapi-validator: failed to read spec file: %s", err.Error())
-		return nil, fmt.Errorf("failed to read spec file: %w", err)
+		return nil, fmt.Errorf("failed to read spec: %w", err)
 	}
 
 	loader := openapi3.NewLoader()
 	doc, err := loader.LoadFromData(specData)
 	if err != nil {
-		handle.Log(shared.LogLevelError, "openapi-validator: failed to parse spec: %s", err.Error())
 		return nil, fmt.Errorf("failed to parse spec: %w", err)
 	}
 
 	if err = doc.Validate(context.Background()); err != nil {
-		handle.Log(shared.LogLevelError, "openapi-validator: invalid OpenAPI spec: %s", err.Error())
 		return nil, fmt.Errorf("invalid OpenAPI spec: %w", err)
 	}
 
 	router, err := gorillamux.NewRouter(doc)
 	if err != nil {
-		handle.Log(shared.LogLevelError, "openapi-validator: failed to create router: %s", err.Error())
 		return nil, fmt.Errorf("failed to create router: %w", err)
 	}
 
-	handle.Log(shared.LogLevelDebug, "openapi-validator: spec loaded and router created successfully")
+	if cfg.DenyResponse == nil {
+		cfg.DenyResponse = &pkg.LocalResponse{
+			Status: 400,
+		}
+	} else {
+		if cfg.DenyResponse.Status == 0 {
+			cfg.DenyResponse.Status = 400
+		}
+		if err := cfg.DenyResponse.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid deny_response config: %w", err)
+		}
+	}
 
-	// Pre-compute deny response headers to avoid allocating per-request.
 	var denyResponseHeaders [][2]string
-	for k, v := range cfg.DenyHeaders {
+	for k, v := range cfg.DenyResponse.Headers {
 		denyResponseHeaders = append(denyResponseHeaders, [2]string{k, v})
 	}
 
-	parsed := &openAPIValidatorParsedConfig{
+	return &openAPIValidatorParsedConfig{
 		openAPIValidatorConfig: cfg,
 		router:                 router,
 		denyResponseHeaders:    denyResponseHeaders,
+	}, nil
+}
+
+// Create parses the JSON configuration, loads the OpenAPI spec, and creates a factory.
+func (o *OpenAPIValidatorHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle,
+	config []byte,
+) (shared.HttpFilterFactory, error) {
+	parsed, err := parseConfig(config)
+	if err != nil {
+		return nil, err
+	}
+
+	if parsed == nil {
+		handle.Log(shared.LogLevelInfo, "openapi-validator: empty filter config")
 	}
 
 	return &openAPIValidatorHttpFilterFactory{config: parsed}, nil
+}
+
+// CreatePerRoute parses per-route configuration for the OpenAPI validator filter.
+func (o *OpenAPIValidatorHttpFilterConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, error) {
+	cfg, err := parseConfig(unparsedConfig)
+	if err != nil {
+		return nil, err
+	}
+	if cfg == nil {
+		// It's not allowed to have empty route config because it doesn't make sense to have an
+		// empty config override the global config.
+		return nil, fmt.Errorf("openapi-validator: per-route config is empty or invalid")
+	}
+	return cfg, nil
 }
 
 // ExtensionName is the name of the extension that will be used in the

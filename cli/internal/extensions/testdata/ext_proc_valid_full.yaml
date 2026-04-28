@@ -1,0 +1,31 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: test-extension
+version: 1.0.0
+categories:
+  - Security
+author: Test Author
+description: A test extension
+longDescription: |
+  This is a longer description of the test extension.
+type: ext_proc
+tags:
+  - test
+license: Apache-2.0
+examples:
+  - title: Basic usage
+    description: Run the extension
+    code: |
+      boe run --extension test-extension
+extProc:
+  grpcPort: 50051
+  failureModeAllow: true
+  messageTimeout: 200ms
+  processingMode:
+    requestHeaderMode: SEND
+    responseHeaderMode: SKIP
+    requestBodyMode: BUFFERED
+    responseBodyMode: NONE

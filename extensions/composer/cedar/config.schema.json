@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/composer/cedar/config.schema.json",
+  "title": "Cedar Authorization Configuration",
+  "description": "Configuration for the Cedar authorization extension. Evaluates Cedar policies inline to authorize HTTP requests.",
+  "type": "object",
+  "required": ["policy", "principal_type", "principal_id_header"],
+  "additionalProperties": false,
+  "properties": {
+    "policy": {
+      "$ref": "#/$defs/DataSource",
+      "description": "Cedar policy set to evaluate."
+    },
+    "entities_file": {
+      "type": "string",
+      "description": "Path to a JSON file containing Cedar entities for hierarchy support."
+    },
+    "principal_type": {
+      "type": "string",
+      "description": "Cedar entity type for the principal (e.g. \"User\")."
+    },
+    "principal_id_header": {
+      "type": "string",
+      "description": "Request header from which to extract the principal ID."
+    },
+    "action_type": {
+      "type": "string",
+      "description": "Cedar entity type for actions. Defaults to \"Action\"."
+    },
+    "resource_type": {
+      "type": "string",
+      "description": "Cedar entity type for resources. Defaults to \"Resource\"."
+    },
+    "deny_status": {
+      "type": "integer",
+      "description": "HTTP status code returned when a request is denied. Defaults to 403.",
+      "minimum": 100,
+      "maximum": 599
+    },
+    "deny_body": {
+      "type": "string",
+      "description": "Response body returned when a request is denied. Defaults to \"Forbidden\"."
+    },
+    "deny_headers": {
+      "type": "object",
+      "description": "Additional headers to include in deny responses.",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "fail_open": {
+      "type": "boolean",
+      "description": "If true, allow requests when policy evaluation fails. Defaults to false."
+    },
+    "dry_run": {
+      "type": "boolean",
+      "description": "If true, log authorization decisions without enforcing them. Defaults to false."
+    },
+    "metadata_namespaces": {
+      "type": "array",
+      "description": "List of dynamic metadata namespaces to include in the Cedar context record under the \"dynamic_metadata\" key.",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "$defs": {
+    "DataSource": {
+      "type": "object",
+      "description": "A data source provided either inline or as a file path. Exactly one must be set.",
+      "additionalProperties": false,
+      "properties": {
+        "inline": {
+          "type": "string",
+          "description": "Data provided directly as a string."
+        },
+        "file": {
+          "type": "string",
+          "description": "Path to a file containing the data."
+        }
+      },
+      "oneOf": [
+        { "required": ["inline"] },
+        { "required": ["file"] }
+      ]
+    }
+  }
+}

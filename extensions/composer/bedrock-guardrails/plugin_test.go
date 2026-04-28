@@ -1,0 +1,648 @@
+// Copyright Built On Envoy
+// SPDX-License-Identifier: Apache-2.0
+// The full text of the Apache license is available in the LICENSE file at
+// the root of the repo.
+
+package impl
+
+import (
+	"encoding/json"
+	"testing"
+
+	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
+	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/fake"
+	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
+)
+
+// newPluginHandleWithoutPerRouteConfig creates a mock HttpFilterHandle with default expectations including
+// GetMostSpecificConfig returning nil (no per-route config).
+func newPluginHandleWithoutPerRouteConfig(ctrl *gomock.Controller) *mocks.MockHttpFilterHandle {
+	pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	pluginHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
+	return pluginHandle
+}
+
+// newPluginHandleWithPerRouteConfig creates a mock HttpFilterHandle that returns
+// the given per-route config from GetMostSpecificConfig.
+func newPluginHandleWithPerRouteConfig(ctrl *gomock.Controller, perRouteConfig any) *mocks.MockHttpFilterHandle {
+	pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	pluginHandle.EXPECT().GetMostSpecificConfig().Return(perRouteConfig).AnyTimes()
+	return pluginHandle
+}
+
+// --- Tests for getContent ---
+
+func TestGetContent_SingleUserMessage(t *testing.T) {
+	body := []byte(`{"messages":[{"role":"user","content":"hello world"}],"model":"gpt-4"}`)
+
+	content, err := getContent(body)
+	require.NoError(t, err)
+	require.Len(t, content, 1)
+	require.Equal(t, "hello world", content[0].Text.Text)
+}
+
+func TestGetContent_MultipleUserMessages(t *testing.T) {
+	body := []byte(`{
+		"messages": [
+			{"role": "system", "content": "You are helpful"},
+			{"role": "user", "content": "First question"},
+			{"role": "assistant", "content": "First answer"},
+			{"role": "user", "content": "Second question"}
+		],
+		"model": "gpt-4"
+	}`)
+
+	content, err := getContent(body)
+	require.NoError(t, err)
+	require.Len(t, content, 2)
+	require.Equal(t, "First question", content[0].Text.Text)
+	require.Equal(t, "Second question", content[1].Text.Text)
+}
+
+func TestGetContent_ArrayContentUserMessage(t *testing.T) {
+	body := []byte(`{
+		"messages": [
+			{"role": "user", "content": [{"type": "text", "text": "Part 1"}, {"type": "text", "text": "Part 2"}]}
+		],
+		"model": "gpt-4"
+	}`)
+
+	content, err := getContent(body)
+	require.NoError(t, err)
+	require.Len(t, content, 1)
+	require.Equal(t, "Part 1\nPart 2", content[0].Text.Text)
+}
+
+func TestGetContent_NoUserMessages(t *testing.T) {
+	body := []byte(`{"messages":[{"role":"system","content":"You are helpful"}],"model":"gpt-4"}`)
+
+	content, err := getContent(body)
+	require.NoError(t, err)
+	require.Empty(t, content)
+}
+
+func TestGetContent_InvalidJSON(t *testing.T) {
+	body := []byte(`{invalid json}`)
+
+	content, err := getContent(body)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "parsing chat request")
+	require.Nil(t, content)
+}
+
+// --- Tests for CustomHttpFilterConfigFactory.Create ---
+
+func TestCustomHTTPFilterConfigFactory_Create_ValidConfig(t *testing.T) {
+	cfg := bedrockGuardrailsConfig{
+		BedrockEndpoint: "bedrock.us-east-1.amazonaws.com",
+		Cluster:         "bedrock-cluster",
+		BedrockAPIKey:   "my-api-key",
+		BedrockGuardrails: []bedrockGuardrail{
+			{Identifier: "g1", Version: "1"},
+		},
+	}
+	cfgJSON, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockConfigHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	factory := &CustomHttpFilterConfigFactory{}
+	filterFactory, err := factory.Create(mockConfigHandle, cfgJSON)
+
+	require.NoError(t, err)
+	require.NotNil(t, filterFactory)
+
+	customFactory, ok := filterFactory.(*customHTTPFilterFactory)
+	require.True(t, ok)
+	require.Equal(t, "bedrock-cluster", customFactory.config.Cluster)
+	require.Equal(t, "my-api-key", customFactory.config.BedrockAPIKey)
+	require.Len(t, customFactory.config.BedrockGuardrails, 1)
+	require.Equal(t, "g1", customFactory.config.BedrockGuardrails[0].Identifier)
+}
+
+func TestCustomHTTPFilterConfigFactory_Create_EmptyConfig(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockConfigHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	factory := &CustomHttpFilterConfigFactory{}
+	filterFactory, err := factory.Create(mockConfigHandle, []byte{})
+
+	// Empty config is valid — defaults are applied
+	require.NoError(t, err)
+	require.NotNil(t, filterFactory)
+
+	customFactory, ok := filterFactory.(*customHTTPFilterFactory)
+	require.True(t, ok)
+	// Default TimeoutMs should be set
+	require.Equal(t, uint64(1000*10), customFactory.config.TimeoutMs)
+}
+
+func TestCustomHTTPFilterConfigFactory_Create_NilConfig(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockConfigHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	factory := &CustomHttpFilterConfigFactory{}
+	filterFactory, err := factory.Create(mockConfigHandle, nil)
+
+	require.NoError(t, err)
+	require.NotNil(t, filterFactory)
+}
+
+func TestCustomHTTPFilterConfigFactory_Create_InvalidJSON(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockConfigHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	factory := &CustomHttpFilterConfigFactory{}
+	filterFactory, err := factory.Create(mockConfigHandle, []byte(`{invalid json}`))
+
+	require.Error(t, err)
+	require.Nil(t, filterFactory)
+}
+
+func TestCustomHTTPFilterConfigFactory_Create_DefaultTimeout(t *testing.T) {
+	cfgJSON := []byte(`{"bedrock_cluster": "my-cluster"}`)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockConfigHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	factory := &CustomHttpFilterConfigFactory{}
+	filterFactory, err := factory.Create(mockConfigHandle, cfgJSON)
+
+	require.NoError(t, err)
+	customFactory := filterFactory.(*customHTTPFilterFactory)
+	// TimeoutMs defaults to 10s
+	require.Equal(t, uint64(10000), customFactory.config.TimeoutMs)
+}
+
+// --- Tests for customHTTPFilterFactory.Create ---
+
+func TestCustomHTTPFilterFactory_Create(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
+
+	cfg := &bedrockGuardrailsConfig{
+		Cluster: "my-cluster",
+	}
+	factory := &customHTTPFilterFactory{config: cfg}
+
+	filter := factory.Create(mockHandle)
+
+	require.NotNil(t, filter)
+	bgFilter, ok := filter.(*bedrockGuardrailsHTTPFilter)
+	require.True(t, ok)
+	require.Equal(t, mockHandle, bgFilter.handle)
+	require.Equal(t, cfg, bgFilter.config)
+}
+
+func Test_CreatePerRoute(t *testing.T) {
+	t.Run("valid config", func(t *testing.T) {
+		config := map[string]any{
+			"bedrock_cluster": "my-cluster",
+			"bedrock_guardrails": []map[string]any{
+				{"identifier": "guardrail-1", "version": "1"},
+			},
+		}
+		configJSON, err := json.Marshal(config)
+		require.NoError(t, err)
+
+		result, err := (&CustomHttpFilterConfigFactory{}).CreatePerRoute(configJSON)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		perRoute, ok := result.(*bedrockGuardrailsConfig)
+		require.True(t, ok)
+		assert.Equal(t, "my-cluster", perRoute.Cluster)
+		assert.Len(t, perRoute.BedrockGuardrails, 1)
+	})
+
+	t.Run("empty config returns default config", func(t *testing.T) {
+		result, err := (&CustomHttpFilterConfigFactory{}).CreatePerRoute([]byte{})
+		require.NoError(t, err)
+		perRoute, ok := result.(*bedrockGuardrailsConfig)
+		require.True(t, ok)
+		assert.Empty(t, perRoute.Cluster)
+	})
+
+	t.Run("invalid JSON returns error", func(t *testing.T) {
+		result, err := (&CustomHttpFilterConfigFactory{}).CreatePerRoute([]byte(`{invalid`))
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
+}
+
+func Test_PerRouteConfigOverride(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	baseConfig := &bedrockGuardrailsConfig{Cluster: "base-cluster"}
+	baseFactory := &customHTTPFilterFactory{config: baseConfig}
+
+	t.Run("per-route config overrides factory config", func(t *testing.T) {
+		perRouteConfig := &bedrockGuardrailsConfig{Cluster: "override-cluster"}
+		mockHandle := newPluginHandleWithPerRouteConfig(ctrl, perRouteConfig)
+		filter := baseFactory.Create(mockHandle)
+		bgFilter, ok := filter.(*bedrockGuardrailsHTTPFilter)
+		require.True(t, ok)
+		assert.Equal(t, "override-cluster", bgFilter.config.Cluster)
+	})
+
+	t.Run("nil per-route config uses factory config", func(t *testing.T) {
+		mockHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
+		filter := baseFactory.Create(mockHandle)
+		bgFilter, ok := filter.(*bedrockGuardrailsHTTPFilter)
+		require.True(t, ok)
+		assert.Equal(t, "base-cluster", bgFilter.config.Cluster)
+	})
+
+	t.Run("non-matching per-route config type uses factory config", func(t *testing.T) {
+		mockHandle := newPluginHandleWithPerRouteConfig(ctrl, "not-a-per-route-config")
+		filter := baseFactory.Create(mockHandle)
+		bgFilter, ok := filter.(*bedrockGuardrailsHTTPFilter)
+		require.True(t, ok)
+		assert.Equal(t, "base-cluster", bgFilter.config.Cluster)
+	})
+}
+
+// --- Tests for WellKnownHttpFilterConfigFactories ---
+
+func TestWellKnownHttpFilterConfigFactories_BedrockGuardrails(t *testing.T) {
+	factories := WellKnownHttpFilterConfigFactories()
+
+	require.NotNil(t, factories)
+	require.Len(t, factories, 1)
+	require.Contains(t, factories, "bedrock-guardrails")
+
+	_, ok := factories["bedrock-guardrails"].(*CustomHttpFilterConfigFactory)
+	require.True(t, ok)
+}
+
+// --- Tests for bedrockGuardrailsHTTPFilter.OnRequestHeaders ---
+
+func TestOnRequestHeaders_AlwaysStops(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+
+	filter := &bedrockGuardrailsHTTPFilter{
+		handle: mockHandle,
+		config: &bedrockGuardrailsConfig{},
+	}
+
+	result := filter.OnRequestHeaders(fake.NewFakeHeaderMap(map[string][]string{}), false)
+	require.Equal(t, shared.HeadersStatusStop, result)
+}
+
+func TestOnRequestHeaders_HeadersOnly(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+
+	filter := &bedrockGuardrailsHTTPFilter{
+		handle: mockHandle,
+		config: &bedrockGuardrailsConfig{},
+	}
+	mockHandle.EXPECT().Log(shared.LogLevelDebug, gomock.Any()).Times(1)
+
+	result := filter.OnRequestHeaders(fake.NewFakeHeaderMap(map[string][]string{}), true)
+	require.Equal(t, shared.HeadersStatusContinue, result)
+}
+
+// --- Tests for dedupGuardrails ---
+
+func TestDedupGuardrails_NoDuplicates(t *testing.T) {
+	input := []bedrockGuardrail{
+		{Identifier: "g1", Version: "1"},
+		{Identifier: "g2", Version: "2"},
+	}
+	result := dedupGuardrails(input)
+	require.Len(t, result, 2)
+}
+
+func TestDedupGuardrails_WithDuplicates(t *testing.T) {
+	input := []bedrockGuardrail{
+		{Identifier: "g1", Version: "1"},
+		{Identifier: "g1", Version: "1"},
+		{Identifier: "g2", Version: "2"},
+	}
+	result := dedupGuardrails(input)
+	require.Len(t, result, 2)
+	require.Equal(t, "g1", result[0].Identifier)
+	require.Equal(t, "g2", result[1].Identifier)
+}
+
+func TestDedupGuardrails_SameIdentifierDifferentVersion(t *testing.T) {
+	input := []bedrockGuardrail{
+		{Identifier: "g1", Version: "1"},
+		{Identifier: "g1", Version: "2"},
+	}
+	result := dedupGuardrails(input)
+	require.Len(t, result, 2)
+}
+
+func TestDedupGuardrails_Empty(t *testing.T) {
+	result := dedupGuardrails([]bedrockGuardrail{})
+	require.Empty(t, result)
+}
+
+func TestDedupGuardrails_AllDuplicates(t *testing.T) {
+	input := []bedrockGuardrail{
+		{Identifier: "g1", Version: "1"},
+		{Identifier: "g1", Version: "1"},
+		{Identifier: "g1", Version: "1"},
+	}
+	result := dedupGuardrails(input)
+	require.Len(t, result, 1)
+	require.Equal(t, "g1", result[0].Identifier)
+}
+
+func TestCustomHTTPFilterConfigFactory_Create_DeduplicatesGuardrails(t *testing.T) {
+	cfg := bedrockGuardrailsConfig{
+		Cluster: "bedrock-cluster",
+		BedrockGuardrails: []bedrockGuardrail{
+			{Identifier: "g1", Version: "1"},
+			{Identifier: "g1", Version: "1"},
+			{Identifier: "g2", Version: "2"},
+		},
+	}
+	cfgJSON, err := json.Marshal(cfg)
+	require.NoError(t, err)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockConfigHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	factory := &CustomHttpFilterConfigFactory{}
+	filterFactory, err := factory.Create(mockConfigHandle, cfgJSON)
+
+	require.NoError(t, err)
+	customFactory := filterFactory.(*customHTTPFilterFactory)
+	require.Len(t, customFactory.config.BedrockGuardrails, 2)
+	require.Equal(t, "g1", customFactory.config.BedrockGuardrails[0].Identifier)
+	require.Equal(t, "g2", customFactory.config.BedrockGuardrails[1].Identifier)
+}
+
+// --- Tests for bedrockGuardrailsHTTPFilter.OnRequestBody ---
+
+func TestOnRequestBody_NotEndStream(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	filter := &bedrockGuardrailsHTTPFilter{
+		handle: mockHandle,
+		config: &bedrockGuardrailsConfig{},
+	}
+
+	// endStream=false should return StopAndBuffer immediately
+	result := filter.OnRequestBody(fake.NewFakeBodyBuffer([]byte("some data")), false)
+	require.Equal(t, shared.BodyStatusStopAndBuffer, result)
+}
+
+func TestOnRequestBody_EmptyBody(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	// ReadWholeRequestBody calls BufferedRequestBody and ReceivedRequestBody
+	emptyBuffer := fake.NewFakeBodyBuffer([]byte{})
+	mockHandle.EXPECT().BufferedRequestBody().Return(emptyBuffer).AnyTimes()
+	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
+
+	filter := &bedrockGuardrailsHTTPFilter{
+		handle: mockHandle,
+		config: &bedrockGuardrailsConfig{
+			BedrockGuardrails: []bedrockGuardrail{{Identifier: "g1", Version: "1"}},
+		},
+	}
+
+	result := filter.OnRequestBody(fake.NewFakeBodyBuffer([]byte{}), true)
+	require.Equal(t, shared.BodyStatusContinue, result)
+}
+
+func TestOnRequestBody_NoGuardrailsConfigured(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	bodyBytes := []byte(`{"messages":[{"role":"user","content":"hello"}],"model":"gpt-4"}`)
+	fakeBuffer := fake.NewFakeBodyBuffer(bodyBytes)
+	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBuffer).AnyTimes()
+	mockHandle.EXPECT().ReceivedRequestBody().Return(nil).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
+
+	filter := &bedrockGuardrailsHTTPFilter{
+		handle: mockHandle,
+		config: &bedrockGuardrailsConfig{
+			BedrockGuardrails: []bedrockGuardrail{}, // empty
+		},
+	}
+
+	result := filter.OnRequestBody(fake.NewFakeBodyBuffer(bodyBytes), true)
+	require.Equal(t, shared.BodyStatusContinue, result)
+}
+
+func TestOnRequestBody_ValidBody_CalloutSuccess(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	bodyBytes := []byte(`{"messages":[{"role":"user","content":"hello"}],"model":"gpt-4"}`)
+	fakeBuffer := fake.NewFakeBodyBuffer(bodyBytes)
+	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBuffer).AnyTimes()
+	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBuffer).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
+
+	// RequestHeaders().Remove is called to remove content-length
+	fakeHeaders := fake.NewFakeHeaderMap(map[string][]string{"content-length": {"42"}})
+	mockHandle.EXPECT().RequestHeaders().Return(fakeHeaders).AnyTimes()
+
+	mockHandle.EXPECT().HttpCallout(
+		"bedrock-cluster",
+		gomock.Any(), // headers
+		gomock.Any(), // body
+		uint64(1000*20),
+		gomock.Any(), // callback
+	).Return(shared.HttpCalloutInitSuccess, uint64(1)).Times(1)
+
+	cfg := &bedrockGuardrailsConfig{
+		Cluster:         "bedrock-cluster",
+		BedrockEndpoint: "bedrock.us-east-1.amazonaws.com",
+		BedrockAPIKey:   "my-api-key",
+		BedrockGuardrails: []bedrockGuardrail{
+			{Identifier: "g1", Version: "1"},
+		},
+	}
+
+	filter := &bedrockGuardrailsHTTPFilter{
+		handle: mockHandle,
+		config: cfg,
+	}
+
+	result := filter.OnRequestBody(fake.NewFakeBodyBuffer(bodyBytes), true)
+	require.Equal(t, shared.BodyStatusStopAndBuffer, result)
+
+	// content-length header should have been removed
+	require.Empty(t, fakeHeaders.Headers["content-length"])
+}
+
+func TestOnRequestBody_InvalidBody_GetCalloutHeadersError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	// Body is invalid JSON — getCalloutHeaders will fail
+	invalidBody := []byte(`{invalid json}`)
+	fakeBuffer := fake.NewFakeBodyBuffer(invalidBody)
+	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBuffer).AnyTimes()
+	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBuffer).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
+
+	fakeHeaders := fake.NewFakeHeaderMap(map[string][]string{})
+	mockHandle.EXPECT().RequestHeaders().Return(fakeHeaders).AnyTimes()
+
+	mockHandle.EXPECT().SendLocalResponse(uint32(502), gomock.Any(), gomock.Any(), "").Times(1)
+
+	cfg := &bedrockGuardrailsConfig{
+		Cluster:         "bedrock-cluster",
+		BedrockEndpoint: "bedrock.us-east-1.amazonaws.com",
+		BedrockAPIKey:   "my-api-key",
+		BedrockGuardrails: []bedrockGuardrail{
+			{Identifier: "g1", Version: "1"},
+		},
+	}
+
+	filter := &bedrockGuardrailsHTTPFilter{
+		handle: mockHandle,
+		config: cfg,
+	}
+
+	result := filter.OnRequestBody(fake.NewFakeBodyBuffer(invalidBody), true)
+	require.Equal(t, shared.BodyStatusStopAndBuffer, result)
+}
+
+func TestOnRequestBody_CalloutInitFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	bodyBytes := []byte(`{"messages":[{"role":"user","content":"hello"}],"model":"gpt-4"}`)
+	fakeBuffer := fake.NewFakeBodyBuffer(bodyBytes)
+	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBuffer).AnyTimes()
+	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBuffer).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
+
+	fakeHeaders := fake.NewFakeHeaderMap(map[string][]string{})
+	mockHandle.EXPECT().RequestHeaders().Return(fakeHeaders).AnyTimes()
+
+	// HttpCallout fails to initialize
+	mockHandle.EXPECT().HttpCallout(
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+	).Return(shared.HttpCalloutInitClusterNotFound, uint64(0)).Times(1)
+
+	mockHandle.EXPECT().SendLocalResponse(uint32(502), gomock.Any(), gomock.Any(), "").Times(1)
+
+	cfg := &bedrockGuardrailsConfig{
+		Cluster:         "bedrock-cluster",
+		BedrockEndpoint: "bedrock.us-east-1.amazonaws.com",
+		BedrockAPIKey:   "my-api-key",
+		BedrockGuardrails: []bedrockGuardrail{
+			{Identifier: "g1", Version: "1"},
+		},
+	}
+
+	filter := &bedrockGuardrailsHTTPFilter{
+		handle: mockHandle,
+		config: cfg,
+	}
+
+	result := filter.OnRequestBody(fake.NewFakeBodyBuffer(bodyBytes), true)
+	require.Equal(t, shared.BodyStatusStopAndBuffer, result)
+}
+
+func TestOnRequestBody_MultipleGuardrails_FirstTriggered(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	bodyBytes := []byte(`{"messages":[{"role":"user","content":"hello"}],"model":"gpt-4"}`)
+	fakeBuffer := fake.NewFakeBodyBuffer(bodyBytes)
+	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBuffer).AnyTimes()
+	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBuffer).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
+
+	fakeHeaders := fake.NewFakeHeaderMap(map[string][]string{})
+	mockHandle.EXPECT().RequestHeaders().Return(fakeHeaders).AnyTimes()
+
+	var capturedHeaders [][2]shared.UnsafeEnvoyBuffer
+	mockHandle.EXPECT().HttpCallout(
+		"bedrock-cluster",
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+	).DoAndReturn(func(_ string, headers [][2]string, _ []byte, _ uint64, _ shared.HttpCalloutCallback) (shared.HttpCalloutInitResult, uint64) {
+		capturedHeaders = toUnsafeEnvoyBufferHeaders(headers)
+		return shared.HttpCalloutInitSuccess, uint64(1)
+	}).Times(1)
+
+	cfg := &bedrockGuardrailsConfig{
+		Cluster:         "bedrock-cluster",
+		BedrockEndpoint: "bedrock.us-east-1.amazonaws.com",
+		BedrockAPIKey:   "my-api-key",
+		BedrockGuardrails: []bedrockGuardrail{
+			{Identifier: "first-guardrail", Version: "1"},
+			{Identifier: "second-guardrail", Version: "2"},
+		},
+	}
+
+	filter := &bedrockGuardrailsHTTPFilter{
+		handle: mockHandle,
+		config: cfg,
+	}
+
+	result := filter.OnRequestBody(fake.NewFakeBodyBuffer(bodyBytes), true)
+	require.Equal(t, shared.BodyStatusStopAndBuffer, result)
+
+	// Only the first guardrail should have been called
+	require.Equal(t, "/guardrail/first-guardrail/version/1/apply", headerValue(capturedHeaders, ":path"))
+}
+
+func toUnsafeEnvoyBufferHeaders(headers [][2]string) [][2]shared.UnsafeEnvoyBuffer {
+	unsafeHeaders := make([][2]shared.UnsafeEnvoyBuffer, len(headers))
+	for i, h := range headers {
+		unsafeHeaders[i][0] = pkg.UnsafeBufferFromBytes([]byte(h[0]))
+		unsafeHeaders[i][1] = pkg.UnsafeBufferFromBytes([]byte(h[1]))
+	}
+	return unsafeHeaders
+}

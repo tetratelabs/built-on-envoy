@@ -9,6 +9,7 @@ package logger
 import (
 	"fmt"
 	"os"
+	"sync"
 
 	"go.uber.org/zap"
 )
@@ -25,10 +26,13 @@ const (
 	DevelopmentLogMode logMode = "development"
 )
 
-var mainLogger *Logger
+var (
+	mainLogger *Logger
+	once       sync.Once
+)
 
 // TODO(wbpcode): may be we can remove this once the SDK provides the logger directly.
-func init() {
+func initLogger() {
 	isDebugMode := false
 	if mode := os.Getenv("LOG_MODE"); mode != "" {
 		switch logMode(mode) {
@@ -55,5 +59,6 @@ func init() {
 
 // GetLogger returns the main logger (for backward compatibility)
 func GetLogger() *Logger {
+	once.Do(initLogger)
 	return mainLogger
 }

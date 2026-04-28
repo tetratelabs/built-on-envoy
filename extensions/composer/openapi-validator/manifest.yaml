@@ -6,7 +6,7 @@
 name: openapi-validator
 parent: composer
 categories:
-  - Security
+  - Traffic Control
 author: Tetrate
 description: Validate HTTP requests against an OpenAPI specification
 longDescription: |
@@ -19,7 +19,8 @@ longDescription: |
 
   - **Full request validation**: Validates the HTTP method, path, path parameters,
     query parameters, request headers, and the request body against the OpenAPI spec.
-  - **OpenAPI 3.0 and 3.1 support**: Load specifications in YAML or JSON format.
+  - **OpenAPI 3.0 and 3.1 support**: Load specifications in YAML or JSON format,
+    either from a file or as inline content.
   - **Configurable body size limit**: Set a maximum request body size to buffer for
     validation. Requests exceeding the limit are rejected with a 413 status.
   - **Dry-run mode**: Log validation failures without enforcing them, useful for
@@ -31,13 +32,18 @@ longDescription: |
 
   | Field | Type | Required | Default | Description |
   |-------|------|----------|---------|-------------|
-  | `spec_file` | string | yes | - | Path to the OpenAPI spec file (YAML or JSON) |
+  | `spec` | object | yes | - | OpenAPI specification source; exactly one of `inline` or `file` must be set |
+  | `spec.inline` | string | yes* | - | Inline OpenAPI spec content (YAML or JSON) |
+  | `spec.file` | string | yes* | - | Path to the OpenAPI spec file (YAML or JSON) |
   | `max_body_bytes` | integer | no | 0 (no limit) | Maximum body size to buffer; 0 disables the limit |
   | `allow_unmatched_paths` | boolean | no | false | Allow requests to paths not in the spec |
   | `dry_run` | boolean | no | false | Log failures without enforcing |
-  | `deny_status` | integer | no | 400 | HTTP status code on validation failure |
-  | `deny_body` | string | no | (error message) | Response body on failure |
-  | `deny_headers` | object | no | - | Additional response headers on failure |
+  | `deny_response` | object | no | - | Response returned on validation failure |
+  | `deny_response.status` | integer | no | 400 | HTTP status code on validation failure |
+  | `deny_response.body` | string | no | (error message) | Response body on failure |
+  | `deny_response.headers` | object | no | - | Additional response headers on failure |
+
+  \* Exactly one of `spec.inline` or `spec.file` must be set.
 type: go
 featured: true
 tags:
@@ -82,7 +88,7 @@ examples:
 
       # Run the extension
       boe run --extension openapi-validator --config '{
-        "spec_file": "/tmp/openapi.yaml"
+        "spec": {"file": "/tmp/openapi.yaml"}
       }'
 
       # Valid request
@@ -104,7 +110,7 @@ examples:
       Set a maximum body size to protect against oversized payloads.
     code: |
       boe run --extension openapi-validator --config '{
-        "spec_file": "/path/to/openapi.yaml",
+        "spec": {"file": "/path/to/openapi.yaml"},
         "max_body_bytes": 1048576
       }'
 
@@ -123,7 +129,7 @@ examples:
       Useful for testing a new API spec before enforcing it.
     code: |
       boe run --extension openapi-validator --config '{
-        "spec_file": "/path/to/openapi.yaml",
+        "spec": {"file": "/path/to/openapi.yaml"},
         "dry_run": true
       }'
   - title: Custom Deny Response
@@ -131,8 +137,10 @@ examples:
       Customize the response returned when a request fails validation.
     code: |
       boe run --extension openapi-validator --config '{
-        "spec_file": "/path/to/openapi.yaml",
-        "deny_status": 422,
-        "deny_body": "Request does not conform to API specification",
-        "deny_headers": {"content-type": "text/plain"}
+        "spec": {"file": "/path/to/openapi.yaml"},
+        "deny_response": {
+          "status": 422,
+          "body": "Request does not conform to API specification",
+          "headers": {"content-type": "text/plain"}
+        }
       }'

@@ -304,3 +304,79 @@
 	border-top: 2px solid var(--border);
 	margin: 32px 0;
 }
+
+/* Callout / Admonition Styles */
+
+.callout {
+	border-left: 4px solid;
+	border-radius: 6px;
+	padding: 14px 18px;
+	margin: 20px 0;
+	font-size: 0.95em;
+}
+
+.callout-title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-weight: 600;
+	margin-bottom: 6px;
+	font-size: 0.95em;
+	text-transform: uppercase;
+	letter-spacing: 0.4px;
+}
+
+.callout-icon {
+	display: flex;
+	align-items: center;
+	flex-shrink: 0;
+}
+
+.callout-body > :last-child {
+	margin-bottom: 0;
+}
+
+.callout-body p,
+.callout-body li {
+	color: inherit;
+}
+
+/* note — Docusaurus info */
+.callout-note {
+	border-color: #4cb3d4;
+	background: #eef9fd;
+}
+.callout-note .callout-title,
+.callout-note .callout-body {
+	color: #193c47;
+}
+
+/* tip — Docusaurus success */
+.callout-tip {
+	border-color: #009400;
+	background: #e6f6e6;
+}
+.callout-tip .callout-title,
+.callout-tip .callout-body {
+	color: #002400;
+}
+
+/* warning — Docusaurus warning */
+.callout-warning {
+	border-color: #e6a800;
+	background: #fff8e6;
+}
+.callout-warning .callout-title,
+.callout-warning .callout-body {
+	color: #4d3800;
+}
+
+/* danger — Docusaurus danger */
+.callout-danger {
+	border-color: #e13238;
+	background: #fff0f0;
+}
+.callout-danger .callout-title,
+.callout-danger .callout-body {
+	color: #4b1113;
+}

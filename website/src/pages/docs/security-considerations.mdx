@@ -1,0 +1,182 @@
+---
+layout: ../../layouts/DocsLayout.astro
+title: Security Considerations
+description: Best practices for hardening a production Built On Envoy deployment
+---
+
+import ToC from '../../components/ToC.astro';
+
+# Security Considerations
+
+Running third-party or internally developed extensions inside Envoy carries inherent risk. Built On Envoy
+[Rust and Go extensions](/docs/extension-types) are compiled into 
+[Envoy Dynamic Modules](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/dynamic_modules)
+that execute **in the same process** as Envoy itself, so a misbehaving extension
+can affect the stability, performance, and security of the entire proxy. This guide covers
+best practices for platform operators who need to harden a production environment and for
+developers who want to write safe, reliable extensions.
+
+<ToC maxDepth="3"/>
+
+## Understanding the Threat Model
+
+### Dynamic modules run in-process
+
+Unlike WebAssembly-based extension systems that provide a sandbox, Envoy Dynamic Modules are
+shared libraries loaded directly into the Envoy process. This means:
+
+- **A crash in an extension crashes Envoy.** A segfault, panic, or unrecoverable error in
+  extension code will bring down the entire Envoy process. There is no fault isolation boundary
+  between the extension and the host.
+- **Extensions share Envoy's memory space.** A buffer overrun, use-after-free, or other memory
+  corruption bug in an extension can corrupt Envoy's internal state, leading to unpredictable
+  behavior or security vulnerabilities.
+- **Extensions inherit Envoy's permissions.** Whatever network access, file system access, and
+  system capabilities Envoy has, every loaded extension has too. A malicious extension could
+  exfiltrate data, open backdoors, or tamper with traffic.
+- **Extensions run on Envoy's worker threads.** Expensive or blocking operations in an extension
+  directly degrade Envoy's throughput and latency for all traffic, not just the traffic handled
+  by that extension.
+
+### Language-specific considerations
+
+**Rust extensions** benefit from the Rust type system and borrow checker, which prevent entire
+classes of memory safety bugs at compile time. However, Rust extensions still use `unsafe` blocks
+to cross the C FFI boundary with Envoy, and bugs in those blocks can cause the same kind of
+corruption as a C extension would.
+
+**Go extensions** run with a Go runtime embedded inside the Envoy process. The Go garbage
+collector provides memory safety, but the interaction between Go's runtime and Envoy's C++
+runtime requires disabling Go's CGO pointer checks (`GODEBUG=cgocheck=0`), because Envoy may
+hold pointers to Go-managed memory. Additionally, Go plugins must be compiled with the exact
+same Go version and dependency versions as the Composer loader module; mismatches can lead to
+subtle ABI incompatibilities and crashes.
+
+## Setting Up a Private Extension Registry
+
+One of the most effective ways to control what runs in your production Envoy fleet is to
+restrict which extensions are available. Instead of allowing the CLI to pull from the public
+registry, configure a private registry that contains only the extensions you have reviewed
+and approved.
+
+### Why use a private registry
+
+- **Allowlisting.** Only vetted extensions can be deployed. Developers cannot accidentally or
+  intentionally pull untrusted code from the public registry.
+- **Audit trail.** A private registry gives you a single point of control where you can track
+  which extension versions are available and who published them.
+- **Air-gapped environments.** Sensitive environments that cannot reach the public internet
+  require a local registry.
+- **Availability.** A local registry mirror eliminates a runtime dependency on an external
+  service.
+
+### Recommended setup
+
+1. **Deploy an OCI-compliant registry** inside your network.
+2. **Mirror only approved extensions** from the public registry. Use tools like `skopeo`,
+   `crane`, or `docker` to copy specific, reviewed extension versions:
+3. **Build your artifacts.** All official Built On Envoy extensions provide the source code. Instead of
+   directly mirroring the extensions it is a best practice to sync the code and build the extensions from the
+   source code before pushing to the private registry.
+4. **Require authentication.** Configure your registry to require credentials. Prefer short-lived tokens
+   or service account credentials over long-lived passwords.
+5. **Enforce TLS.** Never expose a registry over plain HTTP in production.
+6. **Implement an approval workflow.** Before an extension version is pushed to the private
+   registry, require it to pass through a review process (code review, security scan, testing)
+   similar to what you would require for any other production dependency.
+
+See the [Using a custom registry](/docs/custom-registry) guide for detailed CLI configuration
+instructions.
+
+## Evaluating Extension Safety
+
+Before approving an extension for production use, evaluate it against the following criteria.
+
+### Source code availability
+
+Only run extensions whose source code you can review. The `boe` CLI and extension build system
+support publishing source code alongside binary artifacts. Require that every extension in your
+private registry has its source available and that the binary can be reproduced from that source.
+
+### Memory safety
+
+- **Rust extensions:** Review all `unsafe` blocks. Each one should have a clear safety comment
+  explaining why it is sound. Prefer extensions that minimize `unsafe` usage and rely on the
+  SDK's safe abstractions.
+- **Go extensions:** Verify that the extension is compiled against the exact same Composer version
+  and Go toolchain as your deployment. Mismatched versions can pass the version check in some
+  edge cases but still produce undefined behavior at runtime.
+
+### Error handling and resilience
+
+A well-written extension should:
+
+- **Never panic or abort.** Rust extensions should handle all `Result` and `Option` types
+  gracefully. Go extensions should recover from panics within their filter callbacks. An
+  unhandled panic will crash the Envoy process.
+- **Fail open or fail closed, deliberately.** Decide and document what happens when the
+  extension encounters an error. For security-critical extensions (authentication, authorization),
+  failing closed (rejecting the request) is usually correct. For observability extensions,
+  failing open (allowing the request to proceed) is often preferable.
+- **Bound resource usage.** Extensions that buffer request or response bodies should enforce
+  size limits. Extensions that make external calls should set timeouts. Unbounded resource
+  consumption can turn a single malformed request into a denial-of-service against the entire
+  proxy.
+
+### Performance impact
+
+- **Avoid blocking operations on the request path.** Envoy's worker threads are shared across
+  all connections. An extension that makes a synchronous network call or performs expensive
+  computation will stall all traffic on that thread.
+- **Benchmark under realistic load.** Measure the extension's impact on p99 latency and
+  throughput before deploying to production. Even small per-request overhead compounds at scale.
+- **Watch for memory leaks.** Extensions that allocate memory over time without releasing it
+  will eventually cause the Envoy process to be OOM-killed. Monitor memory usage during
+  extended soak tests.
+
+### Dependency hygiene
+
+- **Minimize dependencies.** Each dependency is an additional attack surface and a potential
+  source of vulnerabilities. Prefer extensions with a small, well-known dependency tree.
+- **Pin dependency versions.** Ensure that extension builds are reproducible by pinning all
+  dependency versions. For Go extensions, verify that `go.sum` checksums are present and correct.
+- **Scan for known vulnerabilities.** Run dependency scanning tools (such as `cargo audit` for
+  Rust or `govulncheck` for Go) as part of your extension review process.
+
+## Hardening the Runtime Environment
+
+Beyond controlling which extensions are loaded, harden the environment in which Envoy runs.
+
+### Principle of least privilege
+
+- **Run Envoy as a non-root user** with a dedicated service account.
+- **Drop all unnecessary Linux capabilities.** Envoy typically needs only `NET_BIND_SERVICE`
+  (if binding to privileged ports) and nothing else.
+- **Use a read-only root filesystem** where possible. Mount the extension library directory and
+  any configuration as read-only volumes.
+- **Restrict network egress** from the Envoy process. If your extensions do not need to make
+  outbound calls, block them at the network level. If they do, allowlist only the specific
+  destinations they require.
+
+### Container and orchestrator hardening
+
+- **Use minimal base images.** The official Envoy distroless images or scratch-based images
+  reduce the attack surface available to a compromised extension.
+- **Set resource limits.** Configure CPU and memory limits on the Envoy container to contain
+  the blast radius of a runaway extension.
+- **Enable seccomp and AppArmor/SELinux profiles** to restrict the system calls available to
+  the Envoy process.
+- **Separate the control plane from the data plane.** The process that manages extension
+  configuration and downloads artifacts should not be the same process that handles production
+  traffic, when possible.
+
+### Monitoring and observability
+
+- **Monitor Envoy process health.** Track restarts, crash loops, memory growth, and CPU usage.
+  A sudden change in these metrics after deploying a new extension version is a strong signal
+  that something is wrong.
+- **Enable Envoy access logging and stats.** Extensions can emit custom metrics. Monitor these
+  alongside Envoy's built-in stats to detect anomalies.
+- **Set up alerts for extension-related failures.** If an extension causes Envoy to crash, your
+  orchestrator will restart it, but you need to be alerted before the crash loop exhausts your
+  restart budget.

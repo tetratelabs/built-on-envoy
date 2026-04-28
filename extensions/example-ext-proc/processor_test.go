@@ -1,0 +1,215 @@
+// Copyright Built On Envoy
+// SPDX-License-Identifier: Apache-2.0
+// The full text of the Apache license is available in the LICENSE file at
+// the root of the repo.
+
+package main
+
+import (
+	"io"
+	"testing"
+
+	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	extprocv3 "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+)
+
+func TestProcessRequestHeaders(t *testing.T) {
+	want := &extprocv3.ProcessingResponse{
+		Response: &extprocv3.ProcessingResponse_RequestHeaders{
+			RequestHeaders: &extprocv3.HeadersResponse{
+				Response: &extprocv3.CommonResponse{},
+			},
+		},
+	}
+
+	h := &handlerImpl{}
+	got := h.ProcessRequestHeaders(&extprocv3.HttpHeaders{})
+
+	require.Equal(t, want, got)
+}
+
+func TestProcessRequestBody(t *testing.T) {
+	want := &extprocv3.ProcessingResponse{
+		Response: &extprocv3.ProcessingResponse_RequestBody{
+			RequestBody: &extprocv3.BodyResponse{
+				Response: &extprocv3.CommonResponse{},
+			},
+		},
+	}
+
+	h := &handlerImpl{}
+	got := h.ProcessRequestBody(&extprocv3.HttpBody{})
+
+	require.Equal(t, want, got)
+}
+
+func TestProcessRequestTrailers(t *testing.T) {
+	want := &extprocv3.ProcessingResponse{
+		Response: &extprocv3.ProcessingResponse_RequestTrailers{
+			RequestTrailers: &extprocv3.TrailersResponse{},
+		},
+	}
+
+	h := &handlerImpl{}
+	got := h.ProcessRequestTrailers(&extprocv3.HttpTrailers{})
+
+	require.Equal(t, want, got)
+}
+
+func TestProcessResponseHeaders(t *testing.T) {
+	want := &extprocv3.ProcessingResponse{
+		Response: &extprocv3.ProcessingResponse_ResponseHeaders{
+			ResponseHeaders: &extprocv3.HeadersResponse{
+				Response: &extprocv3.CommonResponse{
+					HeaderMutation: &extprocv3.HeaderMutation{
+						SetHeaders: []*corev3.HeaderValueOption{
+							{
+								Header: &corev3.HeaderValue{
+									Key:      "x-ext-proc",
+									RawValue: []byte("processed"),
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	h := &handlerImpl{}
+	got := h.ProcessResponseHeaders(&extprocv3.HttpHeaders{})
+
+	require.Equal(t, want, got)
+}
+
+func TestProcessResponseBody(t *testing.T) {
+	want := &extprocv3.ProcessingResponse{
+		Response: &extprocv3.ProcessingResponse_ResponseBody{
+			ResponseBody: &extprocv3.BodyResponse{
+				Response: &extprocv3.CommonResponse{},
+			},
+		},
+	}
+
+	h := &handlerImpl{}
+	got := h.ProcessResponseBody(&extprocv3.HttpBody{})
+
+	require.Equal(t, want, got)
+}
+
+func TestProcessResponseTrailers(t *testing.T) {
+	want := &extprocv3.ProcessingResponse{
+		Response: &extprocv3.ProcessingResponse_ResponseTrailers{
+			ResponseTrailers: &extprocv3.TrailersResponse{},
+		},
+	}
+
+	h := &handlerImpl{}
+	got := h.ProcessResponseTrailers(&extprocv3.HttpTrailers{})
+
+	require.Equal(t, want, got)
+}
+
+func TestProcess_DispatchesAllPhases(t *testing.T) {
+	h := &mockHandler{}
+	stream := &mockStream{
+		requests: []*extprocv3.ProcessingRequest{
+			{Request: &extprocv3.ProcessingRequest_RequestHeaders{RequestHeaders: &extprocv3.HttpHeaders{}}},
+			{Request: &extprocv3.ProcessingRequest_RequestBody{RequestBody: &extprocv3.HttpBody{}}},
+			{Request: &extprocv3.ProcessingRequest_RequestTrailers{RequestTrailers: &extprocv3.HttpTrailers{}}},
+			{Request: &extprocv3.ProcessingRequest_ResponseHeaders{ResponseHeaders: &extprocv3.HttpHeaders{}}},
+			{Request: &extprocv3.ProcessingRequest_ResponseBody{ResponseBody: &extprocv3.HttpBody{}}},
+			{Request: &extprocv3.ProcessingRequest_ResponseTrailers{ResponseTrailers: &extprocv3.HttpTrailers{}}},
+		},
+	}
+
+	p := &processor{handler: h}
+	require.NoError(t, p.Process(stream))
+
+	require.Equal(t, []string{
+		"request_headers", "request_body", "request_trailers",
+		"response_headers", "response_body", "response_trailers",
+	}, h.calledWith)
+}
+
+func TestProcess_EmptyStream(t *testing.T) {
+	p := &processor{handler: &mockHandler{}}
+	require.NoError(t, p.Process(&mockStream{}))
+}
+
+func TestProcess_SendError(t *testing.T) {
+	h := &mockHandler{}
+	stream := &mockStream{
+		requests: []*extprocv3.ProcessingRequest{
+			{Request: &extprocv3.ProcessingRequest_RequestHeaders{RequestHeaders: &extprocv3.HttpHeaders{}}},
+		},
+		sendErr: io.ErrClosedPipe,
+	}
+	err := (&processor{handler: h}).Process(stream)
+	require.Equal(t, codes.Unknown, status.Code(err))
+}
+
+// mockStream implements ExternalProcessor_ProcessServer for testing.
+type mockStream struct {
+	grpc.ServerStream
+	requests  []*extprocv3.ProcessingRequest
+	responses []*extprocv3.ProcessingResponse
+	recvIdx   int
+	sendErr   error
+}
+
+func (m *mockStream) Recv() (*extprocv3.ProcessingRequest, error) {
+	if m.recvIdx >= len(m.requests) {
+		return nil, io.EOF
+	}
+	req := m.requests[m.recvIdx]
+	m.recvIdx++
+	return req, nil
+}
+
+func (m *mockStream) Send(resp *extprocv3.ProcessingResponse) error {
+	if m.sendErr != nil {
+		return m.sendErr
+	}
+	m.responses = append(m.responses, resp)
+	return nil
+}
+
+// mockHandler records which phases were called and returns canned responses.
+type mockHandler struct {
+	calledWith []string
+}
+
+func (m *mockHandler) ProcessRequestHeaders(_ *extprocv3.HttpHeaders) *extprocv3.ProcessingResponse {
+	m.calledWith = append(m.calledWith, "request_headers")
+	return nil
+}
+
+func (m *mockHandler) ProcessRequestBody(_ *extprocv3.HttpBody) *extprocv3.ProcessingResponse {
+	m.calledWith = append(m.calledWith, "request_body")
+	return nil
+}
+
+func (m *mockHandler) ProcessRequestTrailers(_ *extprocv3.HttpTrailers) *extprocv3.ProcessingResponse {
+	m.calledWith = append(m.calledWith, "request_trailers")
+	return nil
+}
+
+func (m *mockHandler) ProcessResponseHeaders(_ *extprocv3.HttpHeaders) *extprocv3.ProcessingResponse {
+	m.calledWith = append(m.calledWith, "response_headers")
+	return nil
+}
+
+func (m *mockHandler) ProcessResponseBody(_ *extprocv3.HttpBody) *extprocv3.ProcessingResponse {
+	m.calledWith = append(m.calledWith, "response_body")
+	return nil
+}
+
+func (m *mockHandler) ProcessResponseTrailers(_ *extprocv3.HttpTrailers) *extprocv3.ProcessingResponse {
+	m.calledWith = append(m.calledWith, "response_trailers")
+	return nil
+}

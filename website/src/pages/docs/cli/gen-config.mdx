@@ -4,6 +4,8 @@ title: gen-config
 description: Generate Envoy configuration with extensions
 ---
 
+import Callout from '../../../components/Callout.astro';
+
 # boe gen-config
 
 The gen-config command generates Envoy configuration YAML for the specified extensions.
@@ -17,30 +19,25 @@ embedding in existing configs).
 You can enable multiple extensions using the `--extension` flag, and also load extensions
 from local directories using `--local` for development and testing purposes.
 
+Remote composer (Go plugin) extensions use `oci://` URLs in the generated configuration,
+allowing Envoy to fetch the plugin binary directly from the OCI registry at runtime.
+Local extensions use `file://` URLs pointing to the locally cached binaries.
+
 ## Examples
 
-Generate a complete Envoy configuration with the `example-lua` extension:
+Generate a complete Envoy configuration for the desired extensions:
 
     ```shell
-    boe gen-config --extension example-lua
-    ```
-
-Generate minimal configuration with only extension-generated resources (useful for embedding in existing configs):
-
-    ```shell
-    boe gen-config --extension example-lua --minimal
-    ```
-
-Generate configuration using a local extension during development:
-
-    ```shell
+    boe gen-config --extension ip-restriction
     boe gen-config --local ~/src/my-extension
+    # Generate minimal configuration with only extension-generated resources
+    boe gen-config --extension ip-restriction --minimal
     ```
 
-Save the generated configuration to a file:
+Export the configuration and extension files to a folder by providing the `--output` flag:
 
     ```shell
-    boe gen-config --extension example-lua > envoy.yaml
+    boe gen-config --extension ip-restriction --output /tmp/export
     ```
 
 Generate configuration providing dedicated JSON config to an extension:
@@ -69,7 +66,7 @@ Generate configuration from a specific version hosted in a custom OCI registry:
     export BOE_REGISTRY_USERNAME=username
     export BOE_REGISTRY_PASSWORD=password
 
-    boe gen-config --extension example-lua:1.0.0
+    boe gen-config --extension example-go:0.3.0
     ```
 
 
@@ -91,6 +88,7 @@ boe gen-config --help
 | `--admin-port` | Port for Envoy admin interface. | `uint32` | `9901` | - | No |
 | `--extension` | Extensions to enable (in the format: "name" or "name:version"). | `[]string` | - | - | No |
 | `--local` | Path to a directory containing a local Extension to enable. | `[]string` | - | - | No |
+| `--dev` | Whether to allow downloading dev versions of extensions (with -dev suffix). By default, only stable versions are allowed. | `bool` | `false` | - | No |
 | `--config` | Optional JSON config string for extensions. Applied in order to combined --extension and --local flags. | `[]string` | - | - | No |
 | `--cluster` | Optional additional Envoy cluster provided in the host:tlsPort pattern. | `[]string` | - | - | No |
 | `--cluster-insecure` | Optional additional Envoy cluster (with TLS transport disabled) provided in the host:port pattern. | `[]string` | - | - | No |
@@ -99,4 +97,7 @@ boe gen-config --help
 | `--insecure` | Allow connecting to an insecure (HTTP) registry. | `bool` | `false` | `BOE_REGISTRY_INSECURE` | No |
 | `--username` | Username for the OCI registry. | `string` | - | `BOE_REGISTRY_USERNAME` | No |
 | `--password` | Password for the OCI registry. | `string` | - | `BOE_REGISTRY_PASSWORD` | No |
+| `--test-upstream-host` | Hostname for the test upstream cluster. Mutually exclusive with --test-upstream-cluster. Defaults to "httpbin.org". | `string` | - | - | No |
+| `--test-upstream-cluster` | Name of an existing configured cluster to use as the test upstream. The cluster must be configured via --cluster, --cluster-insecure, or --cluster-json. Mutually exclusive with --test-upstream-host. | `string` | - | - | No |
+| `--output` | Directory to put the generated config into. Use "-" to print it to the standard output. | `string` | `-` | - | No |
 

@@ -4,7 +4,6 @@
 # the root of the repo.
 
 profile: ./out/go-test-coverage.out
-local-prefix: "github.com/tetratelabs/built-on-envoy/cli/"
 
 threshold:
   file: 75

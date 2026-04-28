@@ -75,7 +75,14 @@ longDescription: |
       "address": "10.0.0.2:443"
     },
     "connection": {
+      "mtls": true,
       "tls_version": "TLSv1.3"
+    },
+    "dynamic_metadata": {
+      "envoy.filters.http.jwt_authn": {
+        "sub": "user-123",
+        "iss": "https://issuer.example.com"
+      }
     },
     "parsed_path": ["api", "v1", "resource"],
     "parsed_query": {"key": ["value"]}
@@ -123,7 +130,7 @@ examples:
 
       # Run the extension
       boe run --extension cedar-auth --config '{
-        "policy_file": "/tmp/policy.cedar",
+        "policy": {"file": "/tmp/policy.cedar"},
         "principal_type": "User",
         "principal_id_header": "x-user-id"
       }'
@@ -173,7 +180,7 @@ examples:
       EOF
 
       boe run --extension cedar-auth --config '{
-        "policy_file": "/tmp/policy.cedar",
+        "policy": {"file": "/tmp/policy.cedar"},
         "principal_type": "User",
         "principal_id_header": "x-user-id"
       }'
@@ -209,7 +216,7 @@ examples:
       EOF
 
       boe run --extension cedar-auth --config '{
-        "policy_file": "/tmp/policy.cedar",
+        "policy": {"file": "/tmp/policy.cedar"},
         "principal_type": "User",
         "principal_id_header": "x-user-id"
       }'
@@ -242,7 +249,7 @@ examples:
       EOF
 
       boe run --extension cedar-auth --config '{
-        "policy_file": "/tmp/policy.cedar",
+        "policy": {"file": "/tmp/policy.cedar"},
         "entities_file": "/tmp/entities.json",
         "principal_type": "User",
         "principal_id_header": "x-user-id"
@@ -252,12 +259,22 @@ examples:
       Customize the HTTP response returned when a request is denied.
     code: |
       boe run --extension cedar-auth --config '{
-        "policy_file": "/tmp/policy.cedar",
+        "policy": {"file": "/tmp/policy.cedar"},
         "principal_type": "User",
         "principal_id_header": "x-user-id",
         "deny_status": 401,
         "deny_body": "Authentication Required",
         "deny_headers": {"www-authenticate": "Bearer"}
+      }'
+  - title: Inline Policy Configuration
+    description: |
+      Instead of loading a policy from a file, you can specify the Cedar policy
+      directly in the extension configuration using the `inline` field.
+    code: |
+      boe run --extension cedar-auth --config '{
+        "policy": {"inline": "permit(principal, action, resource);"},
+        "principal_type": "User",
+        "principal_id_header": "x-user-id"
       }'
   - title: Dry-Run Mode
     description: |
@@ -265,7 +282,7 @@ examples:
       Useful for testing new policies in production without blocking traffic.
     code: |
       boe run --extension cedar-auth --config '{
-        "policy_file": "/tmp/policy.cedar",
+        "policy": {"file": "/tmp/policy.cedar"},
         "principal_type": "User",
         "principal_id_header": "x-user-id",
         "dry_run": true
@@ -278,8 +295,20 @@ examples:
       over enforcement.
     code: |
       boe run --extension cedar-auth --config '{
-        "policy_file": "/tmp/policy.cedar",
+        "policy": {"file": "/tmp/policy.cedar"},
         "principal_type": "User",
         "principal_id_header": "x-user-id",
         "fail_open": true
+      }'
+  - title: Include Envoy dynamic metadata in Cedar context
+    description: |
+      Include Envoy dynamic metadata in the Cedar context record under `context.dynamic_metadata`.
+      This allows writing policies that make decisions based on dynamic metadata from other Envoy
+      filters, such as JWT authentication claims.
+    code: |
+      boe run --extension cedar-auth --config '{
+        "policy": {"file": "/tmp/policy.cedar"},
+        "principal_type": "User",
+        "principal_id_header": "x-user-id",
+        "metadata_namespaces": ["envoy.filters.http.jwt_authn"]
       }'

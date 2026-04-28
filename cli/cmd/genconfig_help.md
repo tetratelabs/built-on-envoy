@@ -9,30 +9,25 @@ embedding in existing configs).
 You can enable multiple extensions using the `--extension` flag, and also load extensions
 from local directories using `--local` for development and testing purposes.
 
+Remote composer (Go plugin) extensions use `oci://` URLs in the generated configuration,
+allowing Envoy to fetch the plugin binary directly from the OCI registry at runtime.
+Local extensions use `file://` URLs pointing to the locally cached binaries.
+
 ## Examples
 
-Generate a complete Envoy configuration with the `example-lua` extension:
+Generate a complete Envoy configuration for the desired extensions:
 
     ```shell
-    boe gen-config --extension example-lua
-    ```
-
-Generate minimal configuration with only extension-generated resources (useful for embedding in existing configs):
-
-    ```shell
-    boe gen-config --extension example-lua --minimal
-    ```
-
-Generate configuration using a local extension during development:
-
-    ```shell
+    boe gen-config --extension ip-restriction
     boe gen-config --local ~/src/my-extension
+    # Generate minimal configuration with only extension-generated resources
+    boe gen-config --extension ip-restriction --minimal
     ```
 
-Save the generated configuration to a file:
+Export the configuration and extension files to a folder by providing the `--output` flag:
 
     ```shell
-    boe gen-config --extension example-lua > envoy.yaml
+    boe gen-config --extension ip-restriction --output /tmp/export
     ```
 
 Generate configuration providing dedicated JSON config to an extension:
@@ -61,5 +56,5 @@ Generate configuration from a specific version hosted in a custom OCI registry:
     export BOE_REGISTRY_USERNAME=username
     export BOE_REGISTRY_PASSWORD=password
 
-    boe gen-config --extension example-lua:1.0.0
+    boe gen-config --extension example-go:0.3.0
     ```

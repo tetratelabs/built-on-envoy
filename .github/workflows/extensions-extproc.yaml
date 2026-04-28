@@ -1,0 +1,40 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: ExtProc Extensions
+
+on:
+  workflow_call:
+    inputs:
+      extensions:
+        description: 'JSON array of extensions to check'
+        required: true
+        type: string
+
+jobs:
+  extproc-checks:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        extension: ${{ fromJson(inputs.extensions) }}
+    defaults:
+      run:
+        working-directory: extensions
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: extensions/${{ matrix.extension.path }}/go.mod
+          cache-dependency-path: extensions/${{ matrix.extension.path }}/go.sum
+
+      - run: make format-go lint-go EXTENSION_PATH=${{ matrix.extension.path }}
+      - run: make build-extproc EXTENSION_PATH=${{ matrix.extension.path }}
+      - run: make test-go-coverage EXTENSION_PATH=${{ matrix.extension.path }}
+      - uses: codecov/codecov-action@v6
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          disable_search: true
+          files: extensions/${{ matrix.extension.path }}/out/go-test-coverage.out
+          flags: extensions

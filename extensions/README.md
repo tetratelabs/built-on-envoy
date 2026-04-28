@@ -11,8 +11,7 @@ extension-name/
 ├── README.md           # Description and usage
 ├── manifest.yaml       # Metadata (name, version, author, etc.)
 ├── {go,lua,rs}         # Extension code (language-specific)
-├── config.yaml         # Example Envoy configuration
-└── examples/           # Example usage and test cases
+├── config.schema.json  # (Optional) JSON schema describing the extension configuration
 ```
 
 ## Contributing an Extension

@@ -145,10 +145,63 @@ Commands:
   create <name> [flags]
     Create a new extension template
 
+  download <extension> [flags]
+    Download extensions from the registry
+
   clean [flags]
     Clean cache directories
+
+  version [flags]
+    Print version information
 
 Run "boe <command> --help" for more information on a command.
 `
 	require.Equal(t, expected, buf.String())
+}
+
+func TestParseCmdVersionHelp(t *testing.T) {
+	var cli CLI
+
+	var buf bytes.Buffer
+	parser, err := kong.New(&cli,
+		kong.Name("boe"),
+		kong.Description("Built On Envoy CLI - Discover, run, and build custom filters with zero friction"),
+		kong.Writers(&buf, &buf),
+		kong.Exit(func(int) {}),
+		Vars,
+	)
+	require.NoError(t, err)
+
+	_, _ = parser.Parse([]string{"version", "--help"})
+
+	expected := `Usage: boe version [flags]
+
+Print version information
+
+Print the version information for the Built On Envoy CLI.
+
+Flags:
+  -h, --help                     Show context-sensitive help.
+      --config-home="~/.config/boe"
+                                 Configuration files directory. Defaults to
+                                 ~/.config/boe ($BOE_CONFIG_HOME)
+      --data-home="~/.local/share/boe"
+                                 Downloaded Envoy binaries directory. Defaults
+                                 to ~/.local/share/boe ($BOE_DATA_HOME)
+      --state-home="~/.local/state/boe"
+                                 Persistent state and logs directory. Defaults
+                                 to ~/.local/state/boe ($BOE_STATE_HOME)
+      --runtime-dir=STRING       Ephemeral runtime files directory. Defaults to
+                                 /tmp/boe-$UID ($BOE_RUNTIME_DIR)
+      --boe-log-level="debug"    Log level for the CLI. Defaults to debug
+                                 ($BOE_LOG_LEVEL)
+`
+	require.Equal(t, expected, buf.String())
+}
+
+func TestVersionRun(t *testing.T) {
+	var buf bytes.Buffer
+	v := &Version{output: &buf}
+	require.NoError(t, v.Run())
+	require.Equal(t, "Built On Envoy CLI: dev\n", buf.String())
 }

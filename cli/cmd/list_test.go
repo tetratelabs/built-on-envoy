@@ -7,7 +7,10 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -46,8 +49,10 @@ Flags:
 }
 
 func TestListCommand(t *testing.T) {
+	ts := serveIndex(t)
+
 	var buf bytes.Buffer
-	cmd := &List{output: &buf}
+	cmd := &List{indexURL: ts.URL, output: &buf}
 
 	err := cmd.Run(internaltesting.NewTLogger(t))
 	require.NoError(t, err)
@@ -56,8 +61,8 @@ func TestListCommand(t *testing.T) {
 	lines := strings.Split(output, "\n")
 
 	headers := strings.Fields(lines[0])
-	require.Len(t, headers, 4)
-	require.Equal(t, []string{"NAME", "VERSION", "TYPE", "DESCRIPTION"}, headers)
+	require.Len(t, headers, 5)
+	require.Equal(t, []string{"NAME", "VERSION", "TYPE", "FILTER_TYPE", "DESCRIPTION"}, headers)
 
 	// Verify all extensions are listed
 	names := make(map[string]struct{})
@@ -65,12 +70,12 @@ func TestListCommand(t *testing.T) {
 		if line == "" {
 			continue
 		}
-		fields := fieldsN(line, 4)
+		fields := fieldsN(line, 5)
 		m, ok := extensions.Manifests[fields[0]]
 
 		require.Truef(t, ok, "extension %s not found in manifests", fields[0])
 		require.Equal(t,
-			[]string{m.Name, m.Version, string(m.Type), truncateDescription(m.Description, 60)},
+			[]string{m.Name, m.Version, string(m.Type), string(m.FilterType), truncateDescription(m.Description, 60)},
 			fields,
 		)
 
@@ -94,9 +99,23 @@ func fieldsN(s string, n int) []string {
 	return append(fields[:n-1], strings.Join(fields[n-1:], " "))
 }
 
+// serveIndex starts a test HTTP server that serves the ManifestsIndex as JSON.
+func serveIndex(t *testing.T) *httptest.Server {
+	t.Helper()
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		err := json.NewEncoder(w).Encode(extensions.ManifestsIndex())
+		require.NoError(t, err)
+	}))
+	t.Cleanup(ts.Close)
+	return ts
+}
+
 func TestListCommandAlphabeticalOrder(t *testing.T) {
+	ts := serveIndex(t)
+
 	var buf bytes.Buffer
-	cmd := &List{output: &buf}
+	cmd := &List{indexURL: ts.URL, output: &buf}
 
 	err := cmd.Run(internaltesting.NewTLogger(t))
 	require.NoError(t, err)

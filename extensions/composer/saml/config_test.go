@@ -69,7 +69,7 @@ func TestParseConfig_MissingRequiredFields(t *testing.T) {
 	}{
 		{"missing entity_id", func(m map[string]any) { delete(m, "entity_id") }, "entity_id is required"},
 		{"missing acs_path", func(m map[string]any) { delete(m, "acs_path") }, "acs_path is required"},
-		{"missing idp_metadata", func(m map[string]any) { delete(m, "idp_metadata_xml") }, "one of idp_metadata_xml or idp_metadata_url is required"},
+		{"missing idp_metadata_xml", func(m map[string]any) { delete(m, "idp_metadata_xml") }, "idp_metadata_xml"},
 	}
 
 	for _, tt := range tests {
@@ -77,9 +77,9 @@ func TestParseConfig_MissingRequiredFields(t *testing.T) {
 			m := map[string]any{
 				"entity_id":        "https://sp.example.com",
 				"acs_path":         "/saml/acs",
-				"idp_metadata_xml": idpMeta,
-				"sp_cert_pem":      spKP.CertPEM,
-				"sp_key_pem":       spKP.KeyPEM,
+				"idp_metadata_xml": map[string]string{"inline": idpMeta},
+				"sp_cert_pem":      map[string]string{"inline": spKP.CertPEM},
+				"sp_key_pem":       map[string]string{"inline": spKP.KeyPEM},
 			}
 			tt.mutate(m)
 			data, _ := json.Marshal(m)
@@ -94,9 +94,9 @@ func TestParseConfig_InvalidCertPEM(t *testing.T) {
 	data, _ := json.Marshal(map[string]any{
 		"entity_id":        "https://sp.example.com",
 		"acs_path":         "/saml/acs",
-		"idp_metadata_xml": "<xml/>",
-		"sp_cert_pem":      "not-a-pem",
-		"sp_key_pem":       "not-a-pem",
+		"idp_metadata_xml": map[string]string{"inline": "<xml/>"},
+		"sp_cert_pem":      map[string]string{"inline": "not-a-pem"},
+		"sp_key_pem":       map[string]string{"inline": "not-a-pem"},
 	})
 	_, err := parseConfig(data)
 	require.Error(t, err)
@@ -108,9 +108,9 @@ func TestParseConfig_InvalidKeyPEM(t *testing.T) {
 	data, _ := json.Marshal(map[string]any{
 		"entity_id":        "https://sp.example.com",
 		"acs_path":         "/saml/acs",
-		"idp_metadata_xml": "<xml/>",
-		"sp_cert_pem":      spKP.CertPEM,
-		"sp_key_pem":       "not-a-pem",
+		"idp_metadata_xml": map[string]string{"inline": "<xml/>"},
+		"sp_cert_pem":      map[string]string{"inline": spKP.CertPEM},
+		"sp_key_pem":       map[string]string{"inline": "not-a-pem"},
 	})
 	_, err := parseConfig(data)
 	require.Error(t, err)
@@ -126,9 +126,9 @@ func TestParseConfig_SessionOverrides(t *testing.T) {
 	data, _ := json.Marshal(map[string]any{
 		"entity_id":        "https://sp.example.com",
 		"acs_path":         "/saml/acs",
-		"idp_metadata_xml": idpMeta,
-		"sp_cert_pem":      spKP.CertPEM,
-		"sp_key_pem":       spKP.KeyPEM,
+		"idp_metadata_xml": map[string]string{"inline": idpMeta},
+		"sp_cert_pem":      map[string]string{"inline": spKP.CertPEM},
+		"sp_key_pem":       map[string]string{"inline": spKP.KeyPEM},
 		"session": map[string]any{
 			"cookie_name":   "my_session",
 			"duration":      "1h",
@@ -155,9 +155,9 @@ func TestParseConfig_InvalidSessionDuration(t *testing.T) {
 	data, _ := json.Marshal(map[string]any{
 		"entity_id":        "https://sp.example.com",
 		"acs_path":         "/saml/acs",
-		"idp_metadata_xml": idpMeta,
-		"sp_cert_pem":      spKP.CertPEM,
-		"sp_key_pem":       spKP.KeyPEM,
+		"idp_metadata_xml": map[string]string{"inline": idpMeta},
+		"sp_cert_pem":      map[string]string{"inline": spKP.CertPEM},
+		"sp_key_pem":       map[string]string{"inline": spKP.KeyPEM},
 		"session": map[string]any{
 			"duration": "not-a-duration",
 		},
@@ -175,9 +175,9 @@ func TestParseConfig_InvalidSigningKeyLength(t *testing.T) {
 	data, _ := json.Marshal(map[string]any{
 		"entity_id":        "https://sp.example.com",
 		"acs_path":         "/saml/acs",
-		"idp_metadata_xml": idpMeta,
-		"sp_cert_pem":      spKP.CertPEM,
-		"sp_key_pem":       spKP.KeyPEM,
+		"idp_metadata_xml": map[string]string{"inline": idpMeta},
+		"sp_cert_pem":      map[string]string{"inline": spKP.CertPEM},
+		"sp_key_pem":       map[string]string{"inline": spKP.KeyPEM},
 		"session": map[string]any{
 			"cookie_signing_key": "aabbccdd", // only 4 bytes
 		},
@@ -202,11 +202,11 @@ func TestParseConfig_FileFields(t *testing.T) {
 	require.NoError(t, os.WriteFile(keyFile, []byte(spKP.KeyPEM), 0o600))
 
 	data, _ := json.Marshal(map[string]any{
-		"entity_id":             "https://sp.example.com",
-		"acs_path":              "/saml/acs",
-		"idp_metadata_xml_file": metaFile,
-		"sp_cert_pem_file":      certFile,
-		"sp_key_pem_file":       keyFile,
+		"entity_id":        "https://sp.example.com",
+		"acs_path":         "/saml/acs",
+		"idp_metadata_xml": map[string]string{"file": metaFile},
+		"sp_cert_pem":      map[string]string{"file": certFile},
+		"sp_key_pem":       map[string]string{"file": keyFile},
 	})
 	cfg, err := parseConfig(data)
 	require.NoError(t, err)
@@ -228,29 +228,30 @@ func TestParseConfig_FileAndInline_Error(t *testing.T) {
 	require.NoError(t, os.WriteFile(metaFile, []byte(idpMeta), 0o600))
 
 	data, _ := json.Marshal(map[string]any{
-		"entity_id":             "https://sp.example.com",
-		"acs_path":              "/saml/acs",
-		"idp_metadata_xml":      idpMeta,
-		"idp_metadata_xml_file": metaFile,
-		"sp_cert_pem":           spKP.CertPEM,
-		"sp_key_pem":            spKP.KeyPEM,
+		"entity_id": "https://sp.example.com",
+		"acs_path":  "/saml/acs",
+		// Both inline and file set in the same DataSource — should error.
+		"idp_metadata_xml": map[string]string{"inline": idpMeta, "file": metaFile},
+		"sp_cert_pem":      map[string]string{"inline": spKP.CertPEM},
+		"sp_key_pem":       map[string]string{"inline": spKP.KeyPEM},
 	})
 	_, err := parseConfig(data)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "cannot specify both idp_metadata_xml and idp_metadata_xml_file")
+	require.Contains(t, err.Error(), "idp_metadata_xml")
+	require.Contains(t, err.Error(), "only one of")
 }
 
 func TestParseConfig_FileMissing_Error(t *testing.T) {
 	data, _ := json.Marshal(map[string]any{
-		"entity_id":             "https://sp.example.com",
-		"acs_path":              "/saml/acs",
-		"idp_metadata_xml_file": "/nonexistent/path/metadata.xml",
-		"sp_cert_pem":           "dummy",
-		"sp_key_pem":            "dummy",
+		"entity_id":        "https://sp.example.com",
+		"acs_path":         "/saml/acs",
+		"idp_metadata_xml": map[string]string{"file": "/nonexistent/path/metadata.xml"},
+		"sp_cert_pem":      map[string]string{"inline": "dummy"},
+		"sp_key_pem":       map[string]string{"inline": "dummy"},
 	})
 	_, err := parseConfig(data)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to read idp_metadata_xml_file")
+	require.Contains(t, err.Error(), "idp_metadata_xml")
 }
 
 func TestParseConfig_OptionalOverrides(t *testing.T) {
@@ -262,9 +263,9 @@ func TestParseConfig_OptionalOverrides(t *testing.T) {
 	data, _ := json.Marshal(map[string]any{
 		"entity_id":             "https://sp.example.com",
 		"acs_path":              "/saml/acs",
-		"idp_metadata_xml":      idpMeta,
-		"sp_cert_pem":           spKP.CertPEM,
-		"sp_key_pem":            spKP.KeyPEM,
+		"idp_metadata_xml":      map[string]string{"inline": idpMeta},
+		"sp_cert_pem":           map[string]string{"inline": spKP.CertPEM},
+		"sp_key_pem":            map[string]string{"inline": spKP.KeyPEM},
 		"subject_header":        "x-custom-subject",
 		"sign_authn_requests":   signFalse,
 		"allowed_clock_skew":    "10s",
@@ -295,7 +296,7 @@ func TestParseConfig_NoCertKey_AutoGenerates(t *testing.T) {
 	data, _ := json.Marshal(map[string]any{
 		"entity_id":        "https://sp.example.com",
 		"acs_path":         "/saml/acs",
-		"idp_metadata_xml": idpMeta,
+		"idp_metadata_xml": map[string]string{"inline": idpMeta},
 	})
 	cfg, err := parseConfig(data)
 	require.NoError(t, err)
@@ -314,8 +315,8 @@ func TestParseConfig_OnlyCert_Error(t *testing.T) {
 	data, _ := json.Marshal(map[string]any{
 		"entity_id":        "https://sp.example.com",
 		"acs_path":         "/saml/acs",
-		"idp_metadata_xml": idpMeta,
-		"sp_cert_pem":      spKP.CertPEM,
+		"idp_metadata_xml": map[string]string{"inline": idpMeta},
+		"sp_cert_pem":      map[string]string{"inline": spKP.CertPEM},
 	})
 	_, err := parseConfig(data)
 	require.Error(t, err)
@@ -330,8 +331,8 @@ func TestParseConfig_OnlyKey_Error(t *testing.T) {
 	data, _ := json.Marshal(map[string]any{
 		"entity_id":        "https://sp.example.com",
 		"acs_path":         "/saml/acs",
-		"idp_metadata_xml": idpMeta,
-		"sp_key_pem":       spKP.KeyPEM,
+		"idp_metadata_xml": map[string]string{"inline": idpMeta},
+		"sp_key_pem":       map[string]string{"inline": spKP.KeyPEM},
 	})
 	_, err := parseConfig(data)
 	require.Error(t, err)
@@ -346,111 +347,13 @@ func TestParseConfig_ExplicitCertKey_NotAutoGenerated(t *testing.T) {
 	data, _ := json.Marshal(map[string]any{
 		"entity_id":        "https://sp.example.com",
 		"acs_path":         "/saml/acs",
-		"idp_metadata_xml": idpMeta,
-		"sp_cert_pem":      spKP.CertPEM,
-		"sp_key_pem":       spKP.KeyPEM,
+		"idp_metadata_xml": map[string]string{"inline": idpMeta},
+		"sp_cert_pem":      map[string]string{"inline": spKP.CertPEM},
+		"sp_key_pem":       map[string]string{"inline": spKP.KeyPEM},
 	})
 	cfg, err := parseConfig(data)
 	require.NoError(t, err)
 	require.False(t, cfg.SPCertAutoGenerated)
-	require.NotNil(t, cfg.SPCert)
-	require.NotNil(t, cfg.SPKey)
-}
-
-func TestParseConfig_IDPMetadataURL_Valid(t *testing.T) {
-	spKP := generateTestKeyPair("sp.example.com")
-
-	data, _ := json.Marshal(map[string]any{
-		"entity_id":            "https://sp.example.com",
-		"acs_path":             "/saml/acs",
-		"idp_metadata_url":     "https://idp.example.com/metadata",
-		"idp_metadata_cluster": "idp_cluster",
-		"sp_cert_pem":          spKP.CertPEM,
-		"sp_key_pem":           spKP.KeyPEM,
-	})
-	cfg, err := parseConfig(data)
-	require.NoError(t, err)
-	require.Equal(t, "https://idp.example.com/metadata", cfg.IDPMetadataURL)
-	require.Equal(t, "idp_cluster", cfg.IDPMetadataCluster)
-	require.Empty(t, cfg.IDPMetadataXML)
-}
-
-func TestParseConfig_IDPMetadataURL_MissingCluster(t *testing.T) {
-	spKP := generateTestKeyPair("sp.example.com")
-
-	data, _ := json.Marshal(map[string]any{
-		"entity_id":        "https://sp.example.com",
-		"acs_path":         "/saml/acs",
-		"idp_metadata_url": "https://idp.example.com/metadata",
-		"sp_cert_pem":      spKP.CertPEM,
-		"sp_key_pem":       spKP.KeyPEM,
-	})
-	_, err := parseConfig(data)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "idp_metadata_cluster is required when idp_metadata_url is set")
-}
-
-func TestParseConfig_IDPMetadataURL_ConflictsWithXML(t *testing.T) {
-	spKP := generateTestKeyPair("sp.example.com")
-	idpKP := generateTestKeyPair("idp.example.com")
-	idpMeta := testIDPMetadataXML("https://idp.example.com", "https://idp.example.com/sso", idpKP.Cert)
-
-	data, _ := json.Marshal(map[string]any{
-		"entity_id":            "https://sp.example.com",
-		"acs_path":             "/saml/acs",
-		"idp_metadata_xml":     idpMeta,
-		"idp_metadata_url":     "https://idp.example.com/metadata",
-		"idp_metadata_cluster": "idp_cluster",
-		"sp_cert_pem":          spKP.CertPEM,
-		"sp_key_pem":           spKP.KeyPEM,
-	})
-	_, err := parseConfig(data)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "idp_metadata_xml and idp_metadata_url are mutually exclusive")
-}
-
-func TestParseConfig_IDPMetadataCluster_WithoutURL(t *testing.T) {
-	spKP := generateTestKeyPair("sp.example.com")
-	idpKP := generateTestKeyPair("idp.example.com")
-	idpMeta := testIDPMetadataXML("https://idp.example.com", "https://idp.example.com/sso", idpKP.Cert)
-
-	data, _ := json.Marshal(map[string]any{
-		"entity_id":            "https://sp.example.com",
-		"acs_path":             "/saml/acs",
-		"idp_metadata_xml":     idpMeta,
-		"idp_metadata_cluster": "idp_cluster",
-		"sp_cert_pem":          spKP.CertPEM,
-		"sp_key_pem":           spKP.KeyPEM,
-	})
-	_, err := parseConfig(data)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "idp_metadata_cluster requires idp_metadata_url to be set")
-}
-
-func TestParseConfig_IDPMetadataURL_NeitherXMLNorURL(t *testing.T) {
-	spKP := generateTestKeyPair("sp.example.com")
-
-	data, _ := json.Marshal(map[string]any{
-		"entity_id":   "https://sp.example.com",
-		"acs_path":    "/saml/acs",
-		"sp_cert_pem": spKP.CertPEM,
-		"sp_key_pem":  spKP.KeyPEM,
-	})
-	_, err := parseConfig(data)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "one of idp_metadata_xml or idp_metadata_url is required")
-}
-
-func TestParseConfig_IDPMetadataURL_AutoGeneratesCert(t *testing.T) {
-	data, _ := json.Marshal(map[string]any{
-		"entity_id":            "https://sp.example.com",
-		"acs_path":             "/saml/acs",
-		"idp_metadata_url":     "https://idp.example.com/metadata",
-		"idp_metadata_cluster": "idp_cluster",
-	})
-	cfg, err := parseConfig(data)
-	require.NoError(t, err)
-	require.True(t, cfg.SPCertAutoGenerated)
 	require.NotNil(t, cfg.SPCert)
 	require.NotNil(t, cfg.SPKey)
 }

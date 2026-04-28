@@ -1,0 +1,74 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# To get started with Dependabot version updates, you'll need to specify which
+# package ecosystems to update and where the package manifests are located.
+# Please see the documentation for all configuration options:
+# https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
+
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      go:
+        patterns:
+          - "*"
+
+  - package-ecosystem: gomod
+    directory: /extensions/composer
+    schedule:
+      interval: weekly
+    groups:
+      go-extension-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: npm
+    directory: /website
+    schedule:
+      interval: weekly
+    groups:
+      website-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: gomod
+    directory: /tools
+    schedule:
+      interval: weekly
+    groups:
+      tools-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: gomod
+    directory: /cli/tools/gen-cli-docs
+    schedule:
+      interval: weekly
+    groups:
+      tools-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: gomod
+    directory: /cli/tools/gen-manifest-reference
+    schedule:
+      interval: weekly
+    groups:
+      tools-dependencies:
+        patterns:
+          - "*"

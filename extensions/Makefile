@@ -23,10 +23,14 @@ ifeq ($(EXTENSION_PATH),)
   $(error "EXTENSION_PATH is not set. Please set it to the path of the extension.")
 endif
 
+ROOT    := $(shell git rev-parse --show-toplevel)
+GO_TOOL := go -C $(EXTENSION_PATH) tool -modfile=$(ROOT)/tools/go.mod
+
 # Labels for this lua extension image.
 NAME             := $(shell grep "^name:" ./$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
 VERSION          := $(shell grep "^version:" ./$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
 TYPE             := $(shell grep "^type:" ./$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+FILTER_TYPE      := $(shell grep "^filterType:" ./$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
 DESCRIPTION      := $(shell grep "^description:" ./$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
 TIMESTAMP        := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 COMMIT_SHA       := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
@@ -36,6 +40,14 @@ LICENSE          := Apache-2.0
 HUB    := $(or $(BOE_REGISTRY),$(OCI_REGISTRY)/built-on-envoy)
 IMAGE  := $(HUB)/extension-$(NAME):$(VERSION)$(IMAGE_NONCE)
 SOURCE := https://$(subst ghcr.io,github.com,$(HUB))
+
+# If the version of the image is a development one (ends with '-dev'), we will
+# add an additional 'dev' tag (without the version number) to make it easier to reference the
+# last development version.
+# We still keep the versioned development tag because the `boe run` command relies on those when
+# using the `--dev` flag.
+DEV_LATEST := $(firstword $(subst :, ,$(IMAGE))):dev
+DEV_TAG    := $(if $(filter %-dev,$(VERSION)),--tag $(DEV_LATEST))
 
 # Base OCI image annotations (shared by all image types)
 BASE_OCI_ANNOTATIONS := \
@@ -48,6 +60,7 @@ BASE_OCI_ANNOTATIONS := \
 	--annotation "org.opencontainers.image.revision=$(COMMIT_SHA)" \
 	--annotation "org.opencontainers.image.authors=$(AUTHOR)" \
 	--annotation "io.tetratelabs.built-on-envoy.extension.type=$(TYPE)" \
+	--annotation "io.tetratelabs.built-on-envoy.extension.filter_type=$(FILTER_TYPE)" \
 	--annotation "io.tetratelabs.built-on-envoy.extension.version=$(VERSION)"
 
 # Artifact type annotations
@@ -59,6 +72,64 @@ comma := ,
 MULTI_OCI_ANNOTATIONS := \
 	$(subst --annotation ",--annotation "index$(comma)manifest:,$(BASE_OCI_ANNOTATIONS)) \
 	--annotation "index,manifest:io.tetratelabs.built-on-envoy.extension.artifact=binary"
+
+
+.PHONY: build-extproc
+build-extproc:
+	@CGO_ENABLED=0 go -C $(EXTENSION_PATH) build -a -ldflags="-s -w" -o ./out/ext_proc-server .
+
+.PHONY: format-go
+format-go:
+	@echo "format => ./$(EXTENSION_PATH)/..."
+	@$(GO_TOOL) golangci-lint fmt
+	@echo "licenses => ./$(EXTENSION_PATH)/**"
+	@$(GO_TOOL) license-eye -c $(ROOT)/.licenserc.yaml header fix
+
+.PHONY: lint-go
+lint-go:
+	@echo "golangci-lint => ./$(EXTENSION_PATH)/..."
+	@$(GO_TOOL) golangci-lint run
+
+GO_TEST_ARGS ?=
+.PHONY: test-go
+test-go:
+	@go test -C $(EXTENSION_PATH) $(GO_TEST_ARGS) ./...
+
+.PHONY: test-coverage
+test-go-coverage:
+	@mkdir -p ./$(EXTENSION_PATH)/out
+	@$(MAKE) test-go GO_TEST_ARGS="-coverprofile=./out/go-test-coverage.out \
+		-covermode=atomic \
+		-coverpkg=github.com/tetratelabs/built-on-envoy/extensions/$(EXTENSION_PATH)/... \
+		-count=1 \
+		$(GO_TEST_ARGS)"
+# TODO: Increase these thresholds as we add more tests.
+	@$(GO_TOOL) go-test-coverage \
+		--config ../.testcoverage.yml \
+		--profile ./out/go-test-coverage.out
+
+.PHONY: format-rust
+format-rust:
+	@cd $(EXTENSION_PATH) &&  cargo fmt --check
+
+.PHONY: lint-rust
+lint-rust:
+	@cd $(EXTENSION_PATH) && cargo clippy -- -D warnings
+
+.PHONY: build-rust
+build-rust:
+	@cd $(EXTENSION_PATH) && cargo build --release
+
+.PHONY: test-rust
+test-rust:
+	@cd $(EXTENSION_PATH) && cargo test
+
+.PHONY: test-rust-coverage
+test-rust-coverage:
+	@cd $(EXTENSION_PATH) && cargo llvm-cov --lcov --output-path lcov.info --fail-under-lines 80; \
+		status=$$?; \
+		cargo llvm-cov report --summary-only; \
+		exit $$status
 
 BUILDER_NAME := boe-builder
 .PHONY: create_builder
@@ -77,7 +148,7 @@ push_lua: create_builder
 		--provenance=false \
 		$(BASE_OCI_ANNOTATIONS) \
 		$(SOURCE_ARTIFACT) \
-		--tag $(IMAGE) \
+		--tag $(IMAGE) $(DEV_TAG) \
 		--file Dockerfile.code ./$(EXTENSION_PATH)
 
 PLATFORMS ?= linux/arm64,linux/amd64
@@ -90,8 +161,20 @@ push_rust: create_builder
 		--output type=registry,oci-mediatypes=true$(registry_output) \
 		--provenance=false \
 		$(MULTI_OCI_ANNOTATIONS) \
-		--tag $(IMAGE) \
+		--tag $(IMAGE) $(DEV_TAG) \
 		--file Dockerfile.rust ./$(EXTENSION_PATH)
+
+.PHONY: push_extproc
+push_extproc: create_builder
+	@echo "Building and pushing ExtProc extension image for multiple architectures: $(IMAGE)"
+	@docker buildx build \
+		--builder $(BUILDER_NAME) \
+		--platform=$(PLATFORMS) \
+		--output type=registry,oci-mediatypes=true$(registry_output) \
+		--provenance=false \
+		$(MULTI_OCI_ANNOTATIONS) \
+		--tag $(IMAGE) $(DEV_TAG) \
+		--file Dockerfile.extproc ./$(EXTENSION_PATH)
 
 CODE_IMAGE := $(HUB)/extension-src-$(NAME):$(VERSION)$(IMAGE_NONCE)
 .PHONY: push_code
@@ -99,6 +182,7 @@ push_code: create_builder
 	@echo "Building and pushing extension image (source code only): $(CODE_IMAGE)"
 # Make sure we don't include git-ignored build artifacts in the source images
 	@rm -rf ./${EXTENSION_PATH}/target
+	@rm -rf ./${EXTENSION_PATH}/out
 	@docker buildx build \
 		--builder $(BUILDER_NAME) \
 		--output type=registry,oci-mediatypes=true$(registry_output) \

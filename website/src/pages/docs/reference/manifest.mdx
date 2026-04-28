@@ -32,7 +32,7 @@ Functional categories of the extension.
 |---|---|
 | **Type** | `[]string` |
 | **Required** | Yes |
-| **Allowed values** | `AI`, `Examples`, `Misc`, `Network`, `Observability`, `Performance`, `Transform`, `Security` |
+| **Allowed values** | `AI`, `Authentication`, `Decoder`, `Examples`, `Misc`, `Network`, `Observability`, `Performance`, `Traffic Control`, `Transform`, `Security` |
 
 
 
@@ -44,7 +44,7 @@ Version of Built On Envoy Composer. Required if type is `composer` unless the `p
 |---|---|
 | **Type** | `string` |
 | **Required** | No |
-| **Pattern** | `^\d+\.\d+\.\d+$` |
+| **Pattern** | `^\d+\.\d+\.\d+(-dev)?$` |
 | **Forbidden when** | `parent` is set |
 | **Required when** | `type` is `go` and `parent` is not set |
 
@@ -110,6 +110,60 @@ Short title for the example.
 
 
 
+## extProc
+
+External processor (ext_proc) configuration.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+| **Required when** | `type` is `ext_proc` |
+
+
+
+### extProc.failureModeAllow
+
+Whether to allow requests through if the ext_proc server is unavailable or times out.
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+
+
+### extProc.grpcPort
+
+Port the ext_proc gRPC server listens on.
+
+| | |
+|---|---|
+| **Type** | `integer` |
+| **Required** | No |
+
+
+### extProc.messageTimeout
+
+Per-message timeout (e.g. '200ms'). Envoy waits this long for each ProcessingResponse.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+
+### extProc.processingMode
+
+Controls which HTTP phases are forwarded to the ext_proc server.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+
+
+
+
 ## extensionSet
 
 Whether this manifest defines a set of extensions.
@@ -129,6 +183,18 @@ Whether to feature this extension in UI/listings.
 |---|---|
 | **Type** | `boolean` |
 | **Required** | No |
+
+
+
+## filterType
+
+Envoy filter type. Defaults to `http` if not specified.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+| **Allowed values** | `http`, `network`, `listener`, `udp_listener` |
 
 
 
@@ -266,7 +332,7 @@ Type of the extension.
 |---|---|
 | **Type** | `string` |
 | **Required** | Yes |
-| **Allowed values** | `lua`, `wasm`, `rust`, `go`, `composer` |
+| **Allowed values** | `lua`, `wasm`, `rust`, `go`, `composer`, `ext_proc` |
 
 
 
@@ -278,7 +344,7 @@ Semantic version of the extension. Required unless the `parent` field is set.
 |---|---|
 | **Type** | `string` |
 | **Required** | No |
-| **Pattern** | `^\d+\.\d+\.\d+$` |
+| **Pattern** | `^\d+\.\d+\.\d+(-dev)?$` |
 | **Forbidden when** | `parent` is set |
 | **Required when** | `parent` is not set |
 

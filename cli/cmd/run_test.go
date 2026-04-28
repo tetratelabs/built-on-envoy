@@ -63,6 +63,9 @@ Flags:
                                    or "name:version").
       --local=LOCAL                Path to a directory containing a local
                                    Extension to enable.
+      --dev                        Whether to allow downloading dev versions of
+                                   extensions (with -dev suffix). By default,
+                                   only stable versions are allowed.
       --config=CONFIG              Optional JSON config string for extensions.
                                    Applied in order to combined --extension and
                                    --local flags.
@@ -75,9 +78,23 @@ Flags:
       --cluster-json=CLUSTER-JSON
                                    Optional additional Envoy cluster providing
                                    the complete cluster config in JSON format.
+      --test-upstream-host=STRING
+                                   Hostname for the test upstream
+                                   cluster. Mutually exclusive with
+                                   --test-upstream-cluster. Defaults to
+                                   "httpbin.org".
+      --test-upstream-cluster=STRING
+                                   Name of an existing configured cluster to
+                                   use as the test upstream. The cluster must be
+                                   configured via --cluster, --cluster-insecure,
+                                   or --cluster-json. Mutually exclusive with
+                                   --test-upstream-host.
       --docker                     Run Envoy as a Docker container instead of
                                    using func-e ($BOE_RUN_DOCKER).
-      --registry="ghcr.io/tetratelabs/built-on-envoy"
+      --pull="missing"             Pull policy for the BOE Docker image
+                                   (missing, always, never). Only applicable
+                                   when running with --docker.
+      --registry="%s"
                                    OCI registry URL for the extensions
                                    ($BOE_REGISTRY).
       --insecure                   Allow connecting to an insecure (HTTP)
@@ -86,7 +103,7 @@ Flags:
                                    ($BOE_REGISTRY_USERNAME).
       --password=STRING            Password for the OCI registry
                                    ($BOE_REGISTRY_PASSWORD).
-`, internaltesting.WrapHelp(runHelp))
+`, internaltesting.WrapHelp(runHelp), extensions.DefaultOCIRegistry)
 
 	require.Equal(t, expected, buf.String())
 }
@@ -159,6 +176,15 @@ func TestParseCmdRunCustomValues(t *testing.T) {
 	require.Equal(t, []string{"cors:1.0.0", "rate-limiter", "auth-jwt"}, cli.Run.Extensions)
 	require.Equal(t, "localhost:5000", cli.Run.OCI.Registry)
 	require.True(t, cli.Run.OCI.Insecure)
+}
+
+func TestRunValidateMutualExclusion(t *testing.T) {
+	r := &Run{
+		LogLevel:            "all:error",
+		TestUpstreamHost:    "example.com",
+		TestUpstreamCluster: "example.com:443",
+	}
+	require.ErrorContains(t, r.Validate(), "--test-upstream-host and --test-upstream-cluster are mutually exclusive")
 }
 
 func TestValidateLogLevel(t *testing.T) {
@@ -471,9 +497,9 @@ func TestValidateEnvoyCompat(t *testing.T) {
 	}
 }
 
-func TestRunIncomaptibleEnvoyVersion(t *testing.T) {
+func TestRunIncompatibleEnvoyVersion(t *testing.T) {
 	r := &Run{
-		EnvoyVersion: "1.37.0",
+		EnvoyVersion: "1.38.0",
 		Local:        []string{"./testdata/input_lua_inline"},
 	}
 
@@ -597,6 +623,23 @@ func TestDownloadExtensions(t *testing.T) {
 		require.Len(t, manifests, 1)
 		require.Equal(t, "my-dym", manifests[0].Name)
 		require.Equal(t, extensions.TypeRust, manifests[0].Type)
+	})
+
+	t.Run("binary ExtProc extension", func(t *testing.T) {
+		mock := &mockOCIClient{
+			annotations: map[string]string{
+				ocispec.AnnotationTitle:               "my-ext-proc",
+				extensions.OCIAnnotationExtensionType: string(extensions.TypeExtProc),
+				extensions.OCIAnnotationArtifact:      extensions.ArtifactBinary,
+			},
+		}
+		d := newTestDownloader(t, t.TempDir(), mock)
+
+		manifests, err := downloadExtensions(t.Context(), d, []string{"my-ext-proc:2.0.0"}, false)
+		require.NoError(t, err)
+		require.Len(t, manifests, 1)
+		require.Equal(t, "my-ext-proc", manifests[0].Name)
+		require.Equal(t, extensions.TypeExtProc, manifests[0].Type)
 	})
 
 	t.Run("binary Go extension", func(t *testing.T) {

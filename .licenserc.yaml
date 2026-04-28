@@ -28,6 +28,9 @@ header:
     - "**/Dockerfile.plugin"
     - .editorconfig
     - LICENSE
-    - "**/coraza/rules/**"
+    - "**/coraza/directives/**"
+    - "**/coraza/testdata/**"
     - "**/.claude/**"
     - "**/*.json"
+    - "**/*.log"
+    - "**/integration/coreruleset/**"

@@ -169,6 +169,59 @@ func TestCreateRustWithDockerSupport(t *testing.T) {
 	})
 }
 
+func TestCreateRustNetworkWithDockerSupport(t *testing.T) {
+	tmpDir := t.TempDir()
+	ctx := t.Context()
+
+	// Create a new rust network filter extension
+	process := internaltesting.RunCLI(t, cliBin, "create", "test-docker-network",
+		"--path", tmpDir, "--type", "rust", "--filter-type", "network")
+	status, err := process.Wait()
+	require.NoError(t, err)
+	require.Equal(t, 0, status.ExitCode())
+
+	extensionDir := filepath.Join(tmpDir, "test-docker-network")
+	version := "0.1.0"
+
+	t.Run("makefile_image_target", func(t *testing.T) {
+		// Building the image compiles the scaffolded Rust network filter
+		// project end-to-end, catching template regressions that unit tests
+		// (which only check file contents) can't catch.
+		// #nosec G204
+		makeCmd := exec.CommandContext(ctx, "make", "build_image",
+			fmt.Sprintf("OCI_REGISTRY=%s", registryAddr))
+		makeCmd.Dir = extensionDir
+		output, err := makeCmd.CombinedOutput()
+		t.Logf("make build_image output: %s", string(output))
+		require.NoError(t, err, "Makefile build_image target should be valid")
+
+		// Push local image to registry and check its annotations
+		// #nosec G204
+		pushCmd := exec.CommandContext(ctx, "docker", "push",
+			fmt.Sprintf("%s/built-on-envoy/extension-test-docker-network:%s-linux-%s", registryAddr, version, runtime.GOARCH))
+		output, err = pushCmd.CombinedOutput()
+		t.Logf("docker push output: %s", string(output))
+		require.NoError(t, err, "Should be able to push image to local registry")
+
+		// Pull the image manifest and check annotations
+		fetchManifest(t, registryAddr, "built-on-envoy/extension-test-docker-network",
+			fmt.Sprintf("%s-linux-%s", version, runtime.GOARCH))
+	})
+
+	t.Run("makefile_code_target", func(t *testing.T) {
+		// #nosec G204
+		makeCmd := exec.CommandContext(ctx, "make", "push_code",
+			fmt.Sprintf("OCI_REGISTRY=%s", registryAddr), "BOE_REGISTRY_INSECURE=true")
+		makeCmd.Dir = extensionDir
+		output, err := makeCmd.CombinedOutput()
+		t.Logf("make push_code output: %s", string(output))
+		require.NoError(t, err, "Makefile push_code target should be valid")
+
+		// Pull the image manifest and check annotations
+		fetchManifest(t, registryAddr, "built-on-envoy/extension-src-test-docker-network", version)
+	})
+}
+
 func fetchManifest(t *testing.T, registry, repository, reference string) {
 	url := fmt.Sprintf("http://%s/v2/%s/manifests/%s", registry, repository, reference)
 	// Set Accept header to request OCI media types to ensure the manifest is in OCI format

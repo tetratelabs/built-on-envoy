@@ -21,7 +21,7 @@ import (
 func BuildGoBinaryOnDemand(env, binaryName, packagePath string) (string, error) {
 	if envPath := os.Getenv(env); envPath != "" {
 		if !filepath.IsAbs(envPath) {
-			envPath = filepath.Join(FindProjectRoot(), envPath)
+			envPath = filepath.Join(FindCLIRoot(), envPath)
 		}
 		if _, err := os.Stat(envPath); err != nil {
 			return "", fmt.Errorf("%s path does not exist: %s", env, envPath)
@@ -36,7 +36,7 @@ func BuildGoBinaryOnDemand(env, binaryName, packagePath string) (string, error) 
 
 // BuildGoBinary builds a Go binary with the given name and package path.
 func BuildGoBinary(binaryName, packagePath string) (string, error) {
-	projectRoot := FindProjectRoot()
+	projectRoot := FindCLIRoot()
 	outputDir := filepath.Join(projectRoot, "out")
 
 	// Create output directory.
@@ -66,16 +66,16 @@ func BuildGoBinary(binaryName, packagePath string) (string, error) {
 	return binaryPath, nil
 }
 
-// FindProjectRoot finds the root of the project by looking for go.mod.
-func FindProjectRoot() string {
+// FindCLIRoot finds the root of the CLI project by looking for go.mod.
+func FindCLIRoot() string {
 	dir, _ := os.Getwd()
 	for {
 		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir
+			return filepath.Join(dir, "cli")
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			panic("could not find project root (go.mod)")
+			panic("could not find CLI project root (go.mod)")
 		}
 		dir = parent
 	}

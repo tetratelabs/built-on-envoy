@@ -11,12 +11,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
+	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/utility"
 	"github.com/open-policy-agent/opa/v1/rego"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 // defaultDecisionPath is the default OPA rule path to query if not specified in config.
@@ -24,8 +27,8 @@ const defaultDecisionPath = "envoy.authz.allow"
 
 // opaConfig represents the JSON configuration for this filter.
 type opaConfig struct {
-	// PolicyFile is the path to the .rego policy file.
-	PolicyFile string `json:"policy_file"`
+	// Policies contains the OPA policies to load, which can be specified as either inline strings or file paths.
+	Policies []pkg.DataSource `json:"policies"`
 	// DecisionPath is the OPA rule path to query (default: "envoy.authz.allow").
 	DecisionPath string `json:"decision_path"`
 	// FailOpen allows requests if there is an error evaluating the policy.
@@ -33,6 +36,14 @@ type opaConfig struct {
 	FailOpen bool `json:"fail_open"`
 	// DryRun when true logs the decision but always allows the request.
 	DryRun bool `json:"dry_run"`
+	// WithBody when true buffers the request body and includes it as parsed JSON in the OPA
+	// input document under the "body" key. Only JSON bodies are supported; non-JSON bodies
+	// result in "body" being absent from the input. When false (default), the policy is
+	// evaluated on request headers only.
+	WithBody bool `json:"with_body"`
+	// MetadataNamespaces is an optional list of dynamic metadata namespaces to include in the OPA
+	// input document under the "dynamic_metadata" key.
+	MetadataNamespaces []string `json:"metadata_namespaces"`
 }
 
 // Metric tag values for authorization decisions.
@@ -60,14 +71,16 @@ func (m opaMetrics) IncRequestsTotal(handle shared.HttpFilterHandle, decision st
 type opaParsedConfig struct {
 	opaConfig
 	preparedQuery rego.PreparedEvalQuery
-	metrics       opaMetrics
 }
 
 // opaHttpFilter is the per-request HTTP filter instance.
 type opaHttpFilter struct { //nolint:revive
 	shared.EmptyHttpFilter
-	handle shared.HttpFilterHandle
-	config *opaParsedConfig
+	handle  shared.HttpFilterHandle
+	config  *opaParsedConfig
+	metrics opaMetrics
+	// requestProcessed is set to true once the policy has been evaluated to prevent re-evaluation.
+	requestProcessed bool
 }
 
 // policyResponse holds optional structured response details from the policy.
@@ -77,8 +90,54 @@ type policyResponse struct {
 	body       string
 }
 
-func (o *opaHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) shared.HeadersStatus {
-	input := o.buildInput(headers)
+func (o *opaHttpFilter) OnRequestHeaders(headers shared.HeaderMap, endOfStream bool) shared.HeadersStatus {
+	if o.config.WithBody && !endOfStream {
+		// Wait for the request body before evaluating the policy.
+		return shared.HeadersStatusStop
+	}
+	if !o.evaluateAndDecide(headers, nil) {
+		return shared.HeadersStatusStop
+	}
+	return shared.HeadersStatusContinue
+}
+
+// OnRequestBody buffers the request body and evaluates the OPA policy once the full body is received.
+// This is only invoked when with_body is true in the configuration.
+func (o *opaHttpFilter) OnRequestBody(_ shared.BodyBuffer, endOfStream bool) shared.BodyStatus {
+	if o.requestProcessed {
+		return shared.BodyStatusContinue
+	}
+
+	if !endOfStream {
+		// Keep buffering until the full body is received.
+		return shared.BodyStatusStopAndBuffer
+	}
+
+	if !o.evaluateBodyPolicy() {
+		return shared.BodyStatusStopNoBuffer
+	}
+	return shared.BodyStatusContinue
+}
+
+// OnRequestTrailers is called when request trailers are received, signaling the end of the request body.
+// This is only invoked when with_body is true in the configuration.
+func (o *opaHttpFilter) OnRequestTrailers(_ shared.HeaderMap) shared.TrailersStatus {
+	if o.requestProcessed {
+		return shared.TrailersStatusContinue
+	}
+
+	if !o.evaluateBodyPolicy() {
+		return shared.TrailersStatusStop
+	}
+	return shared.TrailersStatusContinue
+}
+
+// evaluateAndDecide evaluates the OPA policy with the given headers and optional parsed body,
+// enforces the decision, and returns true if the request is allowed.
+func (o *opaHttpFilter) evaluateAndDecide(headers shared.HeaderMap, parsedBody any) bool {
+	o.requestProcessed = true
+
+	input := o.buildInput(headers, parsedBody)
 	o.handle.Log(shared.LogLevelDebug, "opa: evaluating policy for %s %s",
 		headers.GetOne(":method"), headers.GetOne(":path"))
 
@@ -89,13 +148,13 @@ func (o *opaHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) share
 	if err != nil {
 		if o.config.FailOpen {
 			o.handle.Log(shared.LogLevelError, "opa: policy evaluation error (fail_open enabled): %s", err.Error())
-			o.config.metrics.IncRequestsTotal(o.handle, decisionFailOpen)
-			return shared.HeadersStatusContinue
+			o.metrics.IncRequestsTotal(o.handle, decisionFailOpen)
+			return true
 		}
 		o.handle.Log(shared.LogLevelError, "opa: policy evaluation error: %s", err.Error())
 		o.handle.SendLocalResponse(500, nil, []byte("Internal Server Error"), "opa_eval_error")
-		o.config.metrics.IncRequestsTotal(o.handle, decisionDenied)
-		return shared.HeadersStatusStop
+		o.metrics.IncRequestsTotal(o.handle, decisionDenied)
+		return false
 	}
 
 	allowed, resp := interpretResult(rs)
@@ -103,7 +162,7 @@ func (o *opaHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) share
 
 	if !allowed && o.config.DryRun {
 		o.handle.Log(shared.LogLevelInfo, "opa: dry-run decision: allowed=%v", allowed)
-		o.config.metrics.IncRequestsTotal(o.handle, decisionDryAllow)
+		o.metrics.IncRequestsTotal(o.handle, decisionDryAllow)
 		allowed = true
 	}
 
@@ -121,14 +180,14 @@ func (o *opaHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) share
 			body = "Forbidden"
 		}
 		o.handle.Log(shared.LogLevelDebug, "opa: denying request with status %d", status)
+		o.metrics.IncRequestsTotal(o.handle, decisionDenied)
 		o.handle.SendLocalResponse(
 			uint32(status), //nolint:gosec
 			responseHeaders,
 			[]byte(body),
 			"opa_denied",
 		)
-		o.config.metrics.IncRequestsTotal(o.handle, decisionDenied)
-		return shared.HeadersStatusStop
+		return false
 	}
 
 	// If allowed and policy returned headers, add them to the request.
@@ -138,29 +197,53 @@ func (o *opaHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) share
 	}
 
 	if !o.config.DryRun {
-		o.config.metrics.IncRequestsTotal(o.handle, decisionAllowed)
+		o.metrics.IncRequestsTotal(o.handle, decisionAllowed)
 	}
 
-	return shared.HeadersStatusContinue
+	return true
 }
 
-// buildInput constructs the input document for OPA evaluation based on request headers and attributes.
-func (o *opaHttpFilter) buildInput(headers shared.HeaderMap) map[string]any {
+// evaluateBodyPolicy reads the buffered request body, parses it as JSON if the content-type is
+// application/json, and evaluates the OPA policy.
+func (o *opaHttpFilter) evaluateBodyPolicy() bool {
+	headers := o.handle.RequestHeaders()
+
+	var parsedBody any
+	contentType := headers.GetOne("content-type").ToUnsafeString()
+	// We may could support other content types in the future if needed, but for now we only parse
+	// JSON bodies since that's the most common and avoids the complexity of handling arbitrary
+	// body formats.
+	if strings.Contains(contentType, "application/json") {
+		bodyBytes := utility.ReadWholeRequestBody(o.handle)
+		if len(bodyBytes) > 0 {
+			if err := json.Unmarshal(bodyBytes, &parsedBody); err != nil {
+				o.handle.Log(shared.LogLevelDebug, "opa: failed to parse JSON body: %s", err.Error())
+			}
+		}
+	}
+
+	return o.evaluateAndDecide(headers, parsedBody)
+}
+
+// buildInput constructs the input document for OPA evaluation based on request headers, attributes,
+// and an optional pre-parsed JSON body.
+func (o *opaHttpFilter) buildInput(headers shared.HeaderMap, parsedBody any) map[string]any {
 	var (
-		method = headers.GetOne(":method")
-		path   = headers.GetOne(":path")
-		host   = headers.GetOne(":authority")
-		scheme = cmp.Or(headers.GetOne(":scheme"), "http")
+		method = headers.GetOne(":method").ToUnsafeString()
+		path   = headers.GetOne(":path").ToUnsafeString()
+		host   = headers.GetOne(":authority").ToUnsafeString()
+		scheme = cmp.Or(headers.GetOne(":scheme").ToUnsafeString(), "http")
 	)
+
 	parsedPath, parsedQuery := parsePath(path)
-	protocol, _ := o.handle.GetAttributeString(shared.AttributeIDRequestProtocol)
-	protocol = cmp.Or(protocol, "HTTP/1.1")
+	protocolAttr, _ := o.handle.GetAttributeString(shared.AttributeIDRequestProtocol)
+	protocol := cmp.Or(protocolAttr.ToUnsafeString(), "HTTP/1.1")
 
 	// Build headers map excluding pseudo-headers.
 	headerMap := make(map[string]string)
 	for _, h := range headers.GetAll() {
-		key := h[0]
-		val := h[1]
+		key := h[0].ToUnsafeString()
+		val := h[1].ToUnsafeString()
 		if !strings.HasPrefix(key, ":") {
 			headerMap[key] = val
 		}
@@ -175,11 +258,10 @@ func (o *opaHttpFilter) buildInput(headers shared.HeaderMap) map[string]any {
 		subjectPeer, _  = o.handle.GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate)
 		tlsVersion, _   = o.handle.GetAttributeString(shared.AttributeIDConnectionTlsVersion)
 		sha256Digest, _ = o.handle.GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest)
-		// TODO(nacx): The ABI does not expose a method to get Boolean attributes
-		// mtls, _         = f.handle.GetAttributeBool(shared.AttributeIDConnectionMtls)
+		mtls, _         = o.handle.GetAttributeBool(shared.AttributeIDConnectionMtls)
 	)
 
-	return map[string]any{
+	result := map[string]any{
 		"attributes": map[string]any{
 			"request": map[string]any{
 				"http": map[string]any{
@@ -192,26 +274,52 @@ func (o *opaHttpFilter) buildInput(headers shared.HeaderMap) map[string]any {
 				},
 			},
 			"source": map[string]any{
-				"address": sourceAddr,
+				"address": sourceAddr.ToUnsafeString(),
 				"certificate": map[string]any{
-					"uri_san":       uriSanPeer,
-					"dns_san":       dnsSanPeer,
-					"subject":       subjectPeer,
-					"sha256_digest": sha256Digest,
+					"uri_san":       uriSanPeer.ToUnsafeString(),
+					"dns_san":       dnsSanPeer.ToUnsafeString(),
+					"subject":       subjectPeer.ToUnsafeString(),
+					"sha256_digest": sha256Digest.ToUnsafeString(),
 				},
 			},
 			"destination": map[string]any{
-				"address": destAddr,
+				"address": destAddr.ToUnsafeString(),
 			},
 			"connection": map[string]any{
-				// TODO(nacx): Add mTLS boolean when supported by the ABI.
-				// "mtls":        mtls,
-				"tls_version": tlsVersion,
+				"mtls":        mtls,
+				"tls_version": tlsVersion.ToUnsafeString(),
 			},
 		},
-		"parsed_path":  parsedPath,
-		"parsed_query": parsedQuery,
+		"dynamic_metadata": o.dynamicMetadataMap(),
+		"parsed_path":      parsedPath,
+		"parsed_query":     parsedQuery,
 	}
+	if parsedBody != nil {
+		result["body"] = parsedBody
+	}
+	return result
+}
+
+// dynamicMetadataMap extracts dynamic metadata from the filter handle and returns it as a
+// nested map keyed by namespace and then by key.
+func (o *opaHttpFilter) dynamicMetadataMap() map[string]any {
+	dm := make(map[string]any)
+	for _, ns := range o.config.MetadataNamespaces {
+		nsMap := make(map[string]any)
+		keys := o.handle.GetMetadataKeys(shared.MetadataSourceTypeDynamic, ns)
+		for _, key := range keys {
+			keyStr := key.ToUnsafeString()
+			if value, ok := o.handle.GetMetadataString(shared.MetadataSourceTypeDynamic, ns, keyStr); ok {
+				nsMap[keyStr] = value.ToUnsafeString()
+			} else if numValue, ok := o.handle.GetMetadataNumber(shared.MetadataSourceTypeDynamic, ns, keyStr); ok {
+				nsMap[keyStr] = numValue
+			}
+		}
+		if len(nsMap) > 0 {
+			dm[ns] = nsMap
+		}
+	}
+	return dm
 }
 
 // parsePath splits the path into segments and parses query parameters into a map.
@@ -231,9 +339,7 @@ func parsePath(fullPath string) ([]string, map[string][]string) {
 	if queryPart != "" {
 		parsed, err := url.ParseQuery(queryPart)
 		if err == nil {
-			for k, v := range parsed {
-				queryMap[k] = v
-			}
+			maps.Copy(queryMap, parsed)
 		}
 	}
 
@@ -288,11 +394,68 @@ func interpretResult(rs rego.ResultSet) (bool, policyResponse) {
 // opaHttpFilterFactory creates filter instances per-request.
 type opaHttpFilterFactory struct { //nolint:revive
 	shared.EmptyHttpFilterFactory
-	config *opaParsedConfig
+	config  *opaParsedConfig
+	metrics opaMetrics
 }
 
 func (o *opaHttpFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
-	return &opaHttpFilter{handle: handle, config: o.config}
+	cfg := o.config
+	if perRoute := pkg.GetMostSpecificConfig[*opaParsedConfig](handle); perRoute != nil {
+		cfg = perRoute
+	}
+	if cfg == nil {
+		handle.Log(shared.LogLevelInfo, "opa: no config available and use empty filter")
+		return &shared.EmptyHttpFilter{}
+	}
+
+	return &opaHttpFilter{handle: handle, config: cfg, metrics: o.metrics}
+}
+
+// parseConfig parses the raw JSON config bytes and returns a compiled *opaParsedConfig.
+func parseConfig(config []byte) (*opaParsedConfig, error) {
+	if len(config) == 0 {
+		return nil, nil
+	}
+
+	cfg := opaConfig{}
+	if err := json.Unmarshal(config, &cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse config: %w", err)
+	}
+
+	if len(cfg.Policies) == 0 {
+		return nil, fmt.Errorf("no policies provided in config")
+	}
+
+	modules := make(map[string]string, len(cfg.Policies))
+	for i, p := range cfg.Policies {
+		content, err := p.Content()
+		if err != nil {
+			return nil, fmt.Errorf("failed to load policy #%d: %w", i+1, err)
+		}
+		moduleName := p.File
+		if moduleName == "" {
+			moduleName = fmt.Sprintf("inline_policy_%d.rego", i+1)
+		}
+		modules[moduleName] = string(content)
+	}
+
+	if cfg.DecisionPath == "" {
+		cfg.DecisionPath = defaultDecisionPath
+	}
+	query := "result = data." + cfg.DecisionPath
+
+	opts := []func(*rego.Rego){rego.Query(query)}
+	for name, module := range modules {
+		opts = append(opts, rego.Module(name, module))
+	}
+	r := rego.New(opts...)
+
+	pq, err := r.PrepareForEval(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("failed to compile policy: %w", err)
+	}
+
+	return &opaParsedConfig{opaConfig: cfg, preparedQuery: pq}, nil
 }
 
 // OPAHttpFilterConfigFactory is the configuration factory for the HTTP filter.
@@ -302,50 +465,15 @@ type OPAHttpFilterConfigFactory struct { //nolint:revive
 
 // Create parses the JSON configuration and creates a factory for the HTTP filter.
 func (o *OPAHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
-	if len(config) == 0 {
-		handle.Log(shared.LogLevelError, "opa: empty config")
-		return nil, fmt.Errorf("empty config")
-	}
-
-	cfg := opaConfig{}
-	if err := json.Unmarshal(config, &cfg); err != nil {
-		handle.Log(shared.LogLevelError, "opa: failed to parse config: %s", err.Error())
+	parsed, err := parseConfig(config)
+	if err != nil {
+		handle.Log(shared.LogLevelError, "opa: %s", err.Error())
 		return nil, err
 	}
 
-	if cfg.PolicyFile == "" {
-		handle.Log(shared.LogLevelError, "opa: policy_file is required")
-		return nil, fmt.Errorf("policy_file is required")
+	if parsed == nil {
+		handle.Log(shared.LogLevelInfo, "opa: empty filter config")
 	}
-
-	if cfg.DecisionPath == "" {
-		cfg.DecisionPath = defaultDecisionPath
-	}
-
-	handle.Log(shared.LogLevelDebug, "opa: loading policy from %s (decision_path=%s, dry_run=%v, fail_open=%v)",
-		cfg.PolicyFile, cfg.DecisionPath, cfg.DryRun, cfg.FailOpen)
-
-	policyBytes, err := os.ReadFile(cfg.PolicyFile)
-	if err != nil {
-		handle.Log(shared.LogLevelError, "opa: failed to read policy file: %s", err.Error())
-		return nil, fmt.Errorf("failed to read policy file: %w", err)
-	}
-
-	query := "result = data." + cfg.DecisionPath
-	handle.Log(shared.LogLevelDebug, "opa: compiling query: %s", query)
-
-	r := rego.New(
-		rego.Query(query),
-		rego.Module(cfg.PolicyFile, string(policyBytes)),
-	)
-
-	pq, err := r.PrepareForEval(context.Background())
-	if err != nil {
-		handle.Log(shared.LogLevelError, "opa: failed to compile policy: %s", err.Error())
-		return nil, fmt.Errorf("failed to compile policy: %w", err)
-	}
-
-	handle.Log(shared.LogLevelDebug, "opa: policy compiled successfully")
 
 	var metrics opaMetrics
 	metricID, metricStatus := handle.DefineCounter("opa_requests_total", "decision")
@@ -354,13 +482,21 @@ func (o *OPAHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle
 		metrics.enabled = true
 	}
 
-	parsed := &opaParsedConfig{
-		opaConfig:     cfg,
-		preparedQuery: pq,
-		metrics:       metrics,
-	}
+	return &opaHttpFilterFactory{config: parsed, metrics: metrics}, nil
+}
 
-	return &opaHttpFilterFactory{config: parsed}, nil
+// CreatePerRoute parses per-route configuration for the OPA filter.
+func (o *OPAHttpFilterConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, error) {
+	cfg, err := parseConfig(unparsedConfig)
+	if err != nil {
+		return nil, err
+	}
+	if cfg == nil {
+		// It's not allowed to have empty route config because it doesn't make sense to have an
+		// empty config override the global config.
+		return nil, fmt.Errorf("opa: per-route config is empty or invalid")
+	}
+	return cfg, nil
 }
 
 // ExtensionName is the name of the extension that will be used in the

@@ -9,11 +9,11 @@ on:
   push:
     branches:
       - main
-      - release-**
+      - release/**
   pull_request:
     branches:
       - main
-      - release-**
+      - release/**
 
 env:
   GOPROXY: https://proxy.golang.org
@@ -22,8 +22,8 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v4
         id: changes
         with:
           filters: |
@@ -45,12 +45,13 @@ jobs:
       run:
         working-directory: ./cli
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
-          go-version-file: cli/go.mod
-          cache-dependency-path: cli/go.sum
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
       - run: make check
+      - run: make lint
 
   build:
     needs: changes
@@ -60,11 +61,11 @@ jobs:
       run:
         working-directory: ./cli
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
-          go-version-file: cli/go.mod
-          cache-dependency-path: cli/go.sum
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
       - run: make build
 
   test:
@@ -77,30 +78,16 @@ jobs:
     env:
       TEST_OPTS: -race
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
-          go-version-file: cli/go.mod
-          cache-dependency-path: cli/go.sum
-      - run: make test-integration
-
-  coverage:
-    needs: changes
-    if: ${{ needs.changes.outputs.code == 'true' }}
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./cli
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: cli/go.mod
-          cache-dependency-path: cli/go.sum
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
       - run: make test-coverage
-      - uses: codecov/codecov-action@v4
+      - uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          flags: cli
   
   e2e:
     needs: changes
@@ -110,34 +97,25 @@ jobs:
       run:
         working-directory: ./cli
     env:
+      GO_TEST_ARGS: -v
       TEST_BOE_REGISTRY: ghcr.io/tetratelabs/built-on-envoy
       TEST_BOE_REGISTRY_USERNAME: ${{ github.actor }}
       TEST_BOE_REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
-      - uses: docker/setup-buildx-action@v3
-      - uses: actions/setup-go@v5
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
         with:
-          go-version-file: cli/go.mod
-          cache-dependency-path: cli/go.sum
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
       - run: make build_image
       - run: make test-e2e
-
-  lint:
-    needs: changes
-    if: ${{ needs.changes.outputs.code == 'true' }}
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./cli
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: cli/go.mod
-          cache-dependency-path: cli/go.sum
-      - run: make lint
 
   # Aggregate all the required jobs and make it easier to customize CI required jobs
   cli-checks:
@@ -147,7 +125,6 @@ jobs:
       - build
       - test
       - e2e
-      - lint
     # We need this to run always to force-fail (and not skip) if any needed
     # job has failed. Otherwise, a skipped job will not fail the workflow.
     if: always()

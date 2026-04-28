@@ -1,0 +1,127 @@
+# WARNING: This Makefile is auto-generated. Do not modify it directly.
+# If you need to customize the build process, consider using environment variables
+# or wrapper scripts instead of editing this file.
+
+# This IMAGE_NONCE will be appended to the final image tag if set.
+# It is intended to be used in CI environments to ensure that each image
+# built gets a unique tag.
+IMAGE_NONCE  ?=
+OCI_REGISTRY ?= ghcr.io/tetratelabs
+
+registry_output :=
+ifeq ($(BOE_REGISTRY_INSECURE),true)
+  registry_output := ",registry.insecure=true"
+endif
+
+# Default data home layout for boe
+BOE_DATA_HOME ?= {{ .DataHome }}
+
+# Labels for this plugin image.
+NAME             := $(shell grep "^name:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+VERSION          := $(shell grep "^version:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+TYPE             := $(shell grep "^type:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+DESCRIPTION      := $(shell grep "^description:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+TIMESTAMP        := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+COMMIT_SHA       := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
+AUTHOR           := $(shell grep "^author:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+LICENSE          := Apache-2.0
+
+HUB    := $(or $(BOE_REGISTRY),$(OCI_REGISTRY)/built-on-envoy)
+IMAGE  := $(HUB)/extension-$(NAME):$(VERSION)$(IMAGE_NONCE)
+SOURCE := https://$(subst ghcr.io,github.com,$(HUB))
+
+ARCH := $(shell uname -m)
+ifeq ($(ARCH),x86_64)
+  ARCH := amd64
+else ifeq ($(ARCH),aarch64)
+  ARCH := arm64
+endif
+
+# Base OCI image annotations (shared by all image types)
+BASE_OCI_ANNOTATIONS := \
+	--annotation "org.opencontainers.image.source=$(SOURCE)" \
+	--annotation "org.opencontainers.image.licenses=$(LICENSE)" \
+	--annotation "org.opencontainers.image.title=$(NAME)" \
+	--annotation "org.opencontainers.image.version=$(VERSION)" \
+	--annotation "org.opencontainers.image.description=$(DESCRIPTION)" \
+	--annotation "org.opencontainers.image.created=$(TIMESTAMP)" \
+	--annotation "org.opencontainers.image.revision=$(COMMIT_SHA)" \
+	--annotation "org.opencontainers.image.authors=$(AUTHOR)" \
+	--annotation "io.tetratelabs.built-on-envoy.extension.type=$(TYPE)"
+
+# Artifact type annotations
+BINARY_ARTIFACT := --annotation "io.tetratelabs.built-on-envoy.extension.artifact=binary"
+SOURCE_ARTIFACT := --annotation "io.tetratelabs.built-on-envoy.extension.artifact=source"
+
+# Multi-platform OCI annotations (with index,manifest prefix, for binary artifacts)
+comma := ,
+MULTI_OCI_ANNOTATIONS := \
+	$(subst --annotation ",--annotation "index$(comma)manifest:,$(BASE_OCI_ANNOTATIONS)) \
+	--annotation "index,manifest:io.tetratelabs.built-on-envoy.extension.artifact=binary"
+
+BUILDER_NAME := boe-builder
+.PHONY: create_builder
+create_builder:
+	@docker buildx inspect $(BUILDER_NAME) || \
+		docker buildx create --name $(BUILDER_NAME) \
+			--driver docker-container --driver-opt network=host \
+			--buildkitd-flags '--allow-insecure-entitlement network.host' --use
+
+.PHONY: test
+test:
+	go test ./...
+
+.PHONY: build
+build:
+	CGO_ENABLED=0 go build -a -ldflags="-s -w" -o ./out/ext_proc-server .
+
+.PHONY: clean
+clean:
+	rm -f ./out/ext_proc-server
+
+.PHONY: install
+install: build
+	@echo "Installing $(NAME)..."
+	mkdir -p $(BOE_DATA_HOME)/extensions/extproc/$(NAME)/$(VERSION); \
+	cp ./out/ext_proc-server $(BOE_DATA_HOME)/extensions/extproc/$(NAME)/$(VERSION)/ext_proc-server;
+	@echo "Installed to $(BOE_DATA_HOME)/extensions/extproc/$(NAME)"
+
+# For single local platform build, we will add the OS and ARCH to the image tag to avoid confusion.
+# And we will not push it to the registry by default.
+.PHONY: build_image
+build_image:
+	docker buildx build \
+		--output type=docker,oci-mediatypes=true \
+		--provenance=false \
+		$(BASE_OCI_ANNOTATIONS) \
+		$(BINARY_ARTIFACT) \
+		-t $(IMAGE)-linux-$(ARCH) \
+		-f ./Dockerfile .
+
+# For default push operation, we will also prefer to build a multi-platform image to support
+# both amd64 and arm64 architectures, and push it to the registry.
+PLATFORMS ?= linux/arm64,linux/amd64
+.PHONY: push_image
+push_image: create_builder  ## Build and push docker image for the plugin for cross-platform support
+	@echo "Building and pushing image..."
+	docker buildx build --platform=$(PLATFORMS) \
+		--builder $(BUILDER_NAME) \
+		--output type=registry,oci-mediatypes=true$(registry_output) \
+		--provenance=false \
+		$(MULTI_OCI_ANNOTATIONS) \
+		--tag $(IMAGE) \
+		-f ./Dockerfile .
+
+# Package source code into an image and push it to the registry.
+CODE_IMAGE := $(HUB)/extension-src-$(NAME):$(VERSION)$(IMAGE_NONCE)
+.PHONY: push_code
+push_code: create_builder  ## Build and push source code image
+	@echo "Building and pushing source code image..."
+	docker buildx build \
+		--builder $(BUILDER_NAME) \
+		--output type=registry,oci-mediatypes=true$(registry_output) \
+		--provenance=false \
+		$(BASE_OCI_ANNOTATIONS) \
+		$(SOURCE_ARTIFACT) \
+		--tag $(CODE_IMAGE) \
+		-f ./Dockerfile.code .

@@ -1,0 +1,27 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# WARNING: This Dockerfile is auto-generated. Do not modify it directly.
+# If you need to customize the build process, consider creating a separate
+# Dockerfile (e.g., Dockerfile.custom) instead of editing this file.
+
+# Build the manager binary
+FROM golang:1.26.2 AS builder
+
+WORKDIR /workspace
+COPY . .
+
+RUN go mod download all
+
+# Build the ext_proc server binary
+RUN CGO_ENABLED=0 go build -a -ldflags="-s -w" -o ./out/ext_proc-server .
+
+FROM scratch AS final
+
+# ext_proc extension manifests contain information such as the ext_proc config that we need to
+# include in the image.
+COPY --from=builder /workspace/manifest.yaml /
+COPY --from=builder /workspace/out/ext_proc-server /
+ENTRYPOINT [ "/ext_proc-server" ]

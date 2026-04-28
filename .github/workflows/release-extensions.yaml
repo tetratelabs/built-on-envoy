@@ -9,6 +9,7 @@ on:
   push:
     branches:
       - main
+      - release/**
     paths:
       - 'extensions/*/manifest.yaml'
 
@@ -22,7 +23,7 @@ jobs:
       changed-extensions: ${{ steps.detect.outputs.extensions }}
       has-changes: ${{ steps.detect.outputs.has-changes }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 2  # Need at least 2 commits to compare
 
@@ -65,23 +66,12 @@ jobs:
             old_version=$(git show HEAD~1:"$manifest" 2>/dev/null | grep '^version:' | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"' || echo "")
             new_version=$(grep '^version:' "$manifest" | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"' || echo "")
             
-            # Detect language
-            lang=""
-            ext_dir="extensions/$ext_path"
-            if [ -f "$ext_dir/Cargo.toml" ]; then
-              lang="rust"
-            elif [ -f "$ext_dir/go.mod" ]; then
-              lang="go"
-            elif grep -q "^lua:" "$manifest"; then
-              lang="lua"
-            fi
-            
-            echo "Extension: $ext_name (type=$type, lang=$lang, path=$ext_path)"
+            echo "Extension: $ext_name (type=$type, path=$ext_path)"
             echo "Old version: ${old_version:-<new extension>}"
             echo "New version: $new_version"
             
-            # Check if version changed or this is a new extension
-            if [ "$old_version" != "$new_version" ] && [ -n "$new_version" ]; then
+            # Check if version changed or this is a new extension, and new version matches x.y.z
+            if [ "$old_version" != "$new_version" ] && echo "$new_version" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
               if [ -z "$old_version" ]; then
                 echo "New extension detected: $ext_name (version: $new_version)"
               else
@@ -92,13 +82,11 @@ jobs:
               changed_extensions=$(echo "$changed_extensions" | jq -c \
                 --arg name "$ext_name" \
                 --arg type "$type" \
-                --arg lang "$lang" \
                 --arg path "$ext_path" \
-                --arg version "$new_version" \
-                '. + [{name: $name, type: $type, language: $lang, path: $path, version: $version}]')
+                '. + [{name: $name, type: $type, path: $path}]')
               has_changes="true"
             else
-              echo "No version change for $ext_name"
+              echo "Skipping $ext_name: old version: ${old_version:-<none>}, new version: $new_version"
             fi
           done
           
@@ -109,58 +97,7 @@ jobs:
   release-extensions:
     needs: detect-version-changes
     if: needs.detect-version-changes.outputs.has-changes == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    strategy:
-      matrix:
-        extension: ${{ fromJson(needs.detect-version-changes.outputs.changed-extensions) }}
-      fail-fast: false
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/setup-qemu-action@v3
-        with:
-          platforms: amd64,arm64
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io/tetratelabs
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Release Rust Extension
-        if: matrix.extension.language == 'rust'
-        env:
-          EXTENSION_PATH: ${{ matrix.extension.path }}
-        run: |
-          echo "Releasing Rust extension: ${{ matrix.extension.name }} (version: ${{ matrix.extension.version }})"
-          make -C extensions push_rust
-
-      - name: Release Lua Extension
-        if: matrix.extension.language == 'lua'
-        env:
-          EXTENSION_PATH: ${{ matrix.extension.path }}
-        run: |
-          echo "Releasing Lua extension: ${{ matrix.extension.name }} (version: ${{ matrix.extension.version }})"
-          make -C extensions push_lua
-
-      - name: Release Composer
-        if: matrix.extension.name == 'composer'
-        run: |
-          echo "Releasing Composer extension (version: ${{ matrix.extension.version }})"
-          make -C extensions/composer push_image
-      
-      - name: Release Composer Lite
-        if: matrix.extension.name == 'composer'
-        env:
-          COMPOSER_LITE: true
-        run: make -C extensions/composer push_image
-
-      - name: Push Composer source code
-        if: matrix.extension.name == 'composer'
-        run: make -C extensions/composer push_code
-
-      - name: Push Composer plugins
-        if: matrix.extension.name == 'composer'
-        run: make -C extensions/composer push_plugins
+    uses: ./.github/workflows/release-extensions-impl.yaml
+    with:
+      extensions: ${{ needs.detect-version-changes.outputs.changed-extensions }}
+    secrets: inherit

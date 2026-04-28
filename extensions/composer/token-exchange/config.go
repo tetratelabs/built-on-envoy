@@ -97,7 +97,7 @@ func parseTokenExchangeURL(inputURL string) (host, path string, err error) {
 // parseConfig parses and validates the JSON configuration.
 func parseConfig(data []byte) (*tokenExchangeConfig, error) {
 	if len(data) == 0 {
-		return nil, fmt.Errorf("token-exchange: configuration is required")
+		return nil, nil
 	}
 
 	cfg := &tokenExchangeConfig{}

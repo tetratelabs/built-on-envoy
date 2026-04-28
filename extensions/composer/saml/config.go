@@ -16,8 +16,9 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"os"
 	"time"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 // Default configuration values.
@@ -42,11 +43,6 @@ type Config struct {
 	ACSPath string
 	// IDPMetadataXML is the inline IdP metadata XML string.
 	IDPMetadataXML string
-	// IDPMetadataURL is the URL to fetch IdP metadata from (alternative to IDPMetadataXML).
-	IDPMetadataURL string
-	// IDPMetadataCluster is the Envoy cluster name to use for fetching IdP metadata via HttpCallout.
-	// Required when IDPMetadataURL is set.
-	IDPMetadataCluster string
 
 	// SPCert is the parsed SP certificate.
 	SPCert *x509.Certificate
@@ -89,18 +85,12 @@ type Config struct {
 
 // rawConfig is the JSON-serializable representation of the configuration.
 type rawConfig struct {
-	EntityID           string `json:"entity_id"`
-	ACSPath            string `json:"acs_path"`
-	IDPMetadataXML     string `json:"idp_metadata_xml"`
-	IDPMetadataXMLFile string `json:"idp_metadata_xml_file"`
-	IDPMetadataURL     string `json:"idp_metadata_url"`
-	IDPMetadataCluster string `json:"idp_metadata_cluster"`
+	EntityID       string         `json:"entity_id"`
+	ACSPath        string         `json:"acs_path"`
+	IDPMetadataXML pkg.DataSource `json:"idp_metadata_xml"`
 
-	SPCertPEM string `json:"sp_cert_pem"`
-	SPKeyPEM  string `json:"sp_key_pem"`
-
-	SPCertPEMFile string `json:"sp_cert_pem_file"`
-	SPKeyPEMFile  string `json:"sp_key_pem_file"`
+	SPCertPEM *pkg.DataSource `json:"sp_cert_pem,omitempty"`
+	SPKeyPEM  *pkg.DataSource `json:"sp_key_pem,omitempty"`
 
 	Session *rawSessionConfig `json:"session,omitempty"`
 
@@ -124,24 +114,6 @@ type rawSessionConfig struct {
 	CookieSigningKey string `json:"cookie_signing_key,omitempty"`
 }
 
-// resolveFileOrInline returns the value for a config field that supports both
-// inline and file-based variants. If both are set, it returns an error.
-// If filePath is set, the file contents are read and returned.
-// Otherwise, inline is returned as-is.
-func resolveFileOrInline(inline, filePath, fieldName string) (string, error) {
-	if inline != "" && filePath != "" {
-		return "", fmt.Errorf("cannot specify both %s and %s_file", fieldName, fieldName)
-	}
-	if filePath != "" {
-		data, err := os.ReadFile(filePath) //nolint:gosec // filePath is from trusted config, not user input
-		if err != nil {
-			return "", fmt.Errorf("failed to read %s_file %q: %w", fieldName, filePath, err)
-		}
-		return string(data), nil
-	}
-	return inline, nil
-}
-
 // parseConfig parses the JSON configuration bytes into a Config struct.
 // It validates required fields, parses PEM certificates and keys, and sets defaults.
 func parseConfig(data []byte) (*Config, error) {
@@ -152,75 +124,73 @@ func parseConfig(data []byte) (*Config, error) {
 		}
 	}
 
-	// Resolve file-or-inline fields.
-	var err error
-	raw.IDPMetadataXML, err = resolveFileOrInline(raw.IDPMetadataXML, raw.IDPMetadataXMLFile, "idp_metadata_xml")
-	if err != nil {
-		return nil, err
-	}
-	raw.SPCertPEM, err = resolveFileOrInline(raw.SPCertPEM, raw.SPCertPEMFile, "sp_cert_pem")
-	if err != nil {
-		return nil, err
-	}
-	raw.SPKeyPEM, err = resolveFileOrInline(raw.SPKeyPEM, raw.SPKeyPEMFile, "sp_key_pem")
-	if err != nil {
-		return nil, err
-	}
-
-	// Validate required fields.
+	// Validate required string fields.
 	if raw.EntityID == "" {
-		err = errors.Join(err, errors.New("entity_id is required"))
+		return nil, errors.New("entity_id is required")
 	}
 	if raw.ACSPath == "" {
-		err = errors.Join(err, errors.New("acs_path is required"))
+		return nil, errors.New("acs_path is required")
 	}
 
-	// IdP metadata: exactly one of inline XML or URL must be provided.
-	hasInlineMetadata := raw.IDPMetadataXML != ""
-	hasURLMetadata := raw.IDPMetadataURL != ""
-	if hasInlineMetadata && hasURLMetadata {
-		err = errors.Join(err, errors.New("idp_metadata_xml and idp_metadata_url are mutually exclusive"))
+	// Resolve IDPMetadataXML (required).
+	if err := raw.IDPMetadataXML.Validate(); err != nil {
+		return nil, fmt.Errorf("idp_metadata_xml: %w", err)
 	}
-	if !hasInlineMetadata && !hasURLMetadata {
-		err = errors.Join(err, errors.New("one of idp_metadata_xml or idp_metadata_url is required"))
+	content, err := raw.IDPMetadataXML.Content()
+	if err != nil || len(content) == 0 {
+		return nil, fmt.Errorf("idp_metadata_xml: error %w or empty content", err)
 	}
-	if hasURLMetadata && raw.IDPMetadataCluster == "" {
-		err = errors.Join(err, errors.New("idp_metadata_cluster is required when idp_metadata_url is set"))
-	}
-	if !hasURLMetadata && raw.IDPMetadataCluster != "" {
-		err = errors.Join(err, errors.New("idp_metadata_cluster requires idp_metadata_url to be set"))
-	}
+	idpMetaXML := string(content)
 
-	if (raw.SPCertPEM == "") != (raw.SPKeyPEM == "") {
-		err = errors.Join(err, errors.New("sp_cert_pem and sp_key_pem must both be provided, or both omitted"))
+	// Resolve SPCertPEM and SPKeyPEM (optional pair; nil means absent, auto-generate).
+	var spCertPEM, spKeyPEM string
+	if raw.SPCertPEM != nil {
+		if validateErr := raw.SPCertPEM.Validate(); validateErr != nil {
+			return nil, fmt.Errorf("sp_cert_pem: %w", validateErr)
+		}
+		content, e := raw.SPCertPEM.Content()
+		if e != nil {
+			return nil, fmt.Errorf("sp_cert_pem: %w", e)
+		}
+		spCertPEM = string(content)
 	}
-	if err != nil {
-		return nil, err
+	if raw.SPKeyPEM != nil {
+		if validateErr := raw.SPKeyPEM.Validate(); validateErr != nil {
+			return nil, fmt.Errorf("sp_key_pem: %w", validateErr)
+		}
+		content, e := raw.SPKeyPEM.Content()
+		if e != nil {
+			return nil, fmt.Errorf("sp_key_pem: %w", e)
+		}
+		spKeyPEM = string(content)
+	}
+	if (spCertPEM == "") != (spKeyPEM == "") {
+		return nil, errors.New("sp_cert_pem and sp_key_pem must both be provided, or both omitted")
 	}
 
 	var cert *x509.Certificate
 	var key *rsa.PrivateKey
 	var autoGenerated bool
 
-	if raw.SPCertPEM == "" && raw.SPKeyPEM == "" {
+	if spCertPEM == "" {
 		// Auto-generate an ephemeral SP certificate and key.
 		cert, key, err = generateSelfSignedCertAndKey(raw.EntityID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to auto-generate SP certificate and key: %w", err)
 		}
 		// Encode back to PEM for components that need the raw PEM form.
-		raw.SPCertPEM = string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw}))
-		raw.SPKeyPEM = string(pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)}))
+		spCertPEM = string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw}))
+		spKeyPEM = string(pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)}))
 		autoGenerated = true
 	} else {
 		// Parse SP certificate.
-		cert, err = parseCertificatePEM(raw.SPCertPEM)
+		cert, err = parseCertificatePEM(spCertPEM)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse sp_cert_pem: %w", err)
 		}
 
 		// Parse SP private key.
-		key, err = parsePrivateKeyPEM(raw.SPKeyPEM)
+		key, err = parsePrivateKeyPEM(spKeyPEM)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse sp_key_pem: %w", err)
 		}
@@ -229,13 +199,11 @@ func parseConfig(data []byte) (*Config, error) {
 	cfg := &Config{
 		EntityID:            raw.EntityID,
 		ACSPath:             raw.ACSPath,
-		IDPMetadataXML:      raw.IDPMetadataXML,
-		IDPMetadataURL:      raw.IDPMetadataURL,
-		IDPMetadataCluster:  raw.IDPMetadataCluster,
+		IDPMetadataXML:      idpMetaXML,
 		SPCert:              cert,
 		SPKey:               key,
-		SPCertPEM:           raw.SPCertPEM,
-		SPKeyPEM:            raw.SPKeyPEM,
+		SPCertPEM:           spCertPEM,
+		SPKeyPEM:            spKeyPEM,
 		SPCertAutoGenerated: autoGenerated,
 
 		// Defaults.

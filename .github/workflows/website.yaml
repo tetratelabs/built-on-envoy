@@ -9,11 +9,11 @@ on:
   push:
     branches:
       - main
-      - release-**
+      - release/**
   pull_request:
     branches:
       - main
-      - release-**
+      - release/**
 
 env:
   GOPROXY: https://proxy.golang.org
@@ -22,8 +22,8 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v4
         id: changes
         with:
           filters: |
@@ -42,14 +42,14 @@ jobs:
       run:
         working-directory: ./website
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: '20'
-      - uses: actions/setup-go@v5
+          node-version: '22'
+      - uses: actions/setup-go@v6
         with:
-          go-version-file: cli/go.mod
-          cache-dependency-path: cli/go.sum
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
       - run: make -C ../cli gen 
       - run: npm ci
       - run: npm run build

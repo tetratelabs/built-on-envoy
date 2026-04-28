@@ -31,6 +31,7 @@ endif
 # All in-tree plugins will share the same version and composer version because they are treated as part of composer
 NAME             := $(shell grep "^name:" ./$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
 VERSION          := $(shell grep "^version:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+FILTER_TYPE      := $(shell grep "^filterType:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
 DESCRIPTION      := $(shell grep "^description:" ./$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
 TIMESTAMP        := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 COMMIT_SHA       := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
@@ -41,6 +42,14 @@ LICENSE          := Apache-2.0
 HUB    := $(OCI_REGISTRY)/built-on-envoy
 IMAGE  := $(HUB)/extension-$(NAME):$(VERSION)$(IMAGE_NONCE)
 SOURCE := https://$(subst ghcr.io,github.com,$(HUB))
+
+# If the version of the image is a development one (ends with '-dev'), we will
+# add an additional 'dev' tag (without the version number) to make it easier to reference the
+# last development version.
+# We still keep the versioned development tag because the `boe run` command relies on those when
+# using the `--dev` flag.
+DEV_LATEST := $(firstword $(subst :, ,$(IMAGE))):dev
+DEV_TAG    := $(if $(filter %-dev,$(VERSION)),--tag $(DEV_LATEST))
 
 ARCH := $(shell uname -m)
 ifeq ($(ARCH),x86_64)
@@ -60,6 +69,7 @@ BASE_OCI_ANNOTATIONS := \
 	--annotation "org.opencontainers.image.revision=$(COMMIT_SHA)" \
 	--annotation "org.opencontainers.image.authors=$(AUTHOR)" \
 	--annotation "io.tetratelabs.built-on-envoy.extension.type=go" \
+	--annotation "io.tetratelabs.built-on-envoy.extension.filter_type=$(FILTER_TYPE)" \
 	--annotation "io.tetratelabs.built-on-envoy.extension.composer_version=$(COMPOSER_VERSION)"
 
 # Artifact type annotations
@@ -72,6 +82,11 @@ MULTI_OCI_ANNOTATIONS := \
 	$(subst --annotation ",--annotation "index$(comma)manifest:,$(BASE_OCI_ANNOTATIONS)) \
 	--annotation "index,manifest:io.tetratelabs.built-on-envoy.extension.artifact=binary"
 
+# Shared variables used by both this Makefile and the main Makefile.
+include Makefile.common
+
+PLUGIN_BUILD_TAG := $(if $(BUILD_TAGS),-tags $(BUILD_TAGS))
+
 BUILDER_NAME := boe-builder
 .PHONY: create_builder
 create_builder:
@@ -82,7 +97,7 @@ create_builder:
 
 .PHONY: build
 build:
-	CGO_ENABLED=1 go build -buildmode=plugin -o $(NAME).so ./$(EXTENSION_PATH)/standalone
+	CGO_ENABLED=1 go build -trimpath -buildmode=plugin $(PLUGIN_BUILD_TAG) -o $(NAME).so ./$(EXTENSION_PATH)/standalone
 
 .PHONY: install
 install: build
@@ -99,6 +114,7 @@ build_image:
 		--output type=docker,oci-mediatypes=true \
 		--provenance=false \
 		--build-arg EXTENSION_PATH=$(EXTENSION_PATH) \
+		--build-arg BUILD_TAG="$(PLUGIN_BUILD_TAG)" \
 		$(BASE_OCI_ANNOTATIONS) \
 		$(BINARY_ARTIFACT) \
 		-t $(IMAGE)-linux-$(ARCH) \
@@ -116,6 +132,7 @@ push_image: create_builder ## Build and push docker image for the plugin for cro
 		--output type=registry,oci-mediatypes=true$(registry_output) \
 		--provenance=false \
 		--build-arg EXTENSION_PATH=$(EXTENSION_PATH) \
+		--build-arg BUILD_TAG="$(PLUGIN_BUILD_TAG)" \
 		$(MULTI_OCI_ANNOTATIONS) \
-		--tag $(IMAGE) \
+		--tag $(IMAGE) $(DEV_TAG) \
 		-f ./Dockerfile.plugin .

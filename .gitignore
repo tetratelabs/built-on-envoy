@@ -5,6 +5,7 @@ npm-debug.log*
 # Build outputs
 dist/
 .output/
+out/
 
 ## AI
 .claude/
@@ -40,3 +41,4 @@ Thumbs.db
 **/Cargo.lock
 **/*.dylib
 **/.rustc_info.json
+**/lcov.info

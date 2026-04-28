@@ -1,0 +1,38 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: example-ext-proc
+version: 0.1.0
+categories:
+  - Examples
+author: Tetrate
+description: Example `ext_proc` extension that adds a custom response header.
+longDescription: |
+  A minimal `ext_proc` extension that demonstrates how to use the Envoy External
+  Processing filter in BOE. It intercepts response headers and adds a custom
+  `x-ext-proc: processed` header to every response.
+
+  This extension runs as an out-of-process gRPC server. BOE manages the server
+  lifecycle: it starts the server before Envoy and stops it when done.
+type: ext_proc
+tags:
+  - ext-proc
+  - http
+  - filter
+  - example
+license: Apache-2.0
+extProc:
+  grpcPort: 50051
+  failureModeAllow: false
+  processingMode:
+    requestHeaderMode: SEND
+    responseHeaderMode: SEND
+    requestBodyMode: NONE
+    responseBodyMode: NONE
+examples:
+  - title: Basic Usage
+    description: Run the example extension locally
+    code: |
+      boe run --extension example-ext-proc

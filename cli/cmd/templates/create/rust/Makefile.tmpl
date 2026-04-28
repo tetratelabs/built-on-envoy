@@ -25,6 +25,7 @@ BOE_DATA_HOME ?= $(HOME)/.local/share/boe
 NAME             := $(shell grep "^name:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
 VERSION          := $(shell grep "^version:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
 TYPE             := $(shell grep "^type:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+FILTER_TYPE      := $(shell grep "^filterType:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
 DESCRIPTION      := $(shell grep "^description:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
 TIMESTAMP        := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 COMMIT_SHA       := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
@@ -57,6 +58,7 @@ BASE_OCI_ANNOTATIONS := \
 	--annotation "org.opencontainers.image.revision=$(COMMIT_SHA)" \
 	--annotation "org.opencontainers.image.authors=$(AUTHOR)" \
 	--annotation "io.tetratelabs.built-on-envoy.extension.type=$(TYPE)" \
+	--annotation "io.tetratelabs.built-on-envoy.extension.filter_type=$(FILTER_TYPE)" \
 	--annotation "io.tetratelabs.built-on-envoy.extension.version=$(VERSION)"
 
 # Artifact type annotations
@@ -68,6 +70,34 @@ comma := ,
 MULTI_OCI_ANNOTATIONS := \
 	$(subst --annotation ",--annotation "index$(comma)manifest:,$(BASE_OCI_ANNOTATIONS)) \
 	--annotation "index,manifest:io.tetratelabs.built-on-envoy.extension.artifact=binary"
+
+.PHONY: test
+test:
+	cargo test
+
+.PHONY: format
+format:
+	cargo fmt --check
+
+.PHONY: lint
+lint:
+	cargo clippy -- -D warnings
+
+.PHONY: build
+build:
+	cargo build --release
+
+.PHONY: test
+test:
+	cargo test
+
+COVERAGE_THRESHOLD ?= 80
+.PHONY: test-coverage
+test-coverage:
+	cargo llvm-cov --lcov --output-path lcov.info --fail-under-lines $(COVERAGE_THRESHOLD); \
+		status=$$?; \
+		cargo llvm-cov report --summary-only; \
+		exit $$status
 
 BUILDER_NAME := boe-builder
 .PHONY: create_builder

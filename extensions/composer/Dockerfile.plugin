@@ -8,7 +8,7 @@
 # Dockerfile (e.g., Dockerfile.custom) instead of editing this file.
 
 # Build the manager binary
-FROM golang:1.25.7 AS builder
+FROM golang:1.26.2 AS builder
 
 ARG EXTENSION_PATH
 
@@ -17,8 +17,10 @@ COPY . .
 
 RUN go mod download all
 
+# BUILD_TAG is used to to include coraza waf build tags, populated by Makefile.plugin via --build-arg
+ARG BUILD_TAG=""
 # Build go plugin
-RUN CGO_ENABLED=1 go build -buildmode=plugin -o plugin.so ./$EXTENSION_PATH/standalone
+RUN CGO_ENABLED=1 go build -trimpath -buildmode=plugin ${BUILD_TAG} -o plugin.so ./$EXTENSION_PATH/standalone
 
 FROM scratch AS final
 

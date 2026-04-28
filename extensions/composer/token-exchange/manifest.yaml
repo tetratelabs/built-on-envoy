@@ -6,6 +6,7 @@
 name: token-exchange
 parent: composer
 categories:
+  - Authentication
   - Security
 author: Tetrate
 featured: true
@@ -19,7 +20,7 @@ longDescription: |
   ## Features
 
   * **RFC 8693 Compliant**: Token exchange implementation with all optional parameters.
-  * **Impersonation & Delegation**: Supports both semantics — omit `actor_token` for impersonation,
+  * **Impersonation & Delegation**: Supports both semantics - omit `actor_token` for impersonation,
     include it for delegation.
   * **RFC Error Parsing**: Parses and logs error descriptions optionally returned by the STS. 
 

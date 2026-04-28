@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/composer/bedrock-guardrails/config.schema.json",
+  "title": "Bedrock Guardrails Configuration",
+  "description": "Configuration for the AWS Bedrock Guardrails extension. Applies Bedrock Guardrails to evaluate LLM prompts for content moderation.",
+  "type": "object",
+  "required": ["bedrock_endpoint", "bedrock_cluster", "bedrock_api_key", "bedrock_guardrails"],
+  "additionalProperties": false,
+  "properties": {
+    "bedrock_endpoint": {
+      "type": "string",
+      "description": "AWS Bedrock API endpoint URL (e.g. \"https://bedrock-runtime.us-east-1.amazonaws.com\")."
+    },
+    "bedrock_cluster": {
+      "type": "string",
+      "description": "Envoy cluster name configured to reach the Bedrock endpoint."
+    },
+    "bedrock_api_key": {
+      "type": "string",
+      "description": "API key for AWS Bedrock authentication."
+    },
+    "bedrock_guardrails": {
+      "type": "array",
+      "description": "List of Bedrock guardrails to apply. Duplicate identifiers are removed automatically.",
+      "items": {
+        "type": "object",
+        "required": ["identifier", "version"],
+        "additionalProperties": false,
+        "properties": {
+          "identifier": {
+            "type": "string",
+            "description": "Unique guardrail identifier."
+          },
+          "version": {
+            "type": "string",
+            "description": "Guardrail version to apply."
+          }
+        }
+      },
+      "minItems": 1
+    },
+    "bedrock_timeoutms": {
+      "type": "integer",
+      "description": "API request timeout in milliseconds. Defaults to 20000 (20 seconds).",
+      "minimum": 0
+    }
+  }
+}

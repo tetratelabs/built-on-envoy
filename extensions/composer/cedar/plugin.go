@@ -10,18 +10,21 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"strings"
 
 	cedarlib "github.com/cedar-policy/cedar-go"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 // cedarConfig represents the JSON configuration for this filter.
 type cedarConfig struct {
-	// PolicyFile is the path to the .cedar policy file.
-	PolicyFile string `json:"policy_file"`
+	// Policy to evaluate, specified either as a file path or inline string.
+	Policy pkg.DataSource `json:"policy"`
 	// EntitiesFile is the optional path to a JSON entities file.
 	EntitiesFile string `json:"entities_file"`
 	// PrincipalType is the Cedar entity type for the principal (e.g., "User").
@@ -43,6 +46,9 @@ type cedarConfig struct {
 	FailOpen bool `json:"fail_open"`
 	// DryRun when true logs the decision but always allows the request.
 	DryRun bool `json:"dry_run"`
+	// MetadataNamespaces is an optional list of dynamic metadata namespaces to include in the Cedar
+	// context record under the "dynamic_metadata" key.
+	MetadataNamespaces []string `json:"metadata_namespaces"`
 }
 
 // Metric tag values for authorization decisions.
@@ -71,14 +77,14 @@ type cedarParsedConfig struct {
 	cedarConfig
 	policySet *cedarlib.PolicySet
 	entities  cedarlib.EntityMap
-	metrics   cedarMetrics
 }
 
 // cedarHttpFilter is the per-request HTTP filter instance.
 type cedarHttpFilter struct { //nolint:revive
 	shared.EmptyHttpFilter
-	handle shared.HttpFilterHandle
-	config *cedarParsedConfig
+	handle  shared.HttpFilterHandle
+	config  *cedarParsedConfig
+	metrics cedarMetrics
 }
 
 func (c *cedarHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) shared.HeadersStatus {
@@ -86,12 +92,12 @@ func (c *cedarHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) sha
 	if err != nil {
 		if c.config.FailOpen {
 			c.handle.Log(shared.LogLevelWarn, "cedar: request building error (fail_open enabled): %s", err.Error())
-			c.config.metrics.IncRequestsTotal(c.handle, decisionFailOpen)
+			c.metrics.IncRequestsTotal(c.handle, decisionFailOpen)
 			return shared.HeadersStatusContinue
 		}
 		c.handle.Log(shared.LogLevelWarn, "cedar: request building error: %s", err.Error())
 		c.handle.SendLocalResponse(403, nil, []byte("Forbidden"), "cedar_denied")
-		c.config.metrics.IncRequestsTotal(c.handle, decisionDenied)
+		c.metrics.IncRequestsTotal(c.handle, decisionDenied)
 		return shared.HeadersStatusStop
 	}
 
@@ -105,12 +111,12 @@ func (c *cedarHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) sha
 	if len(diagnostic.Errors) > 0 {
 		if c.config.FailOpen {
 			c.handle.Log(shared.LogLevelError, "cedar: policy evaluation errors (fail_open enabled): %v", diagnostic.Errors)
-			c.config.metrics.IncRequestsTotal(c.handle, decisionFailOpen)
+			c.metrics.IncRequestsTotal(c.handle, decisionFailOpen)
 			return shared.HeadersStatusContinue
 		}
 		c.handle.Log(shared.LogLevelError, "cedar: policy evaluation errors: %v", diagnostic.Errors)
 		c.handle.SendLocalResponse(500, nil, []byte("Internal Server Error"), "cedar_eval_error")
-		c.config.metrics.IncRequestsTotal(c.handle, decisionDenied)
+		c.metrics.IncRequestsTotal(c.handle, decisionDenied)
 		return shared.HeadersStatusStop
 	}
 
@@ -118,7 +124,7 @@ func (c *cedarHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) sha
 
 	if !allowed && c.config.DryRun {
 		c.handle.Log(shared.LogLevelInfo, "cedar: dry-run decision: allowed=%v", allowed)
-		c.config.metrics.IncRequestsTotal(c.handle, decisionDryAllow)
+		c.metrics.IncRequestsTotal(c.handle, decisionDryAllow)
 		allowed = true
 	}
 
@@ -142,12 +148,12 @@ func (c *cedarHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) sha
 			[]byte(body),
 			"cedar_denied",
 		)
-		c.config.metrics.IncRequestsTotal(c.handle, decisionDenied)
+		c.metrics.IncRequestsTotal(c.handle, decisionDenied)
 		return shared.HeadersStatusStop
 	}
 
 	if !c.config.DryRun {
-		c.config.metrics.IncRequestsTotal(c.handle, decisionAllowed)
+		c.metrics.IncRequestsTotal(c.handle, decisionAllowed)
 	}
 
 	return shared.HeadersStatusContinue
@@ -157,7 +163,7 @@ func (c *cedarHttpFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) sha
 func (c *cedarHttpFilter) buildRequest(headers shared.HeaderMap) (cedarlib.Request, error) {
 	principalID := ""
 	if c.config.PrincipalIDHeader != "" {
-		principalID = headers.GetOne(c.config.PrincipalIDHeader)
+		principalID = headers.GetOne(c.config.PrincipalIDHeader).ToUnsafeString()
 	}
 	if principalID == "" {
 		return cedarlib.Request{}, fmt.Errorf("principal header %q is empty or missing", c.config.PrincipalIDHeader)
@@ -168,14 +174,14 @@ func (c *cedarHttpFilter) buildRequest(headers shared.HeaderMap) (cedarlib.Reque
 		cedarlib.String(principalID),
 	)
 
-	method := headers.GetOne(":method")
+	method := headers.GetOne(":method").ToUnsafeString()
 	actionType := cmp.Or(c.config.ActionType, "Action")
 	action := cedarlib.NewEntityUID(
 		cedarlib.EntityType(actionType),
 		cedarlib.String(method),
 	)
 
-	fullPath := headers.GetOne(":path")
+	fullPath := headers.GetOne(":path").ToUnsafeString()
 	resourcePath := fullPath
 	if before, _, ok := strings.Cut(fullPath, "?"); ok {
 		resourcePath = before
@@ -199,20 +205,20 @@ func (c *cedarHttpFilter) buildRequest(headers shared.HeaderMap) (cedarlib.Reque
 // buildContext constructs the Cedar context record from request headers and Envoy attributes.
 func (c *cedarHttpFilter) buildContext(headers shared.HeaderMap) cedarlib.Record {
 	var (
-		method = headers.GetOne(":method")
-		path   = headers.GetOne(":path")
-		host   = headers.GetOne(":authority")
-		scheme = cmp.Or(headers.GetOne(":scheme"), "http")
+		method = headers.GetOne(":method").ToUnsafeString()
+		path   = headers.GetOne(":path").ToUnsafeString()
+		host   = headers.GetOne(":authority").ToUnsafeString()
+		scheme = cmp.Or(headers.GetOne(":scheme").ToUnsafeString(), "http")
 	)
 	parsedPath, parsedQuery := parsePath(path)
-	protocol, _ := c.handle.GetAttributeString(shared.AttributeIDRequestProtocol)
-	protocol = cmp.Or(protocol, "HTTP/1.1")
+	protocolAttr, _ := c.handle.GetAttributeString(shared.AttributeIDRequestProtocol)
+	protocol := cmp.Or(protocolAttr.ToUnsafeString(), "HTTP/1.1")
 
 	// Build headers record excluding pseudo-headers.
 	headerMap := cedarlib.RecordMap{}
 	for _, h := range headers.GetAll() {
-		key := h[0]
-		val := h[1]
+		key := h[0].ToUnsafeString()
+		val := h[1].ToUnsafeString()
 		if !strings.HasPrefix(key, ":") {
 			headerMap[cedarlib.String(key)] = cedarlib.String(val)
 		}
@@ -227,6 +233,7 @@ func (c *cedarHttpFilter) buildContext(headers shared.HeaderMap) cedarlib.Record
 		subjectPeer, _  = c.handle.GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate)
 		tlsVersion, _   = c.handle.GetAttributeString(shared.AttributeIDConnectionTlsVersion)
 		sha256Digest, _ = c.handle.GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest)
+		mtls, _         = c.handle.GetAttributeBool(shared.AttributeIDConnectionMtls)
 	)
 
 	// Build parsed_path as a Cedar Set of Strings.
@@ -255,23 +262,47 @@ func (c *cedarHttpFilter) buildContext(headers shared.HeaderMap) cedarlib.Record
 			"headers":  cedarlib.NewRecord(headerMap),
 		}),
 		"source": cedarlib.NewRecord(cedarlib.RecordMap{
-			"address": cedarlib.String(sourceAddr),
+			"address": cedarlib.String(sourceAddr.ToUnsafeString()),
 			"certificate": cedarlib.NewRecord(cedarlib.RecordMap{
-				"uri_san":       cedarlib.String(uriSanPeer),
-				"dns_san":       cedarlib.String(dnsSanPeer),
-				"subject":       cedarlib.String(subjectPeer),
-				"sha256_digest": cedarlib.String(sha256Digest),
+				"uri_san":       cedarlib.String(uriSanPeer.ToUnsafeString()),
+				"dns_san":       cedarlib.String(dnsSanPeer.ToUnsafeString()),
+				"subject":       cedarlib.String(subjectPeer.ToUnsafeString()),
+				"sha256_digest": cedarlib.String(sha256Digest.ToUnsafeString()),
 			}),
 		}),
 		"destination": cedarlib.NewRecord(cedarlib.RecordMap{
-			"address": cedarlib.String(destAddr),
+			"address": cedarlib.String(destAddr.ToUnsafeString()),
 		}),
 		"connection": cedarlib.NewRecord(cedarlib.RecordMap{
-			"tls_version": cedarlib.String(tlsVersion),
+			"mtls":        cedarlib.Boolean(mtls),
+			"tls_version": cedarlib.String(tlsVersion.ToUnsafeString()),
 		}),
-		"parsed_path":  cedarlib.NewSet(pathValues...),
-		"parsed_query": cedarlib.NewRecord(queryRecord),
+		"dynamic_metadata": c.dynamicMetadataMap(),
+		"parsed_path":      cedarlib.NewSet(pathValues...),
+		"parsed_query":     cedarlib.NewRecord(queryRecord),
 	})
+}
+
+// dynamicMetadataMap extracts dynamic metadata from the filter handle and returns it as a
+// Cedar Record keyed by namespace, where each namespace value is a Record of key-value pairs.
+func (c *cedarHttpFilter) dynamicMetadataMap() cedarlib.Value {
+	dm := cedarlib.RecordMap{}
+	for _, ns := range c.config.MetadataNamespaces {
+		nsMap := cedarlib.RecordMap{}
+		keys := c.handle.GetMetadataKeys(shared.MetadataSourceTypeDynamic, ns)
+		for _, key := range keys {
+			keyStr := key.ToUnsafeString()
+			if value, ok := c.handle.GetMetadataString(shared.MetadataSourceTypeDynamic, ns, keyStr); ok {
+				nsMap[cedarlib.String(keyStr)] = cedarlib.String(value.ToUnsafeString())
+			} else if numValue, ok := c.handle.GetMetadataNumber(shared.MetadataSourceTypeDynamic, ns, keyStr); ok {
+				nsMap[cedarlib.String(keyStr)] = cedarlib.Long(int64(numValue))
+			}
+		}
+		if len(nsMap) > 0 {
+			dm[cedarlib.String(ns)] = cedarlib.NewRecord(nsMap)
+		}
+	}
+	return cedarlib.NewRecord(dm)
 }
 
 // parsePath splits the path into segments and parses query parameters into a map.
@@ -291,9 +322,7 @@ func parsePath(fullPath string) ([]string, map[string][]string) {
 	if queryPart != "" {
 		parsed, err := url.ParseQuery(queryPart)
 		if err == nil {
-			for k, v := range parsed {
-				queryMap[k] = v
-			}
+			maps.Copy(queryMap, parsed)
 		}
 	}
 
@@ -303,11 +332,22 @@ func parsePath(fullPath string) ([]string, map[string][]string) {
 // cedarHttpFilterFactory creates filter instances per-request.
 type cedarHttpFilterFactory struct { //nolint:revive
 	shared.EmptyHttpFilterFactory
-	config *cedarParsedConfig
+	config  *cedarParsedConfig
+	metrics cedarMetrics
 }
 
 func (c *cedarHttpFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
-	return &cedarHttpFilter{handle: handle, config: c.config}
+	cfg := c.config
+	if perRoute := pkg.GetMostSpecificConfig[*cedarParsedConfig](handle); perRoute != nil {
+		cfg = perRoute
+	}
+
+	if cfg == nil {
+		handle.Log(shared.LogLevelInfo, "cedar: no config available and use empty filter")
+		return &shared.EmptyHttpFilter{}
+	}
+
+	return &cedarHttpFilter{handle: handle, config: cfg, metrics: c.metrics}
 }
 
 // CedarHttpFilterConfigFactory is the configuration factory for the HTTP filter.
@@ -315,64 +355,61 @@ type CedarHttpFilterConfigFactory struct { //nolint:revive
 	shared.EmptyHttpFilterConfigFactory
 }
 
-// Create parses the JSON configuration and creates a factory for the HTTP filter.
-func (c *CedarHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
+func parseConfig(config []byte) (*cedarParsedConfig, error) {
 	if len(config) == 0 {
-		handle.Log(shared.LogLevelError, "cedar: empty config")
-		return nil, fmt.Errorf("empty config")
+		return nil, nil
 	}
 
 	cfg := cedarConfig{}
 	if err := json.Unmarshal(config, &cfg); err != nil {
-		handle.Log(shared.LogLevelError, "cedar: failed to parse config: %s", err.Error())
-		return nil, err
-	}
-
-	if cfg.PolicyFile == "" {
-		handle.Log(shared.LogLevelError, "cedar: policy_file is required")
-		return nil, fmt.Errorf("policy_file is required")
+		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
 	if cfg.PrincipalType == "" {
-		handle.Log(shared.LogLevelError, "cedar: principal_type is required")
 		return nil, fmt.Errorf("principal_type is required")
 	}
 
 	if cfg.PrincipalIDHeader == "" {
-		handle.Log(shared.LogLevelError, "cedar: principal_id_header is required")
 		return nil, fmt.Errorf("principal_id_header is required")
 	}
 
-	handle.Log(shared.LogLevelDebug, "cedar: loading policy from %s (principal_type=%s, principal_id_header=%s, dry_run=%v, fail_open=%v)",
-		cfg.PolicyFile, cfg.PrincipalType, cfg.PrincipalIDHeader, cfg.DryRun, cfg.FailOpen)
+	if err := cfg.Policy.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid 'policy' configuration: %w", err)
+	}
 
-	policyBytes, err := os.ReadFile(cfg.PolicyFile)
+	policyBytes, err := cfg.Policy.Content()
 	if err != nil {
-		handle.Log(shared.LogLevelError, "cedar: failed to read policy file: %s", err.Error())
-		return nil, fmt.Errorf("failed to read policy file: %w", err)
+		return nil, fmt.Errorf("failed to get policy content: %w", err)
 	}
 
 	policySet, err := cedarlib.NewPolicySetFromBytes("policy.cedar", policyBytes)
 	if err != nil {
-		handle.Log(shared.LogLevelError, "cedar: failed to parse policy: %s", err.Error())
 		return nil, fmt.Errorf("failed to parse policy: %w", err)
 	}
 
-	handle.Log(shared.LogLevelDebug, "cedar: policy parsed successfully")
-
-	// Load entities if provided.
 	var entities cedarlib.EntityMap
 	if cfg.EntitiesFile != "" {
 		entitiesBytes, err := os.ReadFile(cfg.EntitiesFile)
 		if err != nil {
-			handle.Log(shared.LogLevelError, "cedar: failed to read entities file: %s", err.Error())
 			return nil, fmt.Errorf("failed to read entities file: %w", err)
 		}
 		if err := json.Unmarshal(entitiesBytes, &entities); err != nil {
-			handle.Log(shared.LogLevelError, "cedar: failed to parse entities: %s", err.Error())
 			return nil, fmt.Errorf("failed to parse entities: %w", err)
 		}
-		handle.Log(shared.LogLevelDebug, "cedar: entities loaded successfully")
+	}
+
+	return &cedarParsedConfig{cedarConfig: cfg, policySet: policySet, entities: entities}, nil
+}
+
+// Create parses the JSON configuration and creates a factory for the HTTP filter.
+func (c *CedarHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
+	parsed, err := parseConfig(config)
+	if err != nil {
+		return nil, err
+	}
+
+	if parsed == nil {
+		handle.Log(shared.LogLevelInfo, "cedar: empty filter config")
 	}
 
 	var metrics cedarMetrics
@@ -382,14 +419,23 @@ func (c *CedarHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHand
 		metrics.enabled = true
 	}
 
-	parsed := &cedarParsedConfig{
-		cedarConfig: cfg,
-		policySet:   policySet,
-		entities:    entities,
-		metrics:     metrics,
+	return &cedarHttpFilterFactory{config: parsed, metrics: metrics}, nil
+}
+
+// CreatePerRoute parses per-route configuration for the Cedar filter.
+func (c *CedarHttpFilterConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, error) {
+	parsed, err := parseConfig(unparsedConfig)
+	if err != nil {
+		return nil, err
 	}
 
-	return &cedarHttpFilterFactory{config: parsed}, nil
+	if parsed == nil {
+		// It's not allowed to have empty route config because it doesn't make sense to have an
+		// empty config override the global config.
+		return nil, fmt.Errorf("cedar: per-route config is empty or invalid")
+	}
+
+	return parsed, nil
 }
 
 // ExtensionName is the name of the extension that will be used in the

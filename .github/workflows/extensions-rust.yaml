@@ -21,17 +21,22 @@ jobs:
         extension: ${{ fromJson(inputs.extensions) }}
     defaults:
       run:
-        working-directory: extensions/${{ matrix.extension.path }}
+        working-directory: extensions
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
-      - name: Format
-        run: cargo fmt --check
-      - name: Lint
-        run: cargo clippy -- -D warnings
-      - name: Build
-        run: cargo build --release
-      - name: Test
-        run: cargo test
+          components: rustfmt, clippy, llvm-tools
+      - uses: taiki-e/install-action@cargo-llvm-cov
+
+      - run: make format-rust EXTENSION_PATH=${{ matrix.extension.path }}
+      - run: make lint-rust EXTENSION_PATH=${{ matrix.extension.path }}
+      - run: make build-rust EXTENSION_PATH=${{ matrix.extension.path }}
+      - run: make test-rust-coverage EXTENSION_PATH=${{ matrix.extension.path }}
+      
+      - uses: codecov/codecov-action@v6
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          disable_search: true
+          files: extensions/${{ matrix.extension.path }}/lcov.info
+          flags: extensions

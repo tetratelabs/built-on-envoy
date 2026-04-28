@@ -1,0 +1,22 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# Invalid: extProc block present on a non-ext_proc extension type.
+
+name: test-extension
+version: 1.0.0
+categories:
+  - Security
+author: Test Author
+description: A test extension
+longDescription: |
+  This is a longer description of the test extension.
+type: wasm
+tags:
+  - test
+license: Apache-2.0
+examples: []
+extProc:
+  grpcPort: 50051

@@ -7,6 +7,7 @@ package extensions
 
 import (
 	"io/fs"
+	"os"
 	"path/filepath"
 	"testing"
 	"testing/fstest"
@@ -90,6 +91,47 @@ end
 			} else {
 				require.NoError(t, err)
 				require.Equal(t, tt.want, localManifest.Lua)
+			}
+		})
+	}
+}
+
+func TestValidateExtProcManifest(t *testing.T) {
+	wantFull := &ExtProc{
+		GRPCPort:         50051,
+		FailureModeAllow: true,
+		MessageTimeout:   "200ms",
+		ProcessingMode: &ExtProcProcessingMode{
+			RequestHeaderMode:  "SEND",
+			ResponseHeaderMode: "SKIP",
+			RequestBodyMode:    "BUFFERED",
+			ResponseBodyMode:   "NONE",
+		},
+	}
+	wantMinimal := &ExtProc{GRPCPort: 50051}
+
+	tests := []struct {
+		name    string
+		want    *ExtProc
+		wantErr bool
+	}{
+		{"ext_proc_valid_full.yaml", wantFull, false},
+		{"ext_proc_valid_minimal.yaml", wantMinimal, false},
+		{"ext_proc_missing_settings.yaml", nil, true},
+		{"ext_proc_in_wrong_type.yaml", nil, true},
+		{"ext_proc_invalid_header_mode.yaml", nil, true},
+		{"ext_proc_invalid_body_mode.yaml", nil, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			manifestPath := filepath.Join("testdata", tt.name)
+			localManifest, err := LoadLocalManifest(manifestPath)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tt.want, localManifest.ExtProc)
 			}
 		})
 	}
@@ -275,6 +317,170 @@ func TestValidateParentManifest(t *testing.T) {
 	}
 }
 
+func TestHighestMinEnvoyVersion(t *testing.T) {
+	tests := []struct {
+		name      string
+		manifests []*Manifest
+		want      string
+	}{
+		{
+			name:      "empty list",
+			manifests: nil,
+			want:      "",
+		},
+		{
+			name:      "no min versions set",
+			manifests: []*Manifest{{}, {MaxEnvoyVersion: "1.30.0"}},
+			want:      "",
+		},
+		{
+			name: "single manifest with min",
+			manifests: []*Manifest{
+				{MinEnvoyVersion: "1.28.0"},
+			},
+			want: "1.28.0",
+		},
+		{
+			name: "multiple manifests - picks highest",
+			manifests: []*Manifest{
+				{MinEnvoyVersion: "1.28.0"},
+				{MinEnvoyVersion: "1.31.0"},
+				{MinEnvoyVersion: "1.31.1"},
+				{},
+				{MinEnvoyVersion: "1.29.0"},
+			},
+			want: "1.31.1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := HighestMinEnvoyVersion(tt.manifests)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestLowestMaxEnvoyVersion(t *testing.T) {
+	tests := []struct {
+		name      string
+		manifests []*Manifest
+		want      string
+	}{
+		{
+			name:      "empty list",
+			manifests: nil,
+			want:      "",
+		},
+		{
+			name:      "no max versions set",
+			manifests: []*Manifest{{}, {MinEnvoyVersion: "1.28.0"}},
+			want:      "",
+		},
+		{
+			name: "single manifest with max",
+			manifests: []*Manifest{
+				{MaxEnvoyVersion: "1.32.0"},
+			},
+			want: "1.32.0",
+		},
+		{
+			name: "multiple manifests - picks lowest",
+			manifests: []*Manifest{
+				{MaxEnvoyVersion: "1.35.0"},
+				{MaxEnvoyVersion: "1.30.0"},
+				{MaxEnvoyVersion: "1.30.1"},
+				{},
+				{MaxEnvoyVersion: "1.33.0"},
+			},
+			want: "1.30.0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := LowestMaxEnvoyVersion(tt.manifests)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestResolveMinimumCompatibleEnvoyVersion(t *testing.T) {
+	tests := []struct {
+		name      string
+		manifests []*Manifest
+		want      string
+		wantErr   bool
+	}{
+		{
+			name:      "empty list",
+			manifests: nil,
+			want:      "",
+		},
+		{
+			name: "no version constraints",
+			manifests: []*Manifest{
+				{Name: "ext1"},
+				{Name: "ext2"},
+			},
+			want: "",
+		},
+		{
+			name: "only min versions - returns highest min",
+			manifests: []*Manifest{
+				{MinEnvoyVersion: "1.28.0"},
+				{MinEnvoyVersion: "1.31.0"},
+			},
+			want: "1.31.0",
+		},
+		{
+			name: "only max versions - returns lowest max",
+			manifests: []*Manifest{
+				{MaxEnvoyVersion: "1.35.0"},
+				{MaxEnvoyVersion: "1.32.0"},
+			},
+			want: "1.32.0",
+		},
+		{
+			name: "compatible range - returns highest min",
+			manifests: []*Manifest{
+				{MinEnvoyVersion: "1.28.0"},
+				{MinEnvoyVersion: "1.30.0", MaxEnvoyVersion: "1.35.0"},
+				{MaxEnvoyVersion: "1.33.0"},
+			},
+			want: "1.30.0",
+		},
+		{
+			name: "min equals max - compatible",
+			manifests: []*Manifest{
+				{MinEnvoyVersion: "1.30.0"},
+				{MaxEnvoyVersion: "1.30.0"},
+			},
+			want: "1.30.0",
+		},
+		{
+			name: "incompatible range - error",
+			manifests: []*Manifest{
+				{MinEnvoyVersion: "1.33.0"},
+				{MaxEnvoyVersion: "1.30.0"},
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ResolveMinimumCompatibleEnvoyVersion(tt.manifests)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.want, got)
+			}
+		})
+	}
+}
+
 func TestResolveVersionsMissingParent(t *testing.T) {
 	m := &Manifest{
 		Name:   "child",
@@ -318,6 +524,7 @@ func TestLoadLocalManifest(t *testing.T) {
 			Description:     "A test extension",
 			LongDescription: "This is a longer description of the test extension.\n",
 			Type:            TypeWasm,
+			FilterType:      FilterTypeHTTP,
 			Tags:            []string{"test"},
 			License:         "Apache-2.0",
 			Examples: []Example{
@@ -339,5 +546,82 @@ func TestLoadLocalManifest(t *testing.T) {
 	t.Run("invalid-yaml", func(t *testing.T) {
 		_, err := LoadLocalManifest(filepath.Join("testdata", "invalid_manifest.yaml"))
 		require.ErrorIs(t, err, ErrParseManifestFile)
+	})
+}
+
+func TestResolveLocalVersions(t *testing.T) {
+	t.Run("local-parent-found", func(t *testing.T) {
+		// Create a directory structure: parent/child/manifest.yaml
+		tmpDir := t.TempDir()
+		parentDir := tmpDir
+		childDir := filepath.Join(tmpDir, "child")
+		require.NoError(t, os.MkdirAll(childDir, 0o750))
+
+		parentManifest := `name: test-parent
+version: 9.9.9
+composerVersion: 9.9.9
+minEnvoyVersion: 1.99.0
+type: composer
+extensionSet: true
+`
+		childManifest := `name: test-child
+parent: test-parent
+categories: [Misc]
+author: Test
+description: A child extension
+longDescription: A child extension
+type: go
+tags: [test]
+license: Apache-2.0
+examples: []
+`
+		require.NoError(t, os.WriteFile(filepath.Join(parentDir, "manifest.yaml"), []byte(parentManifest), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(childDir, "manifest.yaml"), []byte(childManifest), 0o600))
+
+		m, err := LoadLocalManifest(filepath.Join(childDir, "manifest.yaml"))
+		require.NoError(t, err)
+		require.Empty(t, m.Version)
+
+		require.NoError(t, ResolveLocalVersions(m))
+		assert.Equal(t, "9.9.9", m.Version)
+		assert.Equal(t, "9.9.9", m.ComposerVersion)
+		assert.Equal(t, "1.99.0", m.MinEnvoyVersion)
+	})
+
+	t.Run("no-local-parent-falls-back-to-embedded", func(t *testing.T) {
+		// Create a child manifest in an isolated temp dir (no parent on filesystem).
+		tmpDir := t.TempDir()
+		childManifest := `name: test-child
+parent: composer
+categories: [Misc]
+author: Test
+description: A child extension
+longDescription: A child extension
+type: go
+tags: [test]
+license: Apache-2.0
+examples: []
+`
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "manifest.yaml"), []byte(childManifest), 0o600))
+
+		m, err := LoadLocalManifest(filepath.Join(tmpDir, "manifest.yaml"))
+		require.NoError(t, err)
+
+		// Should fall back to embedded manifests (composer exists in embedded).
+		require.NoError(t, ResolveLocalVersions(m))
+		assert.Equal(t, Manifests["composer"].Version, m.Version)
+		assert.Equal(t, Manifests["composer"].Version, m.ComposerVersion)
+	})
+
+	t.Run("noop-for-non-go-type", func(t *testing.T) {
+		m := &Manifest{Name: "test", Type: TypeWasm, Version: "1.0.0"}
+		require.NoError(t, ResolveLocalVersions(m))
+		assert.Equal(t, "1.0.0", m.Version)
+	})
+
+	t.Run("noop-for-no-parent", func(t *testing.T) {
+		m := &Manifest{Name: "test", Type: TypeGo, Version: "1.0.0"}
+		require.NoError(t, ResolveLocalVersions(m))
+		assert.Equal(t, "1.0.0", m.Version)
 	})
 }

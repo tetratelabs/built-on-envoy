@@ -33,29 +33,37 @@ type (
 		// When set, the version field can be omitted.
 		Parent string `yaml:"parent,omitempty" json:"parent,omitempty"`
 		// ExtensionSet indicates this manifest defines a set of extensions.
-		ExtensionSet    bool      `yaml:"extensionSet,omitempty" json:"extensionSet,omitempty"`
-		Categories      []string  `yaml:"categories" json:"categories"`
-		Author          string    `yaml:"author" json:"author"`
-		Featured        bool      `yaml:"featured" json:"featured,omitempty"`
-		Description     string    `yaml:"description" json:"description"`
-		LongDescription string    `yaml:"longDescription" json:"longDescription"`
-		Type            Type      `yaml:"type" json:"type"`
-		Tags            []string  `yaml:"tags" json:"tags"`
-		License         string    `yaml:"license" json:"license"`
-		Examples        []Example `yaml:"examples" json:"examples"`
-		MinEnvoyVersion string    `yaml:"minEnvoyVersion,omitempty" json:"minEnvoyVersion,omitempty"`
-		MaxEnvoyVersion string    `yaml:"maxEnvoyVersion,omitempty" json:"maxEnvoyVersion,omitempty"`
+		ExtensionSet    bool       `yaml:"extensionSet,omitempty" json:"extensionSet,omitempty"`
+		Categories      []string   `yaml:"categories" json:"categories"`
+		Author          string     `yaml:"author" json:"author"`
+		Featured        bool       `yaml:"featured" json:"featured,omitempty"`
+		Description     string     `yaml:"description" json:"description"`
+		LongDescription string     `yaml:"longDescription" json:"longDescription"`
+		Type            Type       `yaml:"type" json:"type"`
+		FilterType      FilterType `yaml:"filterType,omitempty" json:"filterType,omitempty"`
+		Tags            []string   `yaml:"tags" json:"tags"`
+		License         string     `yaml:"license" json:"license"`
+		Examples        []Example  `yaml:"examples" json:"examples"`
+		MinEnvoyVersion string     `yaml:"minEnvoyVersion,omitempty" json:"minEnvoyVersion,omitempty"`
+		MaxEnvoyVersion string     `yaml:"maxEnvoyVersion,omitempty" json:"maxEnvoyVersion,omitempty"`
 
 		// ComposerVersion specifies the compatible Composer dynamic module version
 		// for Composer go plugins.
-		ComposerVersion string `yaml:"composerVersion,omitempty" json:"composerVersion,omitempty"`
-		Lua             *Lua   `yaml:"lua,omitempty" json:"lua,omitempty"`
+		ComposerVersion string   `yaml:"composerVersion,omitempty" json:"composerVersion,omitempty"`
+		Lua             *Lua     `yaml:"lua,omitempty" json:"lua,omitempty"`
+		ExtProc         *ExtProc `yaml:"extProc,omitempty" json:"extProc,omitempty"`
 
 		// Path to the manifest file in the local filesystem.
 		Path string `yaml:"-" json:"-"`
 		// Remote indicates whether this manifest is from a remote extension.
 		// This is set by the extension Downloader when fetching remote manifests.
 		Remote bool `yaml:"-" json:"-"`
+		// SourceRegistry is the OCI registry the extension was fetched from.
+		// Set by the Downloader for remote extensions.
+		SourceRegistry string `yaml:"-" json:"-"`
+		// SourceTag is the resolved version tag the extension was fetched with.
+		// Set by the Downloader for remote extensions.
+		SourceTag string `yaml:"-" json:"-"`
 	}
 
 	// Example represents an example usage of an extension.
@@ -68,10 +76,33 @@ type (
 	// Type represents the type of an Envoy extension.
 	Type string
 
+	// FilterType represents which Envoy filter chain an extension plugs into (i.e. HTTP, network, UDP listener).
+	FilterType string
+
 	// Lua configuration for manifests that define Lua extensions
 	Lua struct {
 		Inline string `yaml:"inline,omitempty" json:"inline,omitempty"`
 		Path   string `yaml:"path,omitempty" json:"path,omitempty"`
+	}
+
+	// ExtProc configuration for manifests that define ext_proc extensions.
+	ExtProc struct {
+		// GRPCPort is the port the ext_proc gRPC server listens on. Defaults to 50051.
+		GRPCPort int `yaml:"grpcPort,omitempty" json:"grpcPort,omitempty"`
+		// FailureModeAllow configures whether Envoy allows requests through on ext_proc failure.
+		FailureModeAllow bool `yaml:"failureModeAllow,omitempty" json:"failureModeAllow,omitempty"`
+		// MessageTimeout is the per-message timeout (e.g. "200ms").
+		MessageTimeout string `yaml:"messageTimeout,omitempty" json:"messageTimeout,omitempty"`
+		// ProcessingMode controls which phases are sent to the processor.
+		ProcessingMode *ExtProcProcessingMode `yaml:"processingMode,omitempty" json:"processingMode,omitempty"`
+	}
+
+	// ExtProcProcessingMode controls which HTTP phases are forwarded to the ext_proc server.
+	ExtProcProcessingMode struct {
+		RequestHeaderMode  string `yaml:"requestHeaderMode,omitempty" json:"requestHeaderMode,omitempty"`
+		ResponseHeaderMode string `yaml:"responseHeaderMode,omitempty" json:"responseHeaderMode,omitempty"`
+		RequestBodyMode    string `yaml:"requestBodyMode,omitempty" json:"requestBodyMode,omitempty"`
+		ResponseBodyMode   string `yaml:"responseBodyMode,omitempty" json:"responseBodyMode,omitempty"`
 	}
 
 	// ManifestIndexEntry represents manifest entry in the manifext index JSON that is used
@@ -109,6 +140,13 @@ func (m *Manifest) EnvoyConstraints() string {
 	return constraints
 }
 
+// ApplyDefaults applies default values to the manifest fields.
+func (m *Manifest) ApplyDefaults() {
+	if m.FilterType == "" {
+		m.FilterType = FilterTypeHTTP
+	}
+}
+
 const (
 	// TypeLua represents a Lua extension.
 	TypeLua Type = "lua"
@@ -116,11 +154,22 @@ const (
 	TypeWasm Type = "wasm"
 	// TypeRust represents a Rust extension.
 	TypeRust Type = "rust"
+	// TypeExtProc represents an ext_proc extension.
+	TypeExtProc Type = "ext_proc"
 	// TypeGo represents a Go extension.
 	TypeGo Type = "go"
 	// TypeComposer represents a Composer extension that bundles together
 	// multiple Go extensions.
 	TypeComposer Type = "composer"
+
+	// FilterTypeHTTP represents an HTTP filter extension (default).
+	FilterTypeHTTP FilterType = "http"
+	// FilterTypeNetwork represents a network filter extension.
+	FilterTypeNetwork FilterType = "network"
+	// FilterTypeListener represents a listener filter extension.
+	FilterTypeListener FilterType = "listener"
+	// FilterTypeUDPListener represents a UDP listener filter extension.
+	FilterTypeUDPListener FilterType = "udp_listener"
 
 	schemaURL = "manifest.schema.json"
 )
@@ -224,6 +273,8 @@ func loadManifest(fsys fs.FS, path string, validate bool) (*Manifest, error) {
 		return nil, fmt.Errorf("%w: %s", ErrParseManifestFile, path)
 	}
 
+	m.ApplyDefaults()
+
 	if validate {
 		if err := ValidateManifest(&m); err != nil {
 			return nil, fmt.Errorf("validation failed for manifest %s: %w", path, err)
@@ -281,10 +332,55 @@ func LoadLocalManifest(path string) (*Manifest, error) {
 		return nil, err
 	}
 	m.Path = path
-	if err = resolveVersions(m, Manifests); err != nil {
-		return nil, err
-	}
 	return m, nil
+}
+
+// ResolveLocalVersions resolves version fields for a local manifest that has a parent.
+// It first tries to find the parent manifest on the local filesystem by walking up the
+// directory tree from the manifest's path. If not found locally, it falls back to the
+// embedded manifests.
+func ResolveLocalVersions(m *Manifest) error {
+	if m.Type != TypeGo || m.Parent == "" {
+		return nil
+	}
+
+	// Try to find the parent manifest on the local filesystem.
+	parent, err := findLocalParentManifest(m)
+	if err == nil {
+		return resolveVersions(m, map[string]*Manifest{parent.Name: parent})
+	}
+
+	// Fall back to the embedded manifests.
+	return resolveVersions(m, Manifests)
+}
+
+// findLocalParentManifest walks up the directory tree from the manifest's path
+// looking for a manifest.yaml whose name matches the parent field.
+func findLocalParentManifest(m *Manifest) (*Manifest, error) {
+	// Start from the directory containing the child manifest and walk up.
+	dir := filepath.Dir(m.Path)
+	for {
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			// Reached filesystem root without finding the parent.
+			return nil, fmt.Errorf("%w: %s", ErrParentManifestNotFound, m.Parent)
+		}
+		dir = parent
+
+		candidate := filepath.Join(dir, "manifest.yaml")
+		if _, err := os.Stat(candidate); err != nil {
+			continue
+		}
+
+		// Load without validation since the parent may have a different type (e.g. composer).
+		cm, err := loadManifest(os.DirFS(dir), "manifest.yaml", false)
+		if err != nil {
+			continue
+		}
+		if cm.Name == m.Parent {
+			return cm, nil
+		}
+	}
 }
 
 // ValidateManifest validates the manifest against the JSON schema.
@@ -301,4 +397,50 @@ func ValidateManifest(manifest *Manifest) error {
 	}
 
 	return manifestSchema.Validate(v)
+}
+
+// HighestMinEnvoyVersion returns the highest minimum Envoy version among the given manifests.
+func HighestMinEnvoyVersion(manifests []*Manifest) string {
+	highest := "0.0.0"
+	for _, m := range manifests {
+		if m.MinEnvoyVersion != "" && semver.Compare("v"+m.MinEnvoyVersion, "v"+highest) > 0 {
+			highest = m.MinEnvoyVersion
+		}
+	}
+	if highest == "0.0.0" {
+		return ""
+	}
+	return highest
+}
+
+// LowestMaxEnvoyVersion returns the lowest maximum Envoy version among the given manifests.
+func LowestMaxEnvoyVersion(manifests []*Manifest) string {
+	lowest := "9999.9999.9999"
+	for _, m := range manifests {
+		if m.MaxEnvoyVersion != "" && semver.Compare("v"+m.MaxEnvoyVersion, "v"+lowest) < 0 {
+			lowest = m.MaxEnvoyVersion
+		}
+	}
+	if lowest == "9999.9999.9999" {
+		return ""
+	}
+	return lowest
+}
+
+// ResolveMinimumCompatibleEnvoyVersion returns the minimum Envoy version that is compatible with all given manifests.
+func ResolveMinimumCompatibleEnvoyVersion(manifests []*Manifest) (string, error) {
+	highestMin := HighestMinEnvoyVersion(manifests)
+	lowestMax := LowestMaxEnvoyVersion(manifests)
+
+	if highestMin != "" && lowestMax != "" && semver.Compare("v"+highestMin, "v"+lowestMax) > 0 {
+		return "", fmt.Errorf("no compatible Envoy version found: highest minimum %s, lowest maximum %s", highestMin, lowestMax)
+	}
+
+	if highestMin != "" {
+		return highestMin, nil
+	}
+	if lowestMax != "" {
+		return lowestMax, nil
+	}
+	return "", nil
 }

@@ -1,0 +1,121 @@
+// Package impl contains the implementation of the {{ .Name }} extension.
+package impl
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
+)
+
+// Config represents the JSON configuration for this filter.
+type customHttpFilterConfig struct { //nolint:revive
+	HeaderValue string `json:"header_value"`
+}
+
+// This is the implementation of the HTTP filter.
+type customHttpFilter struct {
+	shared.EmptyHttpFilter
+	handle shared.HttpFilterHandle
+	config *customHttpFilterConfig
+}
+
+func (f *customHttpFilter) OnRequestHeaders(headers shared.HeaderMap, endStream bool) shared.HeadersStatus {
+	// TODO: To implement your own custom logic here.
+	headers.Add("x-{{ .Name }}", f.config.HeaderValue)
+	f.handle.Log(shared.LogLevelInfo, "{{ .Name }}: OnRequestHeaders called")
+	return shared.HeadersStatusContinue
+}
+
+func (f *customHttpFilter) OnRequestBody(body shared.BodyBuffer, endStream bool) shared.BodyStatus {
+	return shared.BodyStatusContinue
+}
+
+func (f *customHttpFilter) OnRequestTrailers(trailers shared.HeaderMap) shared.TrailersStatus {
+	return shared.TrailersStatusContinue
+}
+
+func (f *customHttpFilter) OnResponseHeaders(headers shared.HeaderMap, endStream bool) shared.HeadersStatus {
+	// TODO: To implement your own custom logic here.
+	headers.Add("x-{{ .Name }}", f.config.HeaderValue)
+	f.handle.Log(shared.LogLevelInfo, "{{ .Name }}: OnResponseHeaders called")
+	return shared.HeadersStatusContinue
+}
+
+func (f *customHttpFilter) OnResponseBody(body shared.BodyBuffer, endStream bool) shared.BodyStatus {
+	return shared.BodyStatusContinue
+}
+
+func (f *customHttpFilter) OnResponseTrailers(trailers shared.HeaderMap) shared.TrailersStatus {
+	return shared.TrailersStatusContinue
+}
+
+// This is the factory for the HTTP filter.
+type customHttpFilterFactory struct {
+	shared.EmptyHttpFilterFactory
+	config *customHttpFilterConfig
+}
+
+func (f *customHttpFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
+	cfg := f.config
+	if perRoute := getMostSpecificConfig[*customHttpFilterConfig](handle); perRoute != nil {
+		cfg = perRoute
+	}
+	return &customHttpFilter{handle: handle, config: cfg}
+}
+
+// This is the configuration factory for the HTTP filter.
+type CustomHttpFilterConfigFactory struct { //nolint:revive
+	shared.EmptyHttpFilterConfigFactory
+}
+
+func (f *CustomHttpFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, config []byte) (shared.HttpFilterFactory, error) {
+	cfg, err := parseConfig(config)
+	if err != nil {
+		handle.Log(shared.LogLevelError, "{{ .Name }}: "+err.Error())
+		return nil, err
+	}
+	handle.Log(shared.LogLevelInfo, "{{ .Name }}: loaded config with header_value="+cfg.HeaderValue)
+	return &customHttpFilterFactory{config: cfg}, nil
+}
+
+// CreatePerRoute parses per-route configuration for the {{ .Name }} filter.
+func (f *CustomHttpFilterConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, error) {
+	return parseConfig(unparsedConfig)
+}
+
+// WellKnownHttpFilterConfigFactories is used to load the plugin.
+func WellKnownHttpFilterConfigFactories() map[string]shared.HttpFilterConfigFactory { //nolint:revive
+	return map[string]shared.HttpFilterConfigFactory{
+		"{{ .Name }}": &CustomHttpFilterConfigFactory{},
+	}
+}
+
+// parseConfig parses the JSON config bytes into customHttpFilterConfig.
+func parseConfig(config []byte) (*customHttpFilterConfig, error) {
+	// TODO: To implement your own configuration parsing and validation logic here.
+	cfg := &customHttpFilterConfig{
+		HeaderValue: "example",
+	}
+	if len(config) != 0 {
+		if err := json.Unmarshal(config, cfg); err != nil {
+			return nil, fmt.Errorf("{{ .Name }}: failed to parse config: %w", err)
+		}
+	}
+	return cfg, nil
+}
+
+// getMostSpecificConfig returns the per-route config of type T from the filter handle, or the zero value.
+func getMostSpecificConfig[T any](handle shared.HttpFilterHandle) T { //nolint:revive
+	var zero T
+	c := handle.GetMostSpecificConfig()
+	if c == nil {
+		return zero
+	}
+	cfg, ok := c.(T)
+	if !ok {
+		handle.Log(shared.LogLevelDebug, "{{ .Name }}: most specific config is not of expected type")
+		return zero
+	}
+	return cfg
+}

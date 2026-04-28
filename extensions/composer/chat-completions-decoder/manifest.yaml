@@ -1,0 +1,162 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: chat-completions-decoder
+parent: composer
+categories:
+  - AI
+  - Decoder
+author: Tetrate
+featured: true
+description: Decodes OpenAI Chat Completion requests and responses and exposes structured metadata for downstream filters
+longDescription: |
+  An HTTP filter plugin that parses OpenAI Chat Completions API requests and responses and
+  populates Envoy's dynamic filter metadata with structured information extracted from
+  both the request and response bodies.
+
+  This allows downstream filters and route configurations to make decisions based on
+  the contents of the LLM request and response without re-parsing the bodies themselves.
+
+  ## Attribute Naming
+
+  Metadata keys follow the [OpenInference Semantic Conventions](https://github.com/Arize-ai/openinference/blob/main/spec/semantic_conventions.md).
+  List attributes are flattened using indexed dot notation as described in the
+  [LLM Spans attribute flattening spec](https://github.com/Arize-ai/openinference/blob/main/spec/llm_spans.md#attribute-flattening)
+  (e.g. `llm.input_messages.0.message.role`).
+
+  ## Configuration Reference
+
+  | Field | Type | Required | Default | Description |
+  |-------|------|----------|---------|-------------|
+  | `metadata_namespace` | string | no | `io.builtonenvoy.openai` | The filter metadata namespace for the decoded fields |
+
+type: go
+tags:
+  - go
+  - http
+  - ai
+  - openai
+  - chat-completions
+  - metadata
+  - decoder
+  - llm
+license: Apache-2.0
+examples:
+  - title: Basic usage (default namespace)
+    description: |
+      Decode incoming OpenAI Chat Completion requests and expose metadata under the
+      default `io.builtonenvoy.openai` namespace using OpenInference semantic conventions.
+      Downstream filters can access `io.builtonenvoy.openai.llm.model_name`,
+      `io.builtonenvoy.openai.llm.input_messages.0.message.role`, etc.
+    code: |
+      boe run --extension chat-completions-decoder \
+        --test-upstream-host api.openai.com
+
+      # Send a chat completion request
+      curl -X POST http://localhost:10000/v1/chat/completions \
+        -H "Authorization: Bearer $OPENAI_APIKEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "model": "gpt-4o",
+          "messages": [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "What is the weather today?"}
+          ]
+        }'
+
+      # Envoy filter metadata will contain (namespace: "io.builtonenvoy.openai"):
+      # llm.model_name                         = "gpt-4o"
+      # llm.system                             = "openai"
+      # llm.input_messages.count               = 2
+      # llm.input_messages.0.message.role      = "system"
+      # llm.input_messages.0.message.content   = "You are a helpful assistant."
+      # llm.input_messages.1.message.role      = "user"
+      # llm.input_messages.1.message.content   = "What is the weather today?"
+      # llm.tools.count                        = 0
+  - title: Custom metadata namespace
+    description: |
+      Use a custom namespace to avoid conflicts with other filters that also write
+      to filter metadata.
+    code: |
+      boe run --extension chat-completions-decoder \
+        --config '{"metadata_namespace": "llm-request"}' \
+        --test-upstream-host api.openai.com
+
+      # Metadata will now be under the "llm-request" namespace:
+      # llm.model_name                       = "gpt-4o"
+      # llm.system                           = "openai"
+      # llm.input_messages.count             = 1
+      # llm.input_messages.0.message.role    = "user"
+      # llm.input_messages.0.message.content = "..."
+      # llm.tools.count                      = 0
+  - title: Request with tools
+    description: |
+      When the request includes tool definitions, each tool is stored under
+      `llm.tools.N.tool.json_schema` as a JSON string, following the OpenInference spec.
+    code: |
+      boe run --extension chat-completions-decoder \
+        --test-upstream-host api.openai.com
+
+      curl -X POST http://localhost:10000/v1/chat/completions \
+        -H "Authorization: Bearer $OPENAI_APIKEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "model": "gpt-4o",
+          "messages": [{"role": "user", "content": "Book a flight to NYC"}],
+          "tools": [
+            {"type": "function", "function": {"name": "book_flight", "description": "Book a flight"}},
+            {"type": "function", "function": {"name": "cancel_flight", "description": "Cancel a flight"}}
+          ]
+        }'
+
+      # llm.tools.count              = 2
+      # llm.tools.0.tool.json_schema = '{"type":"function","function":{"name":"book_flight","description":"Book a flight"}}'
+      # llm.tools.1.tool.json_schema = '{"type":"function","function":{"name":"cancel_flight","description":"Cancel a flight"}}'
+  - title: Tool call in conversation with response metadata
+    description: |
+      When a multi-turn conversation includes an assistant message with a tool call, the filter
+      captures the tool call details from the request. The response metadata includes the
+      assistant reply and token usage.
+    code: |
+      boe run --extension chat-completions-decoder \
+        --test-upstream-host api.openai.com
+
+      curl -X POST http://localhost:10000/v1/chat/completions \
+        -H "Authorization: Bearer $OPENAI_APIKEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "model": "gpt-4o",
+          "messages": [
+            {"role": "user", "content": "What is the weather in NYC?"},
+            {"role": "assistant", "content": null, "tool_calls": [
+              {"id": "call_abc", "type": "function", "function": {"name": "get_weather", "arguments": "{\"location\":\"NYC\"}"}}
+            ]},
+            {"role": "tool", "content": "Sunny, 72F"}
+          ]
+        }'
+
+      # Request metadata (namespace: "io.builtonenvoy.openai"):
+      # llm.model_name                                                         = "gpt-4o"
+      # llm.system                                                             = "openai"
+      # llm.input_messages.count                                               = 3
+      # llm.input_messages.0.message.role                                      = "user"
+      # llm.input_messages.0.message.content                                   = "What is the weather in NYC?"
+      # llm.input_messages.1.message.role                                      = "assistant"
+      # llm.input_messages.1.message.tool_calls.count                          = 1
+      # llm.input_messages.1.message.tool_calls.0.tool_call.id                 = "call_abc"
+      # llm.input_messages.1.message.tool_calls.0.tool_call.function.name      = "get_weather"
+      # llm.input_messages.1.message.tool_calls.0.tool_call.function.arguments = '{"location":"NYC"}'
+      # llm.input_messages.2.message.role                                      = "tool"
+      # llm.input_messages.2.message.content                                   = "Sunny, 72F"
+      # llm.tools.count                                                        = 0
+
+      # Response metadata (namespace: "io.builtonenvoy.openai", when the model sends its final reply):
+      # llm.output_messages.count                                              = 1
+      # llm.output_messages.0.message.role                                     = "assistant"
+      # llm.output_messages.0.message.content                                  = "The weather in NYC is sunny and 72F."
+      # llm.token_count.prompt                                                 = 85
+      # llm.token_count.completion                                             = 14
+      # llm.token_count.total                                                  = 99
+

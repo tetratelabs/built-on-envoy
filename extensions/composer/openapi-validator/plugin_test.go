@@ -14,8 +14,11 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/fake"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
 const testSpec = `
@@ -84,8 +87,8 @@ func createTestSpecFile(t *testing.T, spec string) string {
 func createTestFilter(t *testing.T, spec string, cfg *openAPIValidatorConfig) (*openAPIValidatorHttpFilter, *mocks.MockHttpFilterHandle) {
 	t.Helper()
 
-	if cfg.SpecFile == "" {
-		cfg.SpecFile = createTestSpecFile(t, spec)
+	if cfg.Spec.File == "" && cfg.Spec.Inline == "" {
+		cfg.Spec.File = createTestSpecFile(t, spec)
 	}
 
 	configJSON, err := json.Marshal(cfg)
@@ -101,6 +104,7 @@ func createTestFilter(t *testing.T, spec string, cfg *openAPIValidatorConfig) (*
 	require.NoError(t, err)
 
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	filter := filterFactory.Create(mockHandle)
@@ -116,7 +120,25 @@ func TestConfigFactory_Create_ValidConfig(t *testing.T) {
 	specFile := createTestSpecFile(t, testSpec)
 
 	configJSON, err := json.Marshal(openAPIValidatorConfig{
-		SpecFile: specFile,
+		Spec: pkg.DataSource{File: specFile},
+	})
+	require.NoError(t, err)
+
+	factory := &OpenAPIValidatorHttpFilterConfigFactory{}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	filterFactory, err := factory.Create(mockHandle, configJSON)
+	require.NoError(t, err)
+	require.NotNil(t, filterFactory)
+}
+
+func TestConfigFactory_Create_InlineSpec(t *testing.T) {
+	configJSON, err := json.Marshal(openAPIValidatorConfig{
+		Spec: pkg.DataSource{Inline: testSpec},
 	})
 	require.NoError(t, err)
 
@@ -141,9 +163,12 @@ func TestConfigFactory_Create_EmptyConfig(t *testing.T) {
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	filterFactory, err := factory.Create(mockHandle, []byte{})
-	require.Error(t, err)
-	require.Nil(t, filterFactory)
-	require.Contains(t, err.Error(), "empty config")
+	require.NoError(t, err)
+	require.NotNil(t, filterFactory)
+
+	mockHTTPHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
+	filter := filterFactory.Create(mockHTTPHandle)
+	require.IsType(t, &shared.EmptyHttpFilter{}, filter)
 }
 
 func TestConfigFactory_Create_InvalidJSON(t *testing.T) {
@@ -173,12 +198,12 @@ func TestConfigFactory_Create_MissingSpecFile(t *testing.T) {
 	filterFactory, err := factory.Create(mockHandle, configJSON)
 	require.Error(t, err)
 	require.Nil(t, filterFactory)
-	require.Contains(t, err.Error(), "spec_file is required")
+	require.Contains(t, err.Error(), "either 'inline' or 'file' must be set")
 }
 
 func TestConfigFactory_Create_SpecFileNotFound(t *testing.T) {
 	configJSON, err := json.Marshal(openAPIValidatorConfig{
-		SpecFile: "/nonexistent/spec.yaml",
+		Spec: pkg.DataSource{File: "/nonexistent/spec.yaml"},
 	})
 	require.NoError(t, err)
 
@@ -192,14 +217,14 @@ func TestConfigFactory_Create_SpecFileNotFound(t *testing.T) {
 	filterFactory, err := factory.Create(mockHandle, configJSON)
 	require.Error(t, err)
 	require.Nil(t, filterFactory)
-	require.Contains(t, err.Error(), "failed to read spec file")
+	require.Contains(t, err.Error(), "failed to read spec")
 }
 
 func TestConfigFactory_Create_InvalidSpec(t *testing.T) {
 	specFile := createTestSpecFile(t, "this is not a valid openapi spec")
 
 	configJSON, err := json.Marshal(openAPIValidatorConfig{
-		SpecFile: specFile,
+		Spec: pkg.DataSource{File: specFile},
 	})
 	require.NoError(t, err)
 
@@ -218,7 +243,7 @@ func TestConfigFactory_Create_InvalidSpec(t *testing.T) {
 func TestConfigFactory_Create_SpecFileReadError(t *testing.T) {
 	nonExistent := filepath.Join(t.TempDir(), "does-not-exist.yaml")
 	cfg := openAPIValidatorConfig{
-		SpecFile: nonExistent,
+		Spec: pkg.DataSource{File: nonExistent},
 	}
 	configJSON, err := json.Marshal(cfg)
 	require.NoError(t, err)
@@ -239,12 +264,14 @@ func TestConfigFactory_Create_CustomConfig(t *testing.T) {
 	specFile := createTestSpecFile(t, testSpec)
 
 	cfg := openAPIValidatorConfig{
-		SpecFile:     specFile,
+		Spec:         pkg.DataSource{File: specFile},
 		MaxBodyBytes: 2048,
 		DryRun:       true,
-		DenyStatus:   422,
-		DenyBody:     "Validation failed",
-		DenyHeaders:  map[string]string{"x-error": "true"},
+		DenyResponse: &pkg.LocalResponse{
+			Status:  422,
+			Body:    "Validation failed",
+			Headers: map[string]string{"x-error": "true"},
+		},
 	}
 	configJSON, err := json.Marshal(cfg)
 	require.NoError(t, err)
@@ -264,9 +291,9 @@ func TestConfigFactory_Create_CustomConfig(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, uint64(2048), oaFactory.config.MaxBodyBytes)
 	require.True(t, oaFactory.config.DryRun)
-	require.Equal(t, 422, oaFactory.config.DenyStatus)
-	require.Equal(t, "Validation failed", oaFactory.config.DenyBody)
-	require.Equal(t, "true", oaFactory.config.DenyHeaders["x-error"])
+	require.Equal(t, 422, oaFactory.config.DenyResponse.Status)
+	require.Equal(t, "Validation failed", oaFactory.config.DenyResponse.Body)
+	require.Equal(t, "true", oaFactory.config.DenyResponse.Headers["x-error"])
 	require.Len(t, oaFactory.config.denyResponseHeaders, 1)
 }
 
@@ -284,7 +311,7 @@ func TestConfigFactory_Create_JSONSpec(t *testing.T) {
 	}`
 	specFile := createTestSpecFile(t, jsonSpec)
 
-	configJSON, err := json.Marshal(openAPIValidatorConfig{SpecFile: specFile})
+	configJSON, err := json.Marshal(openAPIValidatorConfig{Spec: pkg.DataSource{File: specFile}})
 	require.NoError(t, err)
 
 	factory := &OpenAPIValidatorHttpFilterConfigFactory{}
@@ -485,7 +512,11 @@ func TestOnRequestBody_ValidJsonBody(t *testing.T) {
 	fakeBody := fake.NewFakeBodyBuffer(body)
 
 	mockHandle.EXPECT().RequestHeaders().Return(headers).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBody)
+	// Simulate the ReceivedRequestBody being the same as BufferedRequestBody,
+	// which can happen due to Envoy's buffering logic.
+	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBody)
 
 	bodyStatus := filter.OnRequestBody(fakeBody, true)
 	require.Equal(t, shared.BodyStatusContinue, bodyStatus)
@@ -510,7 +541,9 @@ func TestOnRequestBody_InvalidJsonBody(t *testing.T) {
 	fakeBody := fake.NewFakeBodyBuffer(body)
 
 	mockHandle.EXPECT().RequestHeaders().Return(headers).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBody)
+	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBody)
 	mockHandle.EXPECT().SendLocalResponse(
 		uint32(400),
 		gomock.Any(),
@@ -565,7 +598,9 @@ func TestOnRequestBody_WithTrailers(t *testing.T) {
 	// Process via trailers.
 	fakeBuffered := fake.NewFakeBodyBuffer(body)
 	mockHandle.EXPECT().RequestHeaders().Return(headers).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBuffered)
+	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBuffered)
 
 	trailers := fake.NewFakeHeaderMap(map[string][]string{})
 	trailersStatus := filter.OnRequestTrailers(trailers)
@@ -623,8 +658,9 @@ func TestOnRequestBody_NoBodyLimit(t *testing.T) {
 	fakeBody := fake.NewFakeBodyBuffer(body)
 
 	mockHandle.EXPECT().RequestHeaders().Return(headers).AnyTimes()
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
 	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBody)
-
+	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeBody)
 	bodyStatus := filter.OnRequestBody(fakeBody, true)
 	require.Equal(t, shared.BodyStatusContinue, bodyStatus)
 }
@@ -664,18 +700,22 @@ func TestOnRequestBody_DryRunAllowsInvalidBody(t *testing.T) {
 	require.Equal(t, shared.HeadersStatusStop, status)
 
 	// Missing required field "name".
-	body := []byte(`{"email": "alice@example.com"}`)
-	fakeBody := fake.NewFakeBodyBuffer(body)
+	bufferedBody := []byte(`{"email": `)
+	receivedBody := []byte(`"alice@example.com"}`)
+	fakeBufferedBody := fake.NewFakeBodyBuffer(bufferedBody)
+	fakeReceivedBody := fake.NewFakeBodyBuffer(receivedBody)
 
 	mockHandle.EXPECT().RequestHeaders().Return(headers).AnyTimes()
-	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBody)
+	mockHandle.EXPECT().ReceivedBufferedRequestBody().Return(true).Times(1)
+	mockHandle.EXPECT().BufferedRequestBody().Return(fakeBufferedBody)
+	mockHandle.EXPECT().ReceivedRequestBody().Return(fakeReceivedBody)
 
-	bodyStatus := filter.OnRequestBody(fakeBody, true)
+	bodyStatus := filter.OnRequestBody(fakeReceivedBody, true)
 	require.Equal(t, shared.BodyStatusContinue, bodyStatus)
 }
 
 func TestOnRequestBody_DryRunAllowsOversizedBody(t *testing.T) {
-	filter, mockHandle := createTestFilter(t, testSpec, &openAPIValidatorConfig{
+	filter, _ := createTestFilter(t, testSpec, &openAPIValidatorConfig{
 		DryRun:       true,
 		MaxBodyBytes: 10,
 	})
@@ -692,7 +732,6 @@ func TestOnRequestBody_DryRunAllowsOversizedBody(t *testing.T) {
 	require.Equal(t, shared.HeadersStatusStop, status)
 
 	body := fake.NewFakeBodyBuffer([]byte(`{"name": "alice", "email": "alice@example.com"}`))
-	mockHandle.EXPECT().ContinueRequest()
 
 	bodyStatus := filter.OnRequestBody(body, true)
 	require.Equal(t, shared.BodyStatusContinue, bodyStatus)
@@ -702,7 +741,7 @@ func TestOnRequestBody_DryRunAllowsOversizedBody(t *testing.T) {
 
 func TestDenyResponse_CustomStatus(t *testing.T) {
 	filter, mockHandle := createTestFilter(t, testSpec, &openAPIValidatorConfig{
-		DenyStatus: 422,
+		DenyResponse: &pkg.LocalResponse{Status: 422},
 	})
 
 	var capturedStatus uint32
@@ -726,7 +765,7 @@ func TestDenyResponse_CustomStatus(t *testing.T) {
 
 func TestDenyResponse_CustomBody(t *testing.T) {
 	filter, mockHandle := createTestFilter(t, testSpec, &openAPIValidatorConfig{
-		DenyBody: "Custom error message",
+		DenyResponse: &pkg.LocalResponse{Body: "Custom error message"},
 	})
 
 	var capturedBody []byte
@@ -750,7 +789,7 @@ func TestDenyResponse_CustomBody(t *testing.T) {
 
 func TestDenyResponse_CustomHeaders(t *testing.T) {
 	filter, mockHandle := createTestFilter(t, testSpec, &openAPIValidatorConfig{
-		DenyHeaders: map[string]string{"x-error": "validation-failed"},
+		DenyResponse: &pkg.LocalResponse{Headers: map[string]string{"x-error": "validation-failed"}},
 	})
 
 	var capturedHeaders [][2]string
@@ -819,7 +858,7 @@ func TestWellKnownHttpFilterConfigFactories(t *testing.T) {
 func TestFilterFactory_Create(t *testing.T) {
 	specFile := createTestSpecFile(t, testSpec)
 	cfg := openAPIValidatorConfig{
-		SpecFile: specFile,
+		Spec: pkg.DataSource{File: specFile},
 	}
 	configJSON, err := json.Marshal(cfg)
 	require.NoError(t, err)
@@ -835,6 +874,7 @@ func TestFilterFactory_Create(t *testing.T) {
 	require.NoError(t, err)
 
 	mockHandle := mocks.NewMockHttpFilterHandle(ctrl)
+	mockHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 	filter := filterFactory.Create(mockHandle)
 
 	require.NotNil(t, filter)
@@ -861,3 +901,132 @@ func TestOnRequestTrailers_AlreadyProcessed(t *testing.T) {
 	trailersStatus := filter.OnRequestTrailers(trailers)
 	require.Equal(t, shared.TrailersStatusContinue, trailersStatus)
 }
+
+func newPluginHandleWithoutPerRouteConfig(ctrl *gomock.Controller) *mocks.MockHttpFilterHandle {
+	h := mocks.NewMockHttpFilterHandle(ctrl)
+	h.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
+	h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	return h
+}
+
+func newPluginHandleWithPerRouteConfig(ctrl *gomock.Controller, perRouteConfig any) *mocks.MockHttpFilterHandle {
+	h := mocks.NewMockHttpFilterHandle(ctrl)
+	h.EXPECT().GetMostSpecificConfig().Return(perRouteConfig).AnyTimes()
+	h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	return h
+}
+
+func Test_CreatePerRoute(t *testing.T) {
+	f := &OpenAPIValidatorHttpFilterConfigFactory{}
+
+	t.Run("valid inline spec", func(t *testing.T) {
+		cfg := map[string]any{
+			"spec": map[string]any{"inline": testSpec},
+		}
+		b, _ := json.Marshal(cfg)
+		result, err := f.CreatePerRoute(b)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		perRoute, ok := result.(*openAPIValidatorParsedConfig)
+		require.True(t, ok)
+		assert.NotNil(t, perRoute.router)
+		assert.Equal(t, 400, perRoute.DenyResponse.Status)
+	})
+
+	t.Run("empty config returns error", func(t *testing.T) {
+		result, err := f.CreatePerRoute([]byte{})
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
+
+	t.Run("invalid JSON returns error", func(t *testing.T) {
+		result, err := f.CreatePerRoute([]byte(`{invalid`))
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
+
+	t.Run("invalid spec returns error", func(t *testing.T) {
+		cfg := map[string]any{
+			"spec": map[string]any{"inline": "not valid openapi"},
+		}
+		b, _ := json.Marshal(cfg)
+		result, err := f.CreatePerRoute(b)
+		require.Error(t, err)
+		require.Nil(t, result)
+	})
+
+	t.Run("custom deny response status", func(t *testing.T) {
+		cfg := map[string]any{
+			"spec":          map[string]any{"inline": testSpec},
+			"deny_response": map[string]any{"status": 422, "body": "Unprocessable Entity"},
+		}
+		b, _ := json.Marshal(cfg)
+		result, err := f.CreatePerRoute(b)
+		require.NoError(t, err)
+		perRoute, ok := result.(*openAPIValidatorParsedConfig)
+		require.True(t, ok)
+		assert.Equal(t, 422, perRoute.DenyResponse.Status)
+	})
+}
+
+func Test_PerRouteConfigOverride(t *testing.T) {
+	// Build a spec that only allows GET /items
+	routeSpec := `openapi: "3.0.0"
+info:
+  title: Route API
+  version: "1.0"
+paths:
+  /items:
+    get:
+      operationId: listItems
+      responses:
+        "200":
+          description: OK
+`
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockConfigHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	mockConfigHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	baseConfigJSON, _ := json.Marshal(openAPIValidatorConfig{
+		Spec: pkg.DataSource{Inline: testSpec},
+	})
+	baseFilterFactory, err := (&OpenAPIValidatorHttpFilterConfigFactory{}).Create(mockConfigHandle, baseConfigJSON)
+	require.NoError(t, err)
+	baseFactory := baseFilterFactory.(*openAPIValidatorHttpFilterFactory)
+
+	t.Run("per-route config overrides factory config", func(t *testing.T) {
+		perRouteJSON, _ := json.Marshal(map[string]any{
+			"spec": map[string]any{"inline": routeSpec},
+		})
+		perRouteResult, err := (&OpenAPIValidatorHttpFilterConfigFactory{}).CreatePerRoute(perRouteJSON)
+		require.NoError(t, err)
+		perRoute := perRouteResult.(*openAPIValidatorParsedConfig)
+
+		handle := newPluginHandleWithPerRouteConfig(ctrl, perRoute)
+		filter := baseFactory.Create(handle)
+		f, ok := filter.(*openAPIValidatorHttpFilter)
+		require.True(t, ok)
+		assert.Equal(t, perRoute, f.config)
+	})
+
+	t.Run("nil per-route config uses factory config", func(t *testing.T) {
+		handle := newPluginHandleWithoutPerRouteConfig(ctrl)
+		filter := baseFactory.Create(handle)
+		f, ok := filter.(*openAPIValidatorHttpFilter)
+		require.True(t, ok)
+		assert.Equal(t, baseFactory.config, f.config)
+	})
+
+	t.Run("wrong type per-route config uses factory config", func(t *testing.T) {
+		handle := newPluginHandleWithPerRouteConfig(ctrl, "not-a-per-route-config")
+		filter := baseFactory.Create(handle)
+		f, ok := filter.(*openAPIValidatorHttpFilter)
+		require.True(t, ok)
+		assert.Equal(t, baseFactory.config, f.config)
+	})
+}
+
+// ensure shared used
+var _ = shared.MetricsSuccess

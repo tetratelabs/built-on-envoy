@@ -1,0 +1,73 @@
+---
+layout: ../../layouts/DocsLayout.astro
+title: Exporting Envoy config and extensions
+description: Exporting the boe generated Envoy config and the compiled extensions for external use
+---
+
+import ToC from '../../components/ToC.astro';
+import Callout from '../../components/Callout.astro';
+
+# Exporting the Envoy config and extensions for external use
+
+By default, the `boe` CLI generates an Envoy configuration that contains the filters for the provided extensions
+and proxies https://httpbin.org. While this configuration is convenient to test a wide variety of use cases,
+there are situations where customizing the generated Envoy configuration is needed.
+
+This guide explains how to run the extensions locally in Envoy using [func-e](https://func-e.io/) (the tool
+internally used by `boe`) or using Docker.
+
+## Export the configuration and run it locally
+
+Export the configuration for the extensions using the [boe gen-config](/docs/cli/gen-config)
+command with the `--output` flag.
+
+In this example we will use the `ip-restriction` as a remote extension and the `example-go` as a
+local one.
+
+```bash
+boe gen-config \
+        --extension ip-restriction --config '{"allow_addresses":["127.0.0.1"]}' \
+        --local ./extensions/composer/example/ \
+        --output /tmp/boe-export
+```
+
+This will export the Envoy configuration and the extensions to the given directory and produce a detailed
+output with instructions explaining how to run Envoy with `func-e` or Docker:
+
+```bash
+→ Fetching ip-restriction...
+→ Building example-go...
+
+✓ Config exported to: /tmp/boe-export
+    - envoy.yaml
+    - libip-restriction.so
+    - libcomposer.so
+    - example-go.so
+
+→ Run locally with with func-e: (https://func-e.io/)
+    cd /tmp/boe-export
+    export GODEBUG=cgocheck=0
+    func-e run -c envoy.yaml --log-level info --component-log-level dynamic_modules:debug
+
+→ Run locally in Docker: (not supported in Darwin hosts yet)
+    docker run --rm \
+        -p 10000:10000 \
+        -p 9901:9901 \
+        -e ENVOY_DYNAMIC_MODULES_SEARCH_PATH=/boe \
+        -e GODEBUG=cgocheck=0 \
+        -v /tmp/boe-export:/boe \
+        -w /boe \
+        envoyproxy/envoy:v1.37.0 -c /boe/envoy.yaml --log-level info --component-log-level dynamic_modules:debug
+```
+
+This will export the Envoy configuration to the configured output directory (`/tmp/boe-export` in out example)
+and copy the Envoy Dynamic Module library files to that same directory to facilitate configuring the
+[Envoy Dynamic Module search path](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/dynamic_modules#module-discovery).
+
+<Callout type="warning">
+Make sure you export the `GODEBUG` environment variable. It is needed to disable the cgo pointer checks as
+Envoy may hold pointers to Go memory.
+</Callout>
+
+Once ready, follow the instructions in the output and Envoy start & run with the extensions
+configured. You can change and customize the Envoy configuration at your convenience.

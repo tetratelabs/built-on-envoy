@@ -1,0 +1,396 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: openfga
+parent: composer
+categories:
+  - AI
+  - Security
+author: Okta & Tetrate
+description: Inline OpenFGA authorization for Envoy, Envoy Gateway, and AI Gateway — no sidecar required
+longDescription: |
+  This extension implements [OpenFGA](https://openfga.dev/) authorization checks as an
+  inline Envoy HTTP filter. It calls the OpenFGA Check API via Envoy's async HTTP callout
+  mechanism to determine whether a request should be allowed or denied, without requiring
+  a separate authorization sidecar.
+
+  Works with [Envoy](https://www.envoyproxy.io/), [Envoy Gateway](https://gateway.envoyproxy.io/),
+  and [Envoy AI Gateway](https://aigateway.envoyproxy.io/) (AIGatewayRoute, HTTPRoute, MCPRoute).
+  The extension extracts user, relation, and object from request headers, URL path segments,
+  query parameters, or static values, then delegates the authorization decision to OpenFGA.
+
+  ## Key Features
+
+  - **Async HTTP callout**: Uses Envoy's built-in `HttpCallout` to call the OpenFGA Check API
+    through a configured cluster, integrating with Envoy's connection pooling and circuit breaking.
+  - **Flexible input mapping**: Extract `user`, `relation`, and `object` from request headers,
+    URL path segments, query parameters, or static values — no ExtProc needed for REST APIs.
+  - **AI Gateway ready**: Works in the same Envoy filter chain as the AI Gateway External
+    Processor. Use it to control access to AI models, MCP tools, or any HTTP resource.
+  - **Dry-run mode**: Log authorization decisions without enforcing them.
+  - **Fail-open mode**: Allow requests through when OpenFGA or the filter cannot enforce a deny (see Metrics).
+
+  ## OpenFGA best practices
+
+  Follow [OpenFGA’s production guidance](https://openfga.dev/docs/best-practices/running-in-production):
+  enable TLS and API authentication on the OpenFGA server, disable the playground in production,
+  and tune metrics and tracing on the server. Configure the Envoy **cluster** to OpenFGA with TLS
+  and any required upstream headers (for example API tokens) so callouts are protected in transit
+  and authenticated like any other client.
+
+  In production, set **`authorization_model_id`** to a fixed model ID instead of omitting it
+  (omitted uses the store’s latest model, which can change unexpectedly when models are updated).
+
+  OpenFGA’s [query consistency modes](https://openfga.dev/docs/interacting/consistency) apply when
+  Check query caching is enabled on the server. The default omits `consistency` from the Check
+  request (equivalent to minimizing latency when caching matters). Use the optional **`consistency`**
+  config field to send `HIGHER_CONSISTENCY` when you need to skip the cache after tuple writes;
+  avoid setting it on every request because it increases latency and load.
+
+  **`user`**, **`relation`**, and **`object`** must be valid for your authorization model (typically
+  OpenFGA strings such as `type:id`). This extension builds them from static values or request data
+  via `prefix` and extracted values—misconfiguration can produce strings OpenFGA will reject or
+  evaluate incorrectly.
+
+  **`fail_open`** and **`dry_run`** trade security for availability or observability: only enable
+  them deliberately.
+
+  This filter supports **contextual tuples** and **context** (ABAC conditions) in the Check request.
+  Use **`contextual_tuples`** to pass request-scoped relationships (e.g., organization membership from
+  a JWT claim) without storing them in OpenFGA; see [Contextual tuples](https://openfga.dev/docs/interacting/contextual-tuples).
+  Use **`context`** to pass runtime values for [condition evaluation](https://openfga.dev/docs/modeling/conditions)
+  (e.g., current time, IP address) in ABAC-style policies.
+
+  ## Configuration
+
+  The extension requires an Envoy cluster pointing to the OpenFGA server. The `user`, `relation`,
+  and `object` fields for the Check API are built from static values, request headers, URL path
+  segments, or query parameters (see valueSource below).
+
+  ```json
+  {
+    "cluster": "openfga",
+    "openfga_host": "openfga.default.svc:8080",
+    "store_id": "01ABCDEF",
+    "user": {"header": "x-user-id", "prefix": "user:"},
+    "relation": {"value": "can_use"},
+    "object": {"header": "x-ai-model", "prefix": "model:"}
+  }
+  ```
+
+  ## Multi-Rule Configuration
+
+  For routes that handle multiple resource types (e.g., AI models, MCP tools, and generic HTTP
+  resources), use the `rules` array instead of the legacy single-rule config. Each rule can match
+  on request headers and define its own `relation` and `object`.
+
+  - **`rules`**: Array of rules evaluated in order. The first matching rule is used. A rule with no
+    `match` or empty `match.headers` is a catch-all and must be last.
+  - **`match.headers`**: Object mapping header names to match values. Use `"*"` to require the
+    header to be present with any non-empty value; use an exact string for a value match.
+  - **Top-level `user`**: Serves as the default user source for all rules. Individual rules can
+    override with their own `user` field.
+
+  Example: AI model rule (header `x-ai-eg-model`), MCP tool rule (header `x-mcp-tool`), and a
+  catch-all for generic resources.
+
+  ```json
+  {
+    "cluster": "openfga",
+    "openfga_host": "openfga.default.svc:8080",
+    "store_id": "01ABCDEF",
+    "user": {"header": "x-user-id", "prefix": "user:"},
+    "rules": [
+      {"match": {"headers": {"x-ai-eg-model": "*"}}, "relation": {"value": "can_use"}, "object": {"header": "x-ai-eg-model", "prefix": "model:"}},
+      {"match": {"headers": {"x-mcp-tool": "*"}}, "relation": {"value": "can_invoke"}, "object": {"header": "x-mcp-tool", "prefix": "tool:"}},
+      {"relation": {"value": "can_access"}, "object": {"header": "x-resource-id", "prefix": "resource:"}}
+    ]
+  }
+  ```
+
+  ## Filter Chain Ordering
+
+  When deploying with Envoy AI Gateway, filter chain order determines which headers are
+  available when the openfga filter runs.
+
+  **Recommended order:**
+
+  1. **jwe-decrypt** (optional) — decrypts a JWE-wrapped token so JWT authn can read it
+  2. **JWT Authentication** (Envoy built-in) — validates the token and optionally injects
+     claims as request headers via `SecurityPolicy.jwt.claimsToHeaders`
+  3. **openfga** — reads user identity from a header, checks authorization against OpenFGA
+  4. **AI Gateway ExtProc** — parses the request body to route to the correct AI model
+
+  **Why openfga before the AI Gateway ExtProc?**
+
+  OpenFGA is a header-only filter: it runs on `OnRequestHeaders` before the request body is
+  read. The AI Gateway ExtProc processes the request body and may set headers like
+  `x-ai-eg-model` based on the JSON payload. When openfga runs first, it reads
+  `x-ai-eg-model` as set by the **client** — which is the intended control point for
+  access control (the client declares what it wants, and the check runs before any
+  processing). If the model name must come from the body-parsed value injected by ExtProc,
+  place openfga **after** the AI Gateway ExtProc in the filter chain instead.
+
+  ## Identity Integration
+
+  **Envoy Gateway JWT claims injection (recommended)**
+
+  The simplest way to pass user identity to openfga is via Envoy Gateway's `SecurityPolicy`
+  with `claimsToHeaders`. Envoy validates the JWT and injects any claim (e.g. `sub`) into a
+  request header before the filter chain runs — no extra plugins needed. The header name is
+  fully configurable; examples here use `x-user-id` for consistency with the rest of the
+  Composer extension ecosystem.
+
+  ```yaml
+  apiVersion: gateway.envoyproxy.io/v1alpha1
+  kind: SecurityPolicy
+  metadata:
+    name: jwt-policy
+  spec:
+    targetRef:
+      group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: my-route
+    jwt:
+      providers:
+        - name: my-provider
+          issuer: https://auth.example.com
+          remoteJWKS:
+            uri: https://auth.example.com/.well-known/jwks.json
+          claimsToHeaders:
+            - claim: sub
+              header: x-user-id
+  ```
+
+  Then configure openfga to read that header:
+  ```json
+  {"header": "x-user-id", "prefix": "user:"}
+  ```
+
+  **jwe-decrypt + JWT authn (for encrypted tokens)**
+
+  For deployments where clients send JWE-encrypted JWTs, chain the `jwe-decrypt` plugin
+  before openfga in the same Composer filter. The `jwe-decrypt` plugin decrypts the
+  `Authorization` header in-place; Envoy's JWT authn filter then validates the inner JWT
+  and `claimsToHeaders` makes the `sub` claim available as `x-user-id` for openfga to read.
+
+  ## Metrics
+
+  The extension exposes:
+
+  - **`openfga_requests_total`** (counter, tag: `decision`): Authorization outcomes
+  - **`openfga_check_duration_ms`** (histogram): Latency of OpenFGA Check API calls in milliseconds
+
+  | Decision | Description |
+  |----------|-------------|
+  | `allowed` | The Check API allowed the request. |
+  | `denied` | The request was denied: OpenFGA returned not allowed, **or** no rule matched the request, **or** `user` / `relation` / `object` resolved empty (when `fail_open` is false). |
+  | `failopen` | The request was allowed because `fail_open` is true after a callout/API/parse failure, empty check inputs, or no matching rule. |
+  | `dryrun_allow` | OpenFGA would have denied the request but it was allowed because `dry_run` is enabled. |
+  | `error` | The request was denied after a callout failure, non-OK Check response, or unparseable response body (HTTP 502 to the client); not used when `fail_open` is true (those count as `failopen`). |
+type: go
+tags:
+  - go
+  - http
+  - filter
+  - openfga
+  - security
+  - authorization
+  - ai-gateway
+license: Apache-2.0
+examples:
+  - title: AI Model Access Control
+    description: |
+      Control which users can access specific AI models (for example on an AIGatewayRoute).
+      The user identity comes from a header set by upstream authentication; the model name
+      comes from a header you choose (here `x-ai-model`, often set by the client or an
+      upstream filter). For Envoy AI Gateway’s body-derived model header (`x-ai-eg-model`),
+      use the multi-rule example below or place openfga after the AI Gateway ExtProc.
+    code: |
+      boe run --extension openfga \
+        --config '{
+          "cluster": "openfga",
+          "openfga_host": "localhost:8080",
+          "store_id": "YOUR_STORE_ID",
+          "user": {"header": "x-user-id", "prefix": "user:"},
+          "relation": {"value": "can_use"},
+          "object": {"header": "x-ai-model", "prefix": "model:"}
+        }' \
+        --cluster-insecure localhost:8080
+
+      # Allowed (if user:alice has can_use relation with model:gpt-4 in OpenFGA)
+      curl -H "x-user-id: alice" -H "x-ai-model: gpt-4" http://localhost:10000/v1/chat/completions
+
+      # Denied
+      curl -H "x-user-id: bob" -H "x-ai-model: gpt-4" http://localhost:10000/v1/chat/completions
+  - title: MCP Tool Access Control
+    description: |
+      Control which users can invoke specific MCP tools through an MCPRoute.
+    code: |
+      boe run --extension openfga \
+        --config '{
+          "cluster": "openfga",
+          "openfga_host": "localhost:8080",
+          "store_id": "YOUR_STORE_ID",
+          "user": {"header": "x-user-id", "prefix": "user:"},
+          "relation": {"value": "can_invoke"},
+          "object": {"header": "x-mcp-tool", "prefix": "tool:"}
+        }' \
+        --cluster-insecure localhost:8080
+  - title: Multi-Route Authorization
+    description: |
+      Handle AI model access and MCP tool access on the same Gateway with a
+      single filter instance. Rules are evaluated in order; the first match wins.
+      A catch-all rule at the end covers generic HTTP resources.
+    code: |
+      boe run --extension openfga \
+        --config '{
+          "cluster": "openfga",
+          "openfga_host": "localhost:8080",
+          "store_id": "YOUR_STORE_ID",
+          "user": {"header": "x-user-id", "prefix": "user:"},
+          "rules": [
+            {
+              "match": {"headers": {"x-ai-eg-model": "*"}},
+              "relation": {"value": "can_use"},
+              "object": {"header": "x-ai-eg-model", "prefix": "model:"}
+            },
+            {
+              "match": {"headers": {"x-mcp-tool": "*"}},
+              "relation": {"value": "can_invoke"},
+              "object": {"header": "x-mcp-tool", "prefix": "tool:"}
+            },
+            {
+              "relation": {"value": "can_access"},
+              "object": {"header": "x-resource-id", "prefix": "resource:"}
+            }
+          ]
+        }' \
+        --cluster-insecure localhost:8080
+
+      # AI model request (matches rule 1)
+      curl -H "x-user-id: alice" -H "x-ai-eg-model: gpt-4" http://localhost:10000/v1/chat/completions
+
+      # MCP tool request (matches rule 2)
+      curl -H "x-user-id: alice" -H "x-mcp-tool: github__issue_read" http://localhost:10000/mcp
+
+      # Generic HTTP request (matches catch-all rule 3)
+      curl -H "x-user-id: alice" -H "x-resource-id: planning" http://localhost:10000/api/docs
+  - title: Dry-Run Mode
+    description: |
+      Log authorization decisions without enforcing them.
+    code: |
+      boe run --extension openfga \
+        --config '{
+          "cluster": "openfga",
+          "openfga_host": "localhost:8080",
+          "store_id": "YOUR_STORE_ID",
+          "user": {"header": "x-user-id", "prefix": "user:"},
+          "relation": {"value": "can_access"},
+          "object": {"header": "x-resource", "prefix": "document:"},
+          "dry_run": true
+        }' \
+        --cluster-insecure localhost:8080
+  - title: Fail-Open Mode
+    description: |
+      Allow requests when OpenFGA or the filter cannot complete a normal deny/allow path
+      (unreachable API, missing tuple inputs, no matching rule, etc.); see Metrics for details.
+    code: |
+      boe run --extension openfga \
+        --config '{
+          "cluster": "openfga",
+          "openfga_host": "localhost:8080",
+          "store_id": "YOUR_STORE_ID",
+          "user": {"header": "x-user-id", "prefix": "user:"},
+          "relation": {"value": "can_access"},
+          "object": {"header": "x-resource", "prefix": "document:"},
+          "fail_open": true
+        }' \
+        --cluster-insecure localhost:8080
+  - title: REST Resource Authorization via URL Path
+    description: |
+      Authorize access to REST resources identified by URL path segment — no custom
+      headers or ExtProc needed. For an API at `/api/documents/{docId}`, use
+      `path_segment: 2` to extract the document ID from the third path segment (0-indexed).
+      Negative values count from the end: use `path_segment: -1` to always get the last
+      segment, regardless of path depth.
+    code: |
+      boe run --extension openfga \
+        --config '{
+          "cluster": "openfga",
+          "openfga_host": "localhost:8080",
+          "store_id": "YOUR_STORE_ID",
+          "user": {"header": "x-user-id", "prefix": "user:"},
+          "relation": {"value": "can_access"},
+          "object": {"path_segment": 2, "prefix": "document:"}
+        }' \
+        --cluster-insecure localhost:8080
+
+      # GET /api/documents/planning -> checks user:alice can_access document:planning
+      curl -H "x-user-id: alice" http://localhost:10000/api/documents/planning
+
+      # GET /api/documents/budget -> checks user:alice can_access document:budget
+      curl -H "x-user-id: alice" http://localhost:10000/api/documents/budget
+
+      # Using -1 to always capture the last segment (works for /docs/budget or /api/v2/docs/budget)
+      # object: {"path_segment": -1, "prefix": "document:"}
+  - title: Contextual Tuples (Organization Membership)
+    description: |
+      Pass organization membership from a JWT claim as a contextual tuple. The tuple
+      exists only for the duration of this Check request — no need to store it in OpenFGA.
+      This is useful when the organization comes from the user's session (e.g., a JWT
+      claim injected as a header by Envoy's JWT authentication filter).
+    code: |
+      boe run --extension openfga \
+        --config '{
+          "cluster": "openfga",
+          "openfga_host": "localhost:8080",
+          "store_id": "YOUR_STORE_ID",
+          "user": {"header": "x-user-id", "prefix": "user:"},
+          "relation": {"value": "can_use"},
+          "object": {"header": "x-ai-model", "prefix": "model:"},
+          "contextual_tuples": [
+            {
+              "user": {"header": "x-user-id", "prefix": "user:"},
+              "relation": {"value": "member"},
+              "object": {"header": "x-org-id", "prefix": "organization:"}
+            }
+          ]
+        }' \
+        --cluster-insecure localhost:8080
+
+      # Checks user:alice can_use model:gpt-4 with contextual tuple
+      # user:alice member organization:acme
+      curl -H "x-user-id: alice" -H "x-org-id: acme" -H "x-ai-model: gpt-4" \
+        http://localhost:10000/v1/chat/completions
+  - title: API Token Authentication
+    description: |
+      Authenticate callouts to an OpenFGA server that requires an API token.
+      Use `callout_headers` to add an `Authorization` header to every Check request.
+
+      OpenFGA supports two authentication modes (see [OpenFGA authentication setup](https://openfga.dev/docs/getting-started/setup-openfga/configure-openfga#authentication)):
+      - **Preshared key** — pass the configured key directly as `Bearer <key>`.
+      - **OIDC (client credentials)** — obtain a short-lived access token from your
+        IdP's token endpoint using the `client_credentials` grant, then pass it as
+        `Bearer <token>`. OpenFGA will validate the token against the configured
+        issuer and audience.
+
+      The filter does not refresh OIDC tokens itself; set up token rotation in the
+      identity provider or the surrounding platform and update `callout_headers`
+      accordingly.
+    code: |
+      boe run --extension openfga \
+        --config '{
+          "cluster": "openfga",
+          "openfga_host": "openfga.example.com",
+          "store_id": "YOUR_STORE_ID",
+          "user": {"header": "x-user-id", "prefix": "user:"},
+          "relation": {"value": "can_access"},
+          "object": {"header": "x-resource", "prefix": "document:"},
+          "callout_headers": {
+            "authorization": "Bearer YOUR_OPENFGA_API_TOKEN"
+          }
+        }' \
+        --cluster-insecure openfga.example.com:8080

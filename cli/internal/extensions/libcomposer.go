@@ -16,6 +16,15 @@ import (
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
+const (
+	// ComposerArtifact is the name of the embedded composer binary artifact in the OCI registry.
+	ComposerArtifact = "composer"
+	// ComposerArtifactLite is the name of composer (only go plugin) binary artifact in the OCI registry.
+	ComposerArtifactLite = "composer-lite"
+	// ComposerArtifactSource is the name of the composer source code artifact in the OCI registry.
+	ComposerArtifactSource = "composer-src"
+)
+
 // LibComposerVersion is the version of the composer extension used in the current build.
 // The value is automatically generated in the code-generation step from the build process
 // implemented in the `sync-manifests.sh` script.
@@ -26,12 +35,17 @@ var LibComposerVersion string
 
 // CheckOrDownloadLibComposer checks if the libcomposer.so exists in the local cache directory.
 // If not, it tries to download the pre-built libcomposer from OCI registry.
-func CheckOrDownloadLibComposer(ctx context.Context, downloader *Downloader, version string) error {
+func CheckOrDownloadLibComposer(ctx context.Context, downloader *Downloader, version string, artifact string) error {
 	if _, err := os.Stat(LocalCacheComposerLib(downloader.Dirs, version)); err == nil {
 		downloader.Logger.Debug("libcomposer already exists in local cache. skipping download", "version", version)
 		return nil
 	}
-	artifact, err := downloader.DownloadComposer(ctx, version)
+	return DownloadLibComposerAndBuildIfNeeded(ctx, downloader, version, artifact)
+}
+
+// DownloadLibComposerAndBuildIfNeeded is a helper function that combines downloading and building the libcomposer.
+func DownloadLibComposerAndBuildIfNeeded(ctx context.Context, downloader *Downloader, version string, artifactName string) error {
+	artifact, err := downloader.DownloadComposer(ctx, version, artifactName)
 	if err != nil {
 		return fmt.Errorf("failed to download libcomposer: %w", err)
 	}
@@ -60,7 +74,7 @@ func BuildExtensionFromPath(logger *slog.Logger, dirs *xdg.Directories, manifest
 	// Build the extension and save the binary in the local cache directory for composer to load.
 	dest := LocalCacheExtension(dirs, manifest)
 	// #nosec G204
-	cmd = exec.Command("go", "build", "-buildmode=plugin", "-o", dest, "./standalone")
+	cmd = exec.Command("go", "build", "-trimpath", "-buildmode=plugin", "-o", dest, "./standalone")
 	cmd.Dir = path
 	logger.Debug("building local extension", "version", manifest.Version, "path", path, "cmd", cmd.String())
 	output, err = cmd.CombinedOutput()
@@ -76,11 +90,6 @@ func BuildExtensionFromPath(logger *slog.Logger, dirs *xdg.Directories, manifest
 // to be at composerSrcPath. The built libcomposer.so will be saved in the local cache directory for
 // composer to load.
 func BuildLibComposer(logger *slog.Logger, dirs *xdg.Directories, composerSrcPath string, version string, buildPlugins bool) error {
-	if _, err := os.Stat(LocalCacheComposerLib(dirs, version)); err == nil {
-		logger.Debug("libcomposer already exists in local cache. skipping build", "version", version)
-		return nil
-	}
-
 	// Build the libcomposer from source.
 	// #nosec G204
 	cmd := exec.Command("make",

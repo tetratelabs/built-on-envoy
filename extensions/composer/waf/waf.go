@@ -15,22 +15,52 @@ import (
 	ctypes "github.com/corazawaf/coraza/v3/types"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 	waf "github.com/tetratelabs/built-on-envoy/extensions/composer/waf/coraza"
 	"github.com/tetratelabs/built-on-envoy/extensions/composer/waf/logger"
 )
 
+const (
+	defaultMetadataNamespace = "io.builtonenvoy.waf"
+	metadataKeyBlockRule     = "block_rule"
+	metadataKeyBlockPhase    = "block_phase"
+)
+
 type wafPluginFactory struct {
 	shared.EmptyHttpFilterFactory
+	config  coraza.WAF
+	mode    waf.WAFMode
+	metrics *metrics
+}
+
+type perRouteWafPluginConfig struct {
 	config coraza.WAF
 	mode   waf.WAFMode
 }
 
 func (f *wafPluginFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
+	config := f.config
+	mode := f.mode
+
+	// Check for per-route config and override if present.
+	perRouteWafPluginConfig := pkg.GetMostSpecificConfig[*perRouteWafPluginConfig](handle)
+	if perRouteWafPluginConfig != nil {
+		config = perRouteWafPluginConfig.config
+		mode = perRouteWafPluginConfig.mode
+	}
+
+	if config == nil {
+		handle.Log(shared.LogLevelInfo, "waf: no config available and use empty filter")
+		return &shared.EmptyHttpFilter{}
+	}
+
 	return &wafPlugin{
-		logger: logger.GetLogger(),
-		handle: handle,
-		config: f.config,
-		mode:   f.mode,
+		logger:            logger.GetLogger(),
+		handle:            handle,
+		config:            config,
+		mode:              mode,
+		metrics:           f.metrics,
+		metadataNamespace: defaultMetadataNamespace,
 	}
 }
 
@@ -39,37 +69,65 @@ type wafPluginConfigFactory struct {
 }
 
 func (f *wafPluginConfigFactory) Create(
-	_ shared.HttpFilterConfigHandle,
+	handle shared.HttpFilterConfigHandle,
 	unparsedConfig []byte,
 ) (shared.HttpFilterFactory, error) {
+	var wafConfig coraza.WAF
+	var mode waf.WAFMode
+	var err error
+
+	if len(unparsedConfig) > 0 {
+		wafConfig, mode, err = waf.NewWAFConfigFromBytes(unparsedConfig, logger.GetLogger())
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	if wafConfig == nil {
+		handle.Log(shared.LogLevelInfo, "waf: empty filter config")
+	}
+
+	return &wafPluginFactory{
+		config:  wafConfig,
+		mode:    mode,
+		metrics: newMetrics(handle),
+	}, nil
+}
+
+func (f *wafPluginConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, error) {
 	wafConfig, mode, err := waf.NewWAFConfigFromBytes(unparsedConfig, logger.GetLogger())
 	if err != nil {
 		return nil, err
 	}
-	return &wafPluginFactory{config: wafConfig, mode: mode}, nil
+	return &perRouteWafPluginConfig{
+		config: wafConfig,
+		mode:   mode,
+	}, nil
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
 // The plugin struct that implements the actual logic.
-
 type wafPlugin struct {
 	shared.EmptyHttpFilter
-	logger *logger.Logger
-	handle shared.HttpFilterHandle
-	config coraza.WAF
-	mode   waf.WAFMode
+	logger            *logger.Logger
+	handle            shared.HttpFilterHandle
+	config            coraza.WAF
+	mode              waf.WAFMode
+	metrics           *metrics
+	metadataNamespace string
 
-	context               ctypes.Transaction
+	txContext             ctypes.Transaction
 	protocol              string
 	isUpgrade             bool
 	isSSE                 bool
 	requestBodyProcessed  bool
 	responseBodyProcessed bool
+	authority             string
 }
 
 func (p *wafPlugin) getSourceAddress() (string, int) {
-	address, _ := p.handle.GetAttributeString(shared.AttributeIDSourceAddress)
+	addressAttr, _ := p.handle.GetAttributeString(shared.AttributeIDSourceAddress)
+	address := addressAttr.ToUnsafeString()
 	if address == "" {
 		p.handle.Log(shared.LogLevelDebug, "No source.address attribute")
 		// Use a default value if the attribute is not set.
@@ -90,12 +148,13 @@ func (p *wafPlugin) getSourceAddress() (string, int) {
 }
 
 func (p *wafPlugin) getRequestProtocol() string {
-	protocol, _ := p.handle.GetAttributeString(shared.AttributeIDRequestProtocol)
+	protocolAttr, _ := p.handle.GetAttributeString(shared.AttributeIDRequestProtocol)
+	protocol := protocolAttr.ToString()
 	if protocol == "" {
 		p.handle.Log(shared.LogLevelDebug, "No request.protocol attribute")
 		return "HTTP/1.1"
 	}
-	return strings.Clone(protocol)
+	return protocol
 }
 
 func getServerName(host string) string {
@@ -103,33 +162,38 @@ func getServerName(host string) string {
 }
 
 func (p *wafPlugin) mayInitializeTransaction(headers shared.HeaderMap) {
-	if p.context != nil {
+	if p.txContext != nil {
 		return
 	}
-	id := headers.GetOne("x-request-id")
-	p.context = p.config.NewTransactionWithID(strings.Clone(id))
+	id := headers.GetOne("x-request-id").ToString()
+	p.txContext = p.config.NewTransactionWithID(id)
 	p.isUpgrade = p.checkUpgrade(headers)
 }
 
 func (p *wafPlugin) checkUpgrade(headers shared.HeaderMap) bool {
-	connectionHeader := headers.GetOne("connection")
-	upgrade := headers.GetOne("upgrade")
+	connectionHeader := headers.GetOne("connection").ToUnsafeString()
+	upgrade := headers.GetOne("upgrade").ToUnsafeString()
 	return strings.Contains(strings.ToLower(connectionHeader), "upgrade") &&
 		upgrade != ""
 }
 
 func (p *wafPlugin) checkSSE(headers shared.HeaderMap) bool {
-	return strings.Contains(strings.ToLower(headers.GetOne("content-type")),
+	return strings.Contains(strings.ToLower(headers.GetOne("content-type").ToUnsafeString()),
 		"text/event-stream")
 }
 
-func (p *wafPlugin) OnRequestHeaders(
-	headers shared.HeaderMap,
-	endOfStream bool,
-) shared.HeadersStatus {
+func (p *wafPlugin) OnRequestHeaders(headers shared.HeaderMap, endOfStream bool) shared.HeadersStatus {
+	// Save for later use in response processing.
+	host := headers.GetOne(":authority").ToString()
+	p.protocol = p.getRequestProtocol()
+	if authority, _, err := net.SplitHostPort(host); err == nil {
+		p.authority = authority
+	} else {
+		p.authority = host
+	}
 	p.mayInitializeTransaction(headers)
 
-	if p.context.IsRuleEngineOff() || (p.mode == waf.ModeResponseOnly) {
+	if p.txContext.IsRuleEngineOff() || (p.mode == waf.ModeResponseOnly) {
 		return shared.HeadersStatusContinue
 	}
 
@@ -137,60 +201,47 @@ func (p *wafPlugin) OnRequestHeaders(
 	// Destination is not known in this context. Use placeholders.
 	dstIP, dstPort := "127.0.0.1", 80
 
-	scheme := strings.Clone(headers.GetOne(":scheme"))
+	scheme := headers.GetOne(":scheme").ToString()
 	if scheme == "" {
 		scheme = "http"
 	}
-	host := strings.Clone(headers.GetOne(":authority"))
-	path := strings.Clone(headers.GetOne(":path"))
-	method := strings.Clone(headers.GetOne(":method"))
+	path := headers.GetOne(":path").ToString()
+	method := headers.GetOne(":method").ToString()
 	uri := scheme + "://" + host + path
-	// Save for later use in response processing.
-	p.protocol = p.getRequestProtocol()
 
 	// CRS rules tend to expect Host even with HTTP/2
-	p.context.AddRequestHeader("Host", host)
-	p.context.SetServerName(getServerName(host))
+	p.txContext.AddRequestHeader("Host", host)
+	p.txContext.SetServerName(getServerName(host))
 	headerMap := headers.GetAll()
 	for _, header := range headerMap {
-		p.context.AddRequestHeader(strings.Clone(header[0]), strings.Clone(header[1]))
+		p.txContext.AddRequestHeader(header[0].ToString(), header[1].ToString())
 	}
 
-	p.context.ProcessConnection(srcIP, srcPort, dstIP, dstPort)
-	p.context.ProcessURI(uri, method, p.protocol)
-	interruption := p.context.ProcessRequestHeaders()
+	p.txContext.ProcessConnection(srcIP, srcPort, dstIP, dstPort)
+	p.txContext.ProcessURI(uri, method, p.protocol)
+	interruption := p.txContext.ProcessRequestHeaders()
 	if interruption != nil {
-		status := interruption.Status
-		if status == 0 {
-			status = 403
-		}
-		p.handle.SendLocalResponse(
-			uint32(status), //nolint:gosec // status is validated to be non-zero
-			nil,
-			[]byte("Request blocked by WAF"),
-			"waf_request_headers_blocked",
-		)
+		p.blockRequest(interruption, ctypes.PhaseRequestHeaders, "waf_request_headers_blocked")
 		return shared.HeadersStatusStop
 	}
 
-	// If endOfStream is true or it's an upgrade request, continue the filter chain
-	// because we won't buffer the body anyway.
+	// If endOfStream is true or if we won't buffer the body (upgrade), call handleRequestBody to run phase 2 rules.
+	// This allows rules in the request body phase to run, even if there is no actual body to process and before sending the headers.
 	if endOfStream || p.isUpgrade {
+		if !p.handleRequestBody() {
+			return shared.HeadersStatusStop
+		}
 		return shared.HeadersStatusContinue
 	}
 	return shared.HeadersStatusStop
 }
 
-func (p *wafPlugin) OnRequestBody(
-	body shared.BodyBuffer,
-	endOfStream bool,
-) shared.BodyStatus {
-	if p.context.IsRuleEngineOff() || (p.mode == waf.ModeResponseOnly ||
-		p.requestBodyProcessed) {
+func (p *wafPlugin) OnRequestBody(body shared.BodyBuffer, endOfStream bool) shared.BodyStatus {
+	if p.txContext.IsRuleEngineOff() || p.mode == waf.ModeResponseOnly || p.requestBodyProcessed {
 		return shared.BodyStatusContinue
 	}
 
-	if !p.context.IsRequestBodyAccessible() {
+	if !p.txContext.IsRequestBodyAccessible() {
 		if !p.handleRequestBody() {
 			return shared.BodyStatusStopNoBuffer
 		}
@@ -202,6 +253,13 @@ func (p *wafPlugin) OnRequestBody(
 		return shared.BodyStatusStopNoBuffer
 	}
 
+	// Check if writeRequestBody triggered internally ProcessRequestBody due to body limit reached under ProcessPartial.
+	if p.requestBodyProcessed {
+		// Body limit was reached and it has been inspected without an interruption.
+		// Stop buffering and let the rest of the body stream through.
+		return shared.BodyStatusContinue
+	}
+
 	// If endOfStream is true, process the body now.
 	if endOfStream {
 		if !p.handleRequestBody() {
@@ -210,18 +268,12 @@ func (p *wafPlugin) OnRequestBody(
 		return shared.BodyStatusContinue
 	}
 
-	if p.isUpgrade {
-		// In case of upgrade, we cannot buffer the body anyway.
-		return shared.BodyStatusContinue
-	}
-
 	// In other cases, buffer the body until end of stream.
 	return shared.BodyStatusStopAndBuffer
 }
 
 func (p *wafPlugin) OnRequestTrailers(_ shared.HeaderMap) shared.TrailersStatus {
-	if p.context.IsRuleEngineOff() || (p.mode == waf.ModeResponseOnly ||
-		p.requestBodyProcessed) {
+	if p.txContext.IsRuleEngineOff() || p.mode == waf.ModeResponseOnly || p.requestBodyProcessed {
 		return shared.TrailersStatusContinue
 	}
 
@@ -233,72 +285,55 @@ func (p *wafPlugin) OnRequestTrailers(_ shared.HeaderMap) shared.TrailersStatus 
 	return shared.TrailersStatusContinue
 }
 
-func (p *wafPlugin) OnResponseHeaders(
-	headers shared.HeaderMap,
-	endOfStream bool,
-) shared.HeadersStatus {
+func (p *wafPlugin) OnResponseHeaders(headers shared.HeaderMap, endOfStream bool) shared.HeadersStatus {
 	p.mayInitializeTransaction(p.handle.RequestHeaders())
 	p.isSSE = p.checkSSE(headers)
 
-	if p.context.IsRuleEngineOff() || (p.mode == waf.ModeRequestOnly) {
+	if p.txContext.IsRuleEngineOff() || (p.mode == waf.ModeRequestOnly) {
 		return shared.HeadersStatusContinue
 	}
 
 	for _, header := range headers.GetAll() {
-		p.context.AddResponseHeader(strings.Clone(header[0]), strings.Clone(header[1]))
+		p.txContext.AddResponseHeader(header[0].ToString(), header[1].ToString())
 	}
 	if p.protocol == "" {
 		p.protocol = p.getRequestProtocol()
 	}
-	codeStr := headers.GetOne(":status")
+	codeStr := headers.GetOne(":status").ToUnsafeString()
 	if codeStr == "" {
 		codeStr = "500"
 	}
 	code, err := strconv.Atoi(codeStr)
 	if err != nil {
 		p.handle.Log(shared.LogLevelInfo, "Invalid response status code: %s", codeStr)
-		p.handle.SendLocalResponse(
-			500,
-			nil,
-			[]byte("Internal Server Error"),
-			"waf_internal_error",
-		)
+		p.blockRequest(nil, ctypes.PhaseResponseHeaders, "waf_internal_error")
 		return shared.HeadersStatusStop
 	}
 
-	interruption := p.context.ProcessResponseHeaders(code, p.protocol)
+	interruption := p.txContext.ProcessResponseHeaders(code, p.protocol)
 	if interruption != nil {
-		status := interruption.Status
-		if status == 0 {
-			status = 403
-		}
-		p.handle.SendLocalResponse(
-			uint32(status), //nolint:gosec // status is validated to be non-zero
-			nil,
-			[]byte("Response blocked by WAF"),
-			"waf_response_headers_blocked",
-		)
+		p.blockRequest(interruption, ctypes.PhaseResponseHeaders, "waf_response_headers_blocked")
 		return shared.HeadersStatusStop
 	}
 
-	// If endOfStream is true or it's an upgrade or SSE response, continue the filter chain
-	// because we won't buffer the body anyway.
+	// If endOfStream is true or if we are not going to buffer the response body anyway (upgrade or SSE),
+	// run handleResponseBody to enforce phase 4 rules. Doing so, response variables already populated
+	// are checked, before the headers are sent back.
 	if endOfStream || p.isUpgrade || p.isSSE {
+		if !p.handleResponseBody() {
+			return shared.HeadersStatusStop
+		}
 		return shared.HeadersStatusContinue
 	}
 	return shared.HeadersStatusStop
 }
 
-func (p *wafPlugin) OnResponseBody(
-	body shared.BodyBuffer,
-	endOfStream bool,
-) shared.BodyStatus {
-	if p.context.IsRuleEngineOff() || (p.mode == waf.ModeRequestOnly) ||
-		p.responseBodyProcessed {
+func (p *wafPlugin) OnResponseBody(body shared.BodyBuffer, endOfStream bool) shared.BodyStatus {
+	if p.txContext.IsRuleEngineOff() || p.mode == waf.ModeRequestOnly || p.responseBodyProcessed {
 		return shared.BodyStatusContinue
 	}
 
-	if !p.context.IsResponseBodyAccessible() {
+	if !p.txContext.IsResponseBodyAccessible() || !p.txContext.IsResponseBodyProcessable() {
 		if !p.handleResponseBody() {
 			return shared.BodyStatusStopNoBuffer
 		}
@@ -310,6 +345,13 @@ func (p *wafPlugin) OnResponseBody(
 		return shared.BodyStatusStopNoBuffer
 	}
 
+	// Check if writeResponseBody triggered internally ProcessResponseBody due to body limit reached under ProcessPartial.
+	if p.responseBodyProcessed {
+		// Body limit was reached and it has been inspected without an interruption.
+		// Stop buffering and let the rest of the body stream through.
+		return shared.BodyStatusContinue
+	}
+
 	// If endOfStream is true, process the body now.
 	if endOfStream {
 		if !p.handleResponseBody() {
@@ -318,18 +360,12 @@ func (p *wafPlugin) OnResponseBody(
 		return shared.BodyStatusContinue
 	}
 
-	if p.isUpgrade || p.isSSE {
-		// In case of upgrade or SSE, we cannot buffer the body anyway.
-		return shared.BodyStatusContinue
-	}
-
 	// In other cases, buffer the body until end of stream.
 	return shared.BodyStatusStopAndBuffer
 }
 
 func (p *wafPlugin) OnResponseTrailers(_ shared.HeaderMap) shared.TrailersStatus {
-	if p.context.IsRuleEngineOff() || (p.mode == waf.ModeRequestOnly) ||
-		p.responseBodyProcessed {
+	if p.txContext.IsRuleEngineOff() || p.mode == waf.ModeRequestOnly || p.responseBodyProcessed {
 		return shared.TrailersStatusContinue
 	}
 
@@ -342,10 +378,13 @@ func (p *wafPlugin) OnResponseTrailers(_ shared.HeaderMap) shared.TrailersStatus
 	return shared.TrailersStatusContinue
 }
 
-func (p *wafPlugin) OnDestroy() {
-	if p.context != nil {
-		p.context.ProcessLogging()
-		err := p.context.Close()
+func (p *wafPlugin) OnStreamComplete() {
+	if p.txContext != nil {
+		if !p.txContext.IsRuleEngineOff() {
+			p.metrics.RecordTx(p.handle)
+		}
+		p.txContext.ProcessLogging()
+		err := p.txContext.Close()
 		if err != nil {
 			p.handle.Log(shared.LogLevelDebug, "Failed to close WAF transaction: %v", err.Error())
 		}
@@ -357,31 +396,34 @@ func (p *wafPlugin) writeRequestBody(body shared.BodyBuffer) bool {
 		return true
 	}
 	for _, chunk := range body.GetChunks() {
-		interruption, _, err := p.context.WriteRequestBody(chunk)
+		chunkBytes := chunk.ToUnsafeBytes()
+		interruption, writtenBytes, err := p.txContext.WriteRequestBody(chunkBytes)
 		if err != nil {
 			p.handle.Log(shared.LogLevelInfo,
 				"Failed to write partial request body to WAF: %v", err.Error())
-			p.handle.SendLocalResponse(
-				500,
-				nil,
-				[]byte("Internal Server Error"),
-				"waf_internal_error",
-			)
+			p.blockRequest(nil, ctypes.PhaseRequestBody, "waf_internal_error")
 			return false
 		}
-		// Write*Body triggers Process*Body if the bodylimit (Sec*BodyLimit) is reached.
+		// Write*Body triggers Process*Body when the bodylimit (Sec*BodyLimit) is reached.
 		if interruption != nil {
-			status := interruption.Status
-			if status == 0 {
-				status = 403
+			switch interruption.Status {
+			case 413:
+				// If SecRequestBodyLimitAction is Reject, Coraza will return an interruption with status 413 Payload Too Large
+				// when the request body limit is exceeded.
+				p.blockRequest(interruption, ctypes.PhaseRequestBody, "waf_request_body_overflow")
+			default:
+				// If SecRequestBodyLimitAction is ProcessPartial, Coraza will process the body and
+				// eventually return an interruption.
+				p.blockRequest(interruption, ctypes.PhaseRequestBody, "waf_request_body_blocked")
 			}
-			p.handle.SendLocalResponse(
-				uint32(status), //nolint:gosec // status is validated to be non-zero
-				nil,
-				[]byte("Request blocked by WAF"),
-				"waf_request_body_overflow",
-			)
 			return false
+		}
+		if writtenBytes < len(chunkBytes) {
+			// writtenBytes < chunk length without an interruption means Coraza hit the body limit under ProcessPartial
+			// and ran Process*Body internally with no rule match. Mark the body as processed so
+			// the remaining data streams through without further buffering.
+			p.requestBodyProcessed = true
+			return true
 		}
 	}
 	return true
@@ -390,28 +432,14 @@ func (p *wafPlugin) writeRequestBody(body shared.BodyBuffer) bool {
 func (p *wafPlugin) handleRequestBody() bool {
 	p.requestBodyProcessed = true
 
-	interruption, err := p.context.ProcessRequestBody()
+	interruption, err := p.txContext.ProcessRequestBody()
 	if err != nil {
 		p.handle.Log(shared.LogLevelInfo, "Failed to process request body in WAF: %v", err.Error())
-		p.handle.SendLocalResponse(
-			500,
-			nil,
-			[]byte("Internal Server Error"),
-			"waf_internal_error",
-		)
+		p.blockRequest(nil, ctypes.PhaseRequestBody, "waf_internal_error")
 		return false
 	}
 	if interruption != nil {
-		status := interruption.Status
-		if status == 0 {
-			status = 403
-		}
-		p.handle.SendLocalResponse(
-			uint32(status), //nolint:gosec // status is validated to be non-zero
-			nil,
-			[]byte("Request blocked by WAF"),
-			"waf_request_body_blocked",
-		)
+		p.blockRequest(interruption, ctypes.PhaseRequestBody, "waf_request_body_blocked")
 		return false
 	}
 	return true
@@ -422,30 +450,33 @@ func (p *wafPlugin) writeResponseBody(body shared.BodyBuffer) bool {
 		return true
 	}
 	for _, chunk := range body.GetChunks() {
-		interruption, _, err := p.context.WriteResponseBody(chunk)
+		chunkBytes := chunk.ToUnsafeBytes()
+		interruption, writtenBytes, err := p.txContext.WriteResponseBody(chunkBytes)
 		if err != nil {
 			p.handle.Log(shared.LogLevelInfo, "Failed to write partial response body to WAF: %v", err.Error())
-			p.handle.SendLocalResponse(
-				500,
-				nil,
-				[]byte("Internal Server Error"),
-				"waf_internal_error",
-			)
+			p.blockRequest(nil, ctypes.PhaseResponseBody, "waf_internal_error")
 			return false
 		}
-		// Write*Body triggers Process*Body if the bodylimit (Sec*BodyLimit) is reached.
+		// Write*Body triggers Process*Body when the bodylimit (Sec*BodyLimit) is reached.
 		if interruption != nil {
-			status := interruption.Status
-			if status == 0 {
-				status = 403
+			switch interruption.Status {
+			case 500:
+				// If SecResponseBodyLimitAction is Reject, Coraza will return an interruption with status
+				// 500 Internal Server Error when the response body limit is exceeded.
+				p.blockRequest(interruption, ctypes.PhaseResponseBody, "waf_response_body_overflow")
+			default:
+				// If SecResponseBodyLimitAction is ProcessPartial, Coraza will process the body and
+				// eventually return an interruption.
+				p.blockRequest(interruption, ctypes.PhaseResponseBody, "waf_response_body_blocked")
 			}
-			p.handle.SendLocalResponse(
-				uint32(status), //nolint:gosec // status is validated to be non-zero
-				nil,
-				[]byte("Response blocked by WAF"),
-				"waf_response_body_overflow",
-			)
 			return false
+		}
+		if writtenBytes < len(chunkBytes) {
+			// writtenBytes < chunk length without an interruption means Coraza hit the body limit under ProcessPartial
+			// and ran Process*Body internally with no rule match. Mark the body as processed so
+			// the remaining data streams through without further buffering.
+			p.responseBodyProcessed = true
+			return true
 		}
 	}
 	return true
@@ -454,31 +485,45 @@ func (p *wafPlugin) writeResponseBody(body shared.BodyBuffer) bool {
 func (p *wafPlugin) handleResponseBody() bool {
 	p.responseBodyProcessed = true
 
-	interruption, err := p.context.ProcessResponseBody()
+	interruption, err := p.txContext.ProcessResponseBody()
 	if err != nil {
 		p.handle.Log(shared.LogLevelInfo, "Failed to process response body in WAF: %v", err.Error())
-		p.handle.SendLocalResponse(
-			500,
-			nil,
-			[]byte("Internal Server Error"),
-			"waf_internal_error",
-		)
+		p.blockRequest(nil, ctypes.PhaseResponseBody, "waf_internal_error")
 		return false
 	}
 	if interruption != nil {
-		status := interruption.Status
+		p.blockRequest(interruption, ctypes.PhaseResponseBody, "waf_response_body_blocked")
+		return false
+	}
+
+	return true
+}
+
+// blockRequest is a helper method to send a local response with the appropriate status and body when a request is blocked by the WAF.
+func (p *wafPlugin) blockRequest(interruption *ctypes.Interruption, phase ctypes.RulePhase, reason string) {
+	var status int
+
+	if interruption == nil {
+		// If we have to block the request without a WAF interruption, that means some internal error happened.
+		// In this case we record the metrics without the ruleID.
+		status = 500
+		p.metrics.RecordBlockInternal(p.handle, p.authority, phase)
+	} else {
+		status = interruption.Status
 		if status == 0 {
 			status = 403
 		}
-		p.handle.SendLocalResponse(
-			uint32(status), //nolint:gosec // status is validated to be non-zero
-			nil,
-			[]byte("Response blocked by WAF"),
-			"waf_response_body_blocked",
-		)
-		return false
+		p.metrics.RecordBlockedByRule(p.handle, p.authority, phase, interruption.RuleID)
+		p.handle.SetMetadata(p.metadataNamespace, metadataKeyBlockRule, interruption.RuleID)
 	}
-	return true
+	p.handle.SetMetadata(p.metadataNamespace, metadataKeyBlockPhase, int(phase))
+
+	p.handle.SendLocalResponse(
+		uint32(status), //nolint:gosec // status is validated to be non-zero
+		nil,
+		nil,
+		reason,
+	)
 }
 
 // ExtensionName is the name of the extension that will be used in the `run` command to refer to this embedded plugin.
