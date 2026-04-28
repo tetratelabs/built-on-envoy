@@ -237,8 +237,7 @@ func (p *wafPlugin) OnRequestHeaders(headers shared.HeaderMap, endOfStream bool)
 }
 
 func (p *wafPlugin) OnRequestBody(body shared.BodyBuffer, endOfStream bool) shared.BodyStatus {
-	if p.txContext.IsRuleEngineOff() || (p.mode == waf.ModeResponseOnly ||
-		p.requestBodyProcessed) {
+	if p.txContext.IsRuleEngineOff() || p.mode == waf.ModeResponseOnly || p.requestBodyProcessed {
 		return shared.BodyStatusContinue
 	}
 
@@ -254,6 +253,13 @@ func (p *wafPlugin) OnRequestBody(body shared.BodyBuffer, endOfStream bool) shar
 		return shared.BodyStatusStopNoBuffer
 	}
 
+	// Check if writeRequestBody triggered internally ProcessRequestBody due to body limit reached under ProcessPartial.
+	if p.requestBodyProcessed {
+		// Body limit was reached and it has been inspected without an interruption.
+		// Stop buffering and let the rest of the body stream through.
+		return shared.BodyStatusContinue
+	}
+
 	// If endOfStream is true, process the body now.
 	if endOfStream {
 		if !p.handleRequestBody() {
@@ -262,18 +268,12 @@ func (p *wafPlugin) OnRequestBody(body shared.BodyBuffer, endOfStream bool) shar
 		return shared.BodyStatusContinue
 	}
 
-	if p.isUpgrade {
-		// In case of upgrade, we cannot buffer the body anyway.
-		return shared.BodyStatusContinue
-	}
-
 	// In other cases, buffer the body until end of stream.
 	return shared.BodyStatusStopAndBuffer
 }
 
 func (p *wafPlugin) OnRequestTrailers(_ shared.HeaderMap) shared.TrailersStatus {
-	if p.txContext.IsRuleEngineOff() || (p.mode == waf.ModeResponseOnly ||
-		p.requestBodyProcessed) {
+	if p.txContext.IsRuleEngineOff() || p.mode == waf.ModeResponseOnly || p.requestBodyProcessed {
 		return shared.TrailersStatusContinue
 	}
 
@@ -329,8 +329,7 @@ func (p *wafPlugin) OnResponseHeaders(headers shared.HeaderMap, endOfStream bool
 }
 
 func (p *wafPlugin) OnResponseBody(body shared.BodyBuffer, endOfStream bool) shared.BodyStatus {
-	if p.txContext.IsRuleEngineOff() || (p.mode == waf.ModeRequestOnly) ||
-		p.responseBodyProcessed {
+	if p.txContext.IsRuleEngineOff() || p.mode == waf.ModeRequestOnly || p.responseBodyProcessed {
 		return shared.BodyStatusContinue
 	}
 
@@ -346,6 +345,13 @@ func (p *wafPlugin) OnResponseBody(body shared.BodyBuffer, endOfStream bool) sha
 		return shared.BodyStatusStopNoBuffer
 	}
 
+	// Check if writeResponseBody triggered internally ProcessResponseBody due to body limit reached under ProcessPartial.
+	if p.responseBodyProcessed {
+		// Body limit was reached and it has been inspected without an interruption.
+		// Stop buffering and let the rest of the body stream through.
+		return shared.BodyStatusContinue
+	}
+
 	// If endOfStream is true, process the body now.
 	if endOfStream {
 		if !p.handleResponseBody() {
@@ -354,18 +360,12 @@ func (p *wafPlugin) OnResponseBody(body shared.BodyBuffer, endOfStream bool) sha
 		return shared.BodyStatusContinue
 	}
 
-	if p.isUpgrade || p.isSSE {
-		// In case of upgrade or SSE, we cannot buffer the body anyway.
-		return shared.BodyStatusContinue
-	}
-
 	// In other cases, buffer the body until end of stream.
 	return shared.BodyStatusStopAndBuffer
 }
 
 func (p *wafPlugin) OnResponseTrailers(_ shared.HeaderMap) shared.TrailersStatus {
-	if p.txContext.IsRuleEngineOff() || (p.mode == waf.ModeRequestOnly) ||
-		p.responseBodyProcessed {
+	if p.txContext.IsRuleEngineOff() || p.mode == waf.ModeRequestOnly || p.responseBodyProcessed {
 		return shared.TrailersStatusContinue
 	}
 
@@ -396,17 +396,34 @@ func (p *wafPlugin) writeRequestBody(body shared.BodyBuffer) bool {
 		return true
 	}
 	for _, chunk := range body.GetChunks() {
-		interruption, _, err := p.txContext.WriteRequestBody(chunk.ToUnsafeBytes())
+		chunkBytes := chunk.ToUnsafeBytes()
+		interruption, writtenBytes, err := p.txContext.WriteRequestBody(chunkBytes)
 		if err != nil {
 			p.handle.Log(shared.LogLevelInfo,
 				"Failed to write partial request body to WAF: %v", err.Error())
 			p.blockRequest(nil, ctypes.PhaseRequestBody, "waf_internal_error")
 			return false
 		}
-		// Write*Body triggers Process*Body if the bodylimit (Sec*BodyLimit) is reached.
+		// Write*Body triggers Process*Body when the bodylimit (Sec*BodyLimit) is reached.
 		if interruption != nil {
-			p.blockRequest(interruption, ctypes.PhaseRequestBody, "waf_request_body_overflow")
+			switch interruption.Status {
+			case 413:
+				// If SecRequestBodyLimitAction is Reject, Coraza will return an interruption with status 413 Payload Too Large
+				// when the request body limit is exceeded.
+				p.blockRequest(interruption, ctypes.PhaseRequestBody, "waf_request_body_overflow")
+			default:
+				// If SecRequestBodyLimitAction is ProcessPartial, Coraza will process the body and
+				// eventually return an interruption.
+				p.blockRequest(interruption, ctypes.PhaseRequestBody, "waf_request_body_blocked")
+			}
 			return false
+		}
+		if writtenBytes < len(chunkBytes) {
+			// writtenBytes < chunk length without an interruption means Coraza hit the body limit under ProcessPartial
+			// and ran Process*Body internally with no rule match. Mark the body as processed so
+			// the remaining data streams through without further buffering.
+			p.requestBodyProcessed = true
+			return true
 		}
 	}
 	return true
@@ -433,16 +450,33 @@ func (p *wafPlugin) writeResponseBody(body shared.BodyBuffer) bool {
 		return true
 	}
 	for _, chunk := range body.GetChunks() {
-		interruption, _, err := p.txContext.WriteResponseBody(chunk.ToUnsafeBytes())
+		chunkBytes := chunk.ToUnsafeBytes()
+		interruption, writtenBytes, err := p.txContext.WriteResponseBody(chunkBytes)
 		if err != nil {
 			p.handle.Log(shared.LogLevelInfo, "Failed to write partial response body to WAF: %v", err.Error())
 			p.blockRequest(nil, ctypes.PhaseResponseBody, "waf_internal_error")
 			return false
 		}
-		// Write*Body triggers Process*Body if the bodylimit (Sec*BodyLimit) is reached.
+		// Write*Body triggers Process*Body when the bodylimit (Sec*BodyLimit) is reached.
 		if interruption != nil {
-			p.blockRequest(interruption, ctypes.PhaseResponseBody, "waf_response_body_overflow")
+			switch interruption.Status {
+			case 500:
+				// If SecResponseBodyLimitAction is Reject, Coraza will return an interruption with status
+				// 500 Internal Server Error when the response body limit is exceeded.
+				p.blockRequest(interruption, ctypes.PhaseResponseBody, "waf_response_body_overflow")
+			default:
+				// If SecResponseBodyLimitAction is ProcessPartial, Coraza will process the body and
+				// eventually return an interruption.
+				p.blockRequest(interruption, ctypes.PhaseResponseBody, "waf_response_body_blocked")
+			}
 			return false
+		}
+		if writtenBytes < len(chunkBytes) {
+			// writtenBytes < chunk length without an interruption means Coraza hit the body limit under ProcessPartial
+			// and ran Process*Body internally with no rule match. Mark the body as processed so
+			// the remaining data streams through without further buffering.
+			p.responseBodyProcessed = true
+			return true
 		}
 	}
 	return true
@@ -487,7 +521,7 @@ func (p *wafPlugin) blockRequest(interruption *ctypes.Interruption, phase ctypes
 	p.handle.SendLocalResponse(
 		uint32(status), //nolint:gosec // status is validated to be non-zero
 		nil,
-		[]byte("Blocked by WAF"),
+		nil,
 		reason,
 	)
 }

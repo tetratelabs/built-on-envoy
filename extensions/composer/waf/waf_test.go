@@ -791,7 +791,7 @@ func Test_BlockRequestWaf(t *testing.T) {
 		).Return(shared.MetricsSuccess)
 		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 100001)
 		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestHeaders))
-		pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_request_headers_blocked")
+		pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, nil, "waf_request_headers_blocked")
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
@@ -831,7 +831,7 @@ func Test_BlockRequestWaf(t *testing.T) {
 		).Return(shared.MetricsSuccess)
 		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 100002)
 		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestBody))
-		pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_request_body_blocked")
+		pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, nil, "waf_request_body_blocked")
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
@@ -902,7 +902,7 @@ func Test_BlockRequestWaf(t *testing.T) {
 		).Return(shared.MetricsSuccess)
 		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 100003)
 		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseResponseBody))
-		pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_response_body_blocked")
+		pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, nil, "waf_response_body_blocked")
 
 		responseBody := fake.NewFakeBodyBuffer([]byte(`{"secret":"leaked-secret"}`))
 		bodyStatus := wafPlugin.OnResponseBody(responseBody, true)
@@ -942,7 +942,7 @@ func Test_BlockRequest(t *testing.T) {
 		).Return(shared.MetricsSuccess)
 		// Only block_phase metadata is set (no block_rule for internal errors).
 		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestBody))
-		pluginHandle.EXPECT().SendLocalResponse(uint32(500), nil, []byte("Blocked by WAF"), "waf_internal_error")
+		pluginHandle.EXPECT().SendLocalResponse(uint32(500), nil, nil, "waf_internal_error")
 
 		p.blockRequest(nil, ctypes.PhaseRequestBody, "waf_internal_error")
 	})
@@ -970,7 +970,7 @@ func Test_BlockRequest(t *testing.T) {
 		).Return(shared.MetricsSuccess)
 		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 12345)
 		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestHeaders))
-		pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_request_headers_blocked")
+		pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, nil, "waf_request_headers_blocked")
 
 		p.blockRequest(interruption, ctypes.PhaseRequestHeaders, "waf_request_headers_blocked")
 	})
@@ -998,7 +998,7 @@ func Test_BlockRequest(t *testing.T) {
 		).Return(shared.MetricsSuccess)
 		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 99999)
 		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseResponseBody))
-		pluginHandle.EXPECT().SendLocalResponse(uint32(429), nil, []byte("Blocked by WAF"), "waf_response_body_blocked")
+		pluginHandle.EXPECT().SendLocalResponse(uint32(429), nil, nil, "waf_response_body_blocked")
 
 		p.blockRequest(interruption, ctypes.PhaseResponseBody, "waf_response_body_blocked")
 	})
@@ -1048,7 +1048,7 @@ func Test_SecRequestBodyAccessOff(t *testing.T) {
 				).Return(shared.MetricsSuccess)
 				pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 100002)
 				pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestBody))
-				pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_request_body_blocked")
+				pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, nil, "waf_request_body_blocked")
 			}
 
 			wafPlugin, ok := wafPluginFactory.Create(pluginHandle).(*wafPlugin)
@@ -1122,7 +1122,7 @@ func Test_Phase2ArgsRuleWithSecRequestBodyAccessOff(t *testing.T) {
 			).Return(shared.MetricsSuccess)
 			pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 100002)
 			pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestBody))
-			pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_request_body_blocked")
+			pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, nil, "waf_request_body_blocked")
 
 			wafPlugin, ok := wafPluginFactory.Create(pluginHandle).(*wafPlugin)
 			require.True(t, ok, "failed to cast plugin to wafPlugin")
@@ -1211,7 +1211,7 @@ func Test_Phase2RulesOnHeaderOnlyRequest(t *testing.T) {
 			).Return(shared.MetricsSuccess)
 			pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, tc.ruleID)
 			pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestBody))
-			pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_request_body_blocked")
+			pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, nil, "waf_request_body_blocked")
 
 			wafPlugin, ok := wafPluginFactory.Create(pluginHandle).(*wafPlugin)
 			require.True(t, ok, "failed to cast plugin to wafPlugin")
@@ -1311,7 +1311,7 @@ func Test_Phase4RulesOnHeaderOnlyResponse(t *testing.T) {
 			).Return(shared.MetricsSuccess)
 			pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, tc.ruleID)
 			pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseResponseBody))
-			pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_response_body_blocked")
+			pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, nil, "waf_response_body_blocked")
 
 			wafPlugin, ok := wafPluginFactory.Create(pluginHandle).(*wafPlugin)
 			require.True(t, ok, "failed to cast plugin to wafPlugin")
@@ -1388,7 +1388,7 @@ func Test_SecResponseBodyAccessOff(t *testing.T) {
 				).Return(shared.MetricsSuccess)
 				pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 100003)
 				pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseResponseBody))
-				pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_response_body_blocked")
+				pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, nil, "waf_response_body_blocked")
 			}
 
 			wafPlugin, ok := wafPluginFactory.Create(pluginHandle).(*wafPlugin)
@@ -1463,7 +1463,7 @@ func Test_Phase4ResponseHeadersRuleWithSecResponseBodyAccessOff(t *testing.T) {
 			).Return(shared.MetricsSuccess)
 			pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 100003)
 			pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseResponseBody))
-			pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_response_body_blocked")
+			pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, nil, "waf_response_body_blocked")
 
 			wafPlugin, ok := wafPluginFactory.Create(pluginHandle).(*wafPlugin)
 			require.True(t, ok, "failed to cast plugin to wafPlugin")
@@ -1627,6 +1627,224 @@ func Test_PerRouteConfigOverride(t *testing.T) {
 	})
 }
 
+// When SecRequestBodyLimitAction ProcessPartial is set, the body has to be inspected up
+// to the configured limit and then streamed without keeping buffering the entire body.
+func Test_ProcessPartialBodyLimit(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	// Same directives are shared between request body subtests.
+	// Same rule 100020 is expected to:
+	// - match and block in the first subtest where "hello" is within the 5-byte inspection window.
+	// - not match in the second subtest where "hello" is outside the inspection window, and the body is streamed after the limit is hit.
+	reqPartialDirs := []string{
+		"SecRuleEngine On",
+		"SecRequestBodyAccess On",
+		"SecRequestBodyLimit 5",
+		"SecRequestBodyLimitAction ProcessPartial",
+		`SecRule REQUEST_BODY "@contains hello" "id:100020,phase:2,deny,status:403,msg:'Matched in inspection window'"`,
+	}
+	reqHeaders := map[string][]string{
+		":authority":   {"example.com:8080"},
+		":method":      {"POST"},
+		":path":        {"/submit"},
+		"content-type": {"application/x-www-form-urlencoded"},
+	}
+
+	t.Run("request body: rule matching within inspection window blocks", func(t *testing.T) {
+		wafPluginFactory := newWAFFactory(t, ctrl, reqPartialDirs, "FULL")
+
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
+		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:8080"), true)
+		pluginHandle.EXPECT().IncrementCounterValue(
+			shared.MetricID(2), uint64(1), "example.com", strconv.Itoa(int(ctypes.PhaseRequestBody)), "100020",
+		).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 100020)
+		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestBody))
+		pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, gomock.Any(), "waf_request_body_blocked")
+
+		wafPlugin, ok := wafPluginFactory.Create(pluginHandle).(*wafPlugin)
+		require.True(t, ok)
+
+		require.Equal(t, shared.HeadersStatusStop, wafPlugin.OnRequestHeaders(fake.NewFakeHeaderMap(reqHeaders), false))
+
+		// "hello" is in bytes 1-5, within the inspection window: 100020 matches and blocks the request.
+		bodyStatus := wafPlugin.OnRequestBody(fake.NewFakeBodyBuffer([]byte("hello world")), false)
+		assert.Equal(t, shared.BodyStatusStopNoBuffer, bodyStatus, "expected rule matching within the 5-byte inspection window to block")
+		wafPlugin.OnStreamComplete()
+	})
+
+	t.Run("request body: ProcessPartial streams after limit, rule outside window does not fire", func(t *testing.T) {
+		wafPluginFactory := newWAFFactory(t, ctrl, reqPartialDirs, "FULL")
+
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
+		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:8080"), true)
+
+		wafPlugin, ok := wafPluginFactory.Create(pluginHandle).(*wafPlugin)
+		require.True(t, ok)
+
+		require.Equal(t, shared.HeadersStatusStop, wafPlugin.OnRequestHeaders(fake.NewFakeHeaderMap(reqHeaders), false))
+
+		// "hello" is outside the inspection window: 100020 does not match
+		bodyStatus := wafPlugin.OnRequestBody(fake.NewFakeBodyBuffer([]byte("this is a longer body. matching hello world outside of checked body limits")), false)
+		assert.Equal(t, shared.BodyStatusContinue, bodyStatus, "expected BodyStatusContinue: rule outside window does not fire, body is not kept buffering nor scanned")
+		assert.True(t, wafPlugin.requestBodyProcessed, "expected requestBodyProcessed to be true after limit hit")
+
+		// Subsequent chunks stream through because the body is already marked as processed.
+		bodyStatus = wafPlugin.OnRequestBody(fake.NewFakeBodyBuffer([]byte("more data")), false)
+		assert.Equal(t, shared.BodyStatusContinue, bodyStatus, "expected BodyStatusContinue for subsequent body after ProcessPartial")
+
+		// Trailers also short-circuit.
+		trailerStatus := wafPlugin.OnRequestTrailers(fake.NewFakeHeaderMap(map[string][]string{"grpc-status": {"0"}}))
+		assert.Equal(t, shared.TrailersStatusContinue, trailerStatus, "expected TrailersStatusContinue after ProcessPartial")
+
+		wafPlugin.OnStreamComplete()
+	})
+
+	t.Run("request body: Reject triggers 413", func(t *testing.T) {
+		wafPluginFactory := newWAFFactory(t, ctrl, []string{
+			"SecRuleEngine On",
+			"SecRequestBodyAccess On",
+			"SecRequestBodyLimit 5",
+			"SecRequestBodyLimitAction Reject",
+		}, "FULL")
+
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
+		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:8080"), true)
+		pluginHandle.EXPECT().IncrementCounterValue(
+			shared.MetricID(2), uint64(1), "example.com", strconv.Itoa(int(ctypes.PhaseRequestBody)), gomock.Any(),
+		).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, gomock.Any())
+		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestBody))
+		pluginHandle.EXPECT().SendLocalResponse(uint32(413), nil, gomock.Any(), "waf_request_body_overflow")
+
+		wafPlugin, ok := wafPluginFactory.Create(pluginHandle).(*wafPlugin)
+		require.True(t, ok)
+
+		require.Equal(t, shared.HeadersStatusStop, wafPlugin.OnRequestHeaders(fake.NewFakeHeaderMap(reqHeaders), false))
+
+		bodyStatus := wafPlugin.OnRequestBody(fake.NewFakeBodyBuffer([]byte("hello world")), false)
+		assert.Equal(t, shared.BodyStatusStopNoBuffer, bodyStatus, "expected BodyStatusStopNoBuffer when SecRequestBodyLimitAction is Reject")
+
+		wafPlugin.OnStreamComplete()
+	})
+
+	respPartialDirs := []string{
+		"SecRuleEngine On",
+		"SecResponseBodyAccess On",
+		"SecResponseBodyMimeType text/plain",
+		"SecResponseBodyLimit 5",
+		"SecResponseBodyLimitAction ProcessPartial",
+		`SecRule RESPONSE_BODY "@contains hello" "id:100030,phase:4,deny,status:403,msg:'Matched in inspection window'"`,
+	}
+	respRequestHeaders := fake.NewFakeHeaderMap(map[string][]string{
+		":authority": {"example.com:8080"},
+		":method":    {"GET"},
+		":path":      {"/"},
+	})
+	respHeaders := map[string][]string{
+		":status":      {"200"},
+		"content-type": {"text/plain"},
+	}
+
+	t.Run("response body: rule matching within inspection window blocks", func(t *testing.T) {
+		wafPluginFactory := newWAFFactory(t, ctrl, respPartialDirs, "FULL")
+
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
+		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:8080"), true)
+		pluginHandle.EXPECT().IncrementCounterValue(
+			shared.MetricID(2), uint64(1), "example.com", strconv.Itoa(int(ctypes.PhaseResponseBody)), "100030",
+		).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 100030)
+		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseResponseBody))
+		pluginHandle.EXPECT().SendLocalResponse(uint32(403), gomock.Any(), gomock.Any(), "waf_response_body_blocked")
+
+		wafPlugin, ok := wafPluginFactory.Create(pluginHandle).(*wafPlugin)
+		require.True(t, ok)
+
+		require.Equal(t, shared.HeadersStatusContinue, wafPlugin.OnRequestHeaders(respRequestHeaders, true))
+		pluginHandle.EXPECT().RequestHeaders().Return(respRequestHeaders)
+		require.Equal(t, shared.HeadersStatusStop, wafPlugin.OnResponseHeaders(fake.NewFakeHeaderMap(respHeaders), false))
+
+		// "hello" is in bytes 1-5, within the inspection window: 100030 matches and blocks.
+		bodyStatus := wafPlugin.OnResponseBody(fake.NewFakeBodyBuffer([]byte("hello world")), false)
+		assert.Equal(t, shared.BodyStatusStopNoBuffer, bodyStatus, "expected rule matching within the 5-byte inspection window to block")
+
+		wafPlugin.OnStreamComplete()
+	})
+
+	t.Run("response body: ProcessPartial streams after limit, rule outside window does not fire", func(t *testing.T) {
+		wafPluginFactory := newWAFFactory(t, ctrl, respPartialDirs, "FULL")
+
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
+		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:8080"), true)
+
+		wafPlugin, ok := wafPluginFactory.Create(pluginHandle).(*wafPlugin)
+		require.True(t, ok)
+
+		require.Equal(t, shared.HeadersStatusContinue, wafPlugin.OnRequestHeaders(respRequestHeaders, true))
+		pluginHandle.EXPECT().RequestHeaders().Return(respRequestHeaders)
+		require.Equal(t, shared.HeadersStatusStop, wafPlugin.OnResponseHeaders(fake.NewFakeHeaderMap(respHeaders), false))
+
+		// "hello" is outside the inspection window: 100030 does not match.
+		bodyStatus := wafPlugin.OnResponseBody(fake.NewFakeBodyBuffer([]byte("worldhello")), false)
+		assert.Equal(t, shared.BodyStatusContinue, bodyStatus, "expected BodyStatusContinue: rule outside window does not fire, body is not kept buffering")
+		assert.True(t, wafPlugin.responseBodyProcessed, "expected responseBodyProcessed to be true after limit hit")
+
+		// Subsequent chunks stream through because the body is already marked as processed.
+		bodyStatus = wafPlugin.OnResponseBody(fake.NewFakeBodyBuffer([]byte("more data")), false)
+		assert.Equal(t, shared.BodyStatusContinue, bodyStatus, "expected BodyStatusContinue for subsequent response body after ProcessPartial")
+
+		// Trailers also short-circuit.
+		trailerStatus := wafPlugin.OnResponseTrailers(fake.NewFakeHeaderMap(map[string][]string{"grpc-status": {"0"}}))
+		assert.Equal(t, shared.TrailersStatusContinue, trailerStatus, "expected TrailersStatusContinue after ProcessPartial")
+
+		wafPlugin.OnStreamComplete()
+	})
+
+	t.Run("response body: Reject triggers 500", func(t *testing.T) {
+		wafPluginFactory := newWAFFactory(t, ctrl, []string{
+			"SecRuleEngine On",
+			"SecResponseBodyAccess On",
+			"SecResponseBodyMimeType text/plain",
+			"SecResponseBodyLimit 5",
+			"SecResponseBodyLimitAction Reject",
+		}, "FULL")
+
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
+		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:8080"), true)
+		pluginHandle.EXPECT().IncrementCounterValue(
+			shared.MetricID(2), uint64(1), "example.com", strconv.Itoa(int(ctypes.PhaseResponseBody)), gomock.Any(),
+		).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, gomock.Any())
+		pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseResponseBody))
+		pluginHandle.EXPECT().SendLocalResponse(uint32(500), gomock.Any(), gomock.Any(), "waf_response_body_overflow")
+
+		wafPlugin, ok := wafPluginFactory.Create(pluginHandle).(*wafPlugin)
+		require.True(t, ok)
+
+		require.Equal(t, shared.HeadersStatusContinue, wafPlugin.OnRequestHeaders(respRequestHeaders, true))
+		pluginHandle.EXPECT().RequestHeaders().Return(respRequestHeaders)
+		require.Equal(t, shared.HeadersStatusStop, wafPlugin.OnResponseHeaders(fake.NewFakeHeaderMap(respHeaders), false))
+
+		bodyStatus := wafPlugin.OnResponseBody(fake.NewFakeBodyBuffer([]byte("hello world")), false)
+		assert.Equal(t, shared.BodyStatusStopNoBuffer, bodyStatus, "expected BodyStatusStopNoBuffer when SecResponseBodyLimitAction is Reject")
+
+		wafPlugin.OnStreamComplete()
+	})
+}
+
 func Test_PerRouteConfigBlocksRequest(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -1662,7 +1880,7 @@ func Test_PerRouteConfigBlocksRequest(t *testing.T) {
 	).Return(shared.MetricsSuccess)
 	pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, 200001)
 	pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestHeaders))
-	pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, []byte("Blocked by WAF"), "waf_request_headers_blocked")
+	pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, nil, "waf_request_headers_blocked")
 
 	plugin := baseFactory.Create(pluginHandle)
 	wafPlugin, ok := plugin.(*wafPlugin)
