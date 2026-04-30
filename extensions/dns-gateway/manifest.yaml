@@ -1,0 +1,122 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: dns-gateway
+version: 0.1.0
+minEnvoyVersion: 1.37.1
+categories:
+  - Network
+  - Security
+author: ovadiagal
+description: Transparent egress routing — intercept DNS and route TCP by domain
+longDescription: |
+  Transparent egress routing for Envoy. Applications make normal DNS lookups and TCP
+  connections — this extension intercepts both so Envoy can control which upstream cluster
+  handles each domain, attach metadata (auth tokens, policy IDs), and enforce routing
+  policy, all without any application changes.
+
+  ## Use cases
+
+  * Route outbound traffic through different upstream proxies based on destination domain
+  * Attach per-domain credentials or policy metadata to proxied connections
+  * Enforce egress access control by selectively intercepting DNS for specific domains
+
+  ## How it works
+
+  The extension is a pair of filters that work together:
+
+  1. **`dns_gateway`** (UDP listener filter) — Intercepts DNS queries for configured domain
+     patterns. For each matched query, allocates a virtual IP from a dedicated CIDR range and
+     responds with an A record. The application receives this virtual IP and connects to it
+     as if it were the real destination. Non-matching queries pass through to upstream resolvers.
+
+  2. **`cache_lookup`** (network filter) — When the application opens a TCP connection to a
+     virtual IP, this filter looks up the original domain and its configured metadata from a
+     shared cache and sets them as Envoy
+     [filter state](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/data_sharing_between_filters#primitives).
+     Downstream filters (e.g. `tcp_proxy`, `set_filter_state`) can then use this to select
+     the upstream cluster, set headers, or apply policy.
+
+  ## Features
+
+  * **Domain matching**: Exact (`example.com`) and single-level wildcard (`*.aws.com`) patterns
+  * **Per-domain CIDR ranges**: Each domain pattern allocates virtual IPs from its own subnet
+  * **Metadata propagation**: Arbitrary string key-value pairs flow from config through filter state
+  * **Thread-safe caching**: Concurrent virtual IP allocation with deduplication
+
+  ## Prerequisites
+
+  Requires iptables/nftables rules to redirect application traffic to Envoy:
+  - **DNS**: UDP port 53 redirected to Envoy's DNS listener
+  - **TCP**: Outbound connections to virtual IP ranges redirected to Envoy's TCP listener
+
+  ## Building
+
+  ```bash
+  cargo build --release -p dns-gateway
+  ```
+
+  The compiled library will be at `target/release/libdns_gateway.{so,dylib}`
+tags:
+  - access-control
+  - dns
+  - dynamic-module
+  - egress
+  - networking
+  - routing
+  - rust
+  - security
+  - transparent-proxy
+  - virtual-ip
+license: Apache-2.0
+type: rust
+examples:
+  - title: Single Wildcard Domain
+    description: Intercept all *.aws.com DNS queries and allocate virtual IPs from a /24 range
+    code: |
+      # dns_gateway filter config
+      {
+        "domains": [
+          {
+            "domain": "*.aws.com",
+            "base_ip": "10.239.0.0",
+            "prefix_len": 24,
+            "metadata": {
+              "cluster": "aws_cluster"
+            }
+          }
+        ]
+      }
+  - title: Multiple Domains with Metadata
+    description: Route different domain patterns to different clusters with metadata
+    code: |
+      # dns_gateway filter config
+      {
+        "domains": [
+          {
+            "domain": "*.aws.com",
+            "base_ip": "10.239.0.0",
+            "prefix_len": 24,
+            "metadata": {
+              "cluster": "aws_cluster",
+              "proxy_token": "abc123"
+            }
+          },
+          {
+            "domain": "example.com",
+            "base_ip": "10.239.1.0",
+            "prefix_len": 24,
+            "metadata": {
+              "cluster": "example_cluster",
+              "proxy_token": "def456"
+            }
+          }
+        ]
+      }
+  - title: Cache Lookup Filter
+    description: The cache_lookup network filter requires no configuration
+    code: |
+      # cache_lookup filter config
+      {}
