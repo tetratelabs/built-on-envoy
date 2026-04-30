@@ -1,0 +1,28 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: test-extension
+version: 1.0.0
+categories:
+  - Security
+author: Test Author
+description: A test extension
+longDescription: |
+  Invalid: envoy.filters.http.mcp_router is terminal and replaces the router.
+type: go
+composerVersion: 1.2.3
+tags:
+  - test
+license: Apache-2.0
+examples:
+  - title: Basic usage
+    description: Run the extension
+    code: |
+      boe run --extension test-extension
+nativeHttpFilters:
+  before:
+    - name: envoy.filters.http.mcp_router
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.filters.http.mcp_router.v3.McpRouter

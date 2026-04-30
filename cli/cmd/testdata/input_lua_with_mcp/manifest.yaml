@@ -1,0 +1,36 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: test-lua-with-mcp
+version: 1.0.0
+minEnvoyVersion: 1.38.0
+categories:
+  - Security
+author: Test Author
+description: Lua extension with a native MCP filter declared before it
+longDescription: |
+  Lua extension that consumes MCP attributes published by the native
+  envoy.filters.http.mcp filter declared in nativeHttpFilters.before.
+type: lua
+lua:
+  inline: |
+    function envoy_on_request(request_handle)
+      request_handle:logInfo("hello after mcp")
+    end
+tags:
+  - test
+license: Apache-2.0
+examples:
+  - title: Basic usage
+    description: Run the extension
+    code: |
+      boe run --extension test-lua-with-mcp
+nativeHttpFilters:
+  before:
+    - name: envoy.filters.http.mcp
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.filters.http.mcp.v3.Mcp
+        traffic_mode: REJECT_NO_MCP
+        request_storage_mode: DYNAMIC_METADATA_AND_FILTER_STATE

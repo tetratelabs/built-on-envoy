@@ -296,6 +296,33 @@ Unique identifier for the extension.
 
 
 
+## nativeHttpFilters
+
+Native Envoy HTTP filters that BOE must emit in the HCM filter chain together with this extension's generated HTTP filter.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+| **Forbidden when** | `filterType` is set |
+| **Forbidden when** | `type` is `wasm` |
+| **Forbidden when** | `type` is `composer` |
+
+
+
+### nativeHttpFilters.before
+
+Native Envoy HTTP filters to emit before this extension's generated HTTP filter, in the order listed.
+
+| | |
+|---|---|
+| **Type** | `[]object` |
+| **Required** | No |
+| **Min items** | 1 |
+
+
+
+
 ## parent
 
 Parent extension set whose version will be used. When set, the `version` and `composerVersion` fields can't be set.

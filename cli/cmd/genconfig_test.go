@@ -61,6 +61,10 @@ Flags:
       --config=CONFIG              Optional JSON config string for extensions.
                                    Applied in order to combined --extension and
                                    --local flags.
+      --native-http-filter-before=NATIVE-HTTP-FILTER-BEFORE
+                                   Optional YAML/JSON native HTTP filter list
+                                   (or @filepath) per extension position.
+                                   Overrides manifest nativeHttpFilters.before.
       --cluster=CLUSTER,...        Optional additional Envoy cluster provided in
                                    the host:tlsPort pattern.
       --cluster-insecure=CLUSTER-INSECURE,...
@@ -189,6 +193,18 @@ func TestGenConfig(t *testing.T) {
 			clusters:            []string{clusterShort},
 			testUpstreamCluster: clusterShort,
 			wantFile:            "testdata/output_full_config_with_test_upstream_cluster.yaml",
+		},
+		{
+			name:     "full config with native http filter before extension",
+			minimal:  false,
+			local:    []string{"testdata/input_lua_with_mcp"},
+			wantFile: "testdata/output_full_config_with_native.yaml",
+		},
+		{
+			name:     "minimal config with native http filter before extension",
+			minimal:  true,
+			local:    []string{"testdata/input_lua_with_mcp"},
+			wantFile: "testdata/output_only_filters_with_native.yaml",
 		},
 	}
 

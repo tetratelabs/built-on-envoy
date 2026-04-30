@@ -55,6 +55,10 @@ type RunnerFuncE struct {
 	Extensions []*extensions.Manifest
 	// Configs specifies optional JSON config strings for each extension (by index).
 	Configs []string
+	// NativeHTTPFiltersBefore specifies optional YAML/JSON native HTTP filter overrides
+	// for each extension (by index). When non-empty for a given extension position, it
+	// replaces the manifest's nativeHttpFilters.before.
+	NativeHTTPFiltersBefore []string
 	// Clusters specifies additional Envoy cluster (with TLS) from short names to include in the configuration.
 	Clusters []string
 	// ClustersInsecure specifies additional Envoy cluster (without TLS) from short names to include in the configuration.
@@ -74,17 +78,18 @@ type RunnerFuncE struct {
 // Run starts Envoy using func-e as a library.
 func (r *RunnerFuncE) Run(ctx context.Context) error {
 	params := &ConfigGenerationParams{
-		Logger:              r.Logger,
-		AdminPort:           r.AdminPort,
-		ListenerPort:        r.ListenPort,
-		Dirs:                r.Dirs,
-		Extensions:          r.Extensions,
-		Configs:             r.Configs,
-		Clusters:            r.Clusters,
-		ClustersInsecure:    r.ClustersInsecure,
-		ClustersJSON:        r.ClustersJSON,
-		TestUpstreamHost:    r.TestUpstreamHost,
-		TestUpstreamCluster: r.TestUpstreamCluster,
+		Logger:                  r.Logger,
+		AdminPort:               r.AdminPort,
+		ListenerPort:            r.ListenPort,
+		Dirs:                    r.Dirs,
+		Extensions:              r.Extensions,
+		Configs:                 r.Configs,
+		NativeHTTPFiltersBefore: r.NativeHTTPFiltersBefore,
+		Clusters:                r.Clusters,
+		ClustersInsecure:        r.ClustersInsecure,
+		ClustersJSON:            r.ClustersJSON,
+		TestUpstreamHost:        r.TestUpstreamHost,
+		TestUpstreamCluster:     r.TestUpstreamCluster,
 	}
 	config, err := RenderConfig(params, FullConfigRenderer)
 	if err != nil {
