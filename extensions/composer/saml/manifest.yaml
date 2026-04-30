@@ -24,6 +24,7 @@ longDescription: |
   * **SP Metadata Endpoint**: Auto-generated metadata XML for easy IdP registration
   * **Signed AuthnRequests**: Optional RSA-SHA256 signing of outbound authentication requests
   * **Auto-Generated SP Certificates**: Ephemeral keypair generated when no certificate is provided
+  * **IdP Metadata Fetching**: Optionally load IdP metadata from a URL at config time via Envoy HttpCallout
 
   ## How It Works
 
@@ -39,7 +40,9 @@ longDescription: |
   Required fields:
   - `entity_id`: The SP entity ID (usually, audience URI)
   - `acs_path`: Path for the Assertion Consumer Service endpoint
-  - `idp_metadata_xml`: IdP metadata XML, as `{"inline": "<xml>..."}` or `{"file": "/path/to/metadata.xml"}`
+  - One of (mutually exclusive):
+    - `idp_metadata_xml`: IdP metadata XML, as `{"inline": "<xml>..."}` or `{"file": "/path/to/metadata.xml"}`. Parsed at config-load time.
+    - `idp_metadata_url` + `idp_metadata_cluster`: Fetch the IdP metadata XML from the given URL via the named Envoy cluster at config-load time. The cluster must be reachable when the filter is configured. While the fetch is in flight, requests receive `503 Service Unavailable` with details `saml-metadata-pending`. Once the metadata is loaded, normal SAML processing resumes. If the fetch fails (cluster not found, non-2xx response, unparseable XML), no retry is attempted and requests continue to receive 503 — fix the configuration or restart Envoy after the IdP becomes reachable.
 
   Optional fields:
   - `sp_cert_pem` / `sp_key_pem`: PEM-encoded SP certificate and private key, each as
@@ -89,6 +92,31 @@ examples:
           "entity_id": "http://localhost:10000",
           "acs_path": "/saml/acs",
           "idp_metadata_xml": {"file": "idp-metadata.xml"}
+        }'
+
+      # Test the plugin in the browser and login as testuser/testpass
+      open http://localhost:10000
+
+      # Cleanup keycloak
+      docker compose -f docker-compose.yaml down -v
+  - title: IdP Metadata from URL
+    description: |
+      Fetch the IdP metadata from a URL at config-load time via an Envoy cluster
+      instead of providing it inline or as a file. Useful when the IdP is the
+      source of truth for its metadata and you do not want to redeploy the
+      filter when the IdP rotates signing certificates.
+    code: |
+      # Start keycloack
+      curl -o docker-compose.yaml https://raw.githubusercontent.com/tetratelabs/built-on-envoy/refs/heads/main/extensions/composer/saml/demo/keycloak/docker-compose-remote.yaml
+      docker compose -f docker-compose.yaml up --wait
+
+      # Run the plugin pointing at the IdP metadata endpoint and the cluster that can reach it
+      boe run --extension saml --cluster-insecure=localhost:8080 --config '
+        {
+          "entity_id": "http://localhost:10000",
+          "acs_path": "/saml/acs",
+          "idp_metadata_url": "http://localhost:8080/realms/saml-demo/protocol/saml/descriptor",
+          "idp_metadata_cluster": "localhost:8080"
         }'
 
       # Test the plugin in the browser and login as testuser/testpass

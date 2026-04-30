@@ -48,4 +48,42 @@ func TestConfigSchema(t *testing.T) {
 			"sp_cert_pem": {"file": "/path/to/cert.pem"}
 		}`)
 	})
+	t.Run("URL mode with cluster", func(t *testing.T) {
+		internaltesting.AssertSchemaValid(t, "config.schema.json", `{
+			"entity_id": "https://sp.example.com",
+			"acs_path": "/saml/acs",
+			"idp_metadata_url": "https://idp.example.com/metadata",
+			"idp_metadata_cluster": "idp_cluster"
+		}`)
+	})
+	t.Run("URL mode without cluster is invalid", func(t *testing.T) {
+		internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{
+			"entity_id": "https://sp.example.com",
+			"acs_path": "/saml/acs",
+			"idp_metadata_url": "https://idp.example.com/metadata"
+		}`)
+	})
+	t.Run("cluster without URL is invalid", func(t *testing.T) {
+		internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{
+			"entity_id": "https://sp.example.com",
+			"acs_path": "/saml/acs",
+			"idp_metadata_xml": {"inline": "<xml/>"},
+			"idp_metadata_cluster": "idp_cluster"
+		}`)
+	})
+	t.Run("inline and URL together is invalid", func(t *testing.T) {
+		internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{
+			"entity_id": "https://sp.example.com",
+			"acs_path": "/saml/acs",
+			"idp_metadata_xml": {"inline": "<xml/>"},
+			"idp_metadata_url": "https://idp.example.com/metadata",
+			"idp_metadata_cluster": "idp_cluster"
+		}`)
+	})
+	t.Run("no metadata at all is invalid", func(t *testing.T) {
+		internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{
+			"entity_id": "https://sp.example.com",
+			"acs_path": "/saml/acs"
+		}`)
+	})
 }
