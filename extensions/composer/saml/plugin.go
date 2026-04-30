@@ -7,10 +7,19 @@
 package saml
 
 import (
+	"bytes"
+	"errors"
+	"fmt"
+	"net/url"
+	"sync/atomic"
+
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 
 	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
+
+// idpMetadataCalloutTimeoutMs is the timeout for the config-time IdP metadata HttpCallout.
+const idpMetadataCalloutTimeoutMs = 5000
 
 // samlMetrics holds metric IDs defined at config time, used at request time.
 type samlMetrics struct {
@@ -26,9 +35,14 @@ type samlMetrics struct {
 
 // samlFilterConfig holds the parsed configuration and IdP metadata,
 // shared across all filter instances.
+//
+// idpMetadata is read by request-path filters and written either at config time
+// (inline mode) or from the HttpCallout completion callback (URL mode), all on
+// the main thread but observed concurrently from worker threads — hence
+// atomic.Pointer.
 type samlFilterConfig struct {
 	config      *Config
-	idpMetadata *IDPMetadata
+	idpMetadata atomic.Pointer[IDPMetadata]
 }
 
 // samlFilterFactory creates per-request filter instances.
@@ -64,17 +78,24 @@ func (f *HTTPFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, c
 		handle.Log(shared.LogLevelInfo, "saml: auto-generated ephemeral SP certificate and key (not provided in config)")
 	}
 
-	// Parse IdP metadata from the inline XML.
-	idpMeta, err := parseIDPMetadata([]byte(cfg.IDPMetadataXML))
-	if err != nil {
-		handle.Log(shared.LogLevelError, "saml: failed to parse idp metadata: %s", err.Error())
-		return nil, err
-	}
-	handle.Log(shared.LogLevelInfo, "saml: parsed idp metadata for entity_id=%s, sso_url=%s", idpMeta.EntityID, idpMeta.SSOURL)
+	filterCfg := &samlFilterConfig{config: cfg}
 
-	filterCfg := &samlFilterConfig{
-		config:      cfg,
-		idpMetadata: idpMeta,
+	if cfg.IDPMetadataXML != "" {
+		// Inline mode: parse IdP metadata at config time.
+		idpMeta, err := parseIDPMetadata([]byte(cfg.IDPMetadataXML))
+		if err != nil {
+			handle.Log(shared.LogLevelError, "saml: failed to parse idp metadata: %s", err.Error())
+			return nil, err
+		}
+		filterCfg.idpMetadata.Store(idpMeta)
+		handle.Log(shared.LogLevelInfo, "saml: parsed idp metadata for entity_id=%s, sso_url=%s", idpMeta.EntityID, idpMeta.SSOURL)
+	} else {
+		// URL mode: fetch IdP metadata via HttpCallout from the config handle.
+		// The metadata is published to filterCfg.idpMetadata once the callout completes.
+		// Requests arriving before then receive 503.
+		if err := startIDPMetadataFetch(handle, cfg, filterCfg); err != nil {
+			return nil, err
+		}
 	}
 
 	// Define metrics.
@@ -102,16 +123,127 @@ func (f *HTTPFilterConfigFactory) Create(handle shared.HttpFilterConfigHandle, c
 }
 
 // CreatePerRoute parses per-route configuration for the SAML filter.
+//
+// Per-route configs are parsed without access to a config handle, so they cannot
+// trigger the URL-mode HttpCallout — inline metadata is required.
 func (f *HTTPFilterConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, error) {
 	cfg, err := parseConfig(unparsedConfig)
 	if err != nil {
 		return nil, err
 	}
+	if cfg.IDPMetadataXML == "" {
+		return nil, errors.New("idp_metadata_url is not supported in per-route configuration; use idp_metadata_xml")
+	}
 	idpMeta, err := parseIDPMetadata([]byte(cfg.IDPMetadataXML))
 	if err != nil {
 		return nil, err
 	}
-	return &samlFilterConfig{config: cfg, idpMetadata: idpMeta}, nil
+	out := &samlFilterConfig{config: cfg}
+	out.idpMetadata.Store(idpMeta)
+	return out, nil
+}
+
+// startIDPMetadataFetch initiates an asynchronous HttpCallout to load the IdP metadata
+// from cfg.IDPMetadataURL via cfg.IDPMetadataCluster. On success, the parsed metadata
+// is stored in filterCfg.idpMetadata. On failure during the async response, the
+// metadata stays nil and request handlers respond with 503 until a valid response
+// is observed (e.g. on the next config reload).
+func startIDPMetadataFetch(handle shared.HttpFilterConfigHandle, cfg *Config, filterCfg *samlFilterConfig) error {
+	u, err := url.Parse(cfg.IDPMetadataURL)
+	if err != nil {
+		return fmt.Errorf("invalid idp_metadata_url: %w", err)
+	}
+	if u.Host == "" || u.Scheme == "" {
+		return fmt.Errorf("invalid idp_metadata_url %q: must include scheme and host", cfg.IDPMetadataURL)
+	}
+	requestPath := u.RequestURI()
+	if requestPath == "" {
+		requestPath = "/"
+	}
+
+	cb := &idpMetadataCallback{handle: handle, target: filterCfg}
+	initResult, _ := handle.HttpCallout(
+		cfg.IDPMetadataCluster,
+		[][2]string{
+			{":method", "GET"},
+			{":path", requestPath},
+			{":authority", u.Host},
+		},
+		nil,
+		idpMetadataCalloutTimeoutMs,
+		cb,
+	)
+	if initResult != shared.HttpCalloutInitSuccess {
+		return fmt.Errorf("failed to initiate idp metadata callout to cluster %q: init_result=%d", cfg.IDPMetadataCluster, initResult)
+	}
+	handle.Log(shared.LogLevelInfo, "saml: idp metadata fetch initiated from %s via cluster %s", cfg.IDPMetadataURL, cfg.IDPMetadataCluster)
+	return nil
+}
+
+// idpMetadataCallback receives the response from the config-time HttpCallout that
+// fetches IdP metadata. It parses the response body and publishes the parsed
+// metadata into target.idpMetadata.
+type idpMetadataCallback struct {
+	handle interface {
+		Log(level shared.LogLevel, format string, args ...any)
+	}
+	target *samlFilterConfig
+}
+
+func (c *idpMetadataCallback) OnHttpCalloutDone(_ uint64, result shared.HttpCalloutResult, headers [][2]shared.UnsafeEnvoyBuffer, body []shared.UnsafeEnvoyBuffer) { //nolint:revive
+	if result != shared.HttpCalloutSuccess {
+		c.handle.Log(shared.LogLevelError, "saml: idp metadata callout failed: result=%d", result)
+		return
+	}
+
+	status := calloutHeaderValue(headers, ":status")
+	if status != "200" {
+		c.handle.Log(shared.LogLevelError, "saml: idp metadata callout returned non-200 status: %s", status)
+		return
+	}
+
+	bodyBytes := joinCalloutBody(body)
+	if len(bodyBytes) == 0 {
+		c.handle.Log(shared.LogLevelError, "saml: idp metadata callout returned empty body")
+		return
+	}
+
+	idpMeta, err := parseIDPMetadata(bodyBytes)
+	if err != nil {
+		c.handle.Log(shared.LogLevelError, "saml: failed to parse fetched idp metadata: %s", err.Error())
+		return
+	}
+
+	c.target.idpMetadata.Store(idpMeta)
+	c.handle.Log(shared.LogLevelInfo, "saml: idp metadata loaded for entity_id=%s, sso_url=%s", idpMeta.EntityID, idpMeta.SSOURL)
+}
+
+// joinCalloutBody concatenates the buffers returned by an HttpCallout response into a
+// single byte slice. Returns nil for an empty body. The returned slice references
+// Envoy-owned memory and must be consumed before the callback returns.
+func joinCalloutBody(body []shared.UnsafeEnvoyBuffer) []byte {
+	if len(body) == 0 {
+		return nil
+	}
+	if len(body) == 1 {
+		return body[0].ToUnsafeBytes()
+	}
+	buffers := make([][]byte, len(body))
+	for i, b := range body {
+		buffers[i] = b.ToUnsafeBytes()
+	}
+	return bytes.Join(buffers, nil)
+}
+
+// calloutHeaderValue returns the first value for a key in an HTTP callout response
+// header list.
+func calloutHeaderValue(headers [][2]shared.UnsafeEnvoyBuffer, key string) string {
+	for _, h := range headers {
+		if h[0].ToUnsafeString() == key {
+			return h[1].ToUnsafeString()
+		}
+	}
+	return ""
 }
 
 // WellKnownHttpFilterConfigFactories is used to load the plugin.
