@@ -89,7 +89,7 @@ func TestConfigFactory_Create_URLMode_InitiatesCallout(t *testing.T) {
 		[][2]string{
 			{":method", "GET"},
 			{":path", "/realms/saml-demo/protocol/saml/descriptor"},
-			{"host", "idp.example.com:8080"},
+			{":authority", "idp.example.com:8080"},
 		},
 		gomock.Nil(),
 		uint64(idpMetadataCalloutTimeoutMs),
