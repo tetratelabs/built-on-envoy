@@ -8,6 +8,7 @@ package saml
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
@@ -76,13 +77,21 @@ func Test_CreatePerRoute(t *testing.T) {
 	})
 }
 
-func TestConfigFactory_Create_URLMode_InitiatesCallout(t *testing.T) {
+func TestConfigFactory_Create_URLMode_SchedulesCallout(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	configHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	configHandle.EXPECT().DefineCounter(gomock.Any(), gomock.Any()).Return(shared.MetricID(0), shared.MetricsSuccess).AnyTimes()
+
+	scheduler := mocks.NewMockScheduler(ctrl)
+	configHandle.EXPECT().GetScheduler().Return(scheduler)
+
+	scheduledCh := make(chan func(), 1)
+	scheduler.EXPECT().Schedule(gomock.Any()).Do(func(fn func()) {
+		scheduledCh <- fn
+	})
 
 	configHandle.EXPECT().HttpCallout(
 		"idp_cluster",
@@ -97,43 +106,76 @@ func TestConfigFactory_Create_URLMode_InitiatesCallout(t *testing.T) {
 	).Return(shared.HttpCalloutInitSuccess, uint64(1))
 
 	configJSON, _ := json.Marshal(map[string]any{
-		"entity_id":            "https://sp.example.com",
-		"acs_path":             "/saml/acs",
-		"idp_metadata_url":     "http://idp.example.com:8080/realms/saml-demo/protocol/saml/descriptor",
-		"idp_metadata_cluster": "idp_cluster",
+		"entity_id":                "https://sp.example.com",
+		"acs_path":                 "/saml/acs",
+		"idp_metadata_url":         "http://idp.example.com:8080/realms/saml-demo/protocol/saml/descriptor",
+		"idp_metadata_cluster":     "idp_cluster",
+		"idp_metadata_fetch_delay": "0s",
 	})
 
 	factory := &HTTPFilterConfigFactory{}
 	filterFactory, err := factory.Create(configHandle, configJSON)
 	require.NoError(t, err)
 	require.NotNil(t, filterFactory)
-	// Metadata is not yet loaded.
+
 	sf, ok := filterFactory.(*samlFilterFactory)
 	require.True(t, ok)
-	require.Nil(t, sf.config.idpMetadata.Load())
+	require.Nil(t, sf.config.idpMetadata.Load(), "metadata is not loaded yet — fetch hasn't run")
+
+	// Wait for the goroutine to call scheduler.Schedule, then run the scheduled fn
+	// (this is what Envoy would do on the config thread). The fn invokes HttpCallout.
+	select {
+	case fn := <-scheduledCh:
+		fn()
+	case <-time.After(2 * time.Second):
+		t.Fatal("scheduler.Schedule was not called within 2s")
+	}
 }
 
-func TestConfigFactory_Create_URLMode_InitFailure(t *testing.T) {
+func TestConfigFactory_Create_URLMode_InitFailure_Logged(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	configHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	configHandle.EXPECT().DefineCounter(gomock.Any(), gomock.Any()).Return(shared.MetricID(0), shared.MetricsSuccess).AnyTimes()
+
+	scheduler := mocks.NewMockScheduler(ctrl)
+	configHandle.EXPECT().GetScheduler().Return(scheduler)
+
+	scheduledCh := make(chan func(), 1)
+	scheduler.EXPECT().Schedule(gomock.Any()).Do(func(fn func()) {
+		scheduledCh <- fn
+	})
+
 	configHandle.EXPECT().HttpCallout(
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 	).Return(shared.HttpCalloutInitClusterNotFound, uint64(0))
 
 	configJSON, _ := json.Marshal(map[string]any{
-		"entity_id":            "https://sp.example.com",
-		"acs_path":             "/saml/acs",
-		"idp_metadata_url":     "http://idp.example.com/metadata",
-		"idp_metadata_cluster": "missing_cluster",
+		"entity_id":                "https://sp.example.com",
+		"acs_path":                 "/saml/acs",
+		"idp_metadata_url":         "http://idp.example.com/metadata",
+		"idp_metadata_cluster":     "missing_cluster",
+		"idp_metadata_fetch_delay": "0s",
 	})
 
 	factory := &HTTPFilterConfigFactory{}
-	_, err := factory.Create(configHandle, configJSON)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to initiate idp metadata callout")
+	filterFactory, err := factory.Create(configHandle, configJSON)
+	// Create no longer fails for callout init failure — failure is async and logged.
+	require.NoError(t, err)
+	require.NotNil(t, filterFactory)
+
+	select {
+	case fn := <-scheduledCh:
+		fn()
+	case <-time.After(2 * time.Second):
+		t.Fatal("scheduler.Schedule was not called within 2s")
+	}
+
+	sf, ok := filterFactory.(*samlFilterFactory)
+	require.True(t, ok)
+	require.Nil(t, sf.config.idpMetadata.Load(), "metadata stays nil when callout init fails")
 }
 
 func TestConfigFactory_Create_URLMode_InvalidURL(t *testing.T) {

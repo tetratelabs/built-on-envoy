@@ -10,7 +10,8 @@
     "sp_cert_pem": ["sp_key_pem"],
     "sp_key_pem": ["sp_cert_pem"],
     "idp_metadata_url": ["idp_metadata_cluster"],
-    "idp_metadata_cluster": ["idp_metadata_url"]
+    "idp_metadata_cluster": ["idp_metadata_url"],
+    "idp_metadata_fetch_delay": ["idp_metadata_url"]
   },
   "oneOf": [
     { "required": ["idp_metadata_xml"] },
@@ -36,6 +37,10 @@
     "idp_metadata_cluster": {
       "type": "string",
       "description": "Envoy cluster used to reach idp_metadata_url. Required when idp_metadata_url is set."
+    },
+    "idp_metadata_fetch_delay": {
+      "type": "string",
+      "description": "Delay before the IdP metadata HttpCallout is issued, as a Go duration string (e.g. \"1s\", \"30s\"). Defaults to \"1s\". Gives Envoy time to start the cluster referenced by idp_metadata_cluster before the callout fires. Only valid in URL mode."
     },
     "sp_cert_pem": {
       "$ref": "#/$defs/DataSource",

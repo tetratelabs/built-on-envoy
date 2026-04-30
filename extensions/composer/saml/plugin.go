@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/url"
 	"sync/atomic"
+	"time"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 
@@ -143,11 +144,21 @@ func (f *HTTPFilterConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, er
 	return out, nil
 }
 
-// startIDPMetadataFetch initiates an asynchronous HttpCallout to load the IdP metadata
-// from cfg.IDPMetadataURL via cfg.IDPMetadataCluster. On success, the parsed metadata
-// is stored in filterCfg.idpMetadata. On failure during the async response, the
-// metadata stays nil and request handlers respond with 503 until a valid response
-// is observed (e.g. on the next config reload).
+// startIDPMetadataFetch schedules an asynchronous HttpCallout to load the IdP
+// metadata from cfg.IDPMetadataURL via cfg.IDPMetadataCluster. The callout is
+// deferred by cfg.IDPMetadataFetchDelay so that Envoy has time to start the
+// cluster — issuing the callout immediately at config-load time often fails
+// because the cluster is not yet warm.
+//
+// A goroutine sleeps for the configured delay and then re-enters the config
+// thread via the scheduler returned by handle.GetScheduler(); the actual
+// HttpCallout call is made there because the SDK requires it to run on the
+// thread that owns the config handle.
+//
+// On success, the parsed metadata is stored in filterCfg.idpMetadata. On
+// failure (init failure, non-2xx status, unparseable XML, or callout reset)
+// metadata stays nil and request handlers respond with 503 until the next
+// config reload — there is no automatic retry.
 func startIDPMetadataFetch(handle shared.HttpFilterConfigHandle, cfg *Config, filterCfg *samlFilterConfig) error {
 	u, err := url.Parse(cfg.IDPMetadataURL)
 	if err != nil {
@@ -161,22 +172,38 @@ func startIDPMetadataFetch(handle shared.HttpFilterConfigHandle, cfg *Config, fi
 		requestPath = "/"
 	}
 
+	scheduler := handle.GetScheduler()
 	cb := &idpMetadataCallback{handle: handle, target: filterCfg}
-	initResult, _ := handle.HttpCallout(
-		cfg.IDPMetadataCluster,
-		[][2]string{
-			{":method", "GET"},
-			{":path", requestPath},
-			{":authority", u.Host},
-		},
-		nil,
-		idpMetadataCalloutTimeoutMs,
-		cb,
-	)
-	if initResult != shared.HttpCalloutInitSuccess {
-		return fmt.Errorf("failed to initiate idp metadata callout to cluster %q: init_result=%d", cfg.IDPMetadataCluster, initResult)
+	headers := [][2]string{
+		{":method", "GET"},
+		{":path", requestPath},
+		{":authority", u.Host},
 	}
-	handle.Log(shared.LogLevelInfo, "saml: idp metadata fetch initiated from %s via cluster %s", cfg.IDPMetadataURL, cfg.IDPMetadataCluster)
+
+	handle.Log(shared.LogLevelInfo,
+		"saml: idp metadata fetch scheduled from %s via cluster %s after %s",
+		cfg.IDPMetadataURL, cfg.IDPMetadataCluster, cfg.IDPMetadataFetchDelay)
+
+	go func() {
+		time.Sleep(cfg.IDPMetadataFetchDelay)
+		scheduler.Schedule(func() {
+			initResult, _ := handle.HttpCallout(
+				cfg.IDPMetadataCluster,
+				headers,
+				nil,
+				idpMetadataCalloutTimeoutMs,
+				cb,
+			)
+			if initResult != shared.HttpCalloutInitSuccess {
+				handle.Log(shared.LogLevelError,
+					"saml: failed to initiate idp metadata callout to cluster %q: init_result=%d",
+					cfg.IDPMetadataCluster, initResult)
+				return
+			}
+			handle.Log(shared.LogLevelInfo,
+				"saml: idp metadata callout dispatched to cluster %s", cfg.IDPMetadataCluster)
+		})
+	}()
 	return nil
 }
 
