@@ -91,11 +91,13 @@ func (d *Downloader) DownloadExtension(ctx context.Context, name, version string
 		manifestPath := LocalCacheManifest(d.Dirs, artifact.Manifest)
 		if _, err = os.Stat(manifestPath); err == nil {
 			d.Logger.Info("loading manifest from downloaded extension", "path", manifestPath)
+			fromOCI := artifact.Manifest
 			m, err := LoadLocalManifest(manifestPath)
 			if err != nil {
 				return DownloadedExtension{},
 					fmt.Errorf("failed to load manifest from downloaded extension at %q: %w", manifestPath, err)
 			}
+			mergeManifestFromOCI(m, fromOCI)
 			artifact.Manifest = m
 		}
 	}
@@ -234,4 +236,17 @@ func getLatestTag(ctx context.Context, client oci.RepositoryClient, repository s
 		return tag, nil
 	}
 	return "", fmt.Errorf("%w: %s", errNoTags, repository)
+}
+
+// mergeManifestFromOCI preserves fields from the OCI-annotation-derived
+// manifest when the embedded YAML manifest has them empty. Composer plugins
+// have incomplete manifests because version and composerVersion are inherited
+// from the parent at build time.
+func mergeManifestFromOCI(embedded, fromOCI *Manifest) {
+	if embedded.Version == "" {
+		embedded.Version = fromOCI.Version
+	}
+	if embedded.ComposerVersion == "" {
+		embedded.ComposerVersion = fromOCI.ComposerVersion
+	}
 }
