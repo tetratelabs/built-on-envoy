@@ -64,6 +64,14 @@ else ifeq ($(ARCH),aarch64)
   ARCH := arm64
 endif
 
+# Use the host OS for normal local builds; targets may override this when the
+# output must run somewhere else.
+host_uname_s := $(shell uname -s)
+host_os := $(if $(findstring Linux,$(host_uname_s)),linux,\
+           $(if $(findstring Darwin,$(host_uname_s)),darwin,\
+           $(host_uname_s)))
+force_target_os ?= $(host_os)
+
 # Some IDEs like Goland place `.go` files in the `.idea` directory when using code templates. Using a
 # git command to find the files ensures that only relevant files are formatted and that git-ignored
 # files do not get in the way
@@ -125,9 +133,13 @@ create_builder:
 			--driver docker-container --driver-opt network=host \
 			--buildkitd-flags '--allow-insecure-entitlement network.host' --use
 
+# Cross-build through Docker only when a target overrides force_target_os.
+build_cmd_native = CGO_ENABLED=1 go build -trimpath -buildmode=c-shared $(COMPOSER_BUILD_TAG) -o lib$(NAME).so ./main
+build_cmd_cross  = docker buildx build --platform=$(force_target_os)/$(ARCH) --output type=local,dest=. --build-arg BUILD_TAG="$(COMPOSER_BUILD_TAG)" -f ./Dockerfile .
+
 .PHONY: build
 build:
-	CGO_ENABLED=1 go build -trimpath -buildmode=c-shared $(COMPOSER_BUILD_TAG) -o lib$(NAME).so ./main
+	$(if $(filter $(force_target_os),$(host_os)),$(build_cmd_native),$(build_cmd_cross))
 
 .PHONY: install
 install: build
@@ -199,6 +211,8 @@ install_plugins: ## Install all plugins locally
 		$(MAKE) -f Makefile.plugin install EXTENSION_PATH=$$dir; \
 	done
 	
+# Envoy runs in a Linux container, so the integration library must be Linux.
 .PHONY: test-integration
+test-integration: force_target_os := $(OS)
 test-integration: build
 	$(MAKE) -C integration test

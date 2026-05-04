@@ -237,6 +237,7 @@ func requireRunEnvoy(t *testing.T, integrationDir, composerLibPath string) {
 		dockerArgs := []string{
 			"run",
 			"--network", "host",
+			"--add-host", "host.docker.internal:host-gateway",
 			"-v", integrationDir + ":/integration",
 			"-v", composerDir + ":/composer:ro",
 			"-w", "/integration",
