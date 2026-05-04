@@ -38,14 +38,6 @@ export async function getStaticPaths() {
 
 const { extension } = Astro.props as { extension: Extension };
 
-// When only minEnvoyVersion is set, compute an implicit max as major.(minor+1).patch
-function implicitMaxEnvoyVersion(minVersion: string): string {
-	const parts = minVersion.split('.');
-	if (parts.length < 2) return minVersion;
-	const minor = parseInt(parts[1], 10);
-	return `${parts[0]}.${minor + 1}.x`;
-}
-
 // Helper function to format type names (snake_case to Title Case)
 function formatTypeName(type: string): string {
 	return type
@@ -101,13 +93,12 @@ function formatTypeName(type: string): string {
 										<span class="meta-label">Envoy Version</span>
 										<span class="meta-value">
 											{extension.minEnvoyVersion && `>= ${extension.minEnvoyVersion}`}
-											{extension.minEnvoyVersion && <br/>}
-											{(extension.maxEnvoyVersion || extension.minEnvoyVersion) && (
-												<>
-													{`<= ${extension.maxEnvoyVersion ?? implicitMaxEnvoyVersion(extension.minEnvoyVersion!)}`}
+											{extension.minEnvoyVersion && extension.maxEnvoyVersion && (
+												<Fragment>
+													{`<= ${extension.maxEnvoyVersion}`}
 													{' '}
 													<a href="https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/dynamic_modules#compatibility" target="_blank" rel="noopener noreferrer" title="Envoy compatibility" style="font-size: 0.75em; vertical-align: super; text-decoration: none;">?</a>
-												</>
+												</Fragment>
 											)}
 										</span>
 									</div>

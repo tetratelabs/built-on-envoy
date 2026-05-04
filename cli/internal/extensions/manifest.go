@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -140,10 +141,27 @@ func (m *Manifest) EnvoyConstraints() string {
 	return constraints
 }
 
+// ImplicitMaxEnvoyVersion computes an implicit max Envoy version from a min version.
+// Given a semver like "1.33.0", it returns "1.34.0" (major.(minor+1).0).
+func ImplicitMaxEnvoyVersion(minVersion string) string {
+	parts := strings.SplitN(minVersion, ".", 3)
+	if len(parts) < 2 {
+		return minVersion
+	}
+	minor, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return minVersion
+	}
+	return fmt.Sprintf("%s.%d.x", parts[0], minor+1)
+}
+
 // ApplyDefaults applies default values to the manifest fields.
 func (m *Manifest) ApplyDefaults() {
 	if m.FilterType == "" {
 		m.FilterType = FilterTypeHTTP
+	}
+	if m.MinEnvoyVersion != "" && m.MaxEnvoyVersion == "" {
+		m.MaxEnvoyVersion = ImplicitMaxEnvoyVersion(m.MinEnvoyVersion)
 	}
 }
 
@@ -302,6 +320,9 @@ func resolveVersions(m *Manifest, all map[string]*Manifest) error {
 		}
 		if m.MaxEnvoyVersion == "" {
 			m.MaxEnvoyVersion = parent.MaxEnvoyVersion
+		}
+		if m.MinEnvoyVersion != "" && m.MaxEnvoyVersion == "" {
+			m.MaxEnvoyVersion = ImplicitMaxEnvoyVersion(m.MinEnvoyVersion)
 		}
 	}
 	return nil
