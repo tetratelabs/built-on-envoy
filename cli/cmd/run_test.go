@@ -69,6 +69,10 @@ Flags:
       --config=CONFIG              Optional JSON config string for extensions.
                                    Applied in order to combined --extension and
                                    --local flags.
+      --native-http-filter-before=NATIVE-HTTP-FILTER-BEFORE
+                                   Optional YAML/JSON native HTTP filter list
+                                   (or @filepath) per extension position.
+                                   Overrides manifest nativeHttpFilters.before.
       --cluster=CLUSTER,...        Optional additional Envoy cluster provided in
                                    the host:tlsPort pattern.
       --cluster-insecure=CLUSTER-INSECURE,...

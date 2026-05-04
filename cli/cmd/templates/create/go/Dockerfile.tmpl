@@ -21,3 +21,6 @@ RUN CGO_ENABLED=1 go build -buildmode=plugin -o plugin.so ./standalone
 FROM scratch AS final
 
 COPY --from=builder /workspace/plugin.so /
+# Preserve manifest.yaml so downloaded artifacts retain manifest-owned fields
+# (e.g. nativeHttpFilters) that the OCI annotation fallback cannot represent.
+COPY --from=builder /workspace/manifest.yaml /

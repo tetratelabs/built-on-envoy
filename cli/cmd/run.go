@@ -41,13 +41,14 @@ type Run struct {
 	// sep:"none" disables Kong's default comma-separated splitting for []string flags.
 	// JSON config values contain commas (e.g. {"a":"1","b":"2"}) which would otherwise
 	// be split into separate invalid fragments, causing protobuf unmarshal failures.
-	Configs             []string     `name:"config" sep:"none" help:"Optional JSON config string for extensions. Applied in order to combined --extension and --local flags."`
-	Clusters            ClusterFlags `embed:""`
-	TestUpstreamHost    string       `name:"test-upstream-host" help:"Hostname for the test upstream cluster. Mutually exclusive with --test-upstream-cluster. Defaults to \"httpbin.org\"."`
-	TestUpstreamCluster string       `name:"test-upstream-cluster" help:"Name of an existing configured cluster to use as the test upstream. The cluster must be configured via --cluster, --cluster-insecure, or --cluster-json. Mutually exclusive with --test-upstream-host."`
-	Docker              bool         `help:"Run Envoy as a Docker container instead of using func-e." default:"false" env:"BOE_RUN_DOCKER"`
-	Pull                string       `name:"pull" help:"Pull policy for the BOE Docker image (missing, always, never). Only applicable when running with --docker." enum:"missing,always,never" default:"missing"`
-	OCI                 OCIFlags     `embed:""`
+	Configs                 []string     `name:"config" sep:"none" help:"Optional JSON config string for extensions. Applied in order to combined --extension and --local flags."`
+	NativeHTTPFiltersBefore []string     `name:"native-http-filter-before" sep:"none" help:"Optional YAML/JSON native HTTP filter list (or @filepath) per extension position. Overrides manifest nativeHttpFilters.before."`
+	Clusters                ClusterFlags `embed:""`
+	TestUpstreamHost        string       `name:"test-upstream-host" help:"Hostname for the test upstream cluster. Mutually exclusive with --test-upstream-cluster. Defaults to \"httpbin.org\"."`
+	TestUpstreamCluster     string       `name:"test-upstream-cluster" help:"Name of an existing configured cluster to use as the test upstream. The cluster must be configured via --cluster, --cluster-insecure, or --cluster-json. Mutually exclusive with --test-upstream-host."`
+	Docker                  bool         `help:"Run Envoy as a Docker container instead of using func-e." default:"false" env:"BOE_RUN_DOCKER"`
+	Pull                    string       `name:"pull" help:"Pull policy for the BOE Docker image (missing, always, never). Only applicable when running with --docker." enum:"missing,always,never" default:"missing"`
+	OCI                     OCIFlags     `embed:""`
 
 	extensionPositions extensionPositions `kong:"-"` // Internal field: tracks the original position of extensions specified via both --extension and --local flags
 	defaultLogLevel    string             `kong:"-"` // Internal field: parsed defaut log level
@@ -178,22 +179,23 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 	}
 
 	runner := &envoy.RunnerFuncE{
-		Logger:              logger,
-		EnvoyVersion:        r.EnvoyVersion,
-		DefaultLogLevel:     r.defaultLogLevel,
-		ComponentLogLevel:   r.componentLogLevel,
-		Dirs:                dirs,
-		RunID:               r.RunID,
-		ListenPort:          r.ListenPort,
-		AdminPort:           r.AdminPort,
-		Extensions:          extensionsToRun,
-		Configs:             r.Configs,
-		Clusters:            r.Clusters.Secure,
-		ClustersInsecure:    r.Clusters.Insecure,
-		ClustersJSON:        r.Clusters.JSONSpec,
-		TestUpstreamHost:    r.TestUpstreamHost,
-		TestUpstreamCluster: r.TestUpstreamCluster,
-		ExtProcBinaries:     extProcBinaries,
+		Logger:                  logger,
+		EnvoyVersion:            r.EnvoyVersion,
+		DefaultLogLevel:         r.defaultLogLevel,
+		ComponentLogLevel:       r.componentLogLevel,
+		Dirs:                    dirs,
+		RunID:                   r.RunID,
+		ListenPort:              r.ListenPort,
+		AdminPort:               r.AdminPort,
+		Extensions:              extensionsToRun,
+		Configs:                 r.Configs,
+		NativeHTTPFiltersBefore: r.NativeHTTPFiltersBefore,
+		Clusters:                r.Clusters.Secure,
+		ClustersInsecure:        r.Clusters.Insecure,
+		ClustersJSON:            r.Clusters.JSONSpec,
+		TestUpstreamHost:        r.TestUpstreamHost,
+		TestUpstreamCluster:     r.TestUpstreamCluster,
+		ExtProcBinaries:         extProcBinaries,
 	}
 
 	return runner.Run(ctx)

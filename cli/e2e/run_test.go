@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -307,4 +308,87 @@ func dummy() string {
 	goModTidyCmd.Dir = path
 	output, err := goModTidyCmd.CombinedOutput()
 	require.NoError(t, err, string(output))
+}
+
+// TestMCPNativeBeforeExtension runs Envoy with a local Lua extension whose
+// manifest declares envoy.filters.http.mcp in nativeHttpFilters.before. It
+// asserts:
+//
+//  1. A valid MCP POST reaches the Lua filter, and Lua observed MCP-populated
+//     dynamic metadata (response carries x-mcp-method and
+//     x-mcp-is-mcp-request).
+//  2. A non-MCP GET is rejected before the Lua filter runs (no x-mcp-*
+//     headers; non-2xx status).
+func TestMCPNativeBeforeExtension(t *testing.T) {
+	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin,
+		"--log-level", "lua:info",
+		"--local", "testdata/lua_with_mcp",
+	)
+
+	// Valid MCP POST: JSON-RPC body, application/json content type, accepting
+	// either JSON or SSE per the MCP Streamable HTTP spec. We POST to /anything
+	// because the default test upstream proxies to httpbin.org.
+	t.Run("valid mcp post reaches lua and exposes metadata", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		t.Cleanup(cancel)
+
+		body := strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`)
+		req, err := http.NewRequestWithContext(ctx,
+			http.MethodPost,
+			fmt.Sprintf("http://localhost:%d/anything", proxyPort), body)
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+
+		check := func(r *http.Response) bool {
+			// Status must indicate the request was accepted by Envoy / MCP and
+			// reached upstream (httpbin.org/anything returns 200).
+			if r.StatusCode/100 != 2 {
+				t.Logf("unexpected status %d", r.StatusCode)
+				return false
+			}
+			if got := r.Header.Get("x-mcp-method"); got != "ping" {
+				t.Logf("x-mcp-method=%q, want ping", got)
+				return false
+			}
+			if got := r.Header.Get("x-mcp-is-mcp-request"); got != "true" {
+				t.Logf("x-mcp-is-mcp-request=%q, want true", got)
+				return false
+			}
+			return true
+		}
+		require.NoError(t, internaltesting.CheckRequest(req, check))
+	})
+
+	// Non-MCP GET: the MCP filter is configured with REJECT_NO_MCP and must
+	// short-circuit the request before Lua runs, so the Lua-set headers are
+	// absent.
+	t.Run("non-mcp request is rejected before lua runs", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		t.Cleanup(cancel)
+
+		req, err := http.NewRequestWithContext(ctx,
+			http.MethodGet,
+			fmt.Sprintf("http://localhost:%d/status/200", proxyPort), nil)
+		require.NoError(t, err)
+
+		check := func(r *http.Response) bool {
+			// Lua never ran, so its headers must be absent. The exact
+			// rejection status is implementation-defined; we assert non-2xx.
+			if r.Header.Get("x-mcp-method") != "" {
+				t.Logf("Lua ran for non-MCP request; x-mcp-method=%q", r.Header.Get("x-mcp-method"))
+				return false
+			}
+			if r.Header.Get("x-mcp-is-mcp-request") != "" {
+				t.Logf("Lua ran for non-MCP request; x-mcp-is-mcp-request=%q", r.Header.Get("x-mcp-is-mcp-request"))
+				return false
+			}
+			if r.StatusCode/100 == 2 {
+				t.Logf("non-MCP request was not rejected; status=%d", r.StatusCode)
+				return false
+			}
+			return true
+		}
+		require.NoError(t, internaltesting.CheckRequest(req, check))
+	})
 }
