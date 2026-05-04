@@ -152,7 +152,7 @@ func ImplicitMaxEnvoyVersion(minVersion string) string {
 	if err != nil {
 		return minVersion
 	}
-	return fmt.Sprintf("%s.%d.x", parts[0], minor+1)
+	return fmt.Sprintf("%s.%d.0", parts[0], minor+1)
 }
 
 // ApplyDefaults applies default values to the manifest fields.
