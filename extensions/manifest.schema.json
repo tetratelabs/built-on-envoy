@@ -36,7 +36,7 @@
     "maxEnvoyVersion": {
       "type": "string",
       "description": "Maximum compatible Envoy version.",
-      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+      "pattern": "^\\d+\\.\\d+\\.(\\d+|x)$"
     },
     "categories": {
       "type": "array",
