@@ -50,9 +50,10 @@ type (
 
 		// ComposerVersion specifies the compatible Composer dynamic module version
 		// for Composer go plugins.
-		ComposerVersion string   `yaml:"composerVersion,omitempty" json:"composerVersion,omitempty"`
-		Lua             *Lua     `yaml:"lua,omitempty" json:"lua,omitempty"`
-		ExtProc         *ExtProc `yaml:"extProc,omitempty" json:"extProc,omitempty"`
+		ComposerVersion   string             `yaml:"composerVersion,omitempty" json:"composerVersion,omitempty"`
+		Lua               *Lua               `yaml:"lua,omitempty" json:"lua,omitempty"`
+		ExtProc           *ExtProc           `yaml:"extProc,omitempty" json:"extProc,omitempty"`
+		NativeHTTPFilters *NativeHTTPFilters `yaml:"nativeHttpFilters,omitempty" json:"nativeHttpFilters,omitempty"`
 
 		// Path to the manifest file in the local filesystem.
 		Path string `yaml:"-" json:"-"`
@@ -104,6 +105,16 @@ type (
 		ResponseHeaderMode string `yaml:"responseHeaderMode,omitempty" json:"responseHeaderMode,omitempty"`
 		RequestBodyMode    string `yaml:"requestBodyMode,omitempty" json:"requestBodyMode,omitempty"`
 		ResponseBodyMode   string `yaml:"responseBodyMode,omitempty" json:"responseBodyMode,omitempty"`
+	}
+
+	// NativeHTTPFilters declares native Envoy HTTP filters that BOE must emit
+	// in the HCM filter chain together with this extension's generated HTTP filter.
+	NativeHTTPFilters struct {
+		// Before lists native Envoy HTTP filters to emit before this extension's
+		// generated HTTP filter, in the order listed. Each entry is the YAML form
+		// of an `envoy.config.core.v3.TypedExtensionConfig`-shaped HTTP filter:
+		// a name and a typed_config carrying an Envoy proto identified by `@type`.
+		Before []map[string]any `yaml:"before,omitempty" json:"before,omitempty"`
 	}
 
 	// ManifestIndexEntry represents manifest entry in the manifext index JSON that is used
@@ -216,6 +227,9 @@ var (
 	ErrParseManifestFile = fmt.Errorf("failed to parse manifest file")
 	// ErrParentManifestNotFound is returned when a parent manifest cannot be found.
 	ErrParentManifestNotFound = fmt.Errorf("parent manifest not found")
+	// ErrInvalidNativeHTTPFilters is returned when nativeHttpFilters fails the semantic checks
+	// that the JSON schema cannot express.
+	ErrInvalidNativeHTTPFilters = fmt.Errorf("invalid nativeHttpFilters")
 )
 
 func init() {
@@ -405,7 +419,8 @@ func findLocalParentManifest(m *Manifest) (*Manifest, error) {
 	}
 }
 
-// ValidateManifest validates the manifest against the JSON schema.
+// ValidateManifest validates the manifest against the JSON schema and
+// against semantic rules that the schema cannot express.
 func ValidateManifest(manifest *Manifest) error {
 	// Convert manifest to JSON for schema validation
 	jsonData, err := json.Marshal(manifest)
@@ -418,7 +433,71 @@ func ValidateManifest(manifest *Manifest) error {
 		return fmt.Errorf("failed to unmarshal JSON for validation: %w", err)
 	}
 
-	return manifestSchema.Validate(v)
+	if err := manifestSchema.Validate(v); err != nil {
+		return err
+	}
+
+	return validateNativeHTTPFilters(manifest)
+}
+
+// validateNativeHTTPFilters runs the semantic checks the schema cannot express:
+// reject reserved/terminal filter names, reject duplicate names within one
+// manifest, and reject the field on extensions that produce no HTTP anchor.
+// Proto resolution and dynamic_modules terminal_filter introspection happen
+// later, in the envoy config-generation layer.
+func validateNativeHTTPFilters(m *Manifest) error {
+	if m.NativeHTTPFilters == nil {
+		return nil
+	}
+	if !hasHTTPAnchor(m) {
+		return fmt.Errorf("%w: nativeHttpFilters requires an extension that generates an HTTP filter; %q with filterType %q has no HTTP anchor",
+			ErrInvalidNativeHTTPFilters, m.Type, m.FilterType)
+	}
+	seen := make(map[string]struct{}, len(m.NativeHTTPFilters.Before))
+	for i, entry := range m.NativeHTTPFilters.Before {
+		raw, present := entry["name"]
+		if !present {
+			return fmt.Errorf("%w: nativeHttpFilters.before[%d] is missing a name", ErrInvalidNativeHTTPFilters, i)
+		}
+		name, ok := raw.(string)
+		if !ok {
+			return fmt.Errorf("%w: nativeHttpFilters.before[%d].name must be a string, got %T", ErrInvalidNativeHTTPFilters, i, raw)
+		}
+		if name == "" {
+			return fmt.Errorf("%w: nativeHttpFilters.before[%d].name is empty", ErrInvalidNativeHTTPFilters, i)
+		}
+		switch name {
+		case "envoy.filters.http.router":
+			return fmt.Errorf("%w: nativeHttpFilters.before[%d]: %q is appended by BOE and cannot be declared",
+				ErrInvalidNativeHTTPFilters, i, name)
+		case "envoy.filters.http.mcp_router":
+			return fmt.Errorf("%w: nativeHttpFilters.before[%d]: %q is a terminal router replacement and is not supported",
+				ErrInvalidNativeHTTPFilters, i, name)
+		}
+		if _, dup := seen[name]; dup {
+			return fmt.Errorf("%w: nativeHttpFilters.before contains duplicate name %q",
+				ErrInvalidNativeHTTPFilters, name)
+		}
+		seen[name] = struct{}{}
+	}
+	return nil
+}
+
+// hasHTTPAnchor reports whether the extension produces an HTTP filter for
+// nativeHttpFilters.before to attach to. Mirrors the generator switch in
+// cli/internal/envoy/extension.go: lua/go/ext_proc always do, rust does only
+// when filterType is http (the default), wasm and composer never do.
+func hasHTTPAnchor(m *Manifest) bool {
+	switch m.Type {
+	case TypeLua, TypeGo, TypeExtProc:
+		return true
+	case TypeRust:
+		return m.FilterType == "" || m.FilterType == FilterTypeHTTP
+	case TypeWasm, TypeComposer:
+		return false
+	default:
+		return false
+	}
 }
 
 // HighestMinEnvoyVersion returns the highest minimum Envoy version among the given manifests.

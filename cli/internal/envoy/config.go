@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"os"
 	"strconv"
+	"strings"
 
 	accesslogv3 "github.com/envoyproxy/go-control-plane/envoy/config/accesslog/v3"
 	bootstrapv3 "github.com/envoyproxy/go-control-plane/envoy/config/bootstrap/v3"
@@ -20,6 +22,7 @@ import (
 	listenerv3 "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
 	routev3 "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
 	streamv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/access_loggers/stream/v3"
+	dymhttpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/dynamic_modules/v3"
 	routerv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/router/v3"
 	hcmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
 	tlsv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
@@ -46,6 +49,10 @@ type ConfigGenerationParams struct {
 	Extensions []*extensions.Manifest
 	// Configs specifies optional JSON config strings for each extension (by index).
 	Configs []string
+	// NativeHTTPFiltersBefore specifies optional YAML/JSON native HTTP filter overrides
+	// for each extension (by index). When non-empty for a given extension position, it
+	// replaces the manifest's nativeHttpFilters.before.
+	NativeHTTPFiltersBefore []string
 	// Clusters specifies additional Envoy cluster (with TLS) from short names to include in the configuration.
 	Clusters []string
 	// ClustersInsecure specifies additional Envoy cluster (without TLS) from short names to include in the configuration.
@@ -198,6 +205,23 @@ func generateConfig(params *ConfigGenerationParams) (GeneratedConfigResources, e
 		if err != nil {
 			return GeneratedConfigResources{}, fmt.Errorf("failed to generate filter config for extension %q: %w", ext.Name, err)
 		}
+		// Native HTTP filters declared by the manifest (or overridden via
+		// --native-http-filter-before) run before the extension's own
+		// generated filters, so a later filter can consume metadata or
+		// filter state populated by the native one.
+		var nativeBefore []*hcmv3.HttpFilter
+		if i < len(params.NativeHTTPFiltersBefore) && params.NativeHTTPFiltersBefore[i] != "" {
+			nativeBefore, err = parseNativeHTTPFiltersBeforeOverride(params.NativeHTTPFiltersBefore[i])
+			if err != nil {
+				return GeneratedConfigResources{}, fmt.Errorf("failed to parse --native-http-filter-before for extension %q: %w", ext.Name, err)
+			}
+		} else {
+			nativeBefore, err = parseNativeHTTPFiltersBefore(ext)
+			if err != nil {
+				return GeneratedConfigResources{}, fmt.Errorf("failed to parse nativeHttpFilters.before for extension %q: %w", ext.Name, err)
+			}
+		}
+		httpFilters = append(httpFilters, nativeBefore...)
 		httpFilters = append(httpFilters, resources.HTTPFilters...)
 		networkFilters = append(networkFilters, resources.NetworkFilters...)
 		listenerFilters = append(listenerFilters, resources.ListenerFilters...)
@@ -243,6 +267,92 @@ func parseJSONCluster(spec string) (*clusterv3.Cluster, error) {
 		return nil, fmt.Errorf("invalid JSON cluster spec: %w", err)
 	}
 	return &cluster, nil
+}
+
+// parseNativeHTTPFiltersBeforeOverride parses a YAML/JSON string (or @filepath)
+// into a list of HCM HttpFilter protos. The input is expected to be a YAML/JSON
+// list of objects, each with at least a "name" and "typed_config" field.
+func parseNativeHTTPFiltersBeforeOverride(raw string) ([]*hcmv3.HttpFilter, error) {
+	data := raw
+	if strings.HasPrefix(raw, "@") {
+		b, err := os.ReadFile(raw[1:])
+		if err != nil {
+			return nil, fmt.Errorf("read file %q: %w", raw[1:], err)
+		}
+		data = string(b)
+	}
+	jsonData, err := yaml.YAMLToJSON([]byte(data))
+	if err != nil {
+		return nil, fmt.Errorf("YAML to JSON: %w", err)
+	}
+	var entries []json.RawMessage
+	if err := json.Unmarshal(jsonData, &entries); err != nil {
+		return nil, fmt.Errorf("unmarshal filter list: %w", err)
+	}
+	out := make([]*hcmv3.HttpFilter, 0, len(entries))
+	for i, entry := range entries {
+		filter := &hcmv3.HttpFilter{}
+		if err := protojson.Unmarshal(entry, filter); err != nil {
+			return nil, fmt.Errorf("entry[%d]: %w", i, err)
+		}
+		if err := rejectTerminalDynamicModule(filter); err != nil {
+			return nil, fmt.Errorf("entry[%d]: %w", i, err)
+		}
+		out = append(out, filter)
+	}
+	return out, nil
+}
+
+// parseNativeHTTPFiltersBefore converts a manifest's nativeHttpFilters.before
+// entries (already decoded by yaml.v3 into map[string]any) into HCM HttpFilter
+// protos. Each entry is JSON-marshaled then protojson-unmarshaled so the
+// embedded typed_config @type is resolved against the proto type registry.
+//
+// Manifest-load validation has already rejected reserved names and the
+// no-HTTP-anchor cases. This helper additionally rejects a dynamic_modules
+// filter whose typed_config marks it terminal — that requires reading the
+// parsed proto, which is only available here.
+func parseNativeHTTPFiltersBefore(m *extensions.Manifest) ([]*hcmv3.HttpFilter, error) {
+	if m.NativeHTTPFilters == nil || len(m.NativeHTTPFilters.Before) == 0 {
+		return nil, nil
+	}
+	out := make([]*hcmv3.HttpFilter, 0, len(m.NativeHTTPFilters.Before))
+	for i, entry := range m.NativeHTTPFilters.Before {
+		raw, err := json.Marshal(entry)
+		if err != nil {
+			return nil, fmt.Errorf("before[%d]: marshal entry: %w", i, err)
+		}
+		filter := &hcmv3.HttpFilter{}
+		if err := protojson.Unmarshal(raw, filter); err != nil {
+			return nil, fmt.Errorf("before[%d]: %w", i, err)
+		}
+		if err := rejectTerminalDynamicModule(filter); err != nil {
+			return nil, fmt.Errorf("before[%d]: %w", i, err)
+		}
+		out = append(out, filter)
+	}
+	return out, nil
+}
+
+// rejectTerminalDynamicModule rejects an envoy.filters.http.dynamic_modules
+// HttpFilter whose typed_config sets terminal_filter = true. Such a filter
+// would conflict with the router that BOE always appends last.
+func rejectTerminalDynamicModule(f *hcmv3.HttpFilter) error {
+	if f.GetName() != "envoy.filters.http.dynamic_modules" {
+		return nil
+	}
+	typedConfig := f.GetTypedConfig()
+	if typedConfig == nil {
+		return nil
+	}
+	dm := &dymhttpv3.DynamicModuleFilter{}
+	if err := typedConfig.UnmarshalTo(dm); err != nil {
+		return fmt.Errorf("unmarshal dynamic_modules typed_config: %w", err)
+	}
+	if dm.GetTerminalFilter() {
+		return fmt.Errorf("envoy.filters.http.dynamic_modules with terminal_filter=true is not supported in nativeHttpFilters.before")
+	}
+	return nil
 }
 
 // parseCluster parses a cluster specification:

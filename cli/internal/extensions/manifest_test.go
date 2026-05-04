@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 	"testing/fstest"
 
@@ -675,4 +676,217 @@ examples: []
 		require.NoError(t, ResolveLocalVersions(m))
 		assert.Equal(t, "1.0.0", m.Version)
 	})
+}
+
+func TestValidateNativeHTTPFilters(t *testing.T) {
+	validTests := []struct {
+		name    string
+		fixture string
+	}{
+		{
+			name:    "valid_go_with_mcp_before",
+			fixture: "native_http_filters_valid.yaml",
+		},
+		{
+			name:    "lua_with_stray_filter_type_is_accepted",
+			fixture: "native_http_filters_lua_with_stray_filter_type.yaml",
+		},
+	}
+
+	for _, tt := range validTests {
+		t.Run(tt.name, func(t *testing.T) {
+			manifestPath := filepath.Join("testdata", tt.fixture)
+			m, err := LoadLocalManifest(manifestPath)
+			require.NoError(t, err)
+			require.NotNil(t, m.NativeHTTPFilters)
+			require.NotEmpty(t, m.NativeHTTPFilters.Before)
+		})
+	}
+
+	invalidTests := []struct {
+		name        string
+		fixture     string
+		expectedErr string
+	}{
+		{
+			name:        "router rejected",
+			fixture:     "native_http_filters_router_rejected.yaml",
+			expectedErr: `validation failed for manifest native_http_filters_router_rejected.yaml: invalid nativeHttpFilters: nativeHttpFilters.before[0]: "envoy.filters.http.router" is appended by BOE and cannot be declared`,
+		},
+		{
+			name:        "mcp router rejected",
+			fixture:     "native_http_filters_mcp_router_rejected.yaml",
+			expectedErr: `validation failed for manifest native_http_filters_mcp_router_rejected.yaml: invalid nativeHttpFilters: nativeHttpFilters.before[0]: "envoy.filters.http.mcp_router" is a terminal router replacement and is not supported`,
+		},
+		{
+			name:        "duplicate name rejected",
+			fixture:     "native_http_filters_duplicate_name.yaml",
+			expectedErr: `validation failed for manifest native_http_filters_duplicate_name.yaml: invalid nativeHttpFilters: nativeHttpFilters.before contains duplicate name "envoy.filters.http.mcp"`,
+		},
+		{
+			name:        "rust network type rejected",
+			fixture:     "native_http_filters_on_rust_network_type.yaml",
+			expectedErr: "validation failed for manifest native_http_filters_on_rust_network_type.yaml: jsonschema validation failed with 'SCHEMA#'\n- at '': 'allOf' failed\n  - at '/nativeHttpFilters': false schema",
+		},
+		{
+			name:        "wasm type rejected",
+			fixture:     "native_http_filters_on_wasm_type.yaml",
+			expectedErr: "validation failed for manifest native_http_filters_on_wasm_type.yaml: jsonschema validation failed with 'SCHEMA#'\n- at '': 'allOf' failed\n  - at '/nativeHttpFilters': false schema",
+		},
+		{
+			name:        "composer type rejected",
+			fixture:     "native_http_filters_on_composer_type.yaml",
+			expectedErr: "validation failed for manifest native_http_filters_on_composer_type.yaml: jsonschema validation failed with 'SCHEMA#'\n- at '': 'allOf' failed\n  - at '/nativeHttpFilters': false schema",
+		},
+		{
+			name:        "missing name rejected",
+			fixture:     "native_http_filters_missing_name.yaml",
+			expectedErr: "validation failed for manifest native_http_filters_missing_name.yaml: jsonschema validation failed with 'SCHEMA#'\n- at '/nativeHttpFilters/before/0': missing property 'name'",
+		},
+		{
+			name:    "missing typed config rejected",
+			fixture: "native_http_filters_missing_typed_config.yaml",
+		},
+		{
+			name:    "missing @type rejected",
+			fixture: "native_http_filters_missing_at_type.yaml",
+		},
+	}
+
+	for _, tt := range invalidTests {
+		t.Run(tt.name, func(t *testing.T) {
+			manifestPath := filepath.Join("testdata", tt.fixture)
+			_, err := LoadLocalManifest(manifestPath)
+			if tt.expectedErr != "" {
+				actual := schemaURIPattern.ReplaceAllString(err.Error(), "SCHEMA#")
+				require.Equal(t, tt.expectedErr, actual)
+			} else {
+				require.Error(t, err)
+			}
+		})
+	}
+}
+
+var schemaURIPattern = regexp.MustCompile(`file:///[^']+/manifest\.schema\.json#`)
+
+func TestValidateNativeHTTPFiltersSemanticErrors(t *testing.T) {
+	tests := []struct {
+		name        string
+		manifest    *Manifest
+		expectedErr string
+	}{
+		{
+			name: "missing name",
+			manifest: &Manifest{
+				Type: TypeLua,
+				NativeHTTPFilters: &NativeHTTPFilters{
+					Before: []map[string]any{{}},
+				},
+			},
+			expectedErr: "invalid nativeHttpFilters: nativeHttpFilters.before[0] is missing a name",
+		},
+		{
+			name: "non string name",
+			manifest: &Manifest{
+				Type: TypeLua,
+				NativeHTTPFilters: &NativeHTTPFilters{
+					Before: []map[string]any{{
+						"name": 123,
+					}},
+				},
+			},
+			expectedErr: "invalid nativeHttpFilters: nativeHttpFilters.before[0].name must be a string, got int",
+		},
+		{
+			name: "empty name",
+			manifest: &Manifest{
+				Type: TypeLua,
+				NativeHTTPFilters: &NativeHTTPFilters{
+					Before: []map[string]any{{
+						"name": "",
+					}},
+				},
+			},
+			expectedErr: "invalid nativeHttpFilters: nativeHttpFilters.before[0].name is empty",
+		},
+		{
+			name: "missing http anchor",
+			manifest: &Manifest{
+				Type: TypeWasm,
+				NativeHTTPFilters: &NativeHTTPFilters{
+					Before: []map[string]any{{
+						"name": "envoy.filters.http.mcp",
+					}},
+				},
+			},
+			expectedErr: "invalid nativeHttpFilters: nativeHttpFilters requires an extension that generates an HTTP filter; \"wasm\" with filterType \"\" has no HTTP anchor",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateNativeHTTPFilters(tt.manifest)
+			require.EqualError(t, err, tt.expectedErr)
+		})
+	}
+}
+
+func TestHasHTTPAnchor(t *testing.T) {
+	tests := []struct {
+		name     string
+		manifest *Manifest
+		expect   bool
+	}{
+		{
+			name:     "lua",
+			manifest: &Manifest{Type: TypeLua},
+			expect:   true,
+		},
+		{
+			name:     "go",
+			manifest: &Manifest{Type: TypeGo},
+			expect:   true,
+		},
+		{
+			name:     "ext proc",
+			manifest: &Manifest{Type: TypeExtProc},
+			expect:   true,
+		},
+		{
+			name:     "rust default http",
+			manifest: &Manifest{Type: TypeRust},
+			expect:   true,
+		},
+		{
+			name:     "rust explicit http",
+			manifest: &Manifest{Type: TypeRust, FilterType: FilterTypeHTTP},
+			expect:   true,
+		},
+		{
+			name:     "rust network",
+			manifest: &Manifest{Type: TypeRust, FilterType: FilterTypeNetwork},
+			expect:   false,
+		},
+		{
+			name:     "wasm",
+			manifest: &Manifest{Type: TypeWasm},
+			expect:   false,
+		},
+		{
+			name:     "composer",
+			manifest: &Manifest{Type: TypeComposer},
+			expect:   false,
+		},
+		{
+			name:     "unknown type",
+			manifest: &Manifest{Type: "mystery"},
+			expect:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.expect, hasHTTPAnchor(tt.manifest))
+		})
+	}
 }

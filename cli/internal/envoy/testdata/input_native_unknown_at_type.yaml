@@ -1,0 +1,32 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# Manifest-load passes (schema OK, name not reserved, no duplicates),
+# but config-gen fails because the @type is not registered.
+name: test-extension
+version: 1.0.0
+categories:
+  - Security
+author: Test Author
+description: A test extension
+longDescription: |
+  Unknown @type - must fail at config generation, not manifest load.
+type: lua
+lua:
+  inline: |
+    function envoy_on_request(request_handle) end
+tags:
+  - test
+license: Apache-2.0
+examples:
+  - title: Basic usage
+    description: Run the extension
+    code: |
+      boe run --extension test-extension
+nativeHttpFilters:
+  before:
+    - name: envoy.filters.http.example_unknown
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.filters.http.example_unknown.v3.Unknown

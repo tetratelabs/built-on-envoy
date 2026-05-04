@@ -1,0 +1,37 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# Terminal dynamic_modules - rejected at config generation. Uses camelCase
+# spelling; protojson normalizes both spellings to the same proto field, so
+# the post-parse check catches both.
+name: test-extension
+version: 1.0.0
+categories:
+  - Security
+author: Test Author
+description: A test extension
+longDescription: |
+  Terminal dynamic_modules with camelCase terminalFilter.
+type: lua
+lua:
+  inline: |
+    function envoy_on_request(request_handle) end
+tags:
+  - test
+license: Apache-2.0
+examples:
+  - title: Basic usage
+    description: Run the extension
+    code: |
+      boe run --extension test-extension
+nativeHttpFilters:
+  before:
+    - name: envoy.filters.http.dynamic_modules
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.filters.http.dynamic_modules.v3.DynamicModuleFilter
+        filter_name: t
+        terminalFilter: true
+        dynamic_module_config:
+          name: t

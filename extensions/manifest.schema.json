@@ -230,6 +230,43 @@
     "extensionSet": {
       "type": "boolean",
       "description": "Whether this manifest defines a set of extensions."
+    },
+    "nativeHttpFilters": {
+      "type": "object",
+      "description": "Native Envoy HTTP filters that BOE must emit in the HCM filter chain together with this extension's generated HTTP filter.",
+      "additionalProperties": false,
+      "properties": {
+        "before": {
+          "type": "array",
+          "description": "Native Envoy HTTP filters to emit before this extension's generated HTTP filter, in the order listed.",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "description": "An Envoy `envoy.config.core.v3.TypedExtensionConfig`-shaped HTTP filter entry: a name plus a typed_config carrying an Envoy proto.",
+            "additionalProperties": false,
+            "required": ["name", "typed_config"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Envoy HTTP filter name (e.g. `envoy.filters.http.mcp`).",
+                "minLength": 1
+              },
+              "typed_config": {
+                "type": "object",
+                "description": "Envoy typed_config; the proto type is selected by `@type`. Additional fields are passed through to the proto unchanged.",
+                "required": ["@type"],
+                "properties": {
+                  "@type": {
+                    "type": "string",
+                    "description": "Fully-qualified proto type URL, e.g. `type.googleapis.com/envoy.extensions.filters.http.mcp.v3.Mcp`.",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "allOf": [
@@ -302,6 +339,44 @@
       },
       "then": {
         "required": ["composerVersion"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": { "const": "rust" },
+          "filterType": { "enum": ["network", "listener", "udp_listener"] }
+        },
+        "required": ["filterType"]
+      },
+      "then": {
+        "properties": {
+          "nativeHttpFilters": false
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": { "const": "wasm" }
+        }
+      },
+      "then": {
+        "properties": {
+          "nativeHttpFilters": false
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": { "const": "composer" }
+        }
+      },
+      "then": {
+        "properties": {
+          "nativeHttpFilters": false
+        }
       }
     }
   ]
