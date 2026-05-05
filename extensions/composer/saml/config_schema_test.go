@@ -103,4 +103,21 @@ func TestConfigSchema(t *testing.T) {
 			"idp_metadata_fetch_delay": "10s"
 		}`)
 	})
+	t.Run("max_attempts with URL mode is valid", func(t *testing.T) {
+		internaltesting.AssertSchemaValid(t, "config.schema.json", `{
+			"entity_id": "https://sp.example.com",
+			"acs_path": "/saml/acs",
+			"idp_metadata_url": "https://idp.example.com/metadata",
+			"idp_metadata_cluster": "idp_cluster",
+			"idp_metadata_fetch_max_attempts": 5
+		}`)
+	})
+	t.Run("max_attempts without URL is invalid", func(t *testing.T) {
+		internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{
+			"entity_id": "https://sp.example.com",
+			"acs_path": "/saml/acs",
+			"idp_metadata_xml": {"inline": "<xml/>"},
+			"idp_metadata_fetch_max_attempts": 5
+		}`)
+	})
 }

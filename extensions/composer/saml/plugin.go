@@ -155,10 +155,11 @@ func (f *HTTPFilterConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, er
 // HttpCallout call is made there because the SDK requires it to run on the
 // thread that owns the config handle.
 //
-// On success, the parsed metadata is stored in filterCfg.idpMetadata. On
-// failure (init failure, non-2xx status, unparseable XML, or callout reset)
+// If an attempt fails (init failure, non-2xx status, unparseable XML, or
+// callout reset), the goroutine sleeps cfg.IDPMetadataFetchDelay and retries
+// up to cfg.IDPMetadataFetchMaxAttempts times. After exhausting all attempts,
 // metadata stays nil and request handlers respond with 503 until the next
-// config reload — there is no automatic retry.
+// config reload.
 func startIDPMetadataFetch(handle shared.HttpFilterConfigHandle, cfg *Config, filterCfg *samlFilterConfig) error {
 	u, err := url.Parse(cfg.IDPMetadataURL)
 	if err != nil {
@@ -172,8 +173,6 @@ func startIDPMetadataFetch(handle shared.HttpFilterConfigHandle, cfg *Config, fi
 		requestPath = "/"
 	}
 
-	scheduler := handle.GetScheduler()
-	cb := &idpMetadataCallback{handle: handle, target: filterCfg}
 	headers := [][2]string{
 		{":method", "GET"},
 		{":path", requestPath},
@@ -181,68 +180,102 @@ func startIDPMetadataFetch(handle shared.HttpFilterConfigHandle, cfg *Config, fi
 	}
 
 	handle.Log(shared.LogLevelInfo,
-		"saml: idp metadata fetch scheduled from %s via cluster %s after %s",
-		cfg.IDPMetadataURL, cfg.IDPMetadataCluster, cfg.IDPMetadataFetchDelay)
+		"saml: idp metadata fetch scheduled from %s via cluster %s after %s (max attempts: %d)",
+		cfg.IDPMetadataURL, cfg.IDPMetadataCluster, cfg.IDPMetadataFetchDelay, cfg.IDPMetadataFetchMaxAttempts)
 
 	go func() {
-		time.Sleep(cfg.IDPMetadataFetchDelay)
-		scheduler.Schedule(func() {
-			initResult, _ := handle.HttpCallout(
-				cfg.IDPMetadataCluster,
-				headers,
-				nil,
-				idpMetadataCalloutTimeoutMs,
-				cb,
-			)
-			if initResult != shared.HttpCalloutInitSuccess {
-				handle.Log(shared.LogLevelError,
-					"saml: failed to initiate idp metadata callout to cluster %q: init_result=%d",
-					cfg.IDPMetadataCluster, initResult)
+		for attempt := 1; attempt <= cfg.IDPMetadataFetchMaxAttempts; attempt++ {
+			time.Sleep(cfg.IDPMetadataFetchDelay)
+
+			done := make(chan bool, 1)
+			cb := &idpMetadataCallback{handle: handle, target: filterCfg, done: done}
+			scheduler := handle.GetScheduler()
+			scheduler.Schedule(func() {
+				initResult, _ := handle.HttpCallout(
+					cfg.IDPMetadataCluster,
+					headers,
+					nil,
+					idpMetadataCalloutTimeoutMs,
+					cb,
+				)
+				if initResult != shared.HttpCalloutInitSuccess {
+					handle.Log(shared.LogLevelError,
+						"saml: failed to initiate idp metadata callout to cluster %q: init_result=%d (attempt %d/%d)",
+						cfg.IDPMetadataCluster, initResult, attempt, cfg.IDPMetadataFetchMaxAttempts)
+					done <- false
+					return
+				}
+				handle.Log(shared.LogLevelInfo,
+					"saml: idp metadata callout dispatched to cluster %s (attempt %d/%d)",
+					cfg.IDPMetadataCluster, attempt, cfg.IDPMetadataFetchMaxAttempts)
+			})
+
+			if <-done {
 				return
 			}
-			handle.Log(shared.LogLevelInfo,
-				"saml: idp metadata callout dispatched to cluster %s", cfg.IDPMetadataCluster)
-		})
+
+			if attempt < cfg.IDPMetadataFetchMaxAttempts {
+				handle.Log(shared.LogLevelWarn,
+					"saml: idp metadata fetch failed; retrying after %s (attempt %d/%d)",
+					cfg.IDPMetadataFetchDelay, attempt, cfg.IDPMetadataFetchMaxAttempts)
+			}
+		}
+		handle.Log(shared.LogLevelError,
+			"saml: idp metadata fetch failed after %d attempts; metadata stays unset until next config reload",
+			cfg.IDPMetadataFetchMaxAttempts)
 	}()
 	return nil
 }
 
 // idpMetadataCallback receives the response from the config-time HttpCallout that
-// fetches IdP metadata. It parses the response body and publishes the parsed
-// metadata into target.idpMetadata.
+// fetches IdP metadata. It parses the response body, publishes the parsed metadata
+// into target.idpMetadata on success, and signals success/failure on done so the
+// retry goroutine in startIDPMetadataFetch can advance.
 type idpMetadataCallback struct {
 	handle interface {
 		Log(level shared.LogLevel, format string, args ...any)
 	}
 	target *samlFilterConfig
+	done   chan<- bool
+}
+
+func (c *idpMetadataCallback) signal(success bool) {
+	if c.done != nil {
+		c.done <- success
+	}
 }
 
 func (c *idpMetadataCallback) OnHttpCalloutDone(_ uint64, result shared.HttpCalloutResult, headers [][2]shared.UnsafeEnvoyBuffer, body []shared.UnsafeEnvoyBuffer) { //nolint:revive
 	if result != shared.HttpCalloutSuccess {
 		c.handle.Log(shared.LogLevelError, "saml: idp metadata callout failed: result=%d", result)
+		c.signal(false)
 		return
 	}
 
 	status := calloutHeaderValue(headers, ":status")
 	if status != "200" {
 		c.handle.Log(shared.LogLevelError, "saml: idp metadata callout returned non-200 status: %s", status)
+		c.signal(false)
 		return
 	}
 
 	bodyBytes := joinCalloutBody(body)
 	if len(bodyBytes) == 0 {
 		c.handle.Log(shared.LogLevelError, "saml: idp metadata callout returned empty body")
+		c.signal(false)
 		return
 	}
 
 	idpMeta, err := parseIDPMetadata(bodyBytes)
 	if err != nil {
 		c.handle.Log(shared.LogLevelError, "saml: failed to parse fetched idp metadata: %s", err.Error())
+		c.signal(false)
 		return
 	}
 
 	c.target.idpMetadata.Store(idpMeta)
 	c.handle.Log(shared.LogLevelInfo, "saml: idp metadata loaded for entity_id=%s, sso_url=%s", idpMeta.EntityID, idpMeta.SSOURL)
+	c.signal(true)
 }
 
 // joinCalloutBody concatenates the buffers returned by an HttpCallout response into a

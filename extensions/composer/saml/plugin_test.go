@@ -93,6 +93,9 @@ func TestConfigFactory_Create_URLMode_SchedulesCallout(t *testing.T) {
 		scheduledCh <- fn
 	})
 
+	idpKP := generateTestKeyPair("idp.example.com")
+	xml := testIDPMetadataXML("https://idp.example.com", "https://idp.example.com/sso", idpKP.Cert)
+
 	configHandle.EXPECT().HttpCallout(
 		"idp_cluster",
 		[][2]string{
@@ -103,7 +106,15 @@ func TestConfigFactory_Create_URLMode_SchedulesCallout(t *testing.T) {
 		gomock.Nil(),
 		uint64(idpMetadataCalloutTimeoutMs),
 		gomock.AssignableToTypeOf(&idpMetadataCallback{}),
-	).Return(shared.HttpCalloutInitSuccess, uint64(1))
+	).DoAndReturn(func(_ string, _ [][2]string, _ []byte, _ uint64, cb shared.HttpCalloutCallback) (shared.HttpCalloutInitResult, uint64) {
+		cb.OnHttpCalloutDone(1, shared.HttpCalloutSuccess,
+			[][2]shared.UnsafeEnvoyBuffer{
+				{pkg.UnsafeBufferFromString(":status"), pkg.UnsafeBufferFromString("200")},
+			},
+			[]shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromString(xml)},
+		)
+		return shared.HttpCalloutInitSuccess, uint64(1)
+	})
 
 	configJSON, _ := json.Marshal(map[string]any{
 		"entity_id":                "https://sp.example.com",
@@ -132,7 +143,7 @@ func TestConfigFactory_Create_URLMode_SchedulesCallout(t *testing.T) {
 	}
 }
 
-func TestConfigFactory_Create_URLMode_InitFailure_Logged(t *testing.T) {
+func TestConfigFactory_Create_URLMode_AllInitFailures_GivesUp(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -141,16 +152,16 @@ func TestConfigFactory_Create_URLMode_InitFailure_Logged(t *testing.T) {
 	configHandle.EXPECT().DefineCounter(gomock.Any(), gomock.Any()).Return(shared.MetricID(0), shared.MetricsSuccess).AnyTimes()
 
 	scheduler := mocks.NewMockScheduler(ctrl)
-	configHandle.EXPECT().GetScheduler().Return(scheduler)
+	configHandle.EXPECT().GetScheduler().Return(scheduler).Times(defaultIDPMetadataFetchMaxAttempts)
 
-	scheduledCh := make(chan func(), 1)
+	scheduledCh := make(chan func(), defaultIDPMetadataFetchMaxAttempts)
 	scheduler.EXPECT().Schedule(gomock.Any()).Do(func(fn func()) {
 		scheduledCh <- fn
-	})
+	}).Times(defaultIDPMetadataFetchMaxAttempts)
 
 	configHandle.EXPECT().HttpCallout(
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
-	).Return(shared.HttpCalloutInitClusterNotFound, uint64(0))
+	).Return(shared.HttpCalloutInitClusterNotFound, uint64(0)).Times(defaultIDPMetadataFetchMaxAttempts)
 
 	configJSON, _ := json.Marshal(map[string]any{
 		"entity_id":                "https://sp.example.com",
@@ -162,20 +173,204 @@ func TestConfigFactory_Create_URLMode_InitFailure_Logged(t *testing.T) {
 
 	factory := &HTTPFilterConfigFactory{}
 	filterFactory, err := factory.Create(configHandle, configJSON)
-	// Create no longer fails for callout init failure — failure is async and logged.
 	require.NoError(t, err)
 	require.NotNil(t, filterFactory)
 
-	select {
-	case fn := <-scheduledCh:
-		fn()
-	case <-time.After(2 * time.Second):
-		t.Fatal("scheduler.Schedule was not called within 2s")
+	for i := 0; i < defaultIDPMetadataFetchMaxAttempts; i++ {
+		select {
+		case fn := <-scheduledCh:
+			fn()
+		case <-time.After(2 * time.Second):
+			t.Fatalf("scheduler.Schedule was not called for attempt %d within 2s", i+1)
+		}
 	}
 
 	sf, ok := filterFactory.(*samlFilterFactory)
 	require.True(t, ok)
-	require.Nil(t, sf.config.idpMetadata.Load(), "metadata stays nil when callout init fails")
+	require.Nil(t, sf.config.idpMetadata.Load(), "metadata stays nil when all callout inits fail")
+}
+
+func TestConfigFactory_Create_URLMode_CustomMaxAttempts_GivesUp(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	const customMaxAttempts = 2
+
+	configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	configHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	configHandle.EXPECT().DefineCounter(gomock.Any(), gomock.Any()).Return(shared.MetricID(0), shared.MetricsSuccess).AnyTimes()
+
+	scheduler := mocks.NewMockScheduler(ctrl)
+	configHandle.EXPECT().GetScheduler().Return(scheduler).Times(customMaxAttempts)
+
+	scheduledCh := make(chan func(), customMaxAttempts)
+	scheduler.EXPECT().Schedule(gomock.Any()).Do(func(fn func()) {
+		scheduledCh <- fn
+	}).Times(customMaxAttempts)
+
+	configHandle.EXPECT().HttpCallout(
+		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+	).Return(shared.HttpCalloutInitClusterNotFound, uint64(0)).Times(customMaxAttempts)
+
+	configJSON, _ := json.Marshal(map[string]any{
+		"entity_id":                       "https://sp.example.com",
+		"acs_path":                        "/saml/acs",
+		"idp_metadata_url":                "http://idp.example.com/metadata",
+		"idp_metadata_cluster":            "missing_cluster",
+		"idp_metadata_fetch_delay":        "0s",
+		"idp_metadata_fetch_max_attempts": customMaxAttempts,
+	})
+
+	factory := &HTTPFilterConfigFactory{}
+	filterFactory, err := factory.Create(configHandle, configJSON)
+	require.NoError(t, err)
+	require.NotNil(t, filterFactory)
+
+	for i := 0; i < customMaxAttempts; i++ {
+		select {
+		case fn := <-scheduledCh:
+			fn()
+		case <-time.After(2 * time.Second):
+			t.Fatalf("scheduler.Schedule was not called for attempt %d within 2s", i+1)
+		}
+	}
+
+	sf, ok := filterFactory.(*samlFilterFactory)
+	require.True(t, ok)
+	require.Nil(t, sf.config.idpMetadata.Load(), "metadata stays nil when all callout inits fail")
+}
+
+func TestConfigFactory_Create_URLMode_RetriesOnInitFailure_ThenSucceeds(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	configHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	configHandle.EXPECT().DefineCounter(gomock.Any(), gomock.Any()).Return(shared.MetricID(0), shared.MetricsSuccess).AnyTimes()
+
+	scheduler := mocks.NewMockScheduler(ctrl)
+	configHandle.EXPECT().GetScheduler().Return(scheduler).Times(2)
+
+	scheduledCh := make(chan func(), 2)
+	scheduler.EXPECT().Schedule(gomock.Any()).Do(func(fn func()) {
+		scheduledCh <- fn
+	}).Times(2)
+
+	idpKP := generateTestKeyPair("idp.example.com")
+	xml := testIDPMetadataXML("https://idp.example.com", "https://idp.example.com/sso", idpKP.Cert)
+
+	gomock.InOrder(
+		configHandle.EXPECT().HttpCallout(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).Return(shared.HttpCalloutInitClusterNotFound, uint64(0)),
+		configHandle.EXPECT().HttpCallout(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).DoAndReturn(func(_ string, _ [][2]string, _ []byte, _ uint64, cb shared.HttpCalloutCallback) (shared.HttpCalloutInitResult, uint64) {
+			cb.OnHttpCalloutDone(1, shared.HttpCalloutSuccess,
+				[][2]shared.UnsafeEnvoyBuffer{
+					{pkg.UnsafeBufferFromString(":status"), pkg.UnsafeBufferFromString("200")},
+				},
+				[]shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromString(xml)},
+			)
+			return shared.HttpCalloutInitSuccess, uint64(1)
+		}),
+	)
+
+	configJSON, _ := json.Marshal(map[string]any{
+		"entity_id":                "https://sp.example.com",
+		"acs_path":                 "/saml/acs",
+		"idp_metadata_url":         "http://idp.example.com/metadata",
+		"idp_metadata_cluster":     "idp_cluster",
+		"idp_metadata_fetch_delay": "0s",
+	})
+
+	factory := &HTTPFilterConfigFactory{}
+	filterFactory, err := factory.Create(configHandle, configJSON)
+	require.NoError(t, err)
+	require.NotNil(t, filterFactory)
+
+	for i := 0; i < 2; i++ {
+		select {
+		case fn := <-scheduledCh:
+			fn()
+		case <-time.After(2 * time.Second):
+			t.Fatalf("scheduler.Schedule was not called for attempt %d within 2s", i+1)
+		}
+	}
+
+	sf, ok := filterFactory.(*samlFilterFactory)
+	require.True(t, ok)
+	loaded := sf.config.idpMetadata.Load()
+	require.NotNil(t, loaded, "metadata should be loaded after a successful retry")
+	require.Equal(t, "https://idp.example.com", loaded.EntityID)
+}
+
+func TestConfigFactory_Create_URLMode_RetriesOnCalloutFailure_ThenSucceeds(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	configHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	configHandle.EXPECT().DefineCounter(gomock.Any(), gomock.Any()).Return(shared.MetricID(0), shared.MetricsSuccess).AnyTimes()
+
+	scheduler := mocks.NewMockScheduler(ctrl)
+	configHandle.EXPECT().GetScheduler().Return(scheduler).Times(2)
+
+	scheduledCh := make(chan func(), 2)
+	scheduler.EXPECT().Schedule(gomock.Any()).Do(func(fn func()) {
+		scheduledCh <- fn
+	}).Times(2)
+
+	idpKP := generateTestKeyPair("idp.example.com")
+	xml := testIDPMetadataXML("https://idp.example.com", "https://idp.example.com/sso", idpKP.Cert)
+
+	gomock.InOrder(
+		configHandle.EXPECT().HttpCallout(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).DoAndReturn(func(_ string, _ [][2]string, _ []byte, _ uint64, cb shared.HttpCalloutCallback) (shared.HttpCalloutInitResult, uint64) {
+			cb.OnHttpCalloutDone(1, shared.HttpCalloutReset, nil, nil)
+			return shared.HttpCalloutInitSuccess, uint64(1)
+		}),
+		configHandle.EXPECT().HttpCallout(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).DoAndReturn(func(_ string, _ [][2]string, _ []byte, _ uint64, cb shared.HttpCalloutCallback) (shared.HttpCalloutInitResult, uint64) {
+			cb.OnHttpCalloutDone(2, shared.HttpCalloutSuccess,
+				[][2]shared.UnsafeEnvoyBuffer{
+					{pkg.UnsafeBufferFromString(":status"), pkg.UnsafeBufferFromString("200")},
+				},
+				[]shared.UnsafeEnvoyBuffer{pkg.UnsafeBufferFromString(xml)},
+			)
+			return shared.HttpCalloutInitSuccess, uint64(2)
+		}),
+	)
+
+	configJSON, _ := json.Marshal(map[string]any{
+		"entity_id":                "https://sp.example.com",
+		"acs_path":                 "/saml/acs",
+		"idp_metadata_url":         "http://idp.example.com/metadata",
+		"idp_metadata_cluster":     "idp_cluster",
+		"idp_metadata_fetch_delay": "0s",
+	})
+
+	factory := &HTTPFilterConfigFactory{}
+	filterFactory, err := factory.Create(configHandle, configJSON)
+	require.NoError(t, err)
+	require.NotNil(t, filterFactory)
+
+	for i := 0; i < 2; i++ {
+		select {
+		case fn := <-scheduledCh:
+			fn()
+		case <-time.After(2 * time.Second):
+			t.Fatalf("scheduler.Schedule was not called for attempt %d within 2s", i+1)
+		}
+	}
+
+	sf, ok := filterFactory.(*samlFilterFactory)
+	require.True(t, ok)
+	loaded := sf.config.idpMetadata.Load()
+	require.NotNil(t, loaded, "metadata should be loaded after a successful retry")
+	require.Equal(t, "https://idp.example.com", loaded.EntityID)
 }
 
 func TestConfigFactory_Create_URLMode_InvalidURL(t *testing.T) {

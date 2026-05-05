@@ -42,7 +42,7 @@ longDescription: |
   - `acs_path`: Path for the Assertion Consumer Service endpoint
   - One of (mutually exclusive):
     - `idp_metadata_xml`: IdP metadata XML, as `{"inline": "<xml>..."}` or `{"file": "/path/to/metadata.xml"}`. Parsed at config-load time.
-    - `idp_metadata_url` + `idp_metadata_cluster`: Fetch the IdP metadata XML from the given URL via the named Envoy cluster. The fetch is **scheduled** to run after `idp_metadata_fetch_delay` (default `1s`), giving Envoy time to bring up the cluster — issuing the callout immediately at config-load time often races with cluster warm-up and fails. While the fetch is pending or in flight, requests receive `503 Service Unavailable` with details `saml-metadata-pending`. Once the metadata is loaded, normal SAML processing resumes. If the fetch fails (cluster not found, non-2xx response, unparseable XML), no retry is attempted and requests continue to receive 503 — fix the configuration or restart Envoy after the IdP becomes reachable.
+    - `idp_metadata_url` + `idp_metadata_cluster`: Fetch the IdP metadata XML from the given URL via the named Envoy cluster. The fetch is **scheduled** to run after `idp_metadata_fetch_delay` (default `1s`), giving Envoy time to bring up the cluster — issuing the callout immediately at config-load time often races with cluster warm-up and fails. While the fetch is pending or in flight, requests receive `503 Service Unavailable` with details `saml-metadata-pending`. Once the metadata is loaded, normal SAML processing resumes. If the fetch fails (init failure, non-2xx response, unparseable XML, or callout reset), the fetch is retried up to `idp_metadata_fetch_max_attempts` times (default `3`), separated by `idp_metadata_fetch_delay`. After all attempts are exhausted, requests continue to receive 503 until Envoy is reloaded.
 
   Optional fields:
   - `sp_cert_pem` / `sp_key_pem`: PEM-encoded SP certificate and private key, each as
@@ -53,8 +53,11 @@ longDescription: |
     `session.cookie_domain`, `session.cookie_signing_key`
   - `bypass_paths`, `attribute_headers`, `sign_authn_requests`, `default_redirect_path`
   - `idp_metadata_fetch_delay`: Go duration string (e.g. `"1s"`, `"30s"`). Delay between
-    config load and the IdP metadata HttpCallout. Defaults to `"1s"`. Only valid in
-    URL mode.
+    config load and the IdP metadata HttpCallout, and between retry attempts. Defaults
+    to `"1s"`. Only valid in URL mode.
+  - `idp_metadata_fetch_max_attempts`: Total number of IdP metadata fetch attempts
+    (initial + retries) before giving up. Must be `>= 1`. Defaults to `3`. Only valid
+    in URL mode.
 
   ## Metrics
 
