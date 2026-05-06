@@ -88,7 +88,7 @@ boe run --help
 | Name | Description | Type | Default | Env Var | Required |
 |------|-------------|------|---------|-----|----------|
 | `--envoy-version` | Envoy version to use (e.g., 1.31.0) | `string` | - | `ENVOY_VERSION` | No |
-| `--log-level` | Envoy component log level. | `string` | `all:error` | - | No |
+| `--log-level` | Envoy component log level. | `string` | `all:error` | `ENVOY_LOG_LEVEL` | No |
 | `--run-id` | Run identifier for this invocation. Defaults to timestamp-based ID or $BOE_RUN_ID. Use '0' for Docker/Kubernetes. | `string` | - | `BOE_RUN_ID` | No |
 | `--listen-port` | Port for Envoy listener to accept incoming traffic. | `uint32` | `10000` | - | No |
 | `--admin-port` | Port for Envoy admin interface. | `uint32` | `9901` | - | No |
