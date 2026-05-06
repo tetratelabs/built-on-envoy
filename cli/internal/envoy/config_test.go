@@ -788,7 +788,11 @@ func TestRenderConfigWithNativeHTTPFiltersBeforeOverride(t *testing.T) {
 func requireEqualError(t *testing.T, err error, expected string) {
 	t.Helper()
 	require.Error(t, err)
-	require.Equal(t, expected, strings.ReplaceAll(err.Error(), "\u00a0", " "))
+	// google.golang.org/protobuf randomizes spaces in error messages between regular space and U+00A0
+	// (see internal/detrand) to discourage exact-string matching. Normalize both sides so tests that
+	// embed proto errors in their expected string aren't flaky depending on which space the runtime drew.
+	normalize := func(s string) string { return strings.ReplaceAll(s, "\u00a0", " ") }
+	require.Equal(t, normalize(expected), normalize(err.Error()))
 }
 
 func requireProtoJSON(t *testing.T, expect string, result []*hcmv3.HttpFilter) {
