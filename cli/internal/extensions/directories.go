@@ -20,11 +20,11 @@ func LocalCacheManifest(dirs *xdg.Directories, manifest *Manifest) string {
 
 // LocalCacheExtensionDir returns the local cache directory for the given extension manifest.
 // Different extension types are organized in different directory structures:
-// - go: extensions/goplugin/<name>/<version> for plugins,
-//   or extensions/dym/<name>/<version> when manifest.CShared is true
-// - rust: extensions/dym/<name>/<version>
-// - ext_proc: extensions/extproc/<name>/<version>
-// - others: extensions/<name>/<version>
+//   - go: extensions/goplugin/<name>/<version> for plugins,
+//     or extensions/dym/<name>/<version> when manifest.CShared is true
+//   - rust: extensions/dym/<name>/<version>
+//   - ext_proc: extensions/extproc/<name>/<version>
+//   - others: extensions/<name>/<version>
 func LocalCacheExtensionDir(dirs *xdg.Directories, manifest *Manifest) string {
 	switch manifest.Type {
 	case TypeGo:
