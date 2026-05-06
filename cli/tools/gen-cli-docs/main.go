@@ -195,7 +195,7 @@ func parseCommands() ([]Command, []EnvVar, error) {
 
 	// Iterate through the children of the root node (these are the commands)
 	for _, node := range k.Model.Children {
-		if node.Type != kong.CommandNode {
+		if node.Type != kong.CommandNode || node.Hidden {
 			continue
 		}
 

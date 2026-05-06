@@ -12,8 +12,6 @@ sections:
         href: /docs/cli/download
       - title: gen-config
         href: /docs/cli/gen-config
-      - title: healthcheck
-        href: /docs/cli/healthcheck
       - title: list
         href: /docs/cli/list
       - title: run

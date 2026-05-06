@@ -139,9 +139,6 @@ Commands:
   run [flags]
     Run Envoy with extensions
 
-  healthcheck [flags]
-    Docker HEALTHCHECK command.
-
   gen-config [flags]
     Generate Envoy configuration with extensions
 
