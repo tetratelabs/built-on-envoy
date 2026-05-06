@@ -585,7 +585,7 @@ func TestRejectTerminalDynamicModule(t *testing.T) {
 	dm := &dymhttpv3.DynamicModuleFilter{}
 	err = routerAny.UnmarshalTo(dm)
 	require.Error(t, err)
-	wrongTypedConfigErr := `unmarshal dynamic_modules typed_config: proto: mismatched message type: got "envoy.extensions.filters.http.dynamic_modules.v3.DynamicModuleFilter", want "envoy.extensions.filters.http.router.v3.Router"`
+	wrongTypedConfigErr := fmt.Sprintf("unmarshal dynamic_modules typed_config: %v", err)
 
 	tests := []struct {
 		name        string
@@ -667,8 +667,8 @@ func TestRenderConfigWithNativeHTTPFiltersBeforeErrors(t *testing.T) {
 		filter := &hcmv3.HttpFilter{}
 		err = protojson.Unmarshal(raw, filter)
 		require.Error(t, err)
-		expectedErr := fmt.Sprintf(`failed to generate config resources: failed to parse nativeHttpFilters.before for extension %q: before[0]: proto: (line 1:70): unable to resolve "type.googleapis.com/envoy.extensions.filters.http.example_unknown.v3.Unknown": "not found"`,
-			ext.Name)
+		expectedErr := fmt.Sprintf("failed to generate config resources: failed to parse nativeHttpFilters.before for extension %q: before[0]: %v",
+			ext.Name, err)
 
 		_, err = RenderConfig(&ConfigGenerationParams{
 			Logger:       internaltesting.NewTLogger(t),
