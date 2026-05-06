@@ -910,7 +910,7 @@ func TestWarnMultipleGoExtensions(t *testing.T) {
 
 			warnMultipleGoExtensions(tt.extensions)
 
-			w.Close()
+			_ = w.Close()
 			os.Stderr = oldStderr
 
 			var buf bytes.Buffer

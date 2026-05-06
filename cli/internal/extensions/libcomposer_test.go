@@ -70,8 +70,8 @@ func TestBuildExtensionFromPath_CShared(t *testing.T) {
 	// Create a fake extension directory with a main/ subdirectory to trigger c-shared build.
 	extDir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(extDir, "main"), 0o750))
-	require.NoError(t, os.WriteFile(filepath.Join(extDir, "go.mod"), []byte("module test\n\ngo 1.23\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(extDir, "main", "main.go"), []byte("package main\nfunc main() {}\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(extDir, "go.mod"), []byte("module test\n\ngo 1.23\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(extDir, "main", "main.go"), []byte("package main\nfunc main() {}\n"), 0o600))
 
 	manifest := &Manifest{Name: "test-cshared", Version: "0.0.1"}
 	cshared, err := BuildExtensionFromPath(logger, fakeDirs, manifest, extDir)
