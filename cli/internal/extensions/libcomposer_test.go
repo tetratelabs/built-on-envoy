@@ -45,10 +45,12 @@ func TestBuildExtensionFromPath(t *testing.T) {
 	manifest, err := LoadLocalManifest(extensionPath + "/manifest.yaml")
 	require.NoError(t, err)
 
-	err = BuildExtensionFromPath(logger, fakeDirs, manifest, extensionPath)
+	cshared, err := BuildExtensionFromPath(logger, fakeDirs, manifest, extensionPath)
 	require.NoError(t, err)
 
-	// Ensure the plugin.so is created.
+	// The example extension does not have a main/ directory, so it should be built as a plugin.
+	require.False(t, cshared)
+
 	pluginPath := LocalCacheExtension(fakeDirs, manifest)
 	_, err = os.Stat(pluginPath)
 	require.NoError(t, err)

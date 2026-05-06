@@ -857,3 +857,73 @@ all Go extensions must use the same composer version`,
 		})
 	}
 }
+
+func TestWarnMultipleGoExtensions(t *testing.T) {
+	tests := []struct {
+		name        string
+		extensions  []*extensions.Manifest
+		wantWarning bool
+	}{
+		{
+			name: "single c-shared Go extension - no warning",
+			extensions: []*extensions.Manifest{
+				{Name: "ext-1", Type: extensions.TypeGo, CShared: true},
+			},
+		},
+		{
+			name: "multiple plugin Go extensions - no warning",
+			extensions: []*extensions.Manifest{
+				{Name: "ext-1", Type: extensions.TypeGo},
+				{Name: "ext-2", Type: extensions.TypeGo},
+			},
+		},
+		{
+			name: "multiple c-shared Go extensions - warning",
+			extensions: []*extensions.Manifest{
+				{Name: "ext-1", Type: extensions.TypeGo, CShared: true},
+				{Name: "ext-2", Type: extensions.TypeGo, CShared: true},
+			},
+			wantWarning: true,
+		},
+		{
+			name: "one c-shared one plugin Go extension - no warning",
+			extensions: []*extensions.Manifest{
+				{Name: "ext-1", Type: extensions.TypeGo, CShared: true},
+				{Name: "ext-2", Type: extensions.TypeGo},
+			},
+		},
+		{
+			name: "mixed types with one c-shared Go - no warning",
+			extensions: []*extensions.Manifest{
+				{Name: "ext-1", Type: extensions.TypeGo, CShared: true},
+				{Name: "ext-2", Type: extensions.TypeRust},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Capture stderr output
+			oldStderr := os.Stderr
+			r, w, _ := os.Pipe()
+			os.Stderr = w
+
+			warnMultipleGoExtensions(tt.extensions)
+
+			w.Close()
+			os.Stderr = oldStderr
+
+			var buf bytes.Buffer
+			_, _ = buf.ReadFrom(r)
+			output := buf.String()
+
+			if tt.wantWarning {
+				require.Contains(t, output, "Multiple Go extensions detected")
+				require.Contains(t, output, "ext-1, ext-2")
+				require.Contains(t, output, "goplugin loader")
+			} else {
+				require.Empty(t, output)
+			}
+		})
+	}
+}

@@ -204,6 +204,16 @@ func TestExtProcRemoteExtension(t *testing.T) {
 }
 
 func TestLocalGoExtension(t *testing.T) {
+	testLocalGoExtension(t, false)
+}
+
+func TestLocalGoExtensionLegacyPluginPath(t *testing.T) {
+	testLocalGoExtension(t, true)
+}
+
+func testLocalGoExtension(t *testing.T, removeCSharedMain bool) {
+	t.Helper()
+
 	// Local builds for Go will pull libcomposer from the remote registry. However, when we're doing changes to versions, etc, we don't want it to
 	// pull an obsolete version, so we'll just push the current composer source to the local registry and use that for the test.
 	t.Setenv("BOE_REGISTRY", registryAddr)
@@ -221,6 +231,10 @@ func TestLocalGoExtension(t *testing.T) {
 	status, err := process.Wait()
 	require.NoError(t, err)
 	require.Equal(t, 0, status.ExitCode())
+
+	if removeCSharedMain {
+		require.NoError(t, os.RemoveAll(dataDir+"/go-e2e/main"))
+	}
 
 	// Add a dummy dependency to the extension to test that the extension can be built and run successfully
 	// even the dependencies of the extension are not a subset of the composer's dependencies.

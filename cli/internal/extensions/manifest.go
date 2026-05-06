@@ -65,6 +65,10 @@ type (
 		// SourceTag is the resolved version tag the extension was fetched with.
 		// Set by the Downloader for remote extensions.
 		SourceTag string `yaml:"-" json:"-"`
+		// CShared indicates the extension was built as an independent c-shared library
+		// (via the main/ directory) rather than as a Go plugin (via standalone/).
+		// Set by BuildExtensionFromPath when the extension has a main/ directory.
+		CShared bool `yaml:"-" json:"-"`
 	}
 
 	// Example represents an example usage of an extension.

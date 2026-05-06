@@ -1,0 +1,16 @@
+// Package main builds a c-shared library that can be loaded directly by Envoy as a dynamic module.
+// Use this entry point when building the extension as an independent shared library.
+// For building as a Go plugin loaded by composer, use the standalone/ directory instead.
+package main
+
+import (
+	_ "github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/abi"
+	sdk "github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go"
+	impl "{{ .Name }}"
+)
+
+func init() {
+	sdk.RegisterHttpFilterConfigFactories(impl.WellKnownHttpFilterConfigFactories())
+}
+
+func main() {} // required for c-shared build
