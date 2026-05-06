@@ -33,6 +33,13 @@ const (
 	defaultDefaultRedirectURL = "/"
 	defaultSLOPath            = "/saml/slo"
 	defaultMetadataPath       = "/saml/metadata"
+	// defaultIDPMetadataFetchDelay is how long the URL-mode metadata fetch waits
+	// before issuing the HttpCallout. Gives Envoy time to bring up the cluster
+	// referenced by idp_metadata_cluster.
+	defaultIDPMetadataFetchDelay = 1 * time.Second
+	// defaultIDPMetadataFetchMaxAttempts is the total number of URL-mode metadata
+	// fetch attempts (initial + retries) before giving up.
+	defaultIDPMetadataFetchMaxAttempts = 3
 )
 
 // Config holds the parsed configuration for the SAML filter.
@@ -41,8 +48,24 @@ type Config struct {
 	EntityID string
 	// ACSPath is the path that this filter will intercept for SAML ACS.
 	ACSPath string
-	// IDPMetadataXML is the inline IdP metadata XML string.
+	// IDPMetadataXML is the resolved IdP metadata XML string. It is set when
+	// idp_metadata_xml (inline or file) is configured, and empty when the
+	// metadata is fetched at config-load time from IDPMetadataURL.
 	IDPMetadataXML string
+	// IDPMetadataURL is the URL to fetch the IdP metadata XML from at config-load time.
+	// Mutually exclusive with IDPMetadataXML.
+	IDPMetadataURL string
+	// IDPMetadataCluster is the Envoy cluster used to reach IDPMetadataURL. Required
+	// when IDPMetadataURL is set.
+	IDPMetadataCluster string
+	// IDPMetadataFetchDelay is how long to wait at config time before issuing the
+	// metadata HttpCallout, giving Envoy time to start IDPMetadataCluster. Only
+	// used in URL mode.
+	IDPMetadataFetchDelay time.Duration
+	// IDPMetadataFetchMaxAttempts is the total number of metadata fetch attempts
+	// (initial + retries) before giving up. Retries are separated by
+	// IDPMetadataFetchDelay. Only used in URL mode.
+	IDPMetadataFetchMaxAttempts int
 
 	// SPCert is the parsed SP certificate.
 	SPCert *x509.Certificate
@@ -85,9 +108,13 @@ type Config struct {
 
 // rawConfig is the JSON-serializable representation of the configuration.
 type rawConfig struct {
-	EntityID       string         `json:"entity_id"`
-	ACSPath        string         `json:"acs_path"`
-	IDPMetadataXML pkg.DataSource `json:"idp_metadata_xml"`
+	EntityID                    string          `json:"entity_id"`
+	ACSPath                     string          `json:"acs_path"`
+	IDPMetadataXML              *pkg.DataSource `json:"idp_metadata_xml,omitempty"`
+	IDPMetadataURL              string          `json:"idp_metadata_url,omitempty"`
+	IDPMetadataCluster          string          `json:"idp_metadata_cluster,omitempty"`
+	IDPMetadataFetchDelay       string          `json:"idp_metadata_fetch_delay,omitempty"`
+	IDPMetadataFetchMaxAttempts *int            `json:"idp_metadata_fetch_max_attempts,omitempty"`
 
 	SPCertPEM *pkg.DataSource `json:"sp_cert_pem,omitempty"`
 	SPKeyPEM  *pkg.DataSource `json:"sp_key_pem,omitempty"`
@@ -132,15 +159,57 @@ func parseConfig(data []byte) (*Config, error) {
 		return nil, errors.New("acs_path is required")
 	}
 
-	// Resolve IDPMetadataXML (required).
-	if err := raw.IDPMetadataXML.Validate(); err != nil {
-		return nil, fmt.Errorf("idp_metadata_xml: %w", err)
+	// IdP metadata: exactly one of inline XML or URL must be set.
+	hasInlineMetadata := raw.IDPMetadataXML != nil
+	hasURLMetadata := raw.IDPMetadataURL != ""
+	if hasInlineMetadata && hasURLMetadata {
+		return nil, errors.New("idp_metadata_xml and idp_metadata_url are mutually exclusive")
 	}
-	content, err := raw.IDPMetadataXML.Content()
-	if err != nil || len(content) == 0 {
-		return nil, fmt.Errorf("idp_metadata_xml: error %w or empty content", err)
+	if !hasInlineMetadata && !hasURLMetadata {
+		return nil, errors.New("one of idp_metadata_xml or idp_metadata_url is required")
 	}
-	idpMetaXML := string(content)
+	if hasURLMetadata && raw.IDPMetadataCluster == "" {
+		return nil, errors.New("idp_metadata_cluster is required when idp_metadata_url is set")
+	}
+	if !hasURLMetadata && raw.IDPMetadataCluster != "" {
+		return nil, errors.New("idp_metadata_cluster requires idp_metadata_url to be set")
+	}
+	if !hasURLMetadata && raw.IDPMetadataFetchDelay != "" {
+		return nil, errors.New("idp_metadata_fetch_delay requires idp_metadata_url to be set")
+	}
+	if !hasURLMetadata && raw.IDPMetadataFetchMaxAttempts != nil {
+		return nil, errors.New("idp_metadata_fetch_max_attempts requires idp_metadata_url to be set")
+	}
+	idpMetadataFetchDelay := defaultIDPMetadataFetchDelay
+	if raw.IDPMetadataFetchDelay != "" {
+		d, err := time.ParseDuration(raw.IDPMetadataFetchDelay)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse idp_metadata_fetch_delay: %w", err)
+		}
+		if d < 0 {
+			return nil, errors.New("idp_metadata_fetch_delay must be non-negative")
+		}
+		idpMetadataFetchDelay = d
+	}
+	idpMetadataFetchMaxAttempts := defaultIDPMetadataFetchMaxAttempts
+	if raw.IDPMetadataFetchMaxAttempts != nil {
+		if *raw.IDPMetadataFetchMaxAttempts < 1 {
+			return nil, fmt.Errorf("idp_metadata_fetch_max_attempts must be >= 1, got %d", *raw.IDPMetadataFetchMaxAttempts)
+		}
+		idpMetadataFetchMaxAttempts = *raw.IDPMetadataFetchMaxAttempts
+	}
+
+	var idpMetaXML string
+	if hasInlineMetadata {
+		if err := raw.IDPMetadataXML.Validate(); err != nil {
+			return nil, fmt.Errorf("idp_metadata_xml: %w", err)
+		}
+		content, err := raw.IDPMetadataXML.Content()
+		if err != nil || len(content) == 0 {
+			return nil, fmt.Errorf("idp_metadata_xml: error %w or empty content", err)
+		}
+		idpMetaXML = string(content)
+	}
 
 	// Resolve SPCertPEM and SPKeyPEM (optional pair; nil means absent, auto-generate).
 	var spCertPEM, spKeyPEM string
@@ -168,9 +237,12 @@ func parseConfig(data []byte) (*Config, error) {
 		return nil, errors.New("sp_cert_pem and sp_key_pem must both be provided, or both omitted")
 	}
 
-	var cert *x509.Certificate
-	var key *rsa.PrivateKey
-	var autoGenerated bool
+	var (
+		cert          *x509.Certificate
+		key           *rsa.PrivateKey
+		autoGenerated bool
+		err           error
+	)
 
 	if spCertPEM == "" {
 		// Auto-generate an ephemeral SP certificate and key.
@@ -197,14 +269,18 @@ func parseConfig(data []byte) (*Config, error) {
 	}
 
 	cfg := &Config{
-		EntityID:            raw.EntityID,
-		ACSPath:             raw.ACSPath,
-		IDPMetadataXML:      idpMetaXML,
-		SPCert:              cert,
-		SPKey:               key,
-		SPCertPEM:           spCertPEM,
-		SPKeyPEM:            spKeyPEM,
-		SPCertAutoGenerated: autoGenerated,
+		EntityID:                    raw.EntityID,
+		ACSPath:                     raw.ACSPath,
+		IDPMetadataXML:              idpMetaXML,
+		IDPMetadataURL:              raw.IDPMetadataURL,
+		IDPMetadataCluster:          raw.IDPMetadataCluster,
+		IDPMetadataFetchDelay:       idpMetadataFetchDelay,
+		IDPMetadataFetchMaxAttempts: idpMetadataFetchMaxAttempts,
+		SPCert:                      cert,
+		SPKey:                       key,
+		SPCertPEM:                   spCertPEM,
+		SPKeyPEM:                    spKeyPEM,
+		SPCertAutoGenerated:         autoGenerated,
 
 		// Defaults.
 		CookieName:          defaultCookieName,
