@@ -329,6 +329,51 @@
     "sourcePath": "composer/waf"
   },
   {
+    "name": "dns-gateway",
+    "version": "0.1.0",
+    "categories": [
+      "Network",
+      "Security"
+    ],
+    "author": "ovadiagal",
+    "description": "Transparent egress routing — intercept DNS and route TCP by domain",
+    "longDescription": "Transparent egress routing for Envoy. Applications make normal DNS lookups and TCP\nconnections — this extension intercepts both so Envoy can control which upstream cluster\nhandles each domain, attach metadata (auth tokens, policy IDs), and enforce routing\npolicy, all without any application changes.\n\n## Use cases\n\n* Route outbound traffic through different upstream proxies based on destination domain\n* Attach per-domain credentials or policy metadata to proxied connections\n* Enforce egress access control by selectively intercepting DNS for specific domains\n\n## How it works\n\nThe extension is a pair of filters that work together:\n\n1. **`dns_gateway`** (UDP listener filter) — Intercepts DNS queries for configured domain\n   patterns. For each matched query, allocates a virtual IP from a dedicated CIDR range and\n   responds with an A record. The application receives this virtual IP and connects to it\n   as if it were the real destination. Non-matching queries pass through to upstream resolvers.\n\n2. **`cache_lookup`** (network filter) — When the application opens a TCP connection to a\n   virtual IP, this filter looks up the original domain and its configured metadata from a\n   shared cache and sets them as Envoy\n   [filter state](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/data_sharing_between_filters#primitives).\n   Downstream filters (e.g. `tcp_proxy`, `set_filter_state`) can then use this to select\n   the upstream cluster, set headers, or apply policy.\n\n## Features\n\n* **Domain matching**: Exact (`example.com`) and single-level wildcard (`*.aws.com`) patterns\n* **Per-domain CIDR ranges**: Each domain pattern allocates virtual IPs from its own subnet\n* **Metadata propagation**: Arbitrary string key-value pairs flow from config through filter state\n* **Thread-safe caching**: Concurrent virtual IP allocation with deduplication\n\n## Prerequisites\n\nRequires iptables/nftables rules to redirect application traffic to Envoy:\n- **DNS**: UDP port 53 redirected to Envoy's DNS listener\n- **TCP**: Outbound connections to virtual IP ranges redirected to Envoy's TCP listener\n\n## Building\n\n```bash\ncargo build --release -p dns-gateway\n```\n\nThe compiled library will be at `target/release/libdns_gateway.{so,dylib}`\n",
+    "type": "rust",
+    "filterType": "http",
+    "tags": [
+      "access-control",
+      "dns",
+      "dynamic-module",
+      "egress",
+      "networking",
+      "routing",
+      "rust",
+      "security",
+      "transparent-proxy",
+      "virtual-ip"
+    ],
+    "license": "Apache-2.0",
+    "examples": [
+      {
+        "title": "Single Wildcard Domain",
+        "description": "Intercept all *.aws.com DNS queries and allocate virtual IPs from a /24 range",
+        "code": "# dns_gateway filter config\n{\n  \"domains\": [\n    {\n      \"domain\": \"*.aws.com\",\n      \"base_ip\": \"10.239.0.0\",\n      \"prefix_len\": 24,\n      \"metadata\": {\n        \"cluster\": \"aws_cluster\"\n      }\n    }\n  ]\n}\n"
+      },
+      {
+        "title": "Multiple Domains with Metadata",
+        "description": "Route different domain patterns to different clusters with metadata",
+        "code": "# dns_gateway filter config\n{\n  \"domains\": [\n    {\n      \"domain\": \"*.aws.com\",\n      \"base_ip\": \"10.239.0.0\",\n      \"prefix_len\": 24,\n      \"metadata\": {\n        \"cluster\": \"aws_cluster\",\n        \"proxy_token\": \"abc123\"\n      }\n    },\n    {\n      \"domain\": \"example.com\",\n      \"base_ip\": \"10.239.1.0\",\n      \"prefix_len\": 24,\n      \"metadata\": {\n        \"cluster\": \"example_cluster\",\n        \"proxy_token\": \"def456\"\n      }\n    }\n  ]\n}\n"
+      },
+      {
+        "title": "Cache Lookup Filter",
+        "description": "The cache_lookup network filter requires no configuration",
+        "code": "# cache_lookup filter config\n{}\n"
+      }
+    ],
+    "minEnvoyVersion": "1.37.1",
+    "sourcePath": "dns-gateway"
+  },
+  {
     "name": "example-ext-proc",
     "version": "0.1.0",
     "categories": [
