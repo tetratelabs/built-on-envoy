@@ -57,4 +57,8 @@ COPY --chown=boe:boe ./out/boe-${TARGETOS}-${TARGETARCH} /boe
 COPY --chown=boe:boe ./entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
+# The healthcheck subcommand discovers Envoy's admin server and checks readiness.
+HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=3 \
+    CMD ["/boe", "healthcheck"]
+
 ENTRYPOINT ["/entrypoint.sh"]
