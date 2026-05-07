@@ -52,7 +52,7 @@ Flags:
 
       --envoy-version=STRING       Envoy version to use (e.g., 1.31.0)
                                    ($ENVOY_VERSION)
-      --log-level="all:error"      Envoy component log level.
+      --log-level="all:error"      Envoy component log level ($ENVOY_LOG_LEVEL).
       --run-id=STRING              Run identifier for this invocation. Defaults
                                    to timestamp-based ID or $BOE_RUN_ID. Use '0'
                                    for Docker/Kubernetes ($BOE_RUN_ID).
@@ -113,6 +113,8 @@ Flags:
 }
 
 func TestParseCmdRunDefaults(t *testing.T) {
+	t.Setenv("ENVOY_LOG_LEVEL", "all:error")
+
 	var cli struct {
 		Run Run `cmd:"" help:"Run Envoy with extensions"`
 	}
@@ -141,6 +143,28 @@ func TestParseCmdRunDefaults(t *testing.T) {
 	// Verify RunID is generated with expected format: YYYYMMDD_HHMMSS_UUU
 	require.NotEmpty(t, cli.Run.RunID)
 	require.Regexp(t, `^\d{8}_\d{6}_\d{3}$`, cli.Run.RunID)
+}
+
+func TestParseCmdRunLogLevelEnv(t *testing.T) {
+	var cli struct {
+		Run Run `cmd:"" help:"Run Envoy with extensions"`
+	}
+
+	parser, err := kong.New(&cli,
+		kong.Name("boe"),
+		kong.Exit(func(int) {}),
+		kong.BindTo(t.Context(), (*context.Context)(nil)),
+		kong.Bind(&xdg.Directories{}),
+		Vars,
+	)
+	require.NoError(t, err)
+
+	t.Setenv("ENVOY_LOG_LEVEL", "all:debug,upstream:trace")
+
+	_, err = parser.Parse([]string{"run"})
+	require.NoError(t, err)
+
+	require.Equal(t, "all:debug,upstream:trace", cli.Run.LogLevel)
 }
 
 func TestParseCmdRunCustomValues(t *testing.T) {

@@ -785,6 +785,7 @@ func TestRenderConfigWithNativeHTTPFiltersBeforeOverride(t *testing.T) {
 	}
 }
 
+// requireEqualError compares error strings while normalizing protobuf NBSP output.
 func requireEqualError(t *testing.T, err error, expected string) {
 	t.Helper()
 	require.Error(t, err)

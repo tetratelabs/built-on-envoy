@@ -30,13 +30,14 @@ const CLIName = "boe"
 
 // CLI is the root command for the Built On Envoy CLI.
 type CLI struct {
-	List      List      `cmd:"" help:"List available extensions"`
-	Run       Run       `cmd:"" help:"Run Envoy with extensions"`
-	GenConfig GenConfig `cmd:"" help:"Generate Envoy configuration with extensions"`
-	Create    Create    `cmd:"" help:"Create a new extension template"`
-	Download  Download  `cmd:"" help:"Download extensions from the registry"`
-	Clean     Clean     `cmd:"" help:"Clean cache directories"`
-	Version   Version   `cmd:"" help:"Print version information"`
+	List        List        `cmd:"" help:"List available extensions"`
+	Run         Run         `cmd:"" help:"Run Envoy with extensions"`
+	Healthcheck Healthcheck `cmd:"" help:"Docker HEALTHCHECK command." hidden:""`
+	GenConfig   GenConfig   `cmd:"" help:"Generate Envoy configuration with extensions"`
+	Create      Create      `cmd:"" help:"Create a new extension template"`
+	Download    Download    `cmd:"" help:"Download extensions from the registry"`
+	Clean       Clean       `cmd:"" help:"Clean cache directories"`
+	Version     Version     `cmd:"" help:"Print version information"`
 
 	// Global XDG flags
 	ConfigHome  string `name:"config-home" env:"BOE_CONFIG_HOME" help:"Configuration files directory. Defaults to ~/.config/boe" type:"path" default:"~/.config/boe"`
