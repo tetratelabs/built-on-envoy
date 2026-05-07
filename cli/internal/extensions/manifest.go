@@ -143,14 +143,15 @@ func (m *Manifest) EnvoyConstraints() string {
 
 // ImplicitMaxEnvoyVersion computes an implicit max Envoy version from a min version.
 // Given a semver like "1.33.0", it returns "1.34.0" (major.(minor+1).0).
+// This adhere to the principles outlined in the Envoy documentation: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/dynamic_modules#compatibility
 func ImplicitMaxEnvoyVersion(minVersion string) string {
 	parts := strings.SplitN(minVersion, ".", 3)
 	if len(parts) < 2 {
-		return minVersion
+		return ""
 	}
 	minor, err := strconv.Atoi(parts[1])
 	if err != nil {
-		return minVersion
+		return ""
 	}
 	return fmt.Sprintf("%s.%d.0", parts[0], minor+1)
 }
