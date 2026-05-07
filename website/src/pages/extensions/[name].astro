@@ -93,8 +93,13 @@ function formatTypeName(type: string): string {
 										<span class="meta-label">Envoy Version</span>
 										<span class="meta-value">
 											{extension.minEnvoyVersion && `>= ${extension.minEnvoyVersion}`}
-											{extension.minEnvoyVersion && extension.maxEnvoyVersion && <br/>}
-											{extension.maxEnvoyVersion && `<= ${extension.maxEnvoyVersion}`}
+											{extension.minEnvoyVersion && extension.maxEnvoyVersion && (
+												<Fragment>
+													{`<= ${extension.maxEnvoyVersion}`}
+													{' '}
+													<a href="https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/dynamic_modules#compatibility" target="_blank" rel="noopener noreferrer" title="Envoy compatibility" style="font-size: 0.75em; vertical-align: super; text-decoration: none;">?</a>
+												</Fragment>
+											)}
 										</span>
 									</div>
 								)}
@@ -189,4 +194,3 @@ function formatTypeName(type: string): string {
 		</script>
 	</body>
 </html>
-
