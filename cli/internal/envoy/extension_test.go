@@ -163,8 +163,9 @@ func TestDynamicModuleFilterGeneratorHTTP(t *testing.T) {
 					TypedConfig: func() *anypb.Any {
 						dymConfig := &dymhttpv3.DynamicModuleFilter{
 							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-								Name:         manifest.Name,
-								LoadGlobally: false,
+								Name:             manifest.Name,
+								LoadGlobally:     false,
+								MetricsNamespace: "builtonenvoy",
 							},
 							FilterName: manifest.Name,
 						}
@@ -192,8 +193,9 @@ func TestDynamicModuleFilterGeneratorHTTP(t *testing.T) {
 					TypedConfig: func() *anypb.Any {
 						dymConfig := &dymhttpv3.DynamicModuleFilter{
 							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-								Name:         manifest.Name,
-								LoadGlobally: false,
+								Name:             manifest.Name,
+								LoadGlobally:     false,
+								MetricsNamespace: "builtonenvoy",
 							},
 							FilterName: manifest.Name,
 							FilterConfig: func() *anypb.Any {
@@ -238,8 +240,9 @@ func TestDynamicModuleFilterGeneratorNetwork(t *testing.T) {
 					TypedConfig: func() *anypb.Any {
 						dymConfig := &dymnetv3.DynamicModuleNetworkFilter{
 							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-								Name:         manifest.Name,
-								LoadGlobally: false,
+								Name:             manifest.Name,
+								LoadGlobally:     false,
+								MetricsNamespace: "builtonenvoy",
 							},
 							FilterName: manifest.Name,
 						}
@@ -268,8 +271,9 @@ func TestDynamicModuleFilterGeneratorNetwork(t *testing.T) {
 					TypedConfig: func() *anypb.Any {
 						dymConfig := &dymnetv3.DynamicModuleNetworkFilter{
 							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-								Name:         manifest.Name,
-								LoadGlobally: false,
+								Name:             manifest.Name,
+								LoadGlobally:     false,
+								MetricsNamespace: "builtonenvoy",
 							},
 							FilterName: manifest.Name,
 							FilterConfig: func() *anypb.Any {
@@ -315,8 +319,9 @@ func TestDynamicModuleFilterGeneratorListener(t *testing.T) {
 					TypedConfig: func() *anypb.Any {
 						dymConfig := &dymlistv3.DynamicModuleListenerFilter{
 							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-								Name:         manifest.Name,
-								LoadGlobally: false,
+								Name:             manifest.Name,
+								LoadGlobally:     false,
+								MetricsNamespace: "builtonenvoy",
 							},
 							FilterName: manifest.Name,
 						}
@@ -346,8 +351,9 @@ func TestDynamicModuleFilterGeneratorListener(t *testing.T) {
 					TypedConfig: func() *anypb.Any {
 						dymConfig := &dymlistv3.DynamicModuleListenerFilter{
 							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-								Name:         manifest.Name,
-								LoadGlobally: false,
+								Name:             manifest.Name,
+								LoadGlobally:     false,
+								MetricsNamespace: "builtonenvoy",
 							},
 							FilterName: manifest.Name,
 							FilterConfig: func() *anypb.Any {
@@ -393,8 +399,9 @@ func TestDynamicModuleFilterGeneratorUDPListener(t *testing.T) {
 					TypedConfig: func() *anypb.Any {
 						dymConfig := &dymudpv3.DynamicModuleUdpListenerFilter{
 							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-								Name:         manifest.Name,
-								LoadGlobally: false,
+								Name:             manifest.Name,
+								LoadGlobally:     false,
+								MetricsNamespace: "builtonenvoy",
 							},
 							FilterName: manifest.Name,
 						}
@@ -424,8 +431,9 @@ func TestDynamicModuleFilterGeneratorUDPListener(t *testing.T) {
 					TypedConfig: func() *anypb.Any {
 						dymConfig := &dymudpv3.DynamicModuleUdpListenerFilter{
 							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-								Name:         manifest.Name,
-								LoadGlobally: false,
+								Name:             manifest.Name,
+								LoadGlobally:     false,
+								MetricsNamespace: "builtonenvoy",
 							},
 							FilterName: manifest.Name,
 							FilterConfig: func() *anypb.Any {
@@ -487,8 +495,9 @@ func TestComposerFilterGenerator(t *testing.T) {
 					TypedConfig: func() *anypb.Any {
 						dymConfig := &dymhttpv3.DynamicModuleFilter{
 							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-								Name:         "composer",
-								LoadGlobally: true,
+								Name:             "composer",
+								LoadGlobally:     true,
+								MetricsNamespace: "builtonenvoy",
 							},
 							FilterName: "goplugin-loader",
 							FilterConfig: func() *anypb.Any {
@@ -535,8 +544,9 @@ func TestComposerFilterGenerator(t *testing.T) {
 
 						dymConfig := &dymhttpv3.DynamicModuleFilter{
 							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-								Name:         "composer",
-								LoadGlobally: true,
+								Name:             "composer",
+								LoadGlobally:     true,
+								MetricsNamespace: "builtonenvoy",
 							},
 							FilterName: "goplugin-loader",
 							FilterConfig: func() *anypb.Any {
@@ -589,8 +599,9 @@ func TestComposerFilterGenerator(t *testing.T) {
 					TypedConfig: func() *anypb.Any {
 						dymConfig := &dymhttpv3.DynamicModuleFilter{
 							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-								Name:         "composer",
-								LoadGlobally: true,
+								Name:             "composer",
+								LoadGlobally:     true,
+								MetricsNamespace: "builtonenvoy",
 							},
 							FilterName: "goplugin-loader",
 							FilterConfig: func() *anypb.Any {
