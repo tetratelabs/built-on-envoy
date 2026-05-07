@@ -170,6 +170,10 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 		return err
 	}
 
+	// Warn if multiple local Go extensions are detected, as each is a separate c-shared
+	// library with its own Go runtime.
+	warnMultipleGoExtensions(extensionsToRun)
+
 	// Collect ext_proc binary paths for process management.
 	extProcBinaries := make(map[string]string)
 	for _, ext := range extensionsToRun {
@@ -255,7 +259,7 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 								artifact.Manifest.Version, name, err)
 						}
 					}
-					if err = extensions.BuildExtensionFromPath(downloader.Logger, downloader.Dirs, manifest, extensionSrc); err != nil {
+					if _, err = extensions.BuildExtensionFromPath(downloader.Logger, downloader.Dirs, manifest, extensionSrc); err != nil {
 						return nil, fmt.Errorf("failed to build Go extension %s from source artifact: %w", name, err)
 					}
 				}
@@ -350,12 +354,17 @@ func loadLocalManifests(ctx context.Context, logger *slog.Logger, downloader *ex
 			case extensions.TypeGo:
 				fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, manifest.Name, internal.ANSIReset)
 				downloader.Logger.Info("building local Go extension", "name", manifest.Name, "version", manifest.Version)
-				if err := extensions.BuildExtensionFromPath(downloader.Logger, downloader.Dirs, manifest, path); err != nil {
+				cshared, err := extensions.BuildExtensionFromPath(downloader.Logger, downloader.Dirs, manifest, path)
+				if err != nil {
 					return nil, err
 				}
-				if err := extensions.DownloadLibComposerAndBuildIfNeeded(ctx, downloader, manifest.ComposerVersion, extensions.ComposerArtifactSource); err != nil {
-					return nil, err
+				if !cshared {
+					// Old-style plugin needs libcomposer to load it.
+					if err := extensions.DownloadLibComposerAndBuildIfNeeded(ctx, downloader, manifest.ComposerVersion, extensions.ComposerArtifactSource); err != nil {
+						return nil, err
+					}
 				}
+				manifest.CShared = cshared
 			case extensions.TypeRust:
 				fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, manifest.Name, internal.ANSIReset)
 				downloader.Logger.Info("building local Rust extension", "name", manifest.Name, "version", manifest.Version)
@@ -401,6 +410,25 @@ func validateEnvoyCompat(envoyVersion string, extensions []*extensions.Manifest)
 	}
 
 	return errors.Join(errs...)
+}
+
+// warnMultipleGoExtensions prints a warning to stderr if multiple c-shared Go extensions
+// are detected, since each is a separate shared library with its own Go runtime.
+func warnMultipleGoExtensions(manifests []*extensions.Manifest) {
+	var csharedGoNames []string
+	for _, ext := range manifests {
+		if ext.Type == extensions.TypeGo && ext.CShared {
+			csharedGoNames = append(csharedGoNames, ext.Name)
+		}
+	}
+	if len(csharedGoNames) >= 2 {
+		fmt.Fprintf(os.Stderr, "\n\033[1;33m⚠ Warning: Multiple Go extensions detected (%s).\033[0m\n"+
+			"  Each Go extension is an independent shared library with its own Go runtime.\n"+
+			"  In production, only one Go runtime can be loaded per Envoy process.\n"+
+			"  Consider compiling all Go extensions into the same binary, or use\n"+
+			"  the goplugin loader to load them through a single composer runtime.\n\n",
+			strings.Join(csharedGoNames, ", "))
+	}
 }
 
 // validateComposerCompat validates that all extensions use the same composer version.

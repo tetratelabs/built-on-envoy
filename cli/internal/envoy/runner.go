@@ -194,14 +194,14 @@ func setupDynamicModuleSearchPath(params *ConfigGenerationParams) (string, func(
 	// Collect all dynamic module libraries that need to be linked
 	var composerVersion string
 	for _, ext := range params.Extensions {
-		switch ext.Type {
-		case extensions.TypeGo:
-			// At this point all extensions are guaranteed to use the same version of
-			// composer.
+		switch {
+		case ext.Type == extensions.TypeGo && !ext.CShared:
+			// Go plugin extensions are loaded by composer via goplugin-loader.
+			// At this point all Go plugin extensions are guaranteed to use the same version of composer.
 			composerVersion = ext.ComposerVersion
 
-		case extensions.TypeRust:
-			// Get the path to the Rust dynamic module library
+		case ext.Type == extensions.TypeRust || (ext.Type == extensions.TypeGo && ext.CShared):
+			// Rust and c-shared Go extensions are loaded directly by Envoy as dynamic modules.
 			libPath := extensions.LocalCacheExtension(params.Dirs, ext)
 			if _, err := os.Stat(libPath); os.IsNotExist(err) {
 				cleanup()
@@ -210,6 +210,11 @@ func setupDynamicModuleSearchPath(params *ConfigGenerationParams) (string, func(
 
 			// Create hard link in the temporary directory
 			linkPath := filepath.Join(tempDir, filepath.Base(libPath))
+			// If the target file exists, skip linking to avoid "file exists" error.
+			if _, err := os.Stat(linkPath); err == nil {
+				continue
+			}
+
 			if err := os.Symlink(libPath, linkPath); err != nil {
 				cleanup()
 				return "", nil, fmt.Errorf("failed to create hard link for %s: %w", ext.Name, err)
