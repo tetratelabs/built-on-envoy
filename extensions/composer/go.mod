@@ -14,7 +14,9 @@ require (
 	github.com/corazawaf/coraza/v3 v3.7.0
 	github.com/crewjam/saml v0.5.1
 	github.com/docker/cli v29.4.2+incompatible
-	github.com/envoyproxy/envoy/source/extensions/dynamic_modules v0.0.0-20260423231439-f1dd21b16c24
+	// This SDK is come from Envoy 1.39-dev but it's compatible with Envoy 1.38 because there is no API change
+	// between Envoy 1.38 and this SDK version.
+	github.com/envoyproxy/envoy/source/extensions/dynamic_modules v0.0.0-20260425100846-90594f45b3ed
 	github.com/getkin/kin-openapi v0.137.0
 	github.com/docker/cli v29.4.2+incompatible
 	// This SDK is come from Envoy 1.39-dev but it's compatible with Envoy 1.38 because there is no API change
