@@ -257,6 +257,10 @@ func (p *wafPlugin) OnRequestBody(body shared.BodyBuffer, endOfStream bool) shar
 	if p.requestBodyProcessed {
 		// Body limit was reached and it has been inspected without an interruption.
 		// Stop buffering and let the rest of the body stream through.
+		//
+		// Enlarge the buffer limit if needed to accommodate all the body seen so far, which includes the previously
+		// buffered body and the newly received body, to avoid hitting the limit again immediately for the remaining body.
+		p.enlargeRequestBufferLimitIfNeeded()
 		return shared.BodyStatusContinue
 	}
 
@@ -265,6 +269,12 @@ func (p *wafPlugin) OnRequestBody(body shared.BodyBuffer, endOfStream bool) shar
 		if !p.handleRequestBody() {
 			return shared.BodyStatusStopNoBuffer
 		}
+
+		// If we reached here, it means the saw the end of stream without hitting the body limit under ProcessPartial.
+		// In most cases, we needn't enlarge the buffer limit here because the last body segment that caused end of stream
+		// will be empty in most cases. However, it would be better to check and enlarge the buffer limit if needed before
+		// continuing.
+		p.enlargeRequestBufferLimitIfNeeded()
 		return shared.BodyStatusContinue
 	}
 
@@ -349,6 +359,10 @@ func (p *wafPlugin) OnResponseBody(body shared.BodyBuffer, endOfStream bool) sha
 	if p.responseBodyProcessed {
 		// Body limit was reached and it has been inspected without an interruption.
 		// Stop buffering and let the rest of the body stream through.
+		//
+		// Enlarge the buffer limit if needed to accommodate all the body seen so far, which includes the previously
+		// buffered body and the newly received body, to avoid hitting the limit again immediately for the remaining body.
+		p.enlargeResponseBufferLimitIfNeeded()
 		return shared.BodyStatusContinue
 	}
 
@@ -357,6 +371,12 @@ func (p *wafPlugin) OnResponseBody(body shared.BodyBuffer, endOfStream bool) sha
 		if !p.handleResponseBody() {
 			return shared.BodyStatusStopNoBuffer
 		}
+
+		// If we reached here, it means the saw the end of stream without hitting the body limit under ProcessPartial.
+		// In most cases, we needn't enlarge the buffer limit here because the last body segment that caused end of stream
+		// will be empty in most cases. However, it would be better to check and enlarge the buffer limit if needed before
+		// continuing.
+		p.enlargeResponseBufferLimitIfNeeded()
 		return shared.BodyStatusContinue
 	}
 
@@ -427,6 +447,47 @@ func (p *wafPlugin) writeRequestBody(body shared.BodyBuffer) bool {
 		}
 	}
 	return true
+}
+
+func (p *wafPlugin) enlargeRequestBufferLimitIfNeeded() {
+	// If the latest received body is previously buffered, it means the body limit is already evaluated and
+	// the buffer limit should be large enough, so we don't need to check again.
+	if p.handle.ReceivedBufferedRequestBody() {
+		return
+	}
+
+	// If we are here, it means we just received a new body segment that is not buffered.
+	// In this case we need to check if the buffer limit is large enough
+	// to accommodate the whole body seen so far, which includes the previously buffered body and the newly
+	// received body.
+
+	currentBufferLimit := p.handle.GetBufferLimit()
+	currentTotalBodySize := p.handle.BufferedRequestBody().GetSize() + p.handle.ReceivedRequestBody().GetSize()
+
+	if currentTotalBodySize >= currentBufferLimit {
+		newBufferLimit := currentTotalBodySize + 32 // add some headroom to avoid hitting the limit again immediately
+		p.handle.Log(shared.LogLevelDebug,
+			"Enlarging buffer limit from %d to %d to accommodate request body", currentBufferLimit, newBufferLimit)
+		p.handle.SetBufferLimit(newBufferLimit)
+	}
+}
+
+func (p *wafPlugin) enlargeResponseBufferLimitIfNeeded() {
+	// If the latest received body is previously buffered, it means the body limit is already evaluated and
+	// the buffer limit should be large enough, so we don't need to check again.
+	if p.handle.ReceivedBufferedResponseBody() {
+		return
+	}
+
+	currentBufferLimit := p.handle.GetBufferLimit()
+	currentTotalBodySize := p.handle.BufferedResponseBody().GetSize() + p.handle.ReceivedResponseBody().GetSize()
+
+	if currentTotalBodySize >= currentBufferLimit {
+		newBufferLimit := currentTotalBodySize + 32 // add some headroom to avoid hitting the limit again immediately
+		p.handle.Log(shared.LogLevelDebug,
+			"Enlarging buffer limit from %d to %d to accommodate response body", currentBufferLimit, newBufferLimit)
+		p.handle.SetBufferLimit(newBufferLimit)
+	}
 }
 
 func (p *wafPlugin) handleRequestBody() bool {
