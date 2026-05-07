@@ -1789,9 +1789,6 @@ func Test_ProcessPartialBodyLimit(t *testing.T) {
 	})
 
 	t.Run("request body: ProcessPartial enlarges buffer when latest chunk is not buffered", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
 		wafPluginFactory := newWAFFactory(t, ctrl, reqPartialDirs, "FULL")
 
 		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
@@ -1817,8 +1814,8 @@ func Test_ProcessPartialBodyLimit(t *testing.T) {
 
 		require.Equal(t, shared.HeadersStatusStop, wafPlugin.OnRequestHeaders(fake.NewFakeHeaderMap(reqHeaders), false))
 
-		bodyStatus := wafPlugin.OnRequestBody(fake.NewFakeBodyBuffer([]byte("worl")), false)
-		bodyStatus = wafPlugin.OnRequestBody(fake.NewFakeBodyBuffer([]byte("dhello")), false)
+		wafPlugin.OnRequestBody(fake.NewFakeBodyBuffer([]byte("worl")), false)
+		bodyStatus := wafPlugin.OnRequestBody(fake.NewFakeBodyBuffer([]byte("dhello")), false)
 		assert.Equal(t, shared.BodyStatusContinue, bodyStatus, "expected ProcessPartial path to enlarge the request buffer and continue streaming")
 		assert.True(t, wafPlugin.requestBodyProcessed, "expected requestBodyProcessed to be true after limit hit")
 
@@ -1934,9 +1931,6 @@ func Test_ProcessPartialBodyLimit(t *testing.T) {
 	})
 
 	t.Run("response body: ProcessPartial enlarges buffer when latest chunk is not buffered", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
 		wafPluginFactory := newWAFFactory(t, ctrl, respPartialDirs, "FULL")
 
 		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
@@ -1964,8 +1958,8 @@ func Test_ProcessPartialBodyLimit(t *testing.T) {
 		pluginHandle.EXPECT().RequestHeaders().Return(respRequestHeaders)
 		require.Equal(t, shared.HeadersStatusStop, wafPlugin.OnResponseHeaders(fake.NewFakeHeaderMap(respHeaders), false))
 
-		bodyStatus := wafPlugin.OnResponseBody(fake.NewFakeBodyBuffer([]byte("worl")), false)
-		bodyStatus = wafPlugin.OnResponseBody(fake.NewFakeBodyBuffer([]byte("dhello")), false)
+		wafPlugin.OnResponseBody(fake.NewFakeBodyBuffer([]byte("worl")), false)
+		bodyStatus := wafPlugin.OnResponseBody(fake.NewFakeBodyBuffer([]byte("dhello")), false)
 		assert.Equal(t, shared.BodyStatusContinue, bodyStatus, "expected ProcessPartial path to enlarge the buffer and continue streaming")
 		assert.True(t, wafPlugin.responseBodyProcessed, "expected responseBodyProcessed to be true after limit hit")
 
