@@ -7,7 +7,10 @@ package waf
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
+	"runtime"
+	"runtime/debug"
 	"strconv"
 	"testing"
 
@@ -1900,4 +1903,75 @@ func Test_PerRouteConfigBlocksRequest(t *testing.T) {
 		"expected per-route WAF to block request")
 
 	wafPlugin.OnStreamComplete()
+}
+
+// Verifies that OnDestroy() keeps heap growth bounded across
+// config reloads by releasing Coraza's memoized regex patterns.
+func Test_OnDestroyReleasesMemory(t *testing.T) {
+	const (
+		reloads     = 30
+		rulesPerWAF = 50
+	)
+
+	ruleID := 1
+	makeDirectives := func() []string {
+		directives := []string{"SecRuleEngine On"}
+		for range rulesPerWAF {
+			directives = append(directives, fmt.Sprintf(
+				`SecRule REQUEST_URI "@rx ^/reload/%d/path$" "id:%d,phase:1,pass,nolog"`, ruleID, ruleID,
+			))
+			ruleID++
+		}
+		return directives
+	}
+
+	heapAlloc := func() uint64 {
+		// GC twice then scavenge: the first GC collects most objects, the second
+		// collects anything promoted or finalized during the first pass, and
+		// FreeOSMemory forces the runtime to return freed pages to the OS so that
+		// HeapAlloc reflects only genuinely live allocations.
+		runtime.GC()
+		runtime.GC()
+		debug.FreeOSMemory()
+		var m runtime.MemStats
+		runtime.ReadMemStats(&m)
+		return m.HeapAlloc
+	}
+
+	baseline := heapAlloc()
+
+	for range reloads {
+		// Use a fresh controller per reload so gomock state doesn't accumulate
+		// and skew the heap measurement.
+		ctrl := gomock.NewController(t)
+
+		mainConfig, err := json.Marshal(map[string]any{"directives": makeDirectives(), "mode": "FULL"})
+		require.NoError(t, err)
+		perRouteConfig, err := json.Marshal(map[string]any{"directives": makeDirectives(), "mode": "FULL"})
+		require.NoError(t, err)
+
+		configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+		configHandle.EXPECT().DefineCounter("waf_tx_total").Return(shared.MetricID(1), shared.MetricsSuccess)
+		configHandle.EXPECT().DefineCounter("waf_tx_blocked", "authority", "phase", "rule_id").Return(shared.MetricID(2), shared.MetricsSuccess)
+
+		configFactory := &wafPluginConfigFactory{}
+		factory, err := configFactory.Create(configHandle, mainConfig)
+		require.NoError(t, err)
+		_, err = configFactory.CreatePerRoute(perRouteConfig)
+		require.NoError(t, err)
+
+		// Simulate Envoy destroying the old factory when a config reload arrives.
+		factory.OnDestroy()
+		ctrl.Finish()
+	}
+
+	const maxGrowthKB = uint64(1024)
+	after := heapAlloc()
+	heapGrowthKB := (max(after, baseline) - baseline) / 1024
+
+	// Without OnDestroy releasing memoized caches: 30 reloads × 2 WAFs × 50 unique
+	// regexes leaks ~11+ MB. With Close(), heap growth stays under 1 MB.
+	assert.LessOrEqual(t, heapGrowthKB, maxGrowthKB,
+		"heap grew %d KB after %d reloads, expected ≤ %d KB: OnDestroy must call Close() on all WAF instances to release Coraza's memoized regex cache",
+		heapGrowthKB, reloads, maxGrowthKB)
 }
