@@ -9,11 +9,6 @@
 # of the directory to 'boe'.
 chown -R boe:boe /var/boe
 
-exec setpriv \
-    --reuid boe \
-    --regid boe \
-    --clear-groups \
-    --inh-caps=-all \
-    --bounding-set=-all \
+exec su-exec boe:boe setpriv \
     --no-new-privs \
     -- "$@"
