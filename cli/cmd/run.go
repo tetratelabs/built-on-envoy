@@ -17,7 +17,6 @@ import (
 	"runtime"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/envoy"
@@ -31,8 +30,9 @@ const defaultLogLevel = "error"
 // Run is a command to run Envoy with extensions.
 type Run struct {
 	EnvoyVersion string   `help:"Envoy version to use (e.g., 1.31.0)" env:"ENVOY_VERSION"`
+	EnvoyPath    string   `name:"envoy-path" help:"Path to a custom Envoy binary. Skips Envoy download and version selection." env:"ENVOY_PATH" type:"existingfile"`
 	LogLevel     string   `help:"Envoy component log level." default:"all:error" env:"ENVOY_LOG_LEVEL"`
-	RunID        string   `name:"run-id" env:"BOE_RUN_ID" help:"Run identifier for this invocation. Defaults to timestamp-based ID or $BOE_RUN_ID. Use '0' for Docker/Kubernetes."`
+	RunID        string   `name:"run-id" env:"BOE_RUN_ID" help:"Run identifier for this invocation. Overrides the default timestamp-based ID."`
 	ListenPort   uint32   `help:"Port for Envoy listener to accept incoming traffic." default:"10000"`
 	AdminPort    uint32   `help:"Port for Envoy admin interface." default:"9901"`
 	Extensions   []string `name:"extension" help:"Extensions to enable (in the format: \"name\" or \"name:version\")."`
@@ -51,7 +51,7 @@ type Run struct {
 	OCI                     OCIFlags     `embed:""`
 
 	extensionPositions extensionPositions `kong:"-"` // Internal field: tracks the original position of extensions specified via both --extension and --local flags
-	defaultLogLevel    string             `kong:"-"` // Internal field: parsed defaut log level
+	defaultLogLevel    string             `kong:"-"` // Internal field: parsed default log level
 	componentLogLevel  string             `kong:"-"` // Internal field: parsed component log levels
 }
 
@@ -84,15 +84,6 @@ func (r *Run) BeforeResolve() error {
 	return err
 }
 
-// BeforeApply is called by Kong before applying defaults to set computed default values.
-func (r *Run) BeforeApply() error {
-	// Set RunID default if not provided
-	if r.RunID == "" {
-		r.RunID = generateRunID(time.Now())
-	}
-	return nil
-}
-
 // Validate is called by Kong after parsing to validate the command arguments.
 func (r *Run) Validate() error {
 	var err error
@@ -102,6 +93,12 @@ func (r *Run) Validate() error {
 	}
 	if r.TestUpstreamHost != "" && r.TestUpstreamCluster != "" {
 		return fmt.Errorf("--test-upstream-host and --test-upstream-cluster are mutually exclusive")
+	}
+	if r.EnvoyPath != "" && r.EnvoyVersion != "" {
+		return fmt.Errorf("--envoy-path and --envoy-version are mutually exclusive")
+	}
+	if r.EnvoyPath != "" && r.Docker {
+		return fmt.Errorf("--envoy-path is not supported with --docker")
 	}
 	return nil
 }
@@ -116,6 +113,7 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 			ListenPort:      r.ListenPort,
 			AdminPort:       r.AdminPort,
 			Dirs:            dirs,
+			RunID:           r.RunID,
 			Arch:            runtime.GOARCH,
 			LocalExtensions: r.Local,
 			Pull:            r.Pull,
@@ -149,18 +147,22 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 		return err
 	}
 
-	// If no Envoy version is specified, check if the extensions have Envoy version constraints defined
-	// and if so, use them to determine a compatible Envoy version to run.
-	if r.EnvoyVersion == "" {
-		r.EnvoyVersion, err = extensions.ResolveMinimumCompatibleEnvoyVersion(extensionsToRun)
-		if err != nil {
-			return err
-		}
-		logger.Debug("resolved Envoy version from manifests", "envoy_version", r.EnvoyVersion)
+	if r.EnvoyPath != "" {
+		logger.Debug("using custom Envoy binary; skipping Envoy version resolution", "envoy_path", r.EnvoyPath)
 	} else {
-		logger.Debug("validating Envoy version compatibility for extensions", "envoy_version", r.EnvoyVersion)
-		if err = validateEnvoyCompat(r.EnvoyVersion, extensionsToRun); err != nil {
-			return err
+		// If no Envoy version is specified, check if the extensions have Envoy version constraints defined
+		// and if so, use them to determine a compatible Envoy version to run.
+		if r.EnvoyVersion == "" {
+			r.EnvoyVersion, err = extensions.ResolveMinimumCompatibleEnvoyVersion(extensionsToRun)
+			if err != nil {
+				return err
+			}
+			logger.Debug("resolved Envoy version from manifests", "envoy_version", r.EnvoyVersion)
+		} else {
+			logger.Debug("validating Envoy version compatibility for extensions", "envoy_version", r.EnvoyVersion)
+			if err = validateEnvoyCompat(r.EnvoyVersion, extensionsToRun); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -185,6 +187,7 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 	runner := &envoy.RunnerFuncE{
 		Logger:                  logger,
 		EnvoyVersion:            r.EnvoyVersion,
+		EnvoyPath:               r.EnvoyPath,
 		DefaultLogLevel:         r.defaultLogLevel,
 		ComponentLogLevel:       r.componentLogLevel,
 		Dirs:                    dirs,
@@ -282,14 +285,6 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 	}
 
 	return downloaded, nil
-}
-
-// generateRunID generates a unique run identifier based on the current time.
-// Defaults to the same convention as func-e: "YYYYMMDD_HHMMSS_UUU" format.
-// Last 3 digits of microseconds to allow concurrent runs.
-func generateRunID(now time.Time) string {
-	micro := now.Nanosecond() / 1000 % 1000
-	return fmt.Sprintf("%s_%03d", now.Format("20060102_150405"), micro)
 }
 
 // parseLogLevels parses a log level string in the format "component:level,component2:level".

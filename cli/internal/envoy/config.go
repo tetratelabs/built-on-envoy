@@ -86,7 +86,7 @@ type GeneratedConfigResources struct {
 type ConfigRenderer func(*ConfigGenerationParams, *GeneratedConfigResources) (string, error)
 
 // RenderConfig renders the Envoy configuration with the given parameters.
-// The ouyput is a YAML string that is passed to func-e to run Envoy.
+// The output is a YAML string that is passed to func-e to run Envoy.
 func RenderConfig(params *ConfigGenerationParams, renderer ConfigRenderer) (string, error) {
 	gen, err := generateConfig(params)
 	if err != nil {

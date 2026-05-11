@@ -52,10 +52,11 @@ Flags:
 
       --envoy-version=STRING       Envoy version to use (e.g., 1.31.0)
                                    ($ENVOY_VERSION)
+      --envoy-path=STRING          Path to a custom Envoy binary. Skips Envoy
+                                   download and version selection ($ENVOY_PATH).
       --log-level="all:error"      Envoy component log level ($ENVOY_LOG_LEVEL).
-      --run-id=STRING              Run identifier for this invocation. Defaults
-                                   to timestamp-based ID or $BOE_RUN_ID. Use '0'
-                                   for Docker/Kubernetes ($BOE_RUN_ID).
+      --run-id=STRING              Run identifier for this invocation. Overrides
+                                   the default timestamp-based ID ($BOE_RUN_ID).
       --listen-port=10000          Port for Envoy listener to accept incoming
                                    traffic.
       --admin-port=9901            Port for Envoy admin interface.
@@ -114,6 +115,8 @@ Flags:
 
 func TestParseCmdRunDefaults(t *testing.T) {
 	t.Setenv("ENVOY_LOG_LEVEL", "all:error")
+	t.Setenv("BOE_RUN_DOCKER", "false")
+	t.Setenv("BOE_RUN_ID", "")
 
 	var cli struct {
 		Run Run `cmd:"" help:"Run Envoy with extensions"`
@@ -136,13 +139,61 @@ func TestParseCmdRunDefaults(t *testing.T) {
 	require.Equal(t, uint32(10000), cli.Run.ListenPort)
 	require.Equal(t, uint32(9901), cli.Run.AdminPort)
 	require.Empty(t, cli.Run.EnvoyVersion)
+	require.Empty(t, cli.Run.EnvoyPath)
 	require.Empty(t, cli.Run.Extensions)
 	require.Equal(t, extensions.DefaultOCIRegistry, cli.Run.OCI.Registry)
 	require.False(t, cli.Run.OCI.Insecure)
 
-	// Verify RunID is generated with expected format: YYYYMMDD_HHMMSS_UUU
-	require.NotEmpty(t, cli.Run.RunID)
-	require.Regexp(t, `^\d{8}_\d{6}_\d{3}$`, cli.Run.RunID)
+	require.Empty(t, cli.Run.RunID)
+}
+
+func TestParseCmdRunDockerRunID(t *testing.T) {
+	tests := []struct {
+		name          string
+		args          []string
+		envRunID      string
+		expectedRunID string
+	}{
+		{
+			name:          "empty by default",
+			args:          []string{"run", "--docker"},
+			expectedRunID: "",
+		},
+		{
+			name:          "explicit run id",
+			args:          []string{"run", "--docker", "--run-id=custom-run-id"},
+			expectedRunID: "custom-run-id",
+		},
+		{
+			name:          "environment run id",
+			args:          []string{"run", "--docker"},
+			envRunID:      "env-run-id",
+			expectedRunID: "env-run-id",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("BOE_RUN_ID", tt.envRunID)
+
+			var cli struct {
+				Run Run `cmd:"" help:"Run Envoy with extensions"`
+			}
+
+			parser, err := kong.New(&cli,
+				kong.Name("boe"),
+				kong.Exit(func(int) {}),
+				kong.BindTo(t.Context(), (*context.Context)(nil)),
+				kong.Bind(&xdg.Directories{}),
+				Vars,
+			)
+			require.NoError(t, err)
+
+			_, err = parser.Parse(tt.args)
+			require.NoError(t, err)
+			require.Equal(t, tt.expectedRunID, cli.Run.RunID)
+		})
+	}
 }
 
 func TestParseCmdRunLogLevelEnv(t *testing.T) {
@@ -207,19 +258,52 @@ func TestParseCmdRunCustomValues(t *testing.T) {
 }
 
 func TestRunValidateMutualExclusion(t *testing.T) {
-	r := &Run{
-		LogLevel:            "all:error",
-		TestUpstreamHost:    "example.com",
-		TestUpstreamCluster: "example.com:443",
+	tests := []struct {
+		name        string
+		run         Run
+		expectedErr string
+	}{
+		{
+			name: "test upstream host and cluster",
+			run: Run{
+				LogLevel:            "all:error",
+				TestUpstreamHost:    "example.com",
+				TestUpstreamCluster: "example.com:443",
+			},
+			expectedErr: "--test-upstream-host and --test-upstream-cluster are mutually exclusive",
+		},
+		{
+			name: "envoy path and version",
+			run: Run{
+				LogLevel:     "all:error",
+				EnvoyPath:    "/usr/local/bin/envoy",
+				EnvoyVersion: "1.38.0",
+			},
+			expectedErr: "--envoy-path and --envoy-version are mutually exclusive",
+		},
+		{
+			name: "envoy path and docker",
+			run: Run{
+				LogLevel:  "all:error",
+				EnvoyPath: "/usr/local/bin/envoy",
+				Docker:    true,
+			},
+			expectedErr: "--envoy-path is not supported with --docker",
+		},
 	}
-	require.ErrorContains(t, r.Validate(), "--test-upstream-host and --test-upstream-cluster are mutually exclusive")
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.EqualError(t, tt.run.Validate(), tt.expectedErr)
+		})
+	}
 }
 
 func TestValidateLogLevel(t *testing.T) {
 	tests := []struct {
-		name      string
-		logLevel  string
-		wantError string
+		name        string
+		logLevel    string
+		expectedErr string
 	}{
 		{
 			name:     "empty log level is valid",
@@ -238,39 +322,39 @@ func TestValidateLogLevel(t *testing.T) {
 			logLevel: " all:error , upstream:trace ",
 		},
 		{
-			name:      "empty entry",
-			logLevel:  " all:error,,upstream:trace ",
-			wantError: `invalid log level format "": expected component:level`,
+			name:        "empty entry",
+			logLevel:    " all:error,,upstream:trace ",
+			expectedErr: `invalid log level format "": expected component:level`,
 		},
 		{
-			name:      "missing colon separator",
-			logLevel:  "allerror",
-			wantError: `invalid log level format "allerror": expected component:level`,
+			name:        "missing colon separator",
+			logLevel:    "allerror",
+			expectedErr: `invalid log level format "allerror": expected component:level`,
 		},
 		{
-			name:      "empty component",
-			logLevel:  ":error",
-			wantError: `invalid log level format ":error": component cannot be empty`,
+			name:        "empty component",
+			logLevel:    ":error",
+			expectedErr: `invalid log level format ":error": component cannot be empty`,
 		},
 		{
-			name:      "empty level",
-			logLevel:  "all:",
-			wantError: `invalid log level format "all:": level cannot be empty`,
+			name:        "empty level",
+			logLevel:    "all:",
+			expectedErr: `invalid log level format "all:": level cannot be empty`,
 		},
 		{
-			name:      "whitespace-only component",
-			logLevel:  " :error",
-			wantError: `invalid log level format " :error": component cannot be empty`,
+			name:        "whitespace-only component",
+			logLevel:    " :error",
+			expectedErr: `invalid log level format " :error": component cannot be empty`,
 		},
 		{
-			name:      "whitespace-only level",
-			logLevel:  "all: ",
-			wantError: `invalid log level format "all: ": level cannot be empty`,
+			name:        "whitespace-only level",
+			logLevel:    "all: ",
+			expectedErr: `invalid log level format "all: ": level cannot be empty`,
 		},
 		{
-			name:      "missing colon in multi-component string",
-			logLevel:  "all:error,badformat",
-			wantError: `invalid log level format "badformat": expected component:level`,
+			name:        "missing colon in multi-component string",
+			logLevel:    "all:error,badformat",
+			expectedErr: `invalid log level format "badformat": expected component:level`,
 		},
 	}
 
@@ -278,10 +362,10 @@ func TestValidateLogLevel(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cmd := Run{LogLevel: tt.logLevel}
 			err := cmd.Validate()
-			if tt.wantError == "" {
+			if tt.expectedErr == "" {
 				require.NoError(t, err)
 			} else {
-				require.EqualError(t, err, tt.wantError)
+				require.EqualError(t, err, tt.expectedErr)
 			}
 		})
 	}

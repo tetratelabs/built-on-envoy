@@ -39,6 +39,8 @@ type RunnerFuncE struct {
 	Logger *slog.Logger
 	// EnvoyVersion specifies the Envoy version to run. If empty, the default version is used.
 	EnvoyVersion string
+	// EnvoyPath specifies a custom Envoy binary path. If set, download and version selection are skipped.
+	EnvoyPath string
 	// DefaultLogLevel specifies the base Envoy log level.
 	DefaultLogLevel string
 	// ComponentLogLevel specifies the Envoy component log level.
@@ -96,7 +98,7 @@ func (r *RunnerFuncE) Run(ctx context.Context) error {
 		return err
 	}
 
-	// Create a temporary directory with hard links to all dynamic module libraries
+	// Create a temporary directory with symlinks to all dynamic module libraries.
 	// TODO(wbpcode): once Envoy support to specify lib path directly, we can remove this hack.
 	searchPath, cleanup, err := setupDynamicModuleSearchPath(params)
 	if err != nil {
@@ -120,20 +122,22 @@ func (r *RunnerFuncE) Run(ctx context.Context) error {
 	_, _ = fmt.Fprintf(os.Stderr, "%s✓ Starting Envoy with extensions: %v...%s\n",
 		internal.ANSIBold, names, internal.ANSIReset)
 
-	r.Logger.Info("running Envoy with func-e", "envoy_version", r.EnvoyVersion, "extensions", names)
+	if r.EnvoyPath != "" {
+		r.Logger.Info("running Envoy", "envoy_path", r.EnvoyPath, "extensions", names)
+	} else {
+		r.Logger.Info("running Envoy", "envoy_version", r.EnvoyVersion, "extensions", names)
+	}
 
-	// ext-proc servers will be started once Envoy starts. func-e assumes that the first child process
-	// is the envoy process, and starting the ext_proc servers before may cause issues.
-	var extProcCmds []*exec.Cmd
+	// ext_proc servers start before Envoy so they are ready to handle requests immediately.
+	extProcCmds, err := startExtProcServers(ctx, r.Logger, params.Extensions, r.ExtProcBinaries)
+	if err != nil {
+		return fmt.Errorf("failed to start ext_proc servers: %w", err)
+	}
 	defer stopExtProcServers(r.Logger, extProcCmds)
 
 	// Define startup hook that will be called when Envoy admin is ready
 	start := time.Now()
 	startupHook := func(_ context.Context, adminClient admin.AdminClient, _ string) error {
-		extProcCmds, err = startExtProcServers(ctx, r.Logger, params.Extensions, r.ExtProcBinaries)
-		if err != nil {
-			return fmt.Errorf("failed to start ext_proc servers: %w", err)
-		}
 		startDuration := time.Since(start).Round(100 * time.Millisecond)
 
 		_, _ = fmt.Fprintf(os.Stderr, `
@@ -158,11 +162,16 @@ Press Ctrl+C to stop
 		api.DataHome(r.Dirs.DataHome),
 		api.StateHome(r.Dirs.StateHome),
 		api.RuntimeDir(r.Dirs.RuntimeDir),
-		api.RunID(r.RunID),
 		admin.WithStartupHook(startupHook),
+	}
+	if r.RunID != "" {
+		opts = append(opts, api.RunID(r.RunID))
 	}
 	if r.EnvoyVersion != "" {
 		opts = append(opts, api.EnvoyVersion(r.EnvoyVersion))
+	}
+	if r.EnvoyPath != "" {
+		opts = append(opts, api.EnvoyPath(r.EnvoyPath))
 	}
 
 	// Run Envoy with embedded config
@@ -174,7 +183,7 @@ Press Ctrl+C to stop
 	return funce.Run(ctx, args, opts...)
 }
 
-// setupDynamicModuleSearchPath creates a temporary directory and populates it with hard links
+// setupDynamicModuleSearchPath creates a temporary directory and populates it with symlinks
 // to all dynamic module libraries (both composer and Rust dynamic modules).
 // Returns the path to the temporary directory and a cleanup function.
 func setupDynamicModuleSearchPath(params *ConfigGenerationParams) (string, func(), error) {
@@ -208,7 +217,7 @@ func setupDynamicModuleSearchPath(params *ConfigGenerationParams) (string, func(
 				return "", nil, fmt.Errorf("library not found at %s for extension %s", libPath, ext.Name)
 			}
 
-			// Create hard link in the temporary directory
+			// Create symlink in the temporary directory.
 			linkPath := filepath.Join(tempDir, filepath.Base(libPath))
 			// If the target file exists, skip linking to avoid "file exists" error.
 			if _, err := os.Stat(linkPath); err == nil {
@@ -217,7 +226,7 @@ func setupDynamicModuleSearchPath(params *ConfigGenerationParams) (string, func(
 
 			if err := os.Symlink(libPath, linkPath); err != nil {
 				cleanup()
-				return "", nil, fmt.Errorf("failed to create hard link for %s: %w", ext.Name, err)
+				return "", nil, fmt.Errorf("failed to create symlink for %s: %w", ext.Name, err)
 			}
 		}
 	}
@@ -232,14 +241,14 @@ func setupDynamicModuleSearchPath(params *ConfigGenerationParams) (string, func(
 
 			if err := os.Symlink(composerPath, linkPath); err != nil {
 				cleanup()
-				return "", nil, fmt.Errorf("failed to create hard link for libcomposer: %w", err)
+				return "", nil, fmt.Errorf("failed to create symlink for libcomposer: %w", err)
 			}
 		}
 	}
 
 	params.Logger.Debug("setting up dynamic module search path", "path", tempDir)
 
-	return tempDir, func() {}, nil
+	return tempDir, cleanup, nil
 }
 
 // extProcServerReadyTimeout is how long to wait for an ext_proc server to accept connections.
@@ -344,7 +353,7 @@ const (
 	// containerStateHome is the XDG state home inside the container.
 	containerStateHome = containerVolumeDir + "/state"
 	// containerRuntimeDir is the XDG runtime dir inside the container.
-	// This much match the one in the CLI Dockerfile
+	// This must match the one in the CLI Dockerfile.
 	containerRuntimeDir = containerVolumeDir + "/run"
 	// containerLocalExtensionsDir is the directory inside the container where local extensions are mounted.
 	containerLocalExtensionsDir = containerRuntimeDir + "/extensions"
@@ -357,6 +366,7 @@ type RunnerDocker struct {
 	ListenPort      uint32
 	AdminPort       uint32
 	Dirs            *xdg.Directories
+	RunID           string
 	Arch            string
 	LocalExtensions []string
 	Pull            string
@@ -381,23 +391,7 @@ func (r *RunnerDocker) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to create Docker volume for cache: %w\nOutput: %s", err, string(output))
 	}
 
-	args := []string{
-		"run", "--rm",
-		"--pull", r.Pull,
-		"--platform", "linux/" + r.Arch,
-		"-p", fmt.Sprintf("%d:%d", r.ListenPort, r.ListenPort),
-		"-p", fmt.Sprintf("%d:%d", r.AdminPort, r.AdminPort),
-		"-v", ContainerCacheVolumeName + ":" + containerVolumeDir,
-		"-e", "BOE_CONFIG_HOME=" + containerConfigHome,
-		"-e", "BOE_DATA_HOME=" + containerDataHome,
-		"-e", "BOE_STATE_HOME=" + containerStateHome,
-		"-e", "BOE_RUNTIME_DIR=" + containerRuntimeDir,
-	}
-
-	args = append(args, localExtArgs...)                  // local extension volumes
-	args = append(args, passthroughEnvVars()...)          // passthrough BOE_ env vars
-	args = append(args, image, "/boe")                    // container image and command
-	args = append(args, r.processCommandArgs(os.Args)...) // command-line args
+	args := r.dockerRunArgs(image, localExtArgs)
 
 	fmt.Printf("→ %sRunning Envoy in Docker (%v)...%s\n", internal.ANSIBold, image, internal.ANSIReset)
 
@@ -410,6 +404,31 @@ func (r *RunnerDocker) Run(ctx context.Context) error {
 	}
 
 	return cmd.Run()
+}
+
+func (r *RunnerDocker) dockerRunArgs(image string, localExtArgs []string) []string {
+	args := []string{
+		"run", "--rm",
+		"--pull", r.Pull,
+		"--platform", "linux/" + r.Arch,
+		"-p", fmt.Sprintf("%d:%d", r.ListenPort, r.ListenPort),
+		"-p", fmt.Sprintf("%d:%d", r.AdminPort, r.AdminPort),
+		"-v", ContainerCacheVolumeName + ":" + containerVolumeDir,
+		"-e", "BOE_CONFIG_HOME=" + containerConfigHome,
+		"-e", "BOE_DATA_HOME=" + containerDataHome,
+		"-e", "BOE_STATE_HOME=" + containerStateHome,
+		"-e", "BOE_RUNTIME_DIR=" + containerRuntimeDir,
+	}
+	if r.RunID != "" {
+		args = append(args, "-e", "BOE_RUN_ID="+r.RunID)
+	}
+
+	args = append(args, localExtArgs...)                  // local extension volumes
+	args = append(args, passthroughEnvVars()...)          // passthrough BOE_ env vars
+	args = append(args, image, "/boe")                    // container image and command
+	args = append(args, r.processCommandArgs(os.Args)...) // command-line args
+
+	return args
 }
 
 // imageVersion returns the image version to use for the Docker runner. For dev versions, it returns "latest"
@@ -426,12 +445,13 @@ func passthroughEnvVars() []string {
 	var args []string
 	// Pass through BOE_ environment variables to the Docker container,
 	// so that users can set registry credentials or other configs via env vars instead of CLI flags.
-	// We don't passthrough the XDG variables as we'll mount hte host directories on a fixed location in the container.
+	// We don't passthrough the XDG variables as we'll mount the host directories on a fixed location in the container.
 	passthroughEnv := slices.DeleteFunc(os.Environ(), func(arg string) bool {
 		return strings.HasPrefix(arg, "BOE_CONFIG_HOME=") ||
 			strings.HasPrefix(arg, "BOE_DATA_HOME=") ||
 			strings.HasPrefix(arg, "BOE_STATE_HOME=") ||
-			strings.HasPrefix(arg, "BOE_RUNTIME_DIR=")
+			strings.HasPrefix(arg, "BOE_RUNTIME_DIR=") ||
+			strings.HasPrefix(arg, "BOE_RUN_ID=")
 	})
 
 	for _, e := range passthroughEnv {
@@ -445,10 +465,7 @@ func passthroughEnvVars() []string {
 
 // processLocalExtensions processes local extensions and returns Docker volume arguments and container paths.
 func (r *RunnerDocker) processLocalExtensions(localExts []string) ([]string, error) {
-	var (
-		args     []string
-		mappings = make(map[string]string)
-	)
+	var args []string
 	for _, ext := range localExts {
 		absPath, containerPath, err := localExtensionContainerPath(ext)
 		if err != nil {
@@ -458,7 +475,7 @@ func (r *RunnerDocker) processLocalExtensions(localExts []string) ([]string, err
 		args = append(args, "-v", absPath+":"+containerPath)
 	}
 
-	r.Logger.Debug("processed local extensions for Docker", "volumes", args, "mappings", mappings)
+	r.Logger.Debug("processed local extensions for Docker", "volumes", args)
 
 	return args, nil
 }
