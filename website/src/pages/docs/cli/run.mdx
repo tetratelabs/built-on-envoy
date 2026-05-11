@@ -49,6 +49,15 @@ and all the files needed to execute the extension locally.
     boe run --local ~/src/built-on-envoy/extensions/composer/example
     ```
 
+Run with a custom Envoy binary. BOE uses this binary directly; it must match the local OS/arch.
+
+    ```shell
+    boe run --envoy-path ~/src/envoy/bazel-bin/source/exe/envoy-static --local ~/src/built-on-envoy/extensions/composer/example
+    ```
+
+For `boe run --docker`, the container defaults to run ID `0` (set via `ENV BOE_RUN_ID=0` in the
+Dockerfile). Override with `--run-id` or the `BOE_RUN_ID` environment variable.
+
 Run extensions with custom JSON configuration strings. Configs are applied in order to the
 combined list of `--extension` and `--local` flags. Use an empty string `''` to skip an extension:
 
@@ -88,8 +97,9 @@ boe run --help
 | Name | Description | Type | Default | Env Var | Required |
 |------|-------------|------|---------|-----|----------|
 | `--envoy-version` | Envoy version to use (e.g., 1.31.0) | `string` | - | `ENVOY_VERSION` | No |
+| `--envoy-path` | Path to a custom Envoy binary. Skips Envoy download and version selection. | `string` | - | `ENVOY_PATH` | No |
 | `--log-level` | Envoy component log level. | `string` | `all:error` | `ENVOY_LOG_LEVEL` | No |
-| `--run-id` | Run identifier for this invocation. Defaults to timestamp-based ID or $BOE_RUN_ID. Use '0' for Docker/Kubernetes. | `string` | - | `BOE_RUN_ID` | No |
+| `--run-id` | Run identifier for this invocation. Overrides the default timestamp-based ID. | `string` | - | `BOE_RUN_ID` | No |
 | `--listen-port` | Port for Envoy listener to accept incoming traffic. | `uint32` | `10000` | - | No |
 | `--admin-port` | Port for Envoy admin interface. | `uint32` | `9901` | - | No |
 | `--extension` | Extensions to enable (in the format: "name" or "name:version"). | `[]string` | - | - | No |

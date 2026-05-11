@@ -57,7 +57,14 @@ COPY --chown=boe:boe ./out/boe-${TARGETOS}-${TARGETARCH} /boe
 COPY --chown=boe:boe ./entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# The healthcheck subcommand discovers Envoy's admin server and checks readiness.
+# Set BOE_RUN_ID=0 for predictable file paths in containers.
+# This creates the following directory structure:
+#   ~/.config/boe/                     - XDG config (e.g., envoy-version preference)
+#   ~/.local/share/boe/                - XDG data (downloaded Envoy binaries)
+#   ~/.local/state/boe/runs/0/         - XDG state (boe.log, envoy config)
+#   ~/.local/state/boe/envoy-runs/0/   - XDG state (Envoy stdout.log, stderr.log)
+#   /tmp/boe-0/                        - XDG runtime (uds.sock, admin-address.txt)
+ENV BOE_RUN_ID=0
 HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=3 \
     CMD ["/boe", "healthcheck"]
 

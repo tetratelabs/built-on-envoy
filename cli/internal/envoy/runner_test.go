@@ -41,7 +41,7 @@ func TestRunner_Run_ConfigError(t *testing.T) {
 	require.ErrorIs(t, err, ErrUnsupportedExtensionType)
 }
 
-func TestRunner_Run_ContextCanceled(t *testing.T) {
+func TestRunnerFuncE_RunID(t *testing.T) {
 	ext := &extensions.Manifest{
 		Name: "test-lua",
 		Type: extensions.TypeLua,
@@ -49,24 +49,34 @@ func TestRunner_Run_ContextCanceled(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // Cancel immediately
+	cancel()
 
-	tmpdir := t.TempDir()
-	r := &RunnerFuncE{
-		Logger:     internaltesting.NewTLogger(t),
-		Dirs:       &xdg.Directories{DataHome: tmpdir, RuntimeDir: tmpdir},
-		Extensions: []*extensions.Manifest{ext},
-		ListenPort: 10000,
-		AdminPort:  9901,
-		RunID:      "test-run",
+	tests := []struct {
+		name  string
+		runID string
+	}{
+		{
+			name: "empty RunID lets func-e choose",
+		},
+		{
+			name:  "explicit RunID",
+			runID: "0",
+		},
 	}
 
-	err := r.Run(ctx)
-	// Expect error because context is canceled, but we care that code was executed.
-	// funce.Run typically returns error when context is canceled.
-	// We mainly want to ensure no panic and that it reached funce.Run.
-	if err != nil {
-		assert.Contains(t, err.Error(), "context canceled")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpdir := t.TempDir()
+			r := &RunnerFuncE{
+				Logger:     internaltesting.NewTLogger(t),
+				Dirs:       &xdg.Directories{DataHome: tmpdir, RuntimeDir: tmpdir, StateHome: tmpdir},
+				Extensions: []*extensions.Manifest{ext},
+				ListenPort: 10000,
+				AdminPort:  9901,
+				RunID:      tt.runID,
+			}
+			require.ErrorIs(t, r.Run(ctx), context.Canceled)
+		})
 	}
 }
 
@@ -176,6 +186,69 @@ func TestProcessCommandArgs(t *testing.T) {
 	assert.Equal(t, want, result)
 }
 
+func TestDockerRunArgs_RunID(t *testing.T) {
+	originalArgs := os.Args
+	os.Args = []string{"boe", "run", "--docker"}
+	t.Cleanup(func() { os.Args = originalArgs })
+
+	tests := []struct {
+		name     string
+		runID    string
+		expected []string
+	}{
+		{
+			name: "empty RunID leaves Dockerfile ENV intact",
+			expected: []string{
+				"run", "--rm",
+				"--pull", "missing",
+				"--platform", "linux/arm64",
+				"-p", "10000:10000",
+				"-p", "9901:9901",
+				"-v", "boe-cache:" + containerVolumeDir,
+				"-e", "BOE_CONFIG_HOME=" + containerConfigHome,
+				"-e", "BOE_DATA_HOME=" + containerDataHome,
+				"-e", "BOE_STATE_HOME=" + containerStateHome,
+				"-e", "BOE_RUNTIME_DIR=" + containerRuntimeDir,
+				"ghcr.io/test/boe:latest", "/boe",
+				"run",
+			},
+		},
+		{
+			name:  "explicit RunID overrides Dockerfile ENV",
+			runID: "custom",
+			expected: []string{
+				"run", "--rm",
+				"--pull", "missing",
+				"--platform", "linux/arm64",
+				"-p", "10000:10000",
+				"-p", "9901:9901",
+				"-v", "boe-cache:" + containerVolumeDir,
+				"-e", "BOE_CONFIG_HOME=" + containerConfigHome,
+				"-e", "BOE_DATA_HOME=" + containerDataHome,
+				"-e", "BOE_STATE_HOME=" + containerStateHome,
+				"-e", "BOE_RUNTIME_DIR=" + containerRuntimeDir,
+				"-e", "BOE_RUN_ID=custom",
+				"ghcr.io/test/boe:latest", "/boe",
+				"run",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &RunnerDocker{
+				Logger:     internaltesting.NewTLogger(t),
+				ListenPort: 10000,
+				AdminPort:  9901,
+				Arch:       "arm64",
+				Pull:       "missing",
+				RunID:      tt.runID,
+			}
+			require.Equal(t, tt.expected, r.dockerRunArgs("ghcr.io/test/boe:latest", nil))
+		})
+	}
+}
+
 func TestPassthroughEnvVars(t *testing.T) {
 	// Save and restore the original environment.
 	originalEnv := os.Environ()
@@ -205,6 +278,7 @@ func TestPassthroughEnvVars(t *testing.T) {
 				"BOE_DATA_HOME":   "/custom/data",
 				"BOE_STATE_HOME":  "/custom/state",
 				"BOE_RUNTIME_DIR": "/custom/runtime",
+				"BOE_RUN_ID":      "host-run-id",
 				"BOE_TOKEN":       "secret",
 				"HOME":            "/home/user",
 			},
