@@ -163,11 +163,9 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 	// Use the library name (with underscores) as the dynamic module config name.
 	// This is the identifier Envoy uses to reference the loaded module.
 	moduleConfig := &dymv3.DynamicModuleConfig{
-		Name:         manifest.Name,
-		LoadGlobally: false,
-		// TODO(nacx): configure a meaningful metrics namespace when
-		// the changes in https://github.com/envoyproxy/envoy/pull/43266 are available.
-		// Currently defaults to `dynamicmodulescustom`.
+		Name:             manifest.Name,
+		LoadGlobally:     false,
+		MetricsNamespace: "builtonenvoy",
 	}
 
 	var httpFilters []*hcmv3.HttpFilter
@@ -308,11 +306,9 @@ func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manif
 
 	protoConfig := &dymhttpv3.DynamicModuleFilter{
 		DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-			Name:         "composer",
-			LoadGlobally: true,
-			// TODO(nacx): configure a metrics namespace like "composer" or similar when
-			// the changes in https://github.com/envoyproxy/envoy/pull/43266 are available.
-			// Currently defaults to `dynamicmodulescustom`.
+			Name:             "composer",
+			LoadGlobally:     true,
+			MetricsNamespace: "builtonenvoy",
 		},
 		FilterName:   "goplugin-loader",
 		FilterConfig: anyConfig,
