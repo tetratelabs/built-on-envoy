@@ -61,6 +61,86 @@ func newWAFFactory(t *testing.T, ctrl *gomock.Controller, directives []string, m
 	return factory
 }
 
+func Test_EnlargeBufferLimitIfNeeded(t *testing.T) {
+	t.Run("request body: enlarges when the new chunk reaches the buffer limit", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+		pluginHandle.EXPECT().ReceivedBufferedRequestBody().Return(false)
+		pluginHandle.EXPECT().GetBufferLimit().Return(uint64(10))
+		pluginHandle.EXPECT().BufferedRequestBody().Return(fake.NewFakeBodyBuffer([]byte("hello")))
+		pluginHandle.EXPECT().ReceivedRequestBody().Return(fake.NewFakeBodyBuffer([]byte("world")))
+		pluginHandle.EXPECT().Log(
+			shared.LogLevelDebug,
+			"Enlarging buffer limit from %d to %d to accommodate request body",
+			uint64(10),
+			uint64(42),
+		)
+		pluginHandle.EXPECT().SetBufferLimit(uint64(42))
+
+		plugin := &wafPlugin{handle: pluginHandle}
+		plugin.enlargeRequestBufferLimitIfNeeded()
+	})
+
+	t.Run("request body: skips when the latest chunk is already buffered", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+		pluginHandle.EXPECT().ReceivedBufferedRequestBody().Return(true)
+
+		plugin := &wafPlugin{handle: pluginHandle}
+		plugin.enlargeRequestBufferLimitIfNeeded()
+	})
+
+	t.Run("response body: enlarges when the new chunk reaches the buffer limit", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+		pluginHandle.EXPECT().ReceivedBufferedResponseBody().Return(false)
+		pluginHandle.EXPECT().GetBufferLimit().Return(uint64(12))
+		pluginHandle.EXPECT().BufferedResponseBody().Return(fake.NewFakeBodyBuffer([]byte("hello")))
+		pluginHandle.EXPECT().ReceivedResponseBody().Return(fake.NewFakeBodyBuffer([]byte("friends")))
+		pluginHandle.EXPECT().Log(
+			shared.LogLevelDebug,
+			"Enlarging buffer limit from %d to %d to accommodate response body",
+			uint64(12),
+			uint64(44),
+		)
+		pluginHandle.EXPECT().SetBufferLimit(uint64(44))
+
+		plugin := &wafPlugin{handle: pluginHandle}
+		plugin.enlargeResponseBufferLimitIfNeeded()
+	})
+
+	t.Run("response body: skips when the latest chunk is already buffered", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+		pluginHandle.EXPECT().ReceivedBufferedResponseBody().Return(true)
+
+		plugin := &wafPlugin{handle: pluginHandle}
+		plugin.enlargeResponseBufferLimitIfNeeded()
+	})
+
+	t.Run("response body: skips when the total size stays below the limit", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+		pluginHandle.EXPECT().ReceivedBufferedResponseBody().Return(false)
+		pluginHandle.EXPECT().GetBufferLimit().Return(uint64(16))
+		pluginHandle.EXPECT().BufferedResponseBody().Return(fake.NewFakeBodyBuffer([]byte("hello")))
+		pluginHandle.EXPECT().ReceivedResponseBody().Return(fake.NewFakeBodyBuffer([]byte("you")))
+
+		plugin := &wafPlugin{handle: pluginHandle}
+		plugin.enlargeResponseBufferLimitIfNeeded()
+	})
+}
+
 func Test_DisableWaf(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -313,6 +393,7 @@ func Test_RequestOnlyWaf(t *testing.T) {
 
 		// Final body processing.
 		bodyBuffer2 := fake.NewFakeBodyBuffer([]byte{})
+		pluginHandle.EXPECT().ReceivedBufferedRequestBody().Return(true)
 		bodyStatus = wafPlugin.OnRequestBody(bodyBuffer2, true)
 		assert.Equal(t, shared.BodyStatusContinue, bodyStatus,
 			"expected no immediate response from WAF for simple request body")
@@ -571,6 +652,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 
 		// Final body processing.
 		bodyBuffer2 := fake.NewFakeBodyBuffer([]byte{})
+		pluginHandle.EXPECT().ReceivedBufferedResponseBody().Return(true)
 		bodyStatus = wafPlugin.OnResponseBody(bodyBuffer2, true)
 		assert.Equal(t, shared.BodyStatusContinue, bodyStatus,
 			"expected no immediate response from WAF for simple response body")
@@ -723,6 +805,7 @@ func Test_FullWaf(t *testing.T) {
 
 		// Final request body processing.
 		bodyBuffer2 := fake.NewFakeBodyBuffer([]byte{})
+		pluginHandle.EXPECT().ReceivedBufferedRequestBody().Return(true)
 		bodyStatus = wafPlugin.OnRequestBody(bodyBuffer2, true)
 		assert.Equal(t, shared.BodyStatusContinue, bodyStatus,
 			"expected no immediate response from WAF for full request body")
@@ -1689,6 +1772,7 @@ func Test_ProcessPartialBodyLimit(t *testing.T) {
 		require.Equal(t, shared.HeadersStatusStop, wafPlugin.OnRequestHeaders(fake.NewFakeHeaderMap(reqHeaders), false))
 
 		// "hello" is outside the inspection window: 100020 does not match
+		pluginHandle.EXPECT().ReceivedBufferedRequestBody().Return(true)
 		bodyStatus := wafPlugin.OnRequestBody(fake.NewFakeBodyBuffer([]byte("this is a longer body. matching hello world outside of checked body limits")), false)
 		assert.Equal(t, shared.BodyStatusContinue, bodyStatus, "expected BodyStatusContinue: rule outside window does not fire, body is not kept buffering nor scanned")
 		assert.True(t, wafPlugin.requestBodyProcessed, "expected requestBodyProcessed to be true after limit hit")
@@ -1700,6 +1784,40 @@ func Test_ProcessPartialBodyLimit(t *testing.T) {
 		// Trailers also short-circuit.
 		trailerStatus := wafPlugin.OnRequestTrailers(fake.NewFakeHeaderMap(map[string][]string{"grpc-status": {"0"}}))
 		assert.Equal(t, shared.TrailersStatusContinue, trailerStatus, "expected TrailersStatusContinue after ProcessPartial")
+
+		wafPlugin.OnStreamComplete()
+	})
+
+	t.Run("request body: ProcessPartial enlarges buffer when latest chunk is not buffered", func(t *testing.T) {
+		wafPluginFactory := newWAFFactory(t, ctrl, reqPartialDirs, "FULL")
+
+		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+		pluginHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
+		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:8080"), true)
+		pluginHandle.EXPECT().ReceivedBufferedRequestBody().Return(false)
+		pluginHandle.EXPECT().GetBufferLimit().Return(uint64(8))
+		pluginHandle.EXPECT().BufferedRequestBody().Return(fake.NewFakeBodyBuffer([]byte("worl")))
+		pluginHandle.EXPECT().ReceivedRequestBody().Return(fake.NewFakeBodyBuffer([]byte("dhello")))
+		pluginHandle.EXPECT().Log(
+			shared.LogLevelDebug,
+			"Enlarging buffer limit from %d to %d to accommodate request body",
+			uint64(8),
+			uint64(42),
+		)
+		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+		pluginHandle.EXPECT().SetBufferLimit(uint64(42))
+
+		wafPlugin, ok := wafPluginFactory.Create(pluginHandle).(*wafPlugin)
+		require.True(t, ok)
+
+		require.Equal(t, shared.HeadersStatusStop, wafPlugin.OnRequestHeaders(fake.NewFakeHeaderMap(reqHeaders), false))
+
+		wafPlugin.OnRequestBody(fake.NewFakeBodyBuffer([]byte("worl")), false)
+		bodyStatus := wafPlugin.OnRequestBody(fake.NewFakeBodyBuffer([]byte("dhello")), false)
+		assert.Equal(t, shared.BodyStatusContinue, bodyStatus, "expected ProcessPartial path to enlarge the request buffer and continue streaming")
+		assert.True(t, wafPlugin.requestBodyProcessed, "expected requestBodyProcessed to be true after limit hit")
 
 		wafPlugin.OnStreamComplete()
 	})
@@ -1796,6 +1914,7 @@ func Test_ProcessPartialBodyLimit(t *testing.T) {
 		require.Equal(t, shared.HeadersStatusStop, wafPlugin.OnResponseHeaders(fake.NewFakeHeaderMap(respHeaders), false))
 
 		// "hello" is outside the inspection window: 100030 does not match.
+		pluginHandle.EXPECT().ReceivedBufferedResponseBody().Return(true)
 		bodyStatus := wafPlugin.OnResponseBody(fake.NewFakeBodyBuffer([]byte("worldhello")), false)
 		assert.Equal(t, shared.BodyStatusContinue, bodyStatus, "expected BodyStatusContinue: rule outside window does not fire, body is not kept buffering")
 		assert.True(t, wafPlugin.responseBodyProcessed, "expected responseBodyProcessed to be true after limit hit")
@@ -1807,6 +1926,42 @@ func Test_ProcessPartialBodyLimit(t *testing.T) {
 		// Trailers also short-circuit.
 		trailerStatus := wafPlugin.OnResponseTrailers(fake.NewFakeHeaderMap(map[string][]string{"grpc-status": {"0"}}))
 		assert.Equal(t, shared.TrailersStatusContinue, trailerStatus, "expected TrailersStatusContinue after ProcessPartial")
+
+		wafPlugin.OnStreamComplete()
+	})
+
+	t.Run("response body: ProcessPartial enlarges buffer when latest chunk is not buffered", func(t *testing.T) {
+		wafPluginFactory := newWAFFactory(t, ctrl, respPartialDirs, "FULL")
+
+		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
+		pluginHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
+		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:8080"), true)
+		pluginHandle.EXPECT().ReceivedBufferedResponseBody().Return(false)
+		pluginHandle.EXPECT().GetBufferLimit().Return(uint64(8))
+		pluginHandle.EXPECT().BufferedResponseBody().Return(fake.NewFakeBodyBuffer([]byte("worl")))
+		pluginHandle.EXPECT().ReceivedResponseBody().Return(fake.NewFakeBodyBuffer([]byte("dhello")))
+		pluginHandle.EXPECT().Log(
+			shared.LogLevelDebug,
+			"Enlarging buffer limit from %d to %d to accommodate response body",
+			uint64(8),
+			uint64(42),
+		)
+		pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+		pluginHandle.EXPECT().SetBufferLimit(uint64(42))
+
+		wafPlugin, ok := wafPluginFactory.Create(pluginHandle).(*wafPlugin)
+		require.True(t, ok)
+
+		require.Equal(t, shared.HeadersStatusContinue, wafPlugin.OnRequestHeaders(respRequestHeaders, true))
+		pluginHandle.EXPECT().RequestHeaders().Return(respRequestHeaders)
+		require.Equal(t, shared.HeadersStatusStop, wafPlugin.OnResponseHeaders(fake.NewFakeHeaderMap(respHeaders), false))
+
+		wafPlugin.OnResponseBody(fake.NewFakeBodyBuffer([]byte("worl")), false)
+		bodyStatus := wafPlugin.OnResponseBody(fake.NewFakeBodyBuffer([]byte("dhello")), false)
+		assert.Equal(t, shared.BodyStatusContinue, bodyStatus, "expected ProcessPartial path to enlarge the buffer and continue streaming")
+		assert.True(t, wafPlugin.responseBodyProcessed, "expected responseBodyProcessed to be true after limit hit")
 
 		wafPlugin.OnStreamComplete()
 	})
