@@ -43,6 +43,7 @@ type Run struct {
 	// be split into separate invalid fragments, causing protobuf unmarshal failures.
 	Configs                 []string     `name:"config" sep:"none" help:"Optional JSON config string for extensions. Applied in order to combined --extension and --local flags."`
 	NativeHTTPFiltersBefore []string     `name:"native-http-filter-before" sep:"none" help:"Optional YAML/JSON native HTTP filter list (or @filepath) per extension position. Overrides manifest nativeHttpFilters.before."`
+	NativeHTTPFiltersAfter  []string     `name:"native-http-filter-after" sep:"none" help:"Optional YAML/JSON native HTTP filter list (or @filepath) per extension position. Overrides manifest nativeHttpFilters.after."`
 	Clusters                ClusterFlags `embed:""`
 	TestUpstreamHost        string       `name:"test-upstream-host" help:"Hostname for the test upstream cluster. Mutually exclusive with --test-upstream-cluster. Defaults to \"httpbin.org\"."`
 	TestUpstreamCluster     string       `name:"test-upstream-cluster" help:"Name of an existing configured cluster to use as the test upstream. The cluster must be configured via --cluster, --cluster-insecure, or --cluster-json. Mutually exclusive with --test-upstream-host."`
@@ -197,6 +198,7 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 		Extensions:              extensionsToRun,
 		Configs:                 r.Configs,
 		NativeHTTPFiltersBefore: r.NativeHTTPFiltersBefore,
+		NativeHTTPFiltersAfter:  r.NativeHTTPFiltersAfter,
 		Clusters:                r.Clusters.Secure,
 		ClustersInsecure:        r.Clusters.Insecure,
 		ClustersJSON:            r.Clusters.JSONSpec,

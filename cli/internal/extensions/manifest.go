@@ -119,6 +119,9 @@ type (
 		// of an `envoy.config.core.v3.TypedExtensionConfig`-shaped HTTP filter:
 		// a name and a typed_config carrying an Envoy proto identified by `@type`.
 		Before []map[string]any `yaml:"before,omitempty" json:"before,omitempty"`
+		// After lists native Envoy HTTP filters to emit after this extension's
+		// generated HTTP filter, in the order listed. Same format as Before.
+		After []map[string]any `yaml:"after,omitempty" json:"after,omitempty"`
 	}
 
 	// ManifestIndexEntry represents manifest entry in the manifext index JSON that is used
@@ -457,32 +460,40 @@ func validateNativeHTTPFilters(m *Manifest) error {
 		return fmt.Errorf("%w: nativeHttpFilters requires an extension that generates an HTTP filter; %q with filterType %q has no HTTP anchor",
 			ErrInvalidNativeHTTPFilters, m.Type, m.FilterType)
 	}
-	seen := make(map[string]struct{}, len(m.NativeHTTPFilters.Before))
-	for i, entry := range m.NativeHTTPFilters.Before {
-		raw, present := entry["name"]
-		if !present {
-			return fmt.Errorf("%w: nativeHttpFilters.before[%d] is missing a name", ErrInvalidNativeHTTPFilters, i)
+	seen := make(map[string]struct{}, len(m.NativeHTTPFilters.Before)+len(m.NativeHTTPFilters.After))
+	for _, list := range []struct {
+		label   string
+		entries []map[string]any
+	}{
+		{"before", m.NativeHTTPFilters.Before},
+		{"after", m.NativeHTTPFilters.After},
+	} {
+		for i, entry := range list.entries {
+			raw, present := entry["name"]
+			if !present {
+				return fmt.Errorf("%w: nativeHttpFilters.%s[%d] is missing a name", ErrInvalidNativeHTTPFilters, list.label, i)
+			}
+			name, ok := raw.(string)
+			if !ok {
+				return fmt.Errorf("%w: nativeHttpFilters.%s[%d].name must be a string, got %T", ErrInvalidNativeHTTPFilters, list.label, i, raw)
+			}
+			if name == "" {
+				return fmt.Errorf("%w: nativeHttpFilters.%s[%d].name is empty", ErrInvalidNativeHTTPFilters, list.label, i)
+			}
+			switch name {
+			case "envoy.filters.http.router":
+				return fmt.Errorf("%w: nativeHttpFilters.%s[%d]: %q is appended by BOE and cannot be declared",
+					ErrInvalidNativeHTTPFilters, list.label, i, name)
+			case "envoy.filters.http.mcp_router":
+				return fmt.Errorf("%w: nativeHttpFilters.%s[%d]: %q is a terminal router replacement and is not supported",
+					ErrInvalidNativeHTTPFilters, list.label, i, name)
+			}
+			if _, dup := seen[name]; dup {
+				return fmt.Errorf("%w: nativeHttpFilters contains duplicate name %q",
+					ErrInvalidNativeHTTPFilters, name)
+			}
+			seen[name] = struct{}{}
 		}
-		name, ok := raw.(string)
-		if !ok {
-			return fmt.Errorf("%w: nativeHttpFilters.before[%d].name must be a string, got %T", ErrInvalidNativeHTTPFilters, i, raw)
-		}
-		if name == "" {
-			return fmt.Errorf("%w: nativeHttpFilters.before[%d].name is empty", ErrInvalidNativeHTTPFilters, i)
-		}
-		switch name {
-		case "envoy.filters.http.router":
-			return fmt.Errorf("%w: nativeHttpFilters.before[%d]: %q is appended by BOE and cannot be declared",
-				ErrInvalidNativeHTTPFilters, i, name)
-		case "envoy.filters.http.mcp_router":
-			return fmt.Errorf("%w: nativeHttpFilters.before[%d]: %q is a terminal router replacement and is not supported",
-				ErrInvalidNativeHTTPFilters, i, name)
-		}
-		if _, dup := seen[name]; dup {
-			return fmt.Errorf("%w: nativeHttpFilters.before contains duplicate name %q",
-				ErrInvalidNativeHTTPFilters, name)
-		}
-		seen[name] = struct{}{}
 	}
 	return nil
 }

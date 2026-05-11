@@ -9,10 +9,9 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
-	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -23,7 +22,9 @@ import (
 )
 
 func TestDefaultProxy(t *testing.T) {
-	proxyPort, adminPort := internaltesting.RunEnvoy(t, cliBin)
+	ports := internaltesting.FreePorts(t, 2)
+	proxyPort, adminPort := ports[0], ports[1]
+	internaltesting.RunEnvoy(t, cliBin, proxyPort, adminPort)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	t.Cleanup(cancel)
@@ -33,13 +34,15 @@ func TestDefaultProxy(t *testing.T) {
 }
 
 func TestCustomPorts(t *testing.T) {
-	_, _ = internaltesting.RunEnvoy(t, cliBin, "--listen-port", "11000", "--admin-port", "12000")
+	ports := internaltesting.FreePorts(t, 2)
+	proxyPort, adminPort := ports[0], ports[1]
+	internaltesting.RunEnvoy(t, cliBin, proxyPort, adminPort)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	t.Cleanup(cancel)
 
-	require.NoError(t, internaltesting.CheckGet(ctx, "http://localhost:11000/status/200", internaltesting.EqualStatus(200)))
-	require.NoError(t, internaltesting.CheckGet(ctx, "http://localhost:12000/server_info", internaltesting.EqualStatus(200)))
+	require.NoError(t, internaltesting.CheckGet(ctx, fmt.Sprintf("http://localhost:%d/status/200", proxyPort), internaltesting.EqualStatus(200)))
+	require.NoError(t, internaltesting.CheckGet(ctx, fmt.Sprintf("http://localhost:%d/server_info", adminPort), internaltesting.EqualStatus(200)))
 }
 
 func TestLuaRemoteExecution(t *testing.T) {
@@ -48,7 +51,9 @@ func TestLuaRemoteExecution(t *testing.T) {
 	// Run the remote extension.
 	// This will resolve the latest tag of the extension, download it to
 	// the data directory, and execute it from there.
-	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin, "--log-level", "lua:info", "--extension", "example-lua")
+	ports := internaltesting.FreePorts(t, 2)
+	proxyPort := ports[0]
+	internaltesting.RunEnvoy(t, cliBin, proxyPort, ports[1], "--log-level", "lua:info", "--extension", "example-lua")
 
 	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
 	checkHeader := func(r *http.Response) bool {
@@ -62,7 +67,9 @@ func TestLuaRemoteExecution(t *testing.T) {
 }
 
 func TestLuaLocalExtension(t *testing.T) {
-	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin,
+	ports := internaltesting.FreePorts(t, 2)
+	proxyPort := ports[0]
+	internaltesting.RunEnvoy(t, cliBin, proxyPort, ports[1],
 		"--log-level", "lua:info",
 		"--local", "../../extensions/example-lua",
 	)
@@ -81,24 +88,17 @@ func TestLuaLocalExtension(t *testing.T) {
 func TestDockerRemoteExtension(t *testing.T) {
 	internaltesting.SkipIfTestRegistryNotConfigured(t)
 
+	ports := internaltesting.FreePorts(t, 2)
+	proxyPort := ports[0]
+
 	// Run the remote extension in Docker.
-	proc := internaltesting.RunCLI(t, cliBin, "run",
+	internaltesting.RunEnvoy(t, cliBin, proxyPort, ports[1],
 		"--docker",
-		"--listen-port", "11000",
 		"--dev",
 		"--log-level", "dynamic_modules:debug",
 		"--extension", "example-go:0.3.0")
 
-	t.Cleanup(func() {
-		_ = proc.Signal(syscall.SIGTERM)
-		_, _ = proc.Wait()
-	})
-
-	require.Eventually(t, func() bool {
-		return internaltesting.IsPortInUse(t.Context(), 11000)
-	}, 2*time.Minute, 200*time.Millisecond, "Envoy did not start listening on port %d", 11000)
-
-	url := "http://localhost:11000/status/200"
+	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
 	checkHeader := func(r *http.Response) bool {
 		return r.Header.Get("x-example-response-header") == "example-value"
 	}
@@ -117,7 +117,9 @@ func TestRustRemoteExtension(t *testing.T) {
 	// Run the remote extension.
 	// This will resolve the latest tag of the extension, download it to
 	// the data directory, and execute it from there.
-	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin, "--log-level",
+	ports := internaltesting.FreePorts(t, 2)
+	proxyPort := ports[0]
+	internaltesting.RunEnvoy(t, cliBin, proxyPort, ports[1], "--log-level",
 		"dynamic_modules:debug", "--extension", "ip-restriction",
 		"--config", `{"deny_addresses": ["192.168.1.50"]}`)
 
@@ -151,7 +153,9 @@ func TestRustLocalExtension(t *testing.T) {
 	require.Equal(t, 0, status.ExitCode())
 
 	// Run the newly created extension
-	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin,
+	ports := internaltesting.FreePorts(t, 2)
+	proxyPort := ports[0]
+	internaltesting.RunEnvoy(t, cliBin, proxyPort, ports[1],
 		"--log-level", "dynamic_modules:debug",
 		"--local", dataDir+"/rust-e2e",
 	)
@@ -169,7 +173,9 @@ func TestRustLocalExtension(t *testing.T) {
 }
 
 func TestExtProcLocalExtension(t *testing.T) {
-	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin, "--log-level",
+	ports := internaltesting.FreePorts(t, 2)
+	proxyPort := ports[0]
+	internaltesting.RunEnvoy(t, cliBin, proxyPort, ports[1], "--log-level",
 		"ext_proc:debug", "--local", "../../extensions/example-ext-proc")
 
 	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
@@ -189,7 +195,9 @@ func TestExtProcRemoteExtension(t *testing.T) {
 	// Run the remote extension.
 	// This will resolve the latest tag of the extension, download it to
 	// the data directory, and execute it from there.
-	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin, "--log-level",
+	ports := internaltesting.FreePorts(t, 2)
+	proxyPort := ports[0]
+	internaltesting.RunEnvoy(t, cliBin, proxyPort, ports[1], "--log-level",
 		"ext_proc:debug", "--extension", "example-ext-proc")
 
 	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
@@ -240,7 +248,9 @@ func testLocalGoExtension(t *testing.T, removeCSharedMain bool) {
 	// even the dependencies of the extension are not a subset of the composer's dependencies.
 	addDummyDependencyToExtension(t, dataDir+"/go-e2e")
 
-	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin,
+	ports := internaltesting.FreePorts(t, 2)
+	proxyPort := ports[0]
+	internaltesting.RunEnvoy(t, cliBin, proxyPort, ports[1],
 		"--local", dataDir+"/go-e2e",
 		"--local", dataDir+"/go-e2e",
 		"--config", "{}",
@@ -324,85 +334,75 @@ func dummy() string {
 	require.NoError(t, err, string(output))
 }
 
-// TestMCPNativeBeforeExtension runs Envoy with a local Lua extension whose
-// manifest declares envoy.filters.http.mcp in nativeHttpFilters.before. It
-// asserts:
-//
-//  1. A valid MCP POST reaches the Lua filter, and Lua observed MCP-populated
-//     dynamic metadata (response carries x-mcp-method and
-//     x-mcp-is-mcp-request).
-//  2. A non-MCP GET is rejected before the Lua filter runs (no x-mcp-*
-//     headers; non-2xx status).
-func TestMCPNativeBeforeExtension(t *testing.T) {
-	proxyPort, _ := internaltesting.RunEnvoy(t, cliBin,
-		"--log-level", "lua:info",
-		"--local", "testdata/lua_with_mcp",
-	)
+// TestNativeHTTPFilterPositionExtensions verifies that nativeHttpFilters.before
+// and .after control filter ordering relative to the extension's own filter.
+func TestNativeHTTPFilterPositionExtensions(t *testing.T) {
+	tests := []struct {
+		name                    string
+		local                   string
+		expectedResponseHeaders http.Header
+	}{
+		{
+			name:  "before: native filter classifies tenant for lua enrichment",
+			local: "testdata/lua_with_header_to_metadata_before",
+			expectedResponseHeaders: http.Header{
+				"X-Upstream-Tenant-Id":     {""},         // stripped before lua saw it
+				"X-Upstream-Tenant-Tier":   {"premium"},  // lua enriched from metadata
+				"X-Upstream-Tenant-Source": {"metadata"}, // proves lua read metadata, not header
+				"X-Tenant-From-Metadata":   {"acme"},
+			},
+		},
+		{
+			name:  "after: lua normalizes tenant for native filter metadata",
+			local: "testdata/lua_with_header_to_metadata_after",
+			expectedResponseHeaders: http.Header{
+				"X-Upstream-Tenant-Id":        {""},        // lua stripped original
+				"X-Upstream-Tenant-Tier":      {"premium"}, // lua enriched from header
+				"X-Upstream-Tenant-Source":    {"header"},  // proves lua read header, not metadata
+				"X-Upstream-Canonical-Tenant": {""},        // carrier stripped by after filter
+				"X-Tenant-From-Metadata":      {"acme"},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	// Valid MCP POST: JSON-RPC body, application/json content type, accepting
-	// either JSON or SSE per the MCP Streamable HTTP spec. We POST to /anything
-	// because the default test upstream proxies to httpbin.org.
-	t.Run("valid mcp post reaches lua and exposes metadata", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-		t.Cleanup(cancel)
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("x-upstream-tenant-id", r.Header.Get("x-tenant-id"))
+				w.Header().Set("x-upstream-tenant-tier", r.Header.Get("x-tenant-tier"))
+				w.Header().Set("x-upstream-tenant-source", r.Header.Get("x-tenant-source"))
+				w.Header().Set("x-upstream-canonical-tenant", r.Header.Get("x-canonical-tenant"))
+				w.WriteHeader(http.StatusOK)
+			}))
+			t.Cleanup(upstream.Close)
 
-		body := strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`)
-		req, err := http.NewRequestWithContext(ctx,
-			http.MethodPost,
-			fmt.Sprintf("http://localhost:%d/anything", proxyPort), body)
-		require.NoError(t, err)
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "application/json, text/event-stream")
+			upstreamAddr := upstream.Listener.Addr().String()
+			ports := internaltesting.FreePorts(t, 2)
+			proxyPort := ports[0]
+			internaltesting.RunEnvoy(t, cliBin, proxyPort, ports[1],
+				"--log-level", "lua:info",
+				"--cluster-insecure", upstreamAddr,
+				"--test-upstream-cluster", upstreamAddr,
+				"--local", tt.local,
+			)
 
-		check := func(r *http.Response) bool {
-			// Status must indicate the request was accepted by Envoy / MCP and
-			// reached upstream (httpbin.org/anything returns 200).
-			if r.StatusCode/100 != 2 {
-				t.Logf("unexpected status %d", r.StatusCode)
-				return false
-			}
-			if got := r.Header.Get("x-mcp-method"); got != "ping" {
-				t.Logf("x-mcp-method=%q, want ping", got)
-				return false
-			}
-			if got := r.Header.Get("x-mcp-is-mcp-request"); got != "true" {
-				t.Logf("x-mcp-is-mcp-request=%q, want true", got)
-				return false
-			}
-			return true
-		}
-		require.NoError(t, internaltesting.CheckRequest(req, check))
-	})
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			t.Cleanup(cancel)
 
-	// Non-MCP GET: the MCP filter is configured with REJECT_NO_MCP and must
-	// short-circuit the request before Lua runs, so the Lua-set headers are
-	// absent.
-	t.Run("non-mcp request is rejected before lua runs", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-		t.Cleanup(cancel)
+			req, err := http.NewRequestWithContext(ctx,
+				http.MethodGet,
+				fmt.Sprintf("http://localhost:%d/anything", proxyPort),
+				nil)
+			require.NoError(t, err)
+			req.Header = http.Header{"X-Tenant-Id": {"acme"}}
 
-		req, err := http.NewRequestWithContext(ctx,
-			http.MethodGet,
-			fmt.Sprintf("http://localhost:%d/status/200", proxyPort), nil)
-		require.NoError(t, err)
+			resp, err := http.DefaultClient.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close() // nolint:errcheck
 
-		check := func(r *http.Response) bool {
-			// Lua never ran, so its headers must be absent. The exact
-			// rejection status is implementation-defined; we assert non-2xx.
-			if r.Header.Get("x-mcp-method") != "" {
-				t.Logf("Lua ran for non-MCP request; x-mcp-method=%q", r.Header.Get("x-mcp-method"))
-				return false
-			}
-			if r.Header.Get("x-mcp-is-mcp-request") != "" {
-				t.Logf("Lua ran for non-MCP request; x-mcp-is-mcp-request=%q", r.Header.Get("x-mcp-is-mcp-request"))
-				return false
-			}
-			if r.StatusCode/100 == 2 {
-				t.Logf("non-MCP request was not rejected; status=%d", r.StatusCode)
-				return false
-			}
-			return true
-		}
-		require.NoError(t, internaltesting.CheckRequest(req, check))
-	})
+			require.Equal(t, http.StatusOK, resp.StatusCode)
+			require.Subset(t, resp.Header, tt.expectedResponseHeaders)
+		})
+	}
 }

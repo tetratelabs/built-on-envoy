@@ -265,6 +265,55 @@
               }
             }
           }
+        },
+        "after": {
+          "type": "array",
+          "description": "Native Envoy HTTP filters to emit after this extension's generated HTTP filter, in the order listed.",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "description": "An Envoy HCM HttpFilter entry: a name plus either a typed_config (static) or config_discovery (ECDS).",
+            "required": ["name"],
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "required": ["name", "typed_config"],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Envoy HTTP filter name.",
+                    "minLength": 1
+                  },
+                  "typed_config": {
+                    "type": "object",
+                    "description": "Envoy typed_config; the proto type is selected by `@type`.",
+                    "required": ["@type"],
+                    "properties": {
+                      "@type": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "additionalProperties": false,
+                "required": ["name", "config_discovery"],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Envoy HTTP filter name.",
+                    "minLength": 1
+                  },
+                  "config_discovery": {
+                    "type": "object",
+                    "description": "ECDS config source for dynamic filter configuration."
+                  }
+                }
+              }
+            ]
+          }
         }
       }
     }

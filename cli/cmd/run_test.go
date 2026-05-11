@@ -74,6 +74,10 @@ Flags:
                                    Optional YAML/JSON native HTTP filter list
                                    (or @filepath) per extension position.
                                    Overrides manifest nativeHttpFilters.before.
+      --native-http-filter-after=NATIVE-HTTP-FILTER-AFTER
+                                   Optional YAML/JSON native HTTP filter list
+                                   (or @filepath) per extension position.
+                                   Overrides manifest nativeHttpFilters.after.
       --cluster=CLUSTER,...        Optional additional Envoy cluster provided in
                                    the host:tlsPort pattern.
       --cluster-insecure=CLUSTER-INSECURE,...

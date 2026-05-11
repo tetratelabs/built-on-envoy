@@ -35,7 +35,8 @@ func Test_healthcheck(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 		defer cancel()
 		err := healthcheck(ctx, pid, logger)
-		require.EqualError(t, err, "timeout waiting for Envoy process: no Envoy process found")
+		// Contains not Equal because the suffix varies
+		require.ErrorContains(t, err, "timeout waiting for Envoy process")
 		// Contains not Equal because there's a timestamp
 		require.Contains(t, buf.String(), "Failed to find Envoy admin server")
 	})

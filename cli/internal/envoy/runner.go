@@ -61,6 +61,10 @@ type RunnerFuncE struct {
 	// for each extension (by index). When non-empty for a given extension position, it
 	// replaces the manifest's nativeHttpFilters.before.
 	NativeHTTPFiltersBefore []string
+	// NativeHTTPFiltersAfter specifies optional YAML/JSON native HTTP filter overrides
+	// for each extension (by index). When non-empty for a given extension position, it
+	// replaces the manifest's nativeHttpFilters.after.
+	NativeHTTPFiltersAfter []string
 	// Clusters specifies additional Envoy cluster (with TLS) from short names to include in the configuration.
 	Clusters []string
 	// ClustersInsecure specifies additional Envoy cluster (without TLS) from short names to include in the configuration.
@@ -87,6 +91,7 @@ func (r *RunnerFuncE) Run(ctx context.Context) error {
 		Extensions:              r.Extensions,
 		Configs:                 r.Configs,
 		NativeHTTPFiltersBefore: r.NativeHTTPFiltersBefore,
+		NativeHTTPFiltersAfter:  r.NativeHTTPFiltersAfter,
 		Clusters:                r.Clusters,
 		ClustersInsecure:        r.ClustersInsecure,
 		ClustersJSON:            r.ClustersJSON,

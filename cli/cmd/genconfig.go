@@ -36,6 +36,7 @@ type GenConfig struct {
 	// be split into separate invalid fragments, causing protobuf unmarshal failures.
 	Configs                 []string     `name:"config" sep:"none" help:"Optional JSON config string for extensions. Applied in order to combined --extension and --local flags."`
 	NativeHTTPFiltersBefore []string     `name:"native-http-filter-before" sep:"none" help:"Optional YAML/JSON native HTTP filter list (or @filepath) per extension position. Overrides manifest nativeHttpFilters.before."`
+	NativeHTTPFiltersAfter  []string     `name:"native-http-filter-after" sep:"none" help:"Optional YAML/JSON native HTTP filter list (or @filepath) per extension position. Overrides manifest nativeHttpFilters.after."`
 	Clusters                ClusterFlags `embed:""`
 	OCI                     OCIFlags     `embed:""`
 	TestUpstreamHost        string       `name:"test-upstream-host" help:"Hostname for the test upstream cluster. Mutually exclusive with --test-upstream-cluster. Defaults to \"httpbin.org\"."`
@@ -141,6 +142,7 @@ func (g *GenConfig) Run(ctx context.Context, dirs *xdg.Directories, logger *slog
 		Extensions:              resolvedExtensions,
 		Configs:                 g.Configs,
 		NativeHTTPFiltersBefore: g.NativeHTTPFiltersBefore,
+		NativeHTTPFiltersAfter:  g.NativeHTTPFiltersAfter,
 		Clusters:                g.Clusters.Secure,
 		ClustersInsecure:        g.Clusters.Insecure,
 		ClustersJSON:            g.Clusters.JSONSpec,

@@ -1,0 +1,56 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: e2e-lua-with-header-to-metadata-after
+version: 1.0.0
+minEnvoyVersion: 1.38.0
+categories:
+  - Security
+author: Built On Envoy
+description: Lua normalizes tenant then a native filter after it extracts metadata
+longDescription: |
+  Lua reads x-tenant-id, sets a tenant tier, and emits a canonical carrier header.
+  header_to_metadata after Lua converts the carrier into metadata and strips it.
+type: lua
+lua:
+  inline: |
+    function envoy_on_request(request_handle)
+      local headers = request_handle:headers()
+      local tenant = headers:get("x-tenant-id")
+      if tenant ~= nil then
+        local tier = "standard"
+        if tenant == "acme" then tier = "premium" end
+        headers:add("x-tenant-tier", tier)
+        headers:add("x-tenant-source", "header")
+        headers:add("x-canonical-tenant", tenant)
+        headers:remove("x-tenant-id")
+      end
+    end
+
+    function envoy_on_response(response_handle)
+      local md = response_handle:streamInfo():dynamicMetadata():get("boe.tenant")
+      if md ~= nil and md.id ~= nil then
+        response_handle:headers():add("x-tenant-from-metadata", tostring(md.id))
+      end
+    end
+tags:
+  - test
+license: Apache-2.0
+examples:
+  - title: Normalize tenant in Lua for metadata routing
+    description: Lua normalizes tenant and emits canonical header; header_to_metadata converts it to metadata
+    code: |
+      boe run --local cli/e2e/testdata/lua_with_header_to_metadata_after
+nativeHttpFilters:
+  after:
+    - name: envoy.filters.http.header_to_metadata
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.filters.http.header_to_metadata.v3.Config
+        request_rules:
+          - header: x-canonical-tenant
+            on_header_present:
+              metadata_namespace: boe.tenant
+              key: id
+            remove: true

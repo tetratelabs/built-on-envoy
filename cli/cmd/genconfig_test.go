@@ -65,6 +65,10 @@ Flags:
                                    Optional YAML/JSON native HTTP filter list
                                    (or @filepath) per extension position.
                                    Overrides manifest nativeHttpFilters.before.
+      --native-http-filter-after=NATIVE-HTTP-FILTER-AFTER
+                                   Optional YAML/JSON native HTTP filter list
+                                   (or @filepath) per extension position.
+                                   Overrides manifest nativeHttpFilters.after.
       --cluster=CLUSTER,...        Optional additional Envoy cluster provided in
                                    the host:tlsPort pattern.
       --cluster-insecure=CLUSTER-INSECURE,...
@@ -197,14 +201,26 @@ func TestGenConfig(t *testing.T) {
 		{
 			name:     "full config with native http filter before extension",
 			minimal:  false,
-			local:    []string{"testdata/input_lua_with_mcp"},
+			local:    []string{"testdata/input_lua_with_header_to_metadata_before"},
 			wantFile: "testdata/output_full_config_with_native.yaml",
 		},
 		{
 			name:     "minimal config with native http filter before extension",
 			minimal:  true,
-			local:    []string{"testdata/input_lua_with_mcp"},
+			local:    []string{"testdata/input_lua_with_header_to_metadata_before"},
 			wantFile: "testdata/output_only_filters_with_native.yaml",
+		},
+		{
+			name:     "full config with native http filter after extension",
+			minimal:  false,
+			local:    []string{"testdata/input_lua_with_header_to_metadata_after"},
+			wantFile: "testdata/output_full_config_with_native_after.yaml",
+		},
+		{
+			name:     "minimal config with native http filter after extension",
+			minimal:  true,
+			local:    []string{"testdata/input_lua_with_header_to_metadata_after"},
+			wantFile: "testdata/output_only_filters_with_native_after.yaml",
 		},
 	}
 

@@ -20,14 +20,8 @@ import (
 	"github.com/tetratelabs/func-e/experimental/admin"
 )
 
-var (
-	// defaultListenPort is the default port where the proxy listens.
-	defaultListenPort = 10000
-	// defaultLogLevel is the default log level for the proxy.
-	defaultLogLevel = "all:debug"
-	// defaultRunEnvoyTimeout is the default timeout for waiting for Envoy to start.
-	defaultRunEnvoyTimeout = 90 * time.Second
-)
+// defaultRunEnvoyTimeout is the default timeout for waiting for Envoy to start.
+const defaultRunEnvoyTimeout = 90 * time.Second
 
 // runEnvoyTimeout returns the timeout duration for waiting for Envoy to start.
 func runEnvoyTimeout() time.Duration {
@@ -35,46 +29,17 @@ func runEnvoyTimeout() time.Duration {
 	return cmp.Or(timeout, defaultRunEnvoyTimeout)
 }
 
-// RunEnvoy executes the "run" command of the CLI binary to start Envoy with given args.
-// It waits until Envoy is ready to serve traffic and returns the listen port and admin port.
-func RunEnvoy(t *testing.T, cliBin string, args ...string) (listenPort int, adminPort int) {
-	proxyPort := defaultListenPort
-	hasLogLevel := false
-	for i, arg := range args {
-		if arg == "--listen-port" && i+1 < len(args) {
-			var err error
-			proxyPort, err = strconv.Atoi(args[i+1])
-			require.NoError(t, err)
-		}
-		if arg == "--log-level" {
-			hasLogLevel = true
-		}
-	}
+// RunEnvoy executes the CLI run command on the given listener and admin ports.
+func RunEnvoy(t *testing.T, cliBin string, listenPort int, adminPort int, args ...string) {
+	args = append([]string{
+		"run",
+		"--listen-port", strconv.Itoa(listenPort),
+		"--admin-port", strconv.Itoa(adminPort),
+	}, args...)
 
-	// Wait up to 10 seconds for both ports to be free.
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-	for IsPortInUse(ctx, proxyPort) {
-		select {
-		case <-ctx.Done():
-			require.FailNow(t, "Ports still in use after timeout",
-				"Port %d is still in use", proxyPort)
-		case <-time.After(500 * time.Millisecond):
-			// Retry after a short delay.
-		}
-	}
-
-	// Set the default log level if not set.
-	if !hasLogLevel {
-		args = append(args, "--log-level", defaultLogLevel)
-	}
-	args = append([]string{"run"}, args...)
-
-	// Run the command
 	process := RunCLI(t, cliBin, args...)
 
 	t.Cleanup(func() {
-		defer cancel()
 		// Don't use require.XXX inside cleanup functions as they call
 		// runtime.Goexit preventing further cleanup functions from running.
 
@@ -90,26 +55,45 @@ func RunEnvoy(t *testing.T, cliBin string, args ...string) (listenPort int, admi
 		}
 	})
 
-	t.Logf("Waiting for boe to start (Envoy listening on %d)...", proxyPort)
+	t.Logf("Waiting for boe to start (Envoy listening on %d)...", listenPort)
 
-	// Wait fist for the main Envoy listener.
-	// The func-e admin client relies on Envoy being the first child process ot be able to retrieve
-	// the admin port.
-	// This may not be the case when running local go extensions that execute commands to compile the plugin
-	// on the first run, so we wait first for Envoy to be listening on the proxy port, then cehck the admin server
-	// as we know there won't be other interfering child processes at that point.
+	// Wait for Envoy to bind its listener before using func-e's admin
+	// discovery. Local extensions can compile helper processes before Envoy
+	// starts, and admin discovery expects Envoy to be the relevant child.
 	require.Eventually(t, func() bool {
-		return IsPortInUse(t.Context(), proxyPort)
-	}, runEnvoyTimeout(), 100*time.Millisecond, "Envoy did not start listening on port %d", proxyPort)
+		return IsPortInUse(t.Context(), listenPort)
+	}, runEnvoyTimeout(), 100*time.Millisecond, "Envoy did not start listening on port %d", listenPort)
 
 	adminClient, err := admin.NewAdminClient(t.Context(), process.Pid)
 	require.NoError(t, err)
 
 	err = adminClient.AwaitReady(t.Context(), time.Second)
 	require.NoError(t, err)
+	require.Equal(t, adminPort, adminClient.Port())
 
 	t.Log("boe CLI is ready")
-	return proxyPort, adminClient.Port()
+}
+
+// FreePorts returns available loopback TCP ports for tests that must pass ports
+// explicitly to a process.
+func FreePorts(t *testing.T, count int) []int {
+	t.Helper()
+
+	listeners := make([]net.Listener, 0, count)
+	defer func() {
+		for _, l := range listeners {
+			_ = l.Close()
+		}
+	}()
+
+	ports := make([]int, 0, count)
+	for i := 0; i < count; i++ {
+		l, err := net.Listen("tcp", "127.0.0.1:0")
+		require.NoError(t, err)
+		listeners = append(listeners, l)
+		ports = append(ports, l.Addr().(*net.TCPAddr).Port)
+	}
+	return ports
 }
 
 // RunCLI starts the CLI as a subprocess with the given arguments.
