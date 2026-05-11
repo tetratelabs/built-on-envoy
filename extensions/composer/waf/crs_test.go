@@ -33,6 +33,7 @@ func newPluginHandle(ctrl *gomock.Controller, sourceAddr, protocol string) *mock
 	h.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 	h.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString(protocol), true).AnyTimes()
 	h.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString(sourceAddr), true).AnyTimes()
+	h.EXPECT().ReceivedBufferedRequestBody().Return(true).AnyTimes()
 	// waf_tx_total (2 args)
 	h.EXPECT().IncrementCounterValue(gomock.Any(), gomock.Any()).Return(shared.MetricsSuccess).AnyTimes()
 	// waf_tx_blocked (5 args: id, value, authority, phase, rule_id)
