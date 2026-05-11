@@ -4,13 +4,12 @@
 package main
 
 import (
+	// Importthe Dynamic module SDK ABI package to ensure the ABI implementations are linked in
+	// correctly and the Envoy host could load and use this module.
 	_ "github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/abi"
-	sdk "github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go"
-	impl "{{ .Name }}"
-)
 
-func init() {
-	sdk.RegisterHttpFilterConfigFactories(impl.WellKnownHttpFilterConfigFactories())
-}
+	// Import the extension which will register itself to the SDK in its init() function.
+	_ "{{ .Name }}/embedded"
+)
 
 func main() {} // required for c-shared build
