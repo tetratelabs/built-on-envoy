@@ -297,6 +297,57 @@ func TestEnvoyConstraints(t *testing.T) {
 	}
 }
 
+func TestImplicitMaxEnvoyVersion(t *testing.T) {
+	tests := []struct {
+		name       string
+		minVersion string
+		want       string
+	}{
+		{
+			name:       "standard version",
+			minVersion: "1.33.0",
+			want:       "1.34.0",
+		},
+		{
+			name:       "minor version zero",
+			minVersion: "1.0.0",
+			want:       "1.1.0",
+		},
+		{
+			name:       "non-zero patch",
+			minVersion: "1.33.5",
+			want:       "1.34.0",
+		},
+		{
+			name:       "missing patch segment",
+			minVersion: "1.33",
+			want:       "1.34.0",
+		},
+		{
+			name:       "empty string",
+			minVersion: "",
+			want:       "",
+		},
+		{
+			name:       "major only",
+			minVersion: "1",
+			want:       "",
+		},
+		{
+			name:       "invalid minor",
+			minVersion: "1.abc.0",
+			want:       "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ImplicitMaxEnvoyVersion(tt.minVersion)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestValidateParentManifest(t *testing.T) {
 	tests := []struct {
 		name    string

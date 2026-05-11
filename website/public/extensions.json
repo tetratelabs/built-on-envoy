@@ -47,6 +47,7 @@
       }
     ],
     "minEnvoyVersion": "1.38.0",
+    "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.6.0-dev",
     "sourcePath": "composer/anthropic-decoder"
   },
@@ -111,6 +112,7 @@
       }
     ],
     "minEnvoyVersion": "1.38.0",
+    "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.6.0-dev",
     "sourcePath": "composer/azure-content-safety"
   },
@@ -158,6 +160,7 @@
       }
     ],
     "minEnvoyVersion": "1.38.0",
+    "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.6.0-dev",
     "sourcePath": "composer/bedrock-guardrails"
   },
@@ -234,6 +237,7 @@
       }
     ],
     "minEnvoyVersion": "1.38.0",
+    "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.6.0-dev",
     "sourcePath": "composer/cedar"
   },
@@ -285,6 +289,7 @@
       }
     ],
     "minEnvoyVersion": "1.38.0",
+    "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.6.0-dev",
     "sourcePath": "composer/chat-completions-decoder"
   },
@@ -325,6 +330,7 @@
       }
     ],
     "minEnvoyVersion": "1.38.0",
+    "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.6.0-dev",
     "sourcePath": "composer/waf"
   },
@@ -390,6 +396,7 @@
       }
     ],
     "minEnvoyVersion": "1.38.0",
+    "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.6.0-dev",
     "sourcePath": "composer/example"
   },
@@ -464,6 +471,7 @@
       }
     ],
     "minEnvoyVersion": "1.38.0",
+    "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.6.0-dev",
     "sourcePath": "composer/file-server"
   },
@@ -511,6 +519,7 @@
       }
     ],
     "minEnvoyVersion": "1.37.1",
+    "maxEnvoyVersion": "1.38.0",
     "sourcePath": "ip-restriction"
   },
   {
@@ -568,6 +577,7 @@
       }
     ],
     "minEnvoyVersion": "1.38.0",
+    "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.6.0-dev",
     "sourcePath": "composer/jwe-decrypt"
   },
@@ -618,6 +628,7 @@
       }
     ],
     "minEnvoyVersion": "1.38.0",
+    "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.6.0-dev",
     "sourcePath": "composer/llm-proxy"
   },
@@ -694,6 +705,7 @@
       }
     ],
     "minEnvoyVersion": "1.38.0",
+    "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.6.0-dev",
     "sourcePath": "composer/opa"
   },
@@ -743,6 +755,7 @@
       }
     ],
     "minEnvoyVersion": "1.38.0",
+    "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.6.0-dev",
     "sourcePath": "composer/openapi-validator"
   },
@@ -812,6 +825,7 @@
       }
     ],
     "minEnvoyVersion": "1.38.0",
+    "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.6.0-dev",
     "sourcePath": "composer/openfga"
   },
@@ -867,6 +881,7 @@
       }
     ],
     "minEnvoyVersion": "1.38.0",
+    "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.6.0-dev",
     "sourcePath": "composer/saml"
   },
@@ -901,6 +916,7 @@
       }
     ],
     "minEnvoyVersion": "1.38.0",
+    "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.6.0-dev",
     "sourcePath": "composer/token-exchange"
   }
