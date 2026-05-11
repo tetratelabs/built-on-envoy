@@ -137,19 +137,18 @@ func testIDPMetadata(idpKP *testKeyPair) *IDPMetadata {
 
 // testFilterConfig creates a samlFilterConfig for filter tests.
 func testFilterConfig(spKP, idpKP *testKeyPair) (*samlFilterConfig, *samlMetrics) {
-	return &samlFilterConfig{
-			config:      testConfig(spKP, idpKP),
-			idpMetadata: testIDPMetadata(idpKP),
-		}, &samlMetrics{
-			authnRequests:          shared.MetricID(1),
-			hasAuthnRequests:       true,
-			assertionsValidated:    shared.MetricID(2),
-			hasAssertionsValidated: true,
-			sessionsCreated:        shared.MetricID(3),
-			hasSessionsCreated:     true,
-			sessionsValidated:      shared.MetricID(4),
-			hasSessionsValidated:   true,
-		}
+	cfg := &samlFilterConfig{config: testConfig(spKP, idpKP)}
+	cfg.idpMetadata.Store(testIDPMetadata(idpKP))
+	return cfg, &samlMetrics{
+		authnRequests:          shared.MetricID(1),
+		hasAuthnRequests:       true,
+		assertionsValidated:    shared.MetricID(2),
+		hasAssertionsValidated: true,
+		sessionsCreated:        shared.MetricID(3),
+		hasSessionsCreated:     true,
+		sessionsValidated:      shared.MetricID(4),
+		hasSessionsValidated:   true,
+	}
 }
 
 var noopLog logger = noopLogger{}

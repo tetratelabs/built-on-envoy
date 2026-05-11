@@ -58,7 +58,6 @@ func (f *samlHTTPFilter) OnRequestHeaders(headers shared.HeaderMap, endStream bo
 	f.handle.Log(shared.LogLevelDebug, "saml: [%s] handling %s %s", f.requestID, method, path)
 
 	cfg := f.cfg.config
-	idpMeta := f.cfg.idpMetadata
 
 	// 1. Check bypass paths.
 	// TODO(wbpcode): optimize this if cfg.BypassPaths is large (e.g. use a trie or hash set).
@@ -69,10 +68,20 @@ func (f *samlHTTPFilter) OnRequestHeaders(headers shared.HeaderMap, endStream bo
 		}
 	}
 
+	// IdP metadata must be loaded for any non-bypassed path. In URL-fetch mode
+	// this may not yet be true if the request arrives before the config-time
+	// HttpCallout completes.
+	idpMeta := f.cfg.idpMetadata.Load()
+	if idpMeta == nil {
+		f.handle.Log(shared.LogLevelError, "saml: [%s] idp metadata not yet loaded; rejecting request", f.requestID)
+		f.handle.SendLocalResponse(503, nil, []byte("Service Unavailable: SAML metadata not yet loaded"), "saml-metadata-pending")
+		return shared.HeadersStatusStop
+	}
+
 	// 2. Serve SP metadata.
 	if path == cfg.MetadataPath {
-		f.serveMetadata()
-		// seveMetadata sends a success or failure local response.
+		f.serveMetadata(idpMeta)
+		// serveMetadata sends a success or failure local response.
 		return shared.HeadersStatusStop
 	}
 
@@ -166,7 +175,12 @@ func (f *samlHTTPFilter) OnRequestTrailers(_ shared.HeaderMap) shared.TrailersSt
 
 func (f *samlHTTPFilter) onRequestComplete() bool {
 	cfg := f.cfg.config
-	idpMeta := f.cfg.idpMetadata
+	idpMeta := f.cfg.idpMetadata.Load()
+	if idpMeta == nil {
+		f.handle.Log(shared.LogLevelError, "saml: [%s] idp metadata not yet loaded; rejecting ACS request", f.requestID)
+		f.handle.SendLocalResponse(503, nil, []byte("Service Unavailable: SAML metadata not yet loaded"), "saml-metadata-pending")
+		return false
+	}
 
 	// Access the full buffered body. We use a utility function that provided by the SDK to read the
 	// whole body.
@@ -229,9 +243,8 @@ func (f *samlHTTPFilter) setUpstreamHeaders(headers shared.HeaderMap, session *S
 }
 
 // serveMetadata serves the SP metadata XML.
-func (f *samlHTTPFilter) serveMetadata() {
+func (f *samlHTTPFilter) serveMetadata(idpMeta *IDPMetadata) {
 	cfg := f.cfg.config
-	idpMeta := f.cfg.idpMetadata
 
 	metadataXML, err := generateSPMetadata(cfg, idpMeta)
 	if err != nil {

@@ -4,12 +4,20 @@
   "title": "SAML Configuration",
   "description": "Configuration for the SAML 2.0 Service Provider authentication extension.",
   "type": "object",
-  "required": ["entity_id", "acs_path", "idp_metadata_xml"],
+  "required": ["entity_id", "acs_path"],
   "additionalProperties": false,
   "dependentRequired": {
     "sp_cert_pem": ["sp_key_pem"],
-    "sp_key_pem": ["sp_cert_pem"]
+    "sp_key_pem": ["sp_cert_pem"],
+    "idp_metadata_url": ["idp_metadata_cluster"],
+    "idp_metadata_cluster": ["idp_metadata_url"],
+    "idp_metadata_fetch_delay": ["idp_metadata_url"],
+    "idp_metadata_fetch_max_attempts": ["idp_metadata_url"]
   },
+  "oneOf": [
+    { "required": ["idp_metadata_xml"] },
+    { "required": ["idp_metadata_url"] }
+  ],
   "properties": {
     "entity_id": {
       "type": "string",
@@ -21,7 +29,24 @@
     },
     "idp_metadata_xml": {
       "$ref": "#/$defs/DataSource",
-      "description": "Identity Provider SAML metadata XML."
+      "description": "Identity Provider SAML metadata XML, supplied inline or read from a file at config-load time. Mutually exclusive with idp_metadata_url."
+    },
+    "idp_metadata_url": {
+      "type": "string",
+      "description": "URL to fetch the Identity Provider SAML metadata XML at config-load time. Requires idp_metadata_cluster. Mutually exclusive with idp_metadata_xml."
+    },
+    "idp_metadata_cluster": {
+      "type": "string",
+      "description": "Envoy cluster used to reach idp_metadata_url. Required when idp_metadata_url is set."
+    },
+    "idp_metadata_fetch_delay": {
+      "type": "string",
+      "description": "Delay before the IdP metadata HttpCallout is issued, as a Go duration string (e.g. \"1s\", \"30s\"). Defaults to \"1s\". Gives Envoy time to start the cluster referenced by idp_metadata_cluster before the callout fires. Only valid in URL mode."
+    },
+    "idp_metadata_fetch_max_attempts": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Total number of IdP metadata fetch attempts (initial + retries) before giving up. Retries are separated by idp_metadata_fetch_delay. Defaults to 3. Only valid in URL mode."
     },
     "sp_cert_pem": {
       "$ref": "#/$defs/DataSource",

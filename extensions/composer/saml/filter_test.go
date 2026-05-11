@@ -494,3 +494,39 @@ func TestMetrics_SessionsValidated_Expired(t *testing.T) {
 	status := f.OnRequestHeaders(headers, true)
 	require.Equal(t, shared.HeadersStatusStop, status)
 }
+
+// TestOnRequestHeaders_MetadataNotLoaded simulates URL-mode where the IdP
+// metadata fetch is still in-flight when a request arrives. The filter should
+// reject with 503.
+func TestOnRequestHeaders_MetadataNotLoaded(t *testing.T) {
+	f, handle, ctrl := newTestFilter(t)
+	defer ctrl.Finish()
+
+	// Clear the metadata to simulate the URL-fetch in-progress state.
+	f.cfg.idpMetadata.Store(nil)
+
+	expectGetAttribute(handle, "/protected", "GET", "https", "sp.example.com")
+	handle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	handle.EXPECT().SendLocalResponse(uint32(503), gomock.Any(), gomock.Any(), gomock.Eq("saml-metadata-pending"))
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{})
+	status := f.OnRequestHeaders(headers, true)
+	require.Equal(t, shared.HeadersStatusStop, status)
+}
+
+// TestOnRequestHeaders_MetadataNotLoaded_BypassPathStillWorks verifies that
+// bypass paths short-circuit before the metadata-readiness check, so health
+// probes succeed even before the IdP metadata fetch completes.
+func TestOnRequestHeaders_MetadataNotLoaded_BypassPathStillWorks(t *testing.T) {
+	f, handle, ctrl := newTestFilter(t)
+	defer ctrl.Finish()
+
+	f.cfg.idpMetadata.Store(nil)
+
+	expectGetAttribute(handle, "/health", "GET", "https", "sp.example.com")
+	handle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	headers := fake.NewFakeHeaderMap(map[string][]string{})
+	status := f.OnRequestHeaders(headers, true)
+	require.Equal(t, shared.HeadersStatusContinue, status)
+}
