@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
@@ -58,31 +59,67 @@ func DownloadLibComposerAndBuildIfNeeded(ctx context.Context, downloader *Downlo
 	return BuildLibComposer(downloader.Logger, downloader.Dirs, artifact.Path, version, false)
 }
 
-// BuildExtensionFromPath builds the extension plugin from the given path and saves it to
-// the local cache directory for composer to load.
-func BuildExtensionFromPath(logger *slog.Logger, dirs *xdg.Directories, manifest *Manifest, path string) error {
+// HasCSharedMain checks if the extension at the given path has a main/ directory,
+// indicating it supports building as an independent c-shared library.
+func HasCSharedMain(path string) bool {
+	info, err := os.Stat(filepath.Join(path, "main"))
+	return err == nil && info.IsDir()
+}
+
+// BuildExtensionFromPath builds the extension from the given path.
+// If a main/ directory exists, it builds as a c-shared library (loaded directly by Envoy).
+// Otherwise, it falls back to building as a Go plugin (loaded by composer/goplugin-loader).
+func BuildExtensionFromPath(logger *slog.Logger, dirs *xdg.Directories, manifest *Manifest, path string) (cshared bool, err error) {
 	// Run go mod tidy in the local extension directory to ensure dependencies are up to date.
 	cmd := exec.Command("go", "mod", "tidy")
 	cmd.Dir = path
 	logger.Debug("running 'go mod tidy' for local extension", "path", path, "cmd", cmd.String())
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to run 'go mod tidy' in %s: %w\nOutput: %s",
+		return false, fmt.Errorf("failed to run 'go mod tidy' in %s: %w\nOutput: %s",
 			path, err, string(output))
 	}
 
-	// Build the extension and save the binary in the local cache directory for composer to load.
-	dest := LocalCacheExtension(dirs, manifest)
+	if HasCSharedMain(path) {
+		return true, buildExtensionCShared(logger, dirs, manifest, path)
+	}
+	return false, buildExtensionPlugin(logger, dirs, manifest, path)
+}
+
+// buildExtensionCShared builds the extension as a c-shared library using the main/ directory.
+func buildExtensionCShared(logger *slog.Logger, dirs *xdg.Directories, manifest *Manifest, path string) error {
+	csharedManifest := *manifest
+	csharedManifest.CShared = true
+
+	dest := LocalCacheExtension(dirs, &csharedManifest)
+	if err := os.MkdirAll(LocalCacheExtensionDir(dirs, &csharedManifest), 0o750); err != nil {
+		return fmt.Errorf("failed to create cache directory: %w", err)
+	}
 	// #nosec G204
-	cmd = exec.Command("go", "build", "-trimpath", "-buildmode=plugin", "-o", dest, "./standalone")
+	cmd := exec.Command("go", "build", "-trimpath", "-buildmode=c-shared", "-o", dest, "./main")
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=1")
 	cmd.Dir = path
-	logger.Debug("building local extension", "version", manifest.Version, "path", path, "cmd", cmd.String())
-	output, err = cmd.CombinedOutput()
+	logger.Debug("building local extension as c-shared", "version", manifest.Version, "path", path, "cmd", cmd.String())
+	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to build local extension from %s: %w\nOutput: %s",
 			path, err, string(output))
 	}
+	return nil
+}
 
+// buildExtensionPlugin builds the extension as a Go plugin using the standalone/ directory.
+func buildExtensionPlugin(logger *slog.Logger, dirs *xdg.Directories, manifest *Manifest, path string) error {
+	dest := LocalCacheExtension(dirs, manifest)
+	// #nosec G204
+	cmd := exec.Command("go", "build", "-trimpath", "-buildmode=plugin", "-o", dest, "./standalone")
+	cmd.Dir = path
+	logger.Debug("building local extension as go-plugin", "version", manifest.Version, "path", path, "cmd", cmd.String())
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to build local extension from %s: %w\nOutput: %s",
+			path, err, string(output))
+	}
 	return nil
 }
 
@@ -96,6 +133,7 @@ func BuildLibComposer(logger *slog.Logger, dirs *xdg.Directories, composerSrcPat
 		"install",
 		"BOE_DATA_HOME="+dirs.DataHome,
 		"COMPOSER_LITE=true",
+		"VERSION="+version,
 	)
 	cmd.Dir = composerSrcPath
 
@@ -112,6 +150,7 @@ func BuildLibComposer(logger *slog.Logger, dirs *xdg.Directories, composerSrcPat
 		pluginsBuild := exec.Command("make",
 			"install_plugins",
 			"BOE_DATA_HOME="+dirs.DataHome,
+			"VERSION="+version,
 		)
 		pluginsBuild.Dir = composerSrcPath
 

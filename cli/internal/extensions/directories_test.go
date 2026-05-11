@@ -49,6 +49,13 @@ func TestLocalCacheExtensionDirs(t *testing.T) {
 	require.Equal(t, "/home/user/.local/share/extensions/goplugin/test/1.0.1/plugin.so",
 		LocalCacheExtension(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeGo}))
 
+	// Test go c-shared type
+	require.Equal(t, "/home/user/.local/share/extensions/dym/test/1.0.1",
+		LocalCacheExtensionDir(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeGo, CShared: true}))
+
+	require.Equal(t, "/home/user/.local/share/extensions/dym/test/1.0.1/libtest.so",
+		LocalCacheExtension(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeGo, CShared: true}))
+
 	// Test ext_proc type
 	require.Equal(t, "/home/user/.local/share/extensions/extproc/test/1.0.1",
 		LocalCacheExtensionDir(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeExtProc}))

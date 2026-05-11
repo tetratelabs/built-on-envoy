@@ -51,10 +51,10 @@ func TestCreateWithDockerSupport(t *testing.T) {
 		}
 		t.Logf("Files in extension directory after build: %v", fileNames)
 
-		// Check there is the `plugin.so` output file.
-		_, fileCheckError := os.Stat(filepath.Join(extensionDir, "plugin.so"))
+		// Check there is the c-shared library output file (lib<name>.so).
+		_, fileCheckError := os.Stat(filepath.Join(extensionDir, "libtest-docker.so"))
 		if fileCheckError != nil {
-			t.Errorf("Makefile build target should produce plugin.so, but got error: %v", fileCheckError)
+			t.Errorf("Makefile build target should produce libtest-docker.so, but got error: %v", fileCheckError)
 		}
 	})
 

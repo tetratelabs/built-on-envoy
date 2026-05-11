@@ -84,7 +84,11 @@ func GenerateFilterConfig(logger *slog.Logger, manifest *extensions.Manifest, di
 	case extensions.TypeRust:
 		generator = DynamicModuleFilterGenerator{Logger: logger}
 	case extensions.TypeGo:
-		generator = ComposerFilterGenerator{Logger: logger}
+		if manifest.CShared {
+			generator = DynamicModuleFilterGenerator{Logger: logger}
+		} else {
+			generator = ComposerFilterGenerator{Logger: logger}
+		}
 	case extensions.TypeExtProc:
 		generator = ExtProcFilterGenerator{Logger: logger}
 	default:

@@ -85,6 +85,7 @@ func createGoExtension(logger *slog.Logger, dirs *xdg.Directories, path, name st
 		".dockerignore":      "templates/create/go/dockerignore.tmpl",
 		"embedded/host.go":   "templates/create/go/host.go.tmpl",
 		"standalone/main.go": "templates/create/go/main.go.tmpl",
+		"main/main.go":       "templates/create/go/main_cshared.go.tmpl",
 	}
 
 	logger.Info("creating Go extension", "name", name, "path", repoPath, "files", slices.Collect(maps.Keys(files)))

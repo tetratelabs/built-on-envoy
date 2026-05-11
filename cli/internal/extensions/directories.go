@@ -20,13 +20,17 @@ func LocalCacheManifest(dirs *xdg.Directories, manifest *Manifest) string {
 
 // LocalCacheExtensionDir returns the local cache directory for the given extension manifest.
 // Different extension types are organized in different directory structures:
-// - go: extensions/goplugin/<name>/<version>
-// - rust: extensions/dym/<name>/<version>
-// - ext_proc: extensions/extproc/<name>/<version>
-// - others: extensions/<name>/<version>
+//   - go: extensions/goplugin/<name>/<version> for plugins,
+//     or extensions/dym/<name>/<version> when manifest.CShared is true
+//   - rust: extensions/dym/<name>/<version>
+//   - ext_proc: extensions/extproc/<name>/<version>
+//   - others: extensions/<name>/<version>
 func LocalCacheExtensionDir(dirs *xdg.Directories, manifest *Manifest) string {
 	switch manifest.Type {
 	case TypeGo:
+		if manifest.CShared {
+			return filepath.Join(dirs.DataHome, "extensions", "dym", manifest.Name, manifest.Version)
+		}
 		return filepath.Join(dirs.DataHome, "extensions", "goplugin", manifest.Name, manifest.Version)
 	case TypeRust:
 		return filepath.Join(dirs.DataHome, "extensions", "dym", manifest.Name, manifest.Version)
@@ -39,13 +43,19 @@ func LocalCacheExtensionDir(dirs *xdg.Directories, manifest *Manifest) string {
 
 // LocalCacheExtension returns the local cache path for the extension library based on the manifest.
 // Returns the appropriate library file name for each extension type:
-// - go: plugin.so (Go plugin)
+// - go: plugin.so for plugins, or lib<name>.so when manifest.CShared is true
 // - rust: lib<name>.so (uses original name from manifest)
+// - ext_proc: ext_proc-server (standalone binary)
 // - others: plugin.so (default)
 func LocalCacheExtension(dirs *xdg.Directories, manifest *Manifest) string {
 	dir := LocalCacheExtensionDir(dirs, manifest)
 
 	switch manifest.Type {
+	case TypeGo:
+		if manifest.CShared {
+			return filepath.Join(dir, fmt.Sprintf("lib%s.so", manifest.Name))
+		}
+		return filepath.Join(dir, "plugin.so")
 	case TypeRust:
 		// Use the original manifest name for the library
 		return filepath.Join(dir, fmt.Sprintf("lib%s.so", manifest.Name))
@@ -53,7 +63,6 @@ func LocalCacheExtension(dirs *xdg.Directories, manifest *Manifest) string {
 		// ext_proc extensions are not Go plugins, so we return the path to the ext_proc server binary instead
 		return filepath.Join(dir, "ext_proc-server")
 	default:
-		// Default for Go and other types
 		return filepath.Join(dir, "plugin.so")
 	}
 }
