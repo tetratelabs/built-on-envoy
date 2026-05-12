@@ -101,7 +101,7 @@ boe run --help
 | `--log-level` | Envoy component log level. | `string` | `all:error` | `ENVOY_LOG_LEVEL` | No |
 | `--run-id` | Run identifier for this invocation. Overrides the default timestamp-based ID. | `string` | - | `BOE_RUN_ID` | No |
 | `--listen-port` | Port for Envoy listener to accept incoming traffic. | `uint32` | `10000` | - | No |
-| `--admin-port` | Port for Envoy admin interface. | `uint32` | `9901` | - | No |
+| `--admin-port` | Port for Envoy admin interface. | `uint32` | `9901` | `BOE_ADMIN_PORT` | No |
 | `--extension` | Extensions to enable (in the format: "name" or "name:version"). | `[]string` | - | - | No |
 | `--local` | Path to a directory containing a local Extension to enable. | `[]string` | - | - | No |
 | `--dev` | Whether to allow downloading dev versions of extensions (with -dev suffix). By default, only stable versions are allowed. | `bool` | `false` | - | No |

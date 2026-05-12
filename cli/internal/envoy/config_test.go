@@ -40,6 +40,9 @@ var outputConfigOnlyFiltersYAML []byte
 //go:embed testdata/output_config_with_test_upstream_cluster.yaml
 var outputConfigWithTestUpstreamClusterYAML []byte
 
+//go:embed testdata/output_config_admin_all_interfaces.yaml
+var outputConfigAdminAllInterfacesYAML []byte
+
 func TestRenderConfig(t *testing.T) {
 	manifest, err := extensions.LoadLocalManifest("testdata/input_lua_inline.yaml")
 	require.NoError(t, err)
@@ -55,17 +58,27 @@ func TestRenderConfig(t *testing.T) {
 			name: "default",
 			params: &ConfigGenerationParams{
 				Logger:       internaltesting.NewTLogger(t),
-				AdminPort:    9901,
+				AdminAddress: "127.0.0.1:9901",
 				ListenerPort: 10000,
 			},
 			renderer: FullConfigRenderer,
 			expect:   string(outputConfigYAML),
 		},
 		{
+			name: "admin on all interfaces",
+			params: &ConfigGenerationParams{
+				Logger:       internaltesting.NewTLogger(t),
+				AdminAddress: "0.0.0.0:9901",
+				ListenerPort: 10000,
+			},
+			renderer: FullConfigRenderer,
+			expect:   string(outputConfigAdminAllInterfacesYAML),
+		},
+		{
 			name: "with extensions",
 			params: &ConfigGenerationParams{
 				Logger:       internaltesting.NewTLogger(t),
-				AdminPort:    9901,
+				AdminAddress: "127.0.0.1:9901",
 				ListenerPort: 10000,
 				Extensions:   []*extensions.Manifest{manifest},
 			},
@@ -76,7 +89,7 @@ func TestRenderConfig(t *testing.T) {
 			name: "minimal with extensions",
 			params: &ConfigGenerationParams{
 				Logger:       internaltesting.NewTLogger(t),
-				AdminPort:    9901,
+				AdminAddress: "127.0.0.1:9901",
 				ListenerPort: 10000,
 				Extensions:   []*extensions.Manifest{manifest},
 			},
@@ -87,7 +100,7 @@ func TestRenderConfig(t *testing.T) {
 			name: "with test upstream cluster",
 			params: &ConfigGenerationParams{
 				Logger:              internaltesting.NewTLogger(t),
-				AdminPort:           9901,
+				AdminAddress:        "127.0.0.1:9901",
 				ListenerPort:        10000,
 				Clusters:            []string{"example.com:443"},
 				TestUpstreamCluster: "example.com:443",
@@ -99,7 +112,7 @@ func TestRenderConfig(t *testing.T) {
 			name: "test upstream cluster not found",
 			params: &ConfigGenerationParams{
 				Logger:              internaltesting.NewTLogger(t),
-				AdminPort:           9901,
+				AdminAddress:        "127.0.0.1:9901",
 				ListenerPort:        10000,
 				TestUpstreamCluster: "nonexistent-cluster",
 			},
@@ -417,7 +430,7 @@ func TestRenderConfigGroupsNativeBeforePerExtension(t *testing.T) {
 
 	result, err := RenderConfig(&ConfigGenerationParams{
 		Logger:       internaltesting.NewTLogger(t),
-		AdminPort:    9901,
+		AdminAddress: "127.0.0.1:9901",
 		ListenerPort: 10000,
 		Extensions:   []*extensions.Manifest{first, second},
 	}, MinimalConfigRenderer)
@@ -658,7 +671,7 @@ func TestRenderConfigWithNativeHTTPFiltersBeforeErrors(t *testing.T) {
 
 		_, err = RenderConfig(&ConfigGenerationParams{
 			Logger:                  internaltesting.NewTLogger(t),
-			AdminPort:               9901,
+			AdminAddress:            "127.0.0.1:9901",
 			ListenerPort:            10000,
 			Extensions:              []*extensions.Manifest{ext},
 			NativeHTTPFiltersBefore: []string{override},
@@ -680,7 +693,7 @@ func TestRenderConfigWithNativeHTTPFiltersBeforeErrors(t *testing.T) {
 
 		_, err = RenderConfig(&ConfigGenerationParams{
 			Logger:       internaltesting.NewTLogger(t),
-			AdminPort:    9901,
+			AdminAddress: "127.0.0.1:9901",
 			ListenerPort: 10000,
 			Extensions:   []*extensions.Manifest{ext},
 		}, MinimalConfigRenderer)
@@ -782,7 +795,7 @@ func TestRenderConfigWithNativeHTTPFiltersBeforeOverride(t *testing.T) {
 
 			result, err := RenderConfig(&ConfigGenerationParams{
 				Logger:                  internaltesting.NewTLogger(t),
-				AdminPort:               9901,
+				AdminAddress:            "127.0.0.1:9901",
 				ListenerPort:            10000,
 				Extensions:              []*extensions.Manifest{ext},
 				NativeHTTPFiltersBefore: tt.nativeHTTPFiltersBefore,
@@ -980,7 +993,7 @@ func TestRenderConfigGroupsNativeAfterPerExtension(t *testing.T) {
 
 	result, err := RenderConfig(&ConfigGenerationParams{
 		Logger:       internaltesting.NewTLogger(t),
-		AdminPort:    9901,
+		AdminAddress: "127.0.0.1:9901",
 		ListenerPort: 10000,
 		Extensions:   []*extensions.Manifest{first, second},
 	}, MinimalConfigRenderer)
@@ -1146,7 +1159,7 @@ func TestRenderConfigWithNativeHTTPFiltersAfterErrors(t *testing.T) {
 
 		_, err = RenderConfig(&ConfigGenerationParams{
 			Logger:                 internaltesting.NewTLogger(t),
-			AdminPort:              9901,
+			AdminAddress:           "127.0.0.1:9901",
 			ListenerPort:           10000,
 			Extensions:             []*extensions.Manifest{ext},
 			NativeHTTPFiltersAfter: []string{override},
@@ -1168,7 +1181,7 @@ func TestRenderConfigWithNativeHTTPFiltersAfterErrors(t *testing.T) {
 
 		_, err = RenderConfig(&ConfigGenerationParams{
 			Logger:       internaltesting.NewTLogger(t),
-			AdminPort:    9901,
+			AdminAddress: "127.0.0.1:9901",
 			ListenerPort: 10000,
 			Extensions:   []*extensions.Manifest{ext},
 		}, MinimalConfigRenderer)
@@ -1267,7 +1280,7 @@ func TestRenderConfigWithNativeHTTPFiltersAfterOverride(t *testing.T) {
 
 			result, err := RenderConfig(&ConfigGenerationParams{
 				Logger:                 internaltesting.NewTLogger(t),
-				AdminPort:              9901,
+				AdminAddress:           "127.0.0.1:9901",
 				ListenerPort:           10000,
 				Extensions:             []*extensions.Manifest{ext},
 				NativeHTTPFiltersAfter: tt.nativeHTTPFiltersAfter,

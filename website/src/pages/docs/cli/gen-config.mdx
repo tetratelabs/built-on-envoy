@@ -85,7 +85,7 @@ boe gen-config --help
 |------|-------------|------|---------|-----|----------|
 | `--minimal` | Generate configuration with only extension-generated resources (HTTP filters and clusters). | `bool` | - | - | No |
 | `--listen-port` | Port for Envoy listener to accept incoming traffic. | `uint32` | `10000` | - | No |
-| `--admin-port` | Port for Envoy admin interface. | `uint32` | `9901` | - | No |
+| `--admin-port` | Port for Envoy admin interface. | `uint32` | `9901` | `BOE_ADMIN_PORT` | No |
 | `--extension` | Extensions to enable (in the format: "name" or "name:version"). | `[]string` | - | - | No |
 | `--local` | Path to a directory containing a local Extension to enable. | `[]string` | - | - | No |
 | `--dev` | Whether to allow downloading dev versions of extensions (with -dev suffix). By default, only stable versions are allowed. | `bool` | `false` | - | No |

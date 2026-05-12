@@ -50,7 +50,8 @@ Flags:
                                    and clusters).
       --listen-port=10000          Port for Envoy listener to accept incoming
                                    traffic.
-      --admin-port=9901            Port for Envoy admin interface.
+      --admin-port=9901            Port for Envoy admin interface
+                                   ($BOE_ADMIN_PORT).
       --extension=EXTENSION,...    Extensions to enable (in the format: "name"
                                    or "name:version").
       --local=LOCAL                Path to a directory containing a local

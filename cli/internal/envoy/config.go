@@ -39,8 +39,8 @@ import (
 type ConfigGenerationParams struct {
 	// Logger is used for logging during config generation.
 	Logger *slog.Logger
-	// AdminPort is the port for Envoy admin interface.
-	AdminPort uint32
+	// AdminAddress is the host:port for Envoy admin interface (e.g. "127.0.0.1:9901").
+	AdminAddress string
 	// ListenerPort is the port where Envoy listens for incoming traffic.
 	ListenerPort uint32
 	// Dirs provides access to XDG directories for locating extension resources.
@@ -141,7 +141,7 @@ func FullConfigRenderer(params *ConfigGenerationParams, gen *GeneratedConfigReso
 		hostRewrite = testUpstreamHost
 	}
 
-	cfg, err := buildFullConfig(params.AdminPort, params.ListenerPort, clusterName, hostRewrite, newCluster, gen.HTTPFilters, gen.NetworkFilters, gen.ListenerFilters, gen.Clusters)
+	cfg, err := buildFullConfig(params.AdminAddress, params.ListenerPort, clusterName, hostRewrite, newCluster, gen.HTTPFilters, gen.NetworkFilters, gen.ListenerFilters, gen.Clusters)
 	if err != nil {
 		return "", fmt.Errorf("failed to build config: %w", err)
 	}
@@ -428,7 +428,16 @@ func parseCluster(shortSpec string, tls bool) (*clusterv3.Cluster, error) {
 // and allows us to use the proto marshalling functions. Otherwise, we would have to create a wrapper
 // proto on our own, or marshal the config manually.
 // TODO(nacx): Is there a wrapper for `admin` and `static_resources` we could use other than Bootstrap?
-func buildFullConfig(adminPort, listenerPort uint32, testUpstreamClusterName, testUpstreamHostRewrite string, newCluster *clusterv3.Cluster, httpFilters []*hcmv3.HttpFilter, networkFilters []*listenerv3.Filter, listenerFilters []*listenerv3.ListenerFilter, clusters []*clusterv3.Cluster) (*bootstrapv3.Bootstrap, error) {
+func buildFullConfig(adminAddress string, listenerPort uint32, testUpstreamClusterName, testUpstreamHostRewrite string, newCluster *clusterv3.Cluster, httpFilters []*hcmv3.HttpFilter, networkFilters []*listenerv3.Filter, listenerFilters []*listenerv3.ListenerFilter, clusters []*clusterv3.Cluster) (*bootstrapv3.Bootstrap, error) {
+	adminHost, adminPortStr, err := net.SplitHostPort(adminAddress)
+	if err != nil {
+		return nil, fmt.Errorf("invalid admin address %q: %w", adminAddress, err)
+	}
+	adminPort, err := strconv.ParseUint(adminPortStr, 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("invalid admin port in %q: %w", adminAddress, err)
+	}
+
 	hcm, err := buildHTTPConnectionManager(httpFilters, testUpstreamClusterName, testUpstreamHostRewrite)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build HTTP connection manager: %w", err)
@@ -470,9 +479,9 @@ func buildFullConfig(adminPort, listenerPort uint32, testUpstreamClusterName, te
 		Address: &corev3.Address{
 			Address: &corev3.Address_SocketAddress{
 				SocketAddress: &corev3.SocketAddress{
-					Address: "127.0.0.1",
+					Address: adminHost,
 					PortSpecifier: &corev3.SocketAddress_PortValue{
-						PortValue: adminPort,
+						PortValue: uint32(adminPort),
 					},
 				},
 			},

@@ -12,10 +12,12 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal"
@@ -34,7 +36,7 @@ type Run struct {
 	LogLevel     string   `help:"Envoy component log level." default:"all:error" env:"ENVOY_LOG_LEVEL"`
 	RunID        string   `name:"run-id" env:"BOE_RUN_ID" help:"Run identifier for this invocation. Overrides the default timestamp-based ID."`
 	ListenPort   uint32   `help:"Port for Envoy listener to accept incoming traffic." default:"10000"`
-	AdminPort    uint32   `help:"Port for Envoy admin interface." default:"9901"`
+	AdminPort    uint32   `name:"admin-port" help:"Port for Envoy admin interface." default:"9901" env:"BOE_ADMIN_PORT"`
 	Extensions   []string `name:"extension" help:"Extensions to enable (in the format: \"name\" or \"name:version\")."`
 	Local        []string `name:"local" sep:"none" help:"Path to a directory containing a local Extension to enable." type:"existingdir"`
 	Dev          bool     `help:"Whether to allow downloading dev versions of extensions (with -dev suffix). By default, only stable versions are allowed." default:"false"`
@@ -194,7 +196,7 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 		Dirs:                    dirs,
 		RunID:                   r.RunID,
 		ListenPort:              r.ListenPort,
-		AdminPort:               r.AdminPort,
+		AdminAddress:            adminAddressForLocal(r.AdminPort),
 		Extensions:              extensionsToRun,
 		Configs:                 r.Configs,
 		NativeHTTPFiltersBefore: r.NativeHTTPFiltersBefore,
@@ -208,6 +210,16 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 	}
 
 	return runner.Run(ctx)
+}
+
+// adminAddressForLocal returns the admin address for a locally-running Envoy.
+// Inside a Docker container, the BOE_ADMIN_ADDRESS env var is set by RunnerDocker
+// to bind on all interfaces; otherwise defaults to loopback.
+func adminAddressForLocal(port uint32) string {
+	if addr := os.Getenv("BOE_ADMIN_ADDRESS"); addr != "" {
+		return addr
+	}
+	return net.JoinHostPort("127.0.0.1", strconv.FormatUint(uint64(port), 10))
 }
 
 // downloadExtensions downloads the specified extensions using the provided downloader.
