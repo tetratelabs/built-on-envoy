@@ -9,15 +9,17 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/tetratelabs/func-e/experimental/admin"
 )
 
 // defaultRunEnvoyTimeout is the default timeout for waiting for Envoy to start.
@@ -57,19 +59,11 @@ func RunEnvoy(t *testing.T, cliBin string, listenPort int, adminPort int, args .
 
 	t.Logf("Waiting for boe to start (Envoy listening on %d)...", listenPort)
 
-	// Wait for Envoy to bind its listener before using func-e's admin
-	// discovery. Local extensions can compile helper processes before Envoy
-	// starts, and admin discovery expects Envoy to be the relevant child.
 	require.Eventually(t, func() bool {
 		return IsPortInUse(t.Context(), listenPort)
 	}, runEnvoyTimeout(), 100*time.Millisecond, "Envoy did not start listening on port %d", listenPort)
 
-	adminClient, err := admin.NewAdminClient(t.Context(), process.Pid)
-	require.NoError(t, err)
-
-	err = adminClient.AwaitReady(t.Context(), time.Second)
-	require.NoError(t, err)
-	require.Equal(t, adminPort, adminClient.Port())
+	AwaitAdminReady(t, adminPort)
 
 	t.Log("boe CLI is ready")
 }
@@ -124,6 +118,32 @@ func RunCLI(t *testing.T, cliBin string, args ...string) *os.Process {
 	t.Logf("boe process started with PID %d", cmd.Process.Pid)
 
 	return cmd.Process
+}
+
+// AwaitAdminReady polls the Envoy admin /ready endpoint until it returns
+// "LIVE" or the test's context is canceled.
+func AwaitAdminReady(t *testing.T, adminPort int) {
+	t.Helper()
+
+	endpoint := fmt.Sprintf("http://127.0.0.1:%d/ready", adminPort)
+	client := &http.Client{Timeout: time.Second}
+
+	require.Eventually(t, func() bool {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, endpoint, http.NoBody)
+		if err != nil {
+			return false
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close() //nolint:errcheck
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return false
+		}
+		return resp.StatusCode == http.StatusOK && strings.EqualFold(strings.TrimSpace(string(body)), "live")
+	}, runEnvoyTimeout(), 100*time.Millisecond, "Envoy admin not ready on port %d", adminPort)
 }
 
 // IsPortInUse checks if a port is in use (returns true if listening).

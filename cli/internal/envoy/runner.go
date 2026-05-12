@@ -179,8 +179,11 @@ Press Ctrl+C to stop
 		opts = append(opts, api.EnvoyPath(r.EnvoyPath))
 	}
 
-	// Run Envoy with embedded config
-	args := []string{"--config-yaml", config, "--log-level", r.DefaultLogLevel}
+	args := []string{
+		"--config-yaml", config,
+		"--log-level", r.DefaultLogLevel,
+		"--use-dynamic-base-id", // allows parallel Envoy instances
+	}
 	if r.ComponentLogLevel != "" {
 		args = append(args, "--component-log-level", r.ComponentLogLevel)
 	}
