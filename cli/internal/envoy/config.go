@@ -489,6 +489,10 @@ func buildFullConfig(adminAddress string, listenerPort uint32, testUpstreamClust
 	}
 
 	return &bootstrapv3.Bootstrap{
+		Node: &corev3.Node{
+			Id:      "boe",
+			Cluster: "boe",
+		},
 		Admin: admin,
 		StaticResources: &bootstrapv3.Bootstrap_StaticResources{
 			Listeners: []*listenerv3.Listener{listener},
