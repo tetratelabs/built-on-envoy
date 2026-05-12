@@ -41,7 +41,7 @@ func RunEnvoy(t *testing.T, cliBin string, args ...string) (listenPort int, admi
 	proxyPort := defaultListenPort
 	hasLogLevel := false
 	for i, arg := range args {
-		if arg == "--listen-port" && i+1 < len(arg) {
+		if arg == "--listen-port" && i+1 < len(args) {
 			var err error
 			proxyPort, err = strconv.Atoi(args[i+1])
 			require.NoError(t, err)
@@ -83,7 +83,7 @@ func RunEnvoy(t *testing.T, cliBin string, args ...string) (listenPort int, admi
 			t.Logf("Failed to send interrupt to boe process: %v", err)
 		}
 		// Wait for the process to exit gracefully, in worst case this is
-		// killed in 3 seconds by WaitDelay conigured int he command.
+		// killed in 3 seconds by WaitDelay configured in the command.
 		// In that case, you may have a zombie Envoy process left behind!
 		if _, err := process.Wait(); err != nil {
 			t.Logf("Failed to wait for boe process to exit: %v", err)

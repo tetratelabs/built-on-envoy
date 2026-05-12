@@ -39,6 +39,15 @@ and all the files needed to execute the extension locally.
     boe run --local ~/src/built-on-envoy/extensions/composer/example
     ```
 
+Run with a custom Envoy binary. BOE uses this binary directly; it must match the local OS/arch.
+
+    ```shell
+    boe run --envoy-path ~/src/envoy/bazel-bin/source/exe/envoy-static --local ~/src/built-on-envoy/extensions/composer/example
+    ```
+
+For `boe run --docker`, the container defaults to run ID `0` (set via `ENV BOE_RUN_ID=0` in the
+Dockerfile). Override with `--run-id` or the `BOE_RUN_ID` environment variable.
+
 Run extensions with custom JSON configuration strings. Configs are applied in order to the
 combined list of `--extension` and `--local` flags. Use an empty string `''` to skip an extension:
 

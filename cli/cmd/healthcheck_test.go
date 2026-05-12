@@ -20,6 +20,12 @@ import (
 	"github.com/tetratelabs/func-e/experimental/admin"
 )
 
+func TestHealthcheck_Run(t *testing.T) {
+	// In test, pid 1 is not boe, so there's no child with --run-id.
+	err := (&Healthcheck{}).Run(t.Context())
+	require.EqualError(t, err, "timeout waiting for Envoy process: no child with --run-id")
+}
+
 func Test_healthcheck(t *testing.T) {
 	pid := os.Getpid()
 
@@ -28,7 +34,7 @@ func Test_healthcheck(t *testing.T) {
 		logger := slog.New(slog.NewTextHandler(&buf, nil))
 		ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 		defer cancel()
-		err := doHealthcheck(ctx, pid, logger)
+		err := healthcheck(ctx, pid, logger)
 		require.EqualError(t, err, "timeout waiting for Envoy process: no Envoy process found")
 		// Contains not Equal because there's a timestamp
 		require.Contains(t, buf.String(), "Failed to find Envoy admin server")
@@ -45,46 +51,23 @@ func Test_healthcheck(t *testing.T) {
 		// Docker. This intentionally ignores the parameter.
 		startupHook := func(ctx context.Context, _ admin.AdminClient, _ string) error {
 			logger := slog.New(slog.NewTextHandler(&log, nil))
-			healthCheckErr = doHealthcheck(ctx, pid, logger)
+			healthCheckErr = healthcheck(ctx, pid, logger)
 			// Cancel immediately to stop Envoy and complete test quickly
 			cancel()
-			return nil
+			return nil // func-e returns nil on context cancellation (clean shutdown).
 		}
 
 		// Run with minimal Envoy config
 		err := func_e.Run(ctx, []string{
 			"--config-yaml",
 			"admin: {address: {socket_address: {address: '127.0.0.1', port_value: 0}}}",
-		}, api.Out(io.Discard), api.EnvoyOut(io.Discard), api.EnvoyErr(io.Discard), admin.WithStartupHook(startupHook))
+		}, api.Out(io.Discard), api.EnvoyOut(io.Discard), api.EnvoyErr(io.Discard),
+			admin.WithStartupHook(startupHook))
 
 		// Expect nil error since Run returns nil on context cancellation (documented behavior)
 		require.NoError(t, err)
 
 		require.NoError(t, healthCheckErr)
-		require.Empty(t, log)
+		require.Empty(t, log.String())
 	})
-}
-
-func TestHealthcheck_Run(t *testing.T) {
-	tests := []struct {
-		name string
-		ctx  func(*testing.T) context.Context
-	}{
-		{
-			name: "returns error when context is canceled",
-			ctx: func(t *testing.T) context.Context {
-				t.Helper()
-				ctx, cancel := context.WithCancel(t.Context())
-				cancel()
-				return ctx
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := (&Healthcheck{}).Run(tt.ctx(t))
-			require.Error(t, err)
-		})
-	}
 }

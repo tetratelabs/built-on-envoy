@@ -3,31 +3,20 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-FROM debian:12.13-slim
-
-ENV DEBIAN_FRONTEND=noninteractive
+FROM cgr.dev/chainguard/gcc-glibc:latest-dev
 
 # Install minimal required build deps
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apk add --no-cache \
     ca-certificates \
-    clang \
-    libclang-dev \
-    llvm \
     curl \
-    make \
-    git \
-    gcc \
-    g++ \
-    libc6-dev \
-    pkg-config \
-    libssl-dev \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    clang \
+    su-exec
 
 # Create a non-root user and install Go and Rust with that user, so that
 # later on the user can build extensions without permission issues.
-# Wer don't switch to the boe user here, we'll do that in the entrypoint so that
+# We don't switch to the boe user here, we'll do that in the entrypoint so that
 # the permissions for the /var/boe mounted named volume can be properly set.
-RUN groupadd -g 10001 boe && useradd -u 10001 -g boe -m -s /usr/sbin/nologin boe
+RUN addgroup -g 10001 boe && adduser -D -u 10001 -G boe boe
 
 # Configure the build cache directories to persist data across runs.
 # The /var/boe directory is mounted as a volume when running the CLI in Docker mode.
@@ -41,7 +30,7 @@ ENV GOMODCACHE=/var/boe/go/pkg/mod \
 
 ARG TARGETOS
 ARG TARGETARCH
-ARG GO_VERSION=1.26.2
+ARG GO_VERSION=1.26.3
 
 # Install Go
 RUN curl -fsSL https://go.dev/dl/go${GO_VERSION}.${TARGETOS}-${TARGETARCH}.tar.gz \
@@ -57,7 +46,14 @@ COPY --chown=boe:boe ./out/boe-${TARGETOS}-${TARGETARCH} /boe
 COPY --chown=boe:boe ./entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# The healthcheck subcommand discovers Envoy's admin server and checks readiness.
+# Set BOE_RUN_ID=0 for predictable file paths in containers.
+# This creates the following directory structure:
+#   ~/.config/boe/                     - XDG config (e.g., envoy-version preference)
+#   ~/.local/share/boe/                - XDG data (downloaded Envoy binaries)
+#   ~/.local/state/boe/runs/0/         - XDG state (boe.log, envoy config)
+#   ~/.local/state/boe/envoy-runs/0/   - XDG state (Envoy stdout.log, stderr.log)
+#   /tmp/boe-0/                        - XDG runtime (uds.sock, admin-address.txt)
+ENV BOE_RUN_ID=0
 HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=3 \
     CMD ["/boe", "healthcheck"]
 
