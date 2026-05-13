@@ -1,7 +1,7 @@
 [
   {
     "name": "anthropic-messages-decoder",
-    "version": "0.6.0-dev",
+    "version": "0.6.0",
     "parent": "composer",
     "categories": [
       "AI",
@@ -48,12 +48,12 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.6.0-dev",
+    "composerVersion": "0.6.0",
     "sourcePath": "composer/anthropic-decoder"
   },
   {
     "name": "azure-content-safety",
-    "version": "0.6.0-dev",
+    "version": "0.6.0",
     "parent": "composer",
     "categories": [
       "Security",
@@ -113,12 +113,12 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.6.0-dev",
+    "composerVersion": "0.6.0",
     "sourcePath": "composer/azure-content-safety"
   },
   {
     "name": "bedrock-guardrails",
-    "version": "0.6.0-dev",
+    "version": "0.6.0",
     "parent": "composer",
     "categories": [
       "AI",
@@ -161,12 +161,12 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.6.0-dev",
+    "composerVersion": "0.6.0",
     "sourcePath": "composer/bedrock-guardrails"
   },
   {
     "name": "cedar-auth",
-    "version": "0.6.0-dev",
+    "version": "0.6.0",
     "parent": "composer",
     "categories": [
       "Security"
@@ -238,12 +238,12 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.6.0-dev",
+    "composerVersion": "0.6.0",
     "sourcePath": "composer/cedar"
   },
   {
     "name": "chat-completions-decoder",
-    "version": "0.6.0-dev",
+    "version": "0.6.0",
     "parent": "composer",
     "categories": [
       "AI",
@@ -290,12 +290,12 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.6.0-dev",
+    "composerVersion": "0.6.0",
     "sourcePath": "composer/chat-completions-decoder"
   },
   {
     "name": "coraza-waf",
-    "version": "0.6.0-dev",
+    "version": "0.6.0",
     "parent": "composer",
     "categories": [
       "Security"
@@ -331,7 +331,7 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.6.0-dev",
+    "composerVersion": "0.6.0",
     "sourcePath": "composer/waf"
   },
   {
@@ -372,7 +372,7 @@
   },
   {
     "name": "example-go",
-    "version": "0.6.0-dev",
+    "version": "0.6.0",
     "parent": "composer",
     "categories": [
       "Examples"
@@ -397,7 +397,7 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.6.0-dev",
+    "composerVersion": "0.6.0",
     "sourcePath": "composer/example"
   },
   {
@@ -440,7 +440,7 @@
   },
   {
     "name": "file-server",
-    "version": "0.6.0-dev",
+    "version": "0.6.0",
     "parent": "composer",
     "categories": [
       "Traffic Control"
@@ -472,7 +472,7 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.6.0-dev",
+    "composerVersion": "0.6.0",
     "sourcePath": "composer/file-server"
   },
   {
@@ -524,7 +524,7 @@
   },
   {
     "name": "jwe-decrypt",
-    "version": "0.6.0-dev",
+    "version": "0.6.0",
     "parent": "composer",
     "categories": [
       "Authentication"
@@ -578,12 +578,12 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.6.0-dev",
+    "composerVersion": "0.6.0",
     "sourcePath": "composer/jwe-decrypt"
   },
   {
     "name": "llm-proxy",
-    "version": "0.6.0-dev",
+    "version": "0.6.0",
     "parent": "composer",
     "categories": [
       "AI"
@@ -629,12 +629,12 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.6.0-dev",
+    "composerVersion": "0.6.0",
     "sourcePath": "composer/llm-proxy"
   },
   {
     "name": "opa",
-    "version": "0.6.0-dev",
+    "version": "0.6.0",
     "parent": "composer",
     "categories": [
       "Security"
@@ -706,12 +706,12 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.6.0-dev",
+    "composerVersion": "0.6.0",
     "sourcePath": "composer/opa"
   },
   {
     "name": "openapi-validator",
-    "version": "0.6.0-dev",
+    "version": "0.6.0",
     "parent": "composer",
     "categories": [
       "Traffic Control"
@@ -756,12 +756,12 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.6.0-dev",
+    "composerVersion": "0.6.0",
     "sourcePath": "composer/openapi-validator"
   },
   {
     "name": "openfga",
-    "version": "0.6.0-dev",
+    "version": "0.6.0",
     "parent": "composer",
     "categories": [
       "AI",
@@ -826,12 +826,12 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.6.0-dev",
+    "composerVersion": "0.6.0",
     "sourcePath": "composer/openfga"
   },
   {
     "name": "saml",
-    "version": "0.6.0-dev",
+    "version": "0.6.0",
     "parent": "composer",
     "categories": [
       "Authentication",
@@ -882,12 +882,12 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.6.0-dev",
+    "composerVersion": "0.6.0",
     "sourcePath": "composer/saml"
   },
   {
     "name": "token-exchange",
-    "version": "0.6.0-dev",
+    "version": "0.6.0",
     "parent": "composer",
     "categories": [
       "Authentication",
@@ -917,7 +917,7 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.6.0-dev",
+    "composerVersion": "0.6.0",
     "sourcePath": "composer/token-exchange"
   }
 ]

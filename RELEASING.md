@@ -27,13 +27,15 @@ argument. The workflow will automatically update the formula code and SHAs to po
 Extensions are released automatically whenever changes are done, so there is no need, in general, to manually release the extensions.
 
 The Go-based extensions are an exception, as they are all released together in the `composer` dynamic module and use the `-dev` suffix in the
-version during development. To cut a release of teh `composer` dynamic module:
+version during development. To cut a release of the `composer` dynamic module:
 
 * Update the version in the [composer manifest](https://github.com/tetratelabs/built-on-envoy/blob/main/extensions/composer/manifest.yaml) and
   remove the `-dev` suffix.
 * Run `make -C cli gen` to regenerate the extension manifest index for the website.
 * Open a pull request with the changes.
-* Once merged, do the same to bump the version of `composer` to the next `-dev` version.
+* Once merged:
+  * Create a tag named `extensions/composer/v<composer-version>` so that the `composer` code is Go-importable.
+  * Update the `composer` manifest to the next `-dev` version.
 
 ### Manually releasing extensions
 
