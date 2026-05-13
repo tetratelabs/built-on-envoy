@@ -846,6 +846,42 @@ func TestDownloadExtensions(t *testing.T) {
 		require.Contains(t, err.Error(), "unknown artifact type")
 	})
 
+	t.Run("source Go extension", func(t *testing.T) {
+		composerVersion := "0.1.0"
+		composer := &extensions.Manifest{Name: "composer", Version: composerVersion, Type: extensions.TypeComposer}
+		dirs := &xdg.Directories{DataHome: t.TempDir()}
+
+		// Precreate the manifests to simulate a successful download
+		composerDir := extensions.LocalCacheComposerSourceArtifactDir(dirs, composer)
+		childDir := filepath.Join(composerDir, "composer-child")
+		require.NoError(t, os.MkdirAll(childDir, 0o750))
+
+		composerManifest, err := os.ReadFile("testdata/composer_test.yaml")
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(filepath.Join(composerDir, "manifest.yaml"), composerManifest, 0o600))
+
+		childManifest, err := os.ReadFile("testdata/composer_child.yaml")
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(filepath.Join(childDir, "manifest.yaml"), childManifest, 0o600))
+
+		mock := &mockOCIClient{
+			annotations: map[string]string{
+				ocispec.AnnotationTitle:                 "composer",
+				extensions.OCIAnnotationExtensionType:   string(extensions.TypeComposer),
+				extensions.OCIAnnotationArtifact:        extensions.ArtifactSource,
+				extensions.OCIAnnotationComposerVersion: composerVersion,
+			},
+		}
+		d := newTestDownloader(t, dirs.DataHome, mock)
+
+		exts, err := downloadExtensions(t.Context(), d, []string{"composer-child:" + composerVersion}, false)
+		require.NoError(t, err)
+		require.Len(t, exts, 1)
+		require.Equal(t, "Test Author", exts[0].Author)
+		require.Equal(t, "1.38.0", exts[0].MinEnvoyVersion)
+		require.Equal(t, "1.39.0", exts[0].MaxEnvoyVersion) // This is computed when loading based on the min version
+	})
+
 	t.Run("source Go extension with missing source dir", func(t *testing.T) {
 		mock := &mockOCIClient{
 			annotations: map[string]string{

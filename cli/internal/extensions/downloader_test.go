@@ -10,6 +10,7 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"testing"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -338,6 +339,68 @@ func TestCheckOrDownloadLibComposerCacheHit(t *testing.T) {
 	}
 
 	require.NoError(t, CheckOrDownloadLibComposer(t.Context(), d, version, ComposerArtifactLite))
+}
+
+func TestDownloadComposerExtensionLoadsParentManifest(t *testing.T) {
+	dirs := &xdg.Directories{DataHome: t.TempDir()}
+	m := &Manifest{Name: "parent-valid", Version: "1.0.0", Type: TypeGo}
+
+	cacheDir := LocalCacheExtensionDir(dirs, m)
+	cachedManifestPath := filepath.Join(cacheDir, "manifest.yaml")
+	cachedManifest, err := os.ReadFile("testdata/parent_valid.yaml")
+	require.NoError(t, err)
+
+	// Create the files as if they were downloaded:
+	// - mock extension binary
+	// - manifest.yaml file as packaged by the old composer individual extensions
+	require.NoError(t, os.MkdirAll(cacheDir, 0o750))
+	require.NoError(t, os.WriteFile(cachedManifestPath, cachedManifest, 0o600))
+	require.NoError(t, os.WriteFile(LocalCacheExtension(dirs, m), []byte("cached"), 0o600))
+
+	d := &Downloader{
+		Logger:                internaltesting.NewTLogger(t),
+		Registry:              "ghcr.io/test",
+		Dirs:                  dirs,
+		OS:                    "linux",
+		Arch:                  "arm64",
+		DisableSourceFallback: true,
+		newClient: func(_ *slog.Logger, _, _, _ string, _ bool) (oci.RepositoryClient, error) {
+			return &mockRepositoryClient{
+				manifestAnnotations: map[string]string{
+					ocispec.AnnotationTitle:      "parent-valid",
+					ocispec.AnnotationVersion:    "1.0.0",
+					OCIAnnotationExtensionType:   string(TypeGo),
+					OCIAnnotationComposerVersion: "1.0.0",
+				},
+			}, nil
+		},
+	}
+
+	// backward-compatible behaviour for old individual composer extension packages.
+	// the information of the manifest should be loaded without loading any further
+	// information from any parent
+	t.Run("no parent manifest", func(t *testing.T) {
+		ext, err := d.DownloadExtension(t.Context(), "parent-valid", "1.0.0")
+		require.NoError(t, err)
+		require.Equal(t, "Test Author", ext.Manifest.Author)
+		require.Empty(t, ext.Manifest.MinEnvoyVersion)
+		require.Empty(t, ext.Manifest.MaxEnvoyVersion)
+	})
+
+	// The information from the parent manifest should be loaded
+	t.Run("with parent manifest", func(t *testing.T) {
+		// Create the parent manifest in the download location
+		parentManifest, err := os.ReadFile("testdata/composer_test.yaml")
+		require.NoError(t, err)
+		parentManifestPath := filepath.Join(cacheDir, "manifest-composer.yaml")
+		require.NoError(t, os.WriteFile(parentManifestPath, parentManifest, 0o600))
+
+		ext, err := d.DownloadExtension(t.Context(), "parent-valid", "1.0.0")
+		require.NoError(t, err)
+		require.Equal(t, "Test Author", ext.Manifest.Author)
+		require.Equal(t, "1.38.0", ext.Manifest.MinEnvoyVersion)
+		require.Equal(t, "1.39.0", ext.Manifest.MaxEnvoyVersion) // This is computed when loading based on the min version
+	})
 }
 
 func TestCheckOrDownloadLibComposerCacheMiss(t *testing.T) {

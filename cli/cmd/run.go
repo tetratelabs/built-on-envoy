@@ -248,7 +248,7 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 			// If the downloaded artifact is the composer bundle, we need to find the path to the extension
 			// inside the composer source tree.
 			if artifact.Manifest.Type == extensions.TypeComposer {
-				var manifest *extensions.Manifest
+				var manifest, composerManifest *extensions.Manifest
 				extensionSrc := extensions.LocalCacheComposerExtensionSourceDir(downloader.Dirs, artifact.Manifest, name)
 				if extensionSrc == "" {
 					return nil, fmt.Errorf("invalid source artifact for Go extension %s: missing expected source directory: %s", name, artifact.Path)
@@ -260,11 +260,15 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 					return nil, fmt.Errorf("failed to load manifest for composer extension %s from source artifact %q: %w",
 						name, extensionSrc, err)
 				}
+				composerManifestPath := filepath.Join(extensions.LocalCacheComposerSourceArtifactDir(downloader.Dirs, artifact.Manifest), "manifest.yaml")
+				composerManifest, err = extensions.LoadLocalManifest(composerManifestPath)
+				if err != nil {
+					return nil, fmt.Errorf("failed to load composer parent manifest for composer extension %s from source artifact %q: %w",
+						name, extensionSrc, err)
+				}
+
+				extensions.ResolveVersionsWithParent(manifest, composerManifest)
 				manifest.Remote = true // Mark the manifest as remote since it is from a downloaded artifact
-				// Composer source artifacts contains manifests without version information (just the parent reference).
-				// We need to set the versions here.
-				manifest.Version = artifact.Manifest.Version
-				manifest.ComposerVersion = artifact.Manifest.ComposerVersion
 
 				if build {
 					fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)

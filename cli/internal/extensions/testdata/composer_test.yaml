@@ -1,0 +1,21 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: composer
+version: 1.0.0
+composerVersion: 1.0.0
+minEnvoyVersion: 1.38.0
+categories:
+  - Misc
+author: Tetrate
+description: Composer parent test extension
+longDescription: |
+  This is a longer description of the test extension.
+type: composer
+tags:
+  - test
+license: Apache-2.0
+examples: []
+extensionSet: true
