@@ -1,0 +1,48 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: CLI CVE Scan
+
+on:
+  # Run nightly scans to upload any new CVEs to the security advisories
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch: {}
+
+env:
+  GOPROXY: https://proxy.golang.org
+  TAG: scan
+  OCI_REGISTRY: local
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-qemu-action@v4
+        with:
+          platforms: amd64,arm64
+
+      - run: make -C cli build_image
+
+      - uses: anchore/scan-action@v7
+        id: scan
+        with:
+          image: local/boe:scan
+          # Do not fail the build if vulnerabilities are found, as we want to upload the report to the security advisories regardless.
+          fail-build: false 
+      - run: cat ${{ steps.scan.outputs.sarif }}
+        if: always()  # Always print the report to the stdout.
+      # Do not upload the security advisories on every run.
+      # Upload the security advisories only for the nightly scans.
+      - uses: github/codeql-action/upload-sarif@v3
+        if: ${{ github.event_name == 'schedule' }}
+        with:
+          sarif_file: ${{ steps.scan.outputs.sarif }}
