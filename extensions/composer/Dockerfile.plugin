@@ -24,5 +24,6 @@ RUN CGO_ENABLED=1 go build -trimpath -buildmode=plugin ${BUILD_TAG} -o plugin.so
 
 FROM scratch AS final
 
+ARG EXTENSION_PATH
 COPY --from=builder /workspace/plugin.so /
 COPY --from=builder /workspace/${EXTENSION_PATH}/manifest.yaml /
