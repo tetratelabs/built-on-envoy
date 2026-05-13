@@ -11,10 +11,12 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal"
@@ -27,7 +29,7 @@ import (
 type GenConfig struct {
 	Minimal    bool     `help:"Generate configuration with only extension-generated resources (HTTP filters and clusters)."`
 	ListenPort uint32   `help:"Port for Envoy listener to accept incoming traffic." default:"10000"`
-	AdminPort  uint32   `help:"Port for Envoy admin interface." default:"9901"`
+	AdminPort  uint32   `name:"admin-port" help:"Port for Envoy admin interface." default:"9901" env:"BOE_ADMIN_PORT"`
 	Extensions []string `name:"extension" help:"Extensions to enable (in the format: \"name\" or \"name:version\")." sep:","`
 	Local      []string `name:"local" help:"Path to a directory containing a local Extension to enable." type:"existingdir" sep:","`
 	Dev        bool     `help:"Whether to allow downloading dev versions of extensions (with -dev suffix). By default, only stable versions are allowed." default:"false"`
@@ -36,6 +38,7 @@ type GenConfig struct {
 	// be split into separate invalid fragments, causing protobuf unmarshal failures.
 	Configs                 []string     `name:"config" sep:"none" help:"Optional JSON config string for extensions. Applied in order to combined --extension and --local flags."`
 	NativeHTTPFiltersBefore []string     `name:"native-http-filter-before" sep:"none" help:"Optional YAML/JSON native HTTP filter list (or @filepath) per extension position. Overrides manifest nativeHttpFilters.before."`
+	NativeHTTPFiltersAfter  []string     `name:"native-http-filter-after" sep:"none" help:"Optional YAML/JSON native HTTP filter list (or @filepath) per extension position. Overrides manifest nativeHttpFilters.after."`
 	Clusters                ClusterFlags `embed:""`
 	OCI                     OCIFlags     `embed:""`
 	TestUpstreamHost        string       `name:"test-upstream-host" help:"Hostname for the test upstream cluster. Mutually exclusive with --test-upstream-cluster. Defaults to \"httpbin.org\"."`
@@ -133,14 +136,17 @@ func (g *GenConfig) Run(ctx context.Context, dirs *xdg.Directories, logger *slog
 		renderer = envoy.FullConfigRenderer
 	}
 
+	adminAddress := net.JoinHostPort("127.0.0.1", strconv.FormatUint(uint64(g.AdminPort), 10))
+
 	config, err := envoy.RenderConfig(&envoy.ConfigGenerationParams{
 		Logger:                  logger,
-		AdminPort:               g.AdminPort,
+		AdminAddress:            adminAddress,
 		ListenerPort:            g.ListenPort,
 		Dirs:                    dirs,
 		Extensions:              resolvedExtensions,
 		Configs:                 g.Configs,
 		NativeHTTPFiltersBefore: g.NativeHTTPFiltersBefore,
+		NativeHTTPFiltersAfter:  g.NativeHTTPFiltersAfter,
 		Clusters:                g.Clusters.Secure,
 		ClustersInsecure:        g.Clusters.Insecure,
 		ClustersJSON:            g.Clusters.JSONSpec,
@@ -240,6 +246,7 @@ func copyFile(srcPath, dstPath string, logger *slog.Logger) error {
 
 // printExportSummary prints information about how to use the exported configuration.
 func printExportSummary(stdout io.Writer, outputPath string, files []string, listenPort, adminPort uint32, envoyVersion string) {
+	adminPortStr := strconv.FormatUint(uint64(adminPort), 10)
 	if envoyVersion == "" {
 		envoyVersion = "dev"
 	} else if !strings.HasPrefix(envoyVersion, "v") {
@@ -260,11 +267,11 @@ func printExportSummary(stdout io.Writer, outputPath string, files []string, lis
 %[1]s→ Run locally in Docker:%[2]s (not supported in Darwin hosts yet)
     docker run --rm \
         -p %[4]d:%[4]d \
-        -p %[5]d:%[5]d \
+        -p %[5]s:%[5]s \
         -e ENVOY_DYNAMIC_MODULES_SEARCH_PATH=/boe \
         -e GODEBUG=cgocheck=0 \
         -v /tmp/boe-export:/boe \
         -w /boe \
         envoyproxy/envoy:%[6]s -c /boe/envoy.yaml --log-level info --component-log-level dynamic_modules:debug
-`, internal.ANSIBold, internal.ANSIReset, outputPath, listenPort, adminPort, envoyVersion)
+`, internal.ANSIBold, internal.ANSIReset, outputPath, listenPort, adminPortStr, envoyVersion)
 }

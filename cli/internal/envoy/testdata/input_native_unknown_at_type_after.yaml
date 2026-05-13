@@ -3,6 +3,8 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
+# Manifest-load passes (schema OK, name not reserved, no duplicates),
+# but config-gen fails because the @type is not registered.
 name: test-extension
 version: 1.0.0
 categories:
@@ -10,9 +12,11 @@ categories:
 author: Test Author
 description: A test extension
 longDescription: |
-  Valid: a Go extension declaring a native header-to-metadata filter to run before itself.
-type: go
-composerVersion: 1.2.3
+  Unknown @type - must fail at config generation, not manifest load.
+type: lua
+lua:
+  inline: |
+    function envoy_on_request(request_handle) end
 tags:
   - test
 license: Apache-2.0
@@ -22,13 +26,7 @@ examples:
     code: |
       boe run --extension test-extension
 nativeHttpFilters:
-  before:
-    - name: envoy.filters.http.header_to_metadata
+  after:
+    - name: envoy.filters.http.example_unknown
       typed_config:
-        "@type": type.googleapis.com/envoy.extensions.filters.http.header_to_metadata.v3.Config
-        request_rules:
-          - header: x-tenant-id
-            on_header_present:
-              metadata_namespace: boe.e2e
-              key: tenant
-            remove: true
+        "@type": type.googleapis.com/envoy.extensions.filters.http.example_unknown.v3.Unknown

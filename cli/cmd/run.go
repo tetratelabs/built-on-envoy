@@ -12,10 +12,12 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal"
@@ -34,7 +36,7 @@ type Run struct {
 	LogLevel     string   `help:"Envoy component log level." default:"all:error" env:"ENVOY_LOG_LEVEL"`
 	RunID        string   `name:"run-id" env:"BOE_RUN_ID" help:"Run identifier for this invocation. Overrides the default timestamp-based ID."`
 	ListenPort   uint32   `help:"Port for Envoy listener to accept incoming traffic." default:"10000"`
-	AdminPort    uint32   `help:"Port for Envoy admin interface." default:"9901"`
+	AdminPort    uint32   `name:"admin-port" help:"Port for Envoy admin interface." default:"9901" env:"BOE_ADMIN_PORT"`
 	Extensions   []string `name:"extension" help:"Extensions to enable (in the format: \"name\" or \"name:version\")."`
 	Local        []string `name:"local" sep:"none" help:"Path to a directory containing a local Extension to enable." type:"existingdir"`
 	Dev          bool     `help:"Whether to allow downloading dev versions of extensions (with -dev suffix). By default, only stable versions are allowed." default:"false"`
@@ -43,6 +45,7 @@ type Run struct {
 	// be split into separate invalid fragments, causing protobuf unmarshal failures.
 	Configs                 []string     `name:"config" sep:"none" help:"Optional JSON config string for extensions. Applied in order to combined --extension and --local flags."`
 	NativeHTTPFiltersBefore []string     `name:"native-http-filter-before" sep:"none" help:"Optional YAML/JSON native HTTP filter list (or @filepath) per extension position. Overrides manifest nativeHttpFilters.before."`
+	NativeHTTPFiltersAfter  []string     `name:"native-http-filter-after" sep:"none" help:"Optional YAML/JSON native HTTP filter list (or @filepath) per extension position. Overrides manifest nativeHttpFilters.after."`
 	Clusters                ClusterFlags `embed:""`
 	TestUpstreamHost        string       `name:"test-upstream-host" help:"Hostname for the test upstream cluster. Mutually exclusive with --test-upstream-cluster. Defaults to \"httpbin.org\"."`
 	TestUpstreamCluster     string       `name:"test-upstream-cluster" help:"Name of an existing configured cluster to use as the test upstream. The cluster must be configured via --cluster, --cluster-insecure, or --cluster-json. Mutually exclusive with --test-upstream-host."`
@@ -193,10 +196,11 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 		Dirs:                    dirs,
 		RunID:                   r.RunID,
 		ListenPort:              r.ListenPort,
-		AdminPort:               r.AdminPort,
+		AdminAddress:            adminAddressForLocal(r.AdminPort),
 		Extensions:              extensionsToRun,
 		Configs:                 r.Configs,
 		NativeHTTPFiltersBefore: r.NativeHTTPFiltersBefore,
+		NativeHTTPFiltersAfter:  r.NativeHTTPFiltersAfter,
 		Clusters:                r.Clusters.Secure,
 		ClustersInsecure:        r.Clusters.Insecure,
 		ClustersJSON:            r.Clusters.JSONSpec,
@@ -206,6 +210,16 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 	}
 
 	return runner.Run(ctx)
+}
+
+// adminAddressForLocal returns the admin address for a locally-running Envoy.
+// Inside a Docker container, the BOE_ADMIN_ADDRESS env var is set by RunnerDocker
+// to bind on all interfaces; otherwise defaults to loopback.
+func adminAddressForLocal(port uint32) string {
+	if addr := os.Getenv("BOE_ADMIN_ADDRESS"); addr != "" {
+		return addr
+	}
+	return net.JoinHostPort("127.0.0.1", strconv.FormatUint(uint64(port), 10))
 }
 
 // downloadExtensions downloads the specified extensions using the provided downloader.

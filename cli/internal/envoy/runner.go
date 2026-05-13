@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -51,8 +52,8 @@ type RunnerFuncE struct {
 	RunID string
 	// ListenPort is the port for Envoy listener to accept incoming traffic.
 	ListenPort uint32
-	// AdminPort is the port for Envoy admin interface.
-	AdminPort uint32
+	// AdminAddress is the host:port for Envoy admin interface (e.g. "127.0.0.1:9901").
+	AdminAddress string
 	// Extensions specifies the extensions to enable.
 	Extensions []*extensions.Manifest
 	// Configs specifies optional JSON config strings for each extension (by index).
@@ -61,6 +62,10 @@ type RunnerFuncE struct {
 	// for each extension (by index). When non-empty for a given extension position, it
 	// replaces the manifest's nativeHttpFilters.before.
 	NativeHTTPFiltersBefore []string
+	// NativeHTTPFiltersAfter specifies optional YAML/JSON native HTTP filter overrides
+	// for each extension (by index). When non-empty for a given extension position, it
+	// replaces the manifest's nativeHttpFilters.after.
+	NativeHTTPFiltersAfter []string
 	// Clusters specifies additional Envoy cluster (with TLS) from short names to include in the configuration.
 	Clusters []string
 	// ClustersInsecure specifies additional Envoy cluster (without TLS) from short names to include in the configuration.
@@ -81,12 +86,13 @@ type RunnerFuncE struct {
 func (r *RunnerFuncE) Run(ctx context.Context) error {
 	params := &ConfigGenerationParams{
 		Logger:                  r.Logger,
-		AdminPort:               r.AdminPort,
+		AdminAddress:            r.AdminAddress,
 		ListenerPort:            r.ListenPort,
 		Dirs:                    r.Dirs,
 		Extensions:              r.Extensions,
 		Configs:                 r.Configs,
 		NativeHTTPFiltersBefore: r.NativeHTTPFiltersBefore,
+		NativeHTTPFiltersAfter:  r.NativeHTTPFiltersAfter,
 		Clusters:                r.Clusters,
 		ClustersInsecure:        r.ClustersInsecure,
 		ClustersJSON:            r.ClustersJSON,
@@ -174,8 +180,11 @@ Press Ctrl+C to stop
 		opts = append(opts, api.EnvoyPath(r.EnvoyPath))
 	}
 
-	// Run Envoy with embedded config
-	args := []string{"--config-yaml", config, "--log-level", r.DefaultLogLevel}
+	args := []string{
+		"--config-yaml", config,
+		"--log-level", r.DefaultLogLevel,
+		"--use-dynamic-base-id", // allows parallel Envoy instances
+	}
 	if r.ComponentLogLevel != "" {
 		args = append(args, "--component-log-level", r.ComponentLogLevel)
 	}
@@ -407,13 +416,16 @@ func (r *RunnerDocker) Run(ctx context.Context) error {
 }
 
 func (r *RunnerDocker) dockerRunArgs(image string, localExtArgs []string) []string {
+	adminPort := strconv.FormatUint(uint64(r.AdminPort), 10)
+	containerAdminAddress := net.JoinHostPort("0.0.0.0", adminPort)
 	args := []string{
 		"run", "--rm",
 		"--pull", r.Pull,
 		"--platform", "linux/" + r.Arch,
 		"-p", fmt.Sprintf("%d:%d", r.ListenPort, r.ListenPort),
-		"-p", fmt.Sprintf("%d:%d", r.AdminPort, r.AdminPort),
+		"-p", adminPort + ":" + adminPort,
 		"-v", ContainerCacheVolumeName + ":" + containerVolumeDir,
+		"-e", "BOE_ADMIN_ADDRESS=" + containerAdminAddress,
 		"-e", "BOE_CONFIG_HOME=" + containerConfigHome,
 		"-e", "BOE_DATA_HOME=" + containerDataHome,
 		"-e", "BOE_STATE_HOME=" + containerStateHome,
@@ -447,7 +459,8 @@ func passthroughEnvVars() []string {
 	// so that users can set registry credentials or other configs via env vars instead of CLI flags.
 	// We don't passthrough the XDG variables as we'll mount the host directories on a fixed location in the container.
 	passthroughEnv := slices.DeleteFunc(os.Environ(), func(arg string) bool {
-		return strings.HasPrefix(arg, "BOE_CONFIG_HOME=") ||
+		return strings.HasPrefix(arg, "BOE_ADMIN_ADDRESS=") ||
+			strings.HasPrefix(arg, "BOE_CONFIG_HOME=") ||
 			strings.HasPrefix(arg, "BOE_DATA_HOME=") ||
 			strings.HasPrefix(arg, "BOE_STATE_HOME=") ||
 			strings.HasPrefix(arg, "BOE_RUNTIME_DIR=") ||

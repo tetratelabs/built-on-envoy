@@ -68,12 +68,12 @@ func TestRunnerFuncE_RunID(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpdir := t.TempDir()
 			r := &RunnerFuncE{
-				Logger:     internaltesting.NewTLogger(t),
-				Dirs:       &xdg.Directories{DataHome: tmpdir, RuntimeDir: tmpdir, StateHome: tmpdir},
-				Extensions: []*extensions.Manifest{ext},
-				ListenPort: 10000,
-				AdminPort:  9901,
-				RunID:      tt.runID,
+				Logger:       internaltesting.NewTLogger(t),
+				Dirs:         &xdg.Directories{DataHome: tmpdir, RuntimeDir: tmpdir, StateHome: tmpdir},
+				Extensions:   []*extensions.Manifest{ext},
+				ListenPort:   10000,
+				AdminAddress: "127.0.0.1:9901",
+				RunID:        tt.runID,
 			}
 			require.ErrorIs(t, r.Run(ctx), context.Canceled)
 		})
@@ -205,6 +205,7 @@ func TestDockerRunArgs_RunID(t *testing.T) {
 				"-p", "10000:10000",
 				"-p", "9901:9901",
 				"-v", "boe-cache:" + containerVolumeDir,
+				"-e", "BOE_ADMIN_ADDRESS=0.0.0.0:9901",
 				"-e", "BOE_CONFIG_HOME=" + containerConfigHome,
 				"-e", "BOE_DATA_HOME=" + containerDataHome,
 				"-e", "BOE_STATE_HOME=" + containerStateHome,
@@ -223,6 +224,7 @@ func TestDockerRunArgs_RunID(t *testing.T) {
 				"-p", "10000:10000",
 				"-p", "9901:9901",
 				"-v", "boe-cache:" + containerVolumeDir,
+				"-e", "BOE_ADMIN_ADDRESS=0.0.0.0:9901",
 				"-e", "BOE_CONFIG_HOME=" + containerConfigHome,
 				"-e", "BOE_DATA_HOME=" + containerDataHome,
 				"-e", "BOE_STATE_HOME=" + containerStateHome,
@@ -273,14 +275,15 @@ func TestPassthroughEnvVars(t *testing.T) {
 		{
 			name: "mix of passthrough and excluded vars",
 			envVars: map[string]string{
-				"BOE_REGISTRY":    "ghcr.io/test",
-				"BOE_CONFIG_HOME": "/custom/config",
-				"BOE_DATA_HOME":   "/custom/data",
-				"BOE_STATE_HOME":  "/custom/state",
-				"BOE_RUNTIME_DIR": "/custom/runtime",
-				"BOE_RUN_ID":      "host-run-id",
-				"BOE_TOKEN":       "secret",
-				"HOME":            "/home/user",
+				"BOE_REGISTRY":      "ghcr.io/test",
+				"BOE_ADMIN_ADDRESS": "127.0.0.1:9901",
+				"BOE_CONFIG_HOME":   "/custom/config",
+				"BOE_DATA_HOME":     "/custom/data",
+				"BOE_STATE_HOME":    "/custom/state",
+				"BOE_RUNTIME_DIR":   "/custom/runtime",
+				"BOE_RUN_ID":        "host-run-id",
+				"BOE_TOKEN":         "secret",
+				"HOME":              "/home/user",
 			},
 			expected: []string{"-e", "BOE_REGISTRY=ghcr.io/test", "-e", "BOE_TOKEN=secret"},
 		},

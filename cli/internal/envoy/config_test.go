@@ -40,6 +40,9 @@ var outputConfigOnlyFiltersYAML []byte
 //go:embed testdata/output_config_with_test_upstream_cluster.yaml
 var outputConfigWithTestUpstreamClusterYAML []byte
 
+//go:embed testdata/output_config_admin_all_interfaces.yaml
+var outputConfigAdminAllInterfacesYAML []byte
+
 func TestRenderConfig(t *testing.T) {
 	manifest, err := extensions.LoadLocalManifest("testdata/input_lua_inline.yaml")
 	require.NoError(t, err)
@@ -55,17 +58,27 @@ func TestRenderConfig(t *testing.T) {
 			name: "default",
 			params: &ConfigGenerationParams{
 				Logger:       internaltesting.NewTLogger(t),
-				AdminPort:    9901,
+				AdminAddress: "127.0.0.1:9901",
 				ListenerPort: 10000,
 			},
 			renderer: FullConfigRenderer,
 			expect:   string(outputConfigYAML),
 		},
 		{
+			name: "admin on all interfaces",
+			params: &ConfigGenerationParams{
+				Logger:       internaltesting.NewTLogger(t),
+				AdminAddress: "0.0.0.0:9901",
+				ListenerPort: 10000,
+			},
+			renderer: FullConfigRenderer,
+			expect:   string(outputConfigAdminAllInterfacesYAML),
+		},
+		{
 			name: "with extensions",
 			params: &ConfigGenerationParams{
 				Logger:       internaltesting.NewTLogger(t),
-				AdminPort:    9901,
+				AdminAddress: "127.0.0.1:9901",
 				ListenerPort: 10000,
 				Extensions:   []*extensions.Manifest{manifest},
 			},
@@ -76,7 +89,7 @@ func TestRenderConfig(t *testing.T) {
 			name: "minimal with extensions",
 			params: &ConfigGenerationParams{
 				Logger:       internaltesting.NewTLogger(t),
-				AdminPort:    9901,
+				AdminAddress: "127.0.0.1:9901",
 				ListenerPort: 10000,
 				Extensions:   []*extensions.Manifest{manifest},
 			},
@@ -87,7 +100,7 @@ func TestRenderConfig(t *testing.T) {
 			name: "with test upstream cluster",
 			params: &ConfigGenerationParams{
 				Logger:              internaltesting.NewTLogger(t),
-				AdminPort:           9901,
+				AdminAddress:        "127.0.0.1:9901",
 				ListenerPort:        10000,
 				Clusters:            []string{"example.com:443"},
 				TestUpstreamCluster: "example.com:443",
@@ -99,7 +112,7 @@ func TestRenderConfig(t *testing.T) {
 			name: "test upstream cluster not found",
 			params: &ConfigGenerationParams{
 				Logger:              internaltesting.NewTLogger(t),
-				AdminPort:           9901,
+				AdminAddress:        "127.0.0.1:9901",
 				ListenerPort:        10000,
 				TestUpstreamCluster: "nonexistent-cluster",
 			},
@@ -268,11 +281,19 @@ func TestParseNativeHTTPFiltersBefore(t *testing.T) {
 			manifest: validManifest,
 			expect: `[
   {
-    "name": "envoy.filters.http.mcp",
+    "name": "envoy.filters.http.header_to_metadata",
     "typed_config": {
-      "@type": "type.googleapis.com/envoy.extensions.filters.http.mcp.v3.Mcp",
-      "traffic_mode": "REJECT_NO_MCP",
-      "request_storage_mode": "DYNAMIC_METADATA_AND_FILTER_STATE"
+      "@type": "type.googleapis.com/envoy.extensions.filters.http.header_to_metadata.v3.Config",
+      "request_rules": [
+        {
+          "header": "x-tenant-id",
+          "on_header_present": {
+            "metadata_namespace": "boe.e2e",
+            "key": "tenant"
+          },
+          "remove": true
+        }
+      ]
     }
   }
 		]`,
@@ -358,12 +379,12 @@ func TestParseNativeHTTPFiltersBeforeErrors(t *testing.T) {
 		{
 			name:        "dynamic_modules terminal snake_case",
 			manifest:    terminalSnakeManifest,
-			expectedErr: "before[0]: envoy.filters.http.dynamic_modules with terminal_filter=true is not supported in nativeHttpFilters.before",
+			expectedErr: "before[0]: envoy.filters.http.dynamic_modules with terminal_filter=true is not supported in nativeHttpFilters",
 		},
 		{
 			name:        "dynamic_modules terminal camelCase",
 			manifest:    terminalCamelManifest,
-			expectedErr: "before[0]: envoy.filters.http.dynamic_modules with terminal_filter=true is not supported in nativeHttpFilters.before",
+			expectedErr: "before[0]: envoy.filters.http.dynamic_modules with terminal_filter=true is not supported in nativeHttpFilters",
 		},
 	}
 
@@ -409,7 +430,7 @@ func TestRenderConfigGroupsNativeBeforePerExtension(t *testing.T) {
 
 	result, err := RenderConfig(&ConfigGenerationParams{
 		Logger:       internaltesting.NewTLogger(t),
-		AdminPort:    9901,
+		AdminAddress: "127.0.0.1:9901",
 		ListenerPort: 10000,
 		Extensions:   []*extensions.Manifest{first, second},
 	}, MinimalConfigRenderer)
@@ -516,7 +537,7 @@ func TestParseNativeHTTPFiltersBeforeOverride(t *testing.T) {
 		{
 			name:        "rejects terminal dynamic module",
 			input:       rejectTerminalDynamicModuleInput,
-			expectedErr: "entry[0]: envoy.filters.http.dynamic_modules with terminal_filter=true is not supported in nativeHttpFilters.before",
+			expectedErr: "entry[0]: envoy.filters.http.dynamic_modules with terminal_filter=true is not supported in nativeHttpFilters",
 		},
 		{
 			name:        "invalid YAML syntax",
@@ -613,7 +634,7 @@ func TestRejectTerminalDynamicModule(t *testing.T) {
 				Name:       "envoy.filters.http.dynamic_modules",
 				ConfigType: &hcmv3.HttpFilter_TypedConfig{TypedConfig: terminalAny},
 			},
-			expectedErr: "envoy.filters.http.dynamic_modules with terminal_filter=true is not supported in nativeHttpFilters.before",
+			expectedErr: "envoy.filters.http.dynamic_modules with terminal_filter=true is not supported in nativeHttpFilters",
 		},
 		{
 			name: "dynamic_modules with wrong typed config errors",
@@ -650,7 +671,7 @@ func TestRenderConfigWithNativeHTTPFiltersBeforeErrors(t *testing.T) {
 
 		_, err = RenderConfig(&ConfigGenerationParams{
 			Logger:                  internaltesting.NewTLogger(t),
-			AdminPort:               9901,
+			AdminAddress:            "127.0.0.1:9901",
 			ListenerPort:            10000,
 			Extensions:              []*extensions.Manifest{ext},
 			NativeHTTPFiltersBefore: []string{override},
@@ -672,7 +693,7 @@ func TestRenderConfigWithNativeHTTPFiltersBeforeErrors(t *testing.T) {
 
 		_, err = RenderConfig(&ConfigGenerationParams{
 			Logger:       internaltesting.NewTLogger(t),
-			AdminPort:    9901,
+			AdminAddress: "127.0.0.1:9901",
 			ListenerPort: 10000,
 			Extensions:   []*extensions.Manifest{ext},
 		}, MinimalConfigRenderer)
@@ -774,10 +795,495 @@ func TestRenderConfigWithNativeHTTPFiltersBeforeOverride(t *testing.T) {
 
 			result, err := RenderConfig(&ConfigGenerationParams{
 				Logger:                  internaltesting.NewTLogger(t),
-				AdminPort:               9901,
+				AdminAddress:            "127.0.0.1:9901",
 				ListenerPort:            10000,
 				Extensions:              []*extensions.Manifest{ext},
 				NativeHTTPFiltersBefore: tt.nativeHTTPFiltersBefore,
+			}, MinimalConfigRenderer)
+			require.NoError(t, err)
+			require.YAMLEq(t, tt.expect, result)
+		})
+	}
+}
+
+func TestParseNativeHTTPFiltersAfter(t *testing.T) {
+	validManifest, err := extensions.LoadLocalManifest("../extensions/testdata/native_http_filters_valid_after.yaml")
+	require.NoError(t, err)
+
+	orderedManifest := &extensions.Manifest{
+		Name: "ordered",
+		Type: extensions.TypeLua,
+		NativeHTTPFilters: &extensions.NativeHTTPFilters{
+			After: []map[string]any{
+				{
+					"name": "envoy.filters.http.mcp",
+					"typed_config": map[string]any{
+						"@type":        "type.googleapis.com/envoy.extensions.filters.http.mcp.v3.Mcp",
+						"traffic_mode": "PASS_THROUGH",
+					},
+				},
+				{
+					"name": "envoy.filters.http.dynamic_modules",
+					"typed_config": map[string]any{
+						"@type":       "type.googleapis.com/envoy.extensions.filters.http.dynamic_modules.v3.DynamicModuleFilter",
+						"filter_name": "n",
+						"dynamic_module_config": map[string]any{
+							"name": "n",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name     string
+		manifest *extensions.Manifest
+		expect   string
+	}{
+		{
+			name:     "valid",
+			manifest: validManifest,
+			expect: `[
+  {
+    "name": "envoy.filters.http.header_to_metadata",
+    "typed_config": {
+      "@type": "type.googleapis.com/envoy.extensions.filters.http.header_to_metadata.v3.Config",
+      "request_rules": [
+        {
+          "header": "x-boe-tenant-metadata",
+          "on_header_present": {
+            "metadata_namespace": "boe.e2e",
+            "key": "tenant"
+          },
+          "remove": true
+        }
+      ]
+    }
+  }
+		]`,
+		},
+		{
+			name:     "preserves order",
+			manifest: orderedManifest,
+			expect: `[
+  {
+    "name": "envoy.filters.http.mcp",
+    "typed_config": {
+      "@type": "type.googleapis.com/envoy.extensions.filters.http.mcp.v3.Mcp"
+    }
+  },
+  {
+    "name": "envoy.filters.http.dynamic_modules",
+    "typed_config": {
+      "@type": "type.googleapis.com/envoy.extensions.filters.http.dynamic_modules.v3.DynamicModuleFilter",
+      "filter_name": "n",
+      "dynamic_module_config": {
+        "name": "n"
+      }
+    }
+  }
+]`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := parseNativeHTTPFiltersAfter(tt.manifest)
+			require.NoError(t, err)
+			requireProtoJSON(t, tt.expect, result)
+		})
+	}
+}
+
+func TestParseNativeHTTPFiltersAfterErrors(t *testing.T) {
+	unknownAtTypeManifest, err := extensions.LoadLocalManifest("testdata/input_native_unknown_at_type_after.yaml")
+	require.NoError(t, err)
+
+	malformedTypedConfigManifest, err := extensions.LoadLocalManifest("testdata/input_native_malformed_typed_config_after.yaml")
+	require.NoError(t, err)
+
+	terminalSnakeManifest, err := extensions.LoadLocalManifest("testdata/input_native_dynmod_terminal_snake_after.yaml")
+	require.NoError(t, err)
+
+	terminalCamelManifest, err := extensions.LoadLocalManifest("testdata/input_native_dynmod_terminal_camel_after.yaml")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name        string
+		manifest    *extensions.Manifest
+		expectedErr string
+	}{
+		{
+			name: "marshal error",
+			manifest: &extensions.Manifest{
+				Name: "marshal-error",
+				Type: extensions.TypeLua,
+				NativeHTTPFilters: &extensions.NativeHTTPFilters{
+					After: []map[string]any{{
+						"name": "envoy.filters.http.mcp",
+						"typed_config": map[string]any{
+							"@type": "type.googleapis.com/envoy.extensions.filters.http.mcp.v3.Mcp",
+							"bad":   make(chan int),
+						},
+					}},
+				},
+			},
+			expectedErr: "after[0]: marshal entry: json: unsupported type: chan int",
+		},
+		{
+			name:        "unknown @type",
+			manifest:    unknownAtTypeManifest,
+			expectedErr: `after[0]: proto: (line 1:70): unable to resolve "type.googleapis.com/envoy.extensions.filters.http.example_unknown.v3.Unknown": "not found"`,
+		},
+		{
+			name:        "malformed typed_config",
+			manifest:    malformedTypedConfigManifest,
+			expectedErr: `after[0]: proto: (line 1:136): invalid value for enum field trafficMode: "NOT_A_VALID_ENUM_VALUE"`,
+		},
+		{
+			name:        "dynamic_modules terminal snake_case",
+			manifest:    terminalSnakeManifest,
+			expectedErr: "after[0]: envoy.filters.http.dynamic_modules with terminal_filter=true is not supported in nativeHttpFilters",
+		},
+		{
+			name:        "dynamic_modules terminal camelCase",
+			manifest:    terminalCamelManifest,
+			expectedErr: "after[0]: envoy.filters.http.dynamic_modules with terminal_filter=true is not supported in nativeHttpFilters",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseNativeHTTPFiltersAfter(tt.manifest)
+			requireEqualError(t, err, tt.expectedErr)
+		})
+	}
+}
+
+// TestRenderConfigGroupsNativeAfterPerExtension drives the composition end-to-end
+// with two extensions, both declaring their own after[]. The HCM chain must
+// emit each extension's after[] immediately after that extension's generated
+// filter, and the same native filter must appear twice (once per declaring
+// extension) — no cross-extension de-duplication.
+func TestRenderConfigGroupsNativeAfterPerExtension(t *testing.T) {
+	first, err := extensions.LoadLocalManifest("testdata/input_lua_inline.yaml")
+	require.NoError(t, err)
+	first.Name = "ext-one"
+	first.NativeHTTPFilters = &extensions.NativeHTTPFilters{
+		After: []map[string]any{{
+			"name": "envoy.filters.http.mcp_json_rest_bridge",
+			"typed_config": map[string]any{
+				"@type": "type.googleapis.com/envoy.extensions.filters.http.mcp_json_rest_bridge.v3.McpJsonRestBridge",
+			},
+		}},
+	}
+
+	second, err := extensions.LoadLocalManifest("testdata/input_lua_inline.yaml")
+	require.NoError(t, err)
+	second.Name = "ext-two"
+	second.NativeHTTPFilters = &extensions.NativeHTTPFilters{
+		After: []map[string]any{{
+			"name": "envoy.filters.http.mcp_json_rest_bridge",
+			"typed_config": map[string]any{
+				"@type": "type.googleapis.com/envoy.extensions.filters.http.mcp_json_rest_bridge.v3.McpJsonRestBridge",
+			},
+		}},
+	}
+
+	result, err := RenderConfig(&ConfigGenerationParams{
+		Logger:       internaltesting.NewTLogger(t),
+		AdminAddress: "127.0.0.1:9901",
+		ListenerPort: 10000,
+		Extensions:   []*extensions.Manifest{first, second},
+	}, MinimalConfigRenderer)
+	require.NoError(t, err)
+	require.YAMLEq(t, `http_filters:
+- name: ext-one
+  typed_config:
+    '@type': type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+    default_source_code:
+      inline_string: |
+        function envoy_on_request(request_handle)
+          request_handle:logInfo("Hello, World!")
+        end
+- name: envoy.filters.http.mcp_json_rest_bridge
+  typed_config:
+    '@type': type.googleapis.com/envoy.extensions.filters.http.mcp_json_rest_bridge.v3.McpJsonRestBridge
+- name: ext-two
+  typed_config:
+    '@type': type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+    default_source_code:
+      inline_string: |
+        function envoy_on_request(request_handle)
+          request_handle:logInfo("Hello, World!")
+        end
+- name: envoy.filters.http.mcp_json_rest_bridge
+  typed_config:
+    '@type': type.googleapis.com/envoy.extensions.filters.http.mcp_json_rest_bridge.v3.McpJsonRestBridge
+`, result)
+}
+
+func TestParseNativeHTTPFiltersAfterOverride(t *testing.T) {
+	bridgeJSON := `[
+  {
+    "name": "envoy.filters.http.mcp_json_rest_bridge",
+    "typed_config": {
+      "@type": "type.googleapis.com/envoy.extensions.filters.http.mcp_json_rest_bridge.v3.McpJsonRestBridge"
+    }
+  }
+]`
+	validYAML := `- name: envoy.filters.http.mcp_json_rest_bridge
+  typed_config:
+    "@type": type.googleapis.com/envoy.extensions.filters.http.mcp_json_rest_bridge.v3.McpJsonRestBridge
+`
+	invalidYAML := "not a list"
+	rejectTerminalDynamicModuleInput := `[
+  {
+    "name": "envoy.filters.http.dynamic_modules",
+    "typed_config": {
+      "@type": "type.googleapis.com/envoy.extensions.filters.http.dynamic_modules.v3.DynamicModuleFilter",
+      "filter_name": "n",
+      "terminal_filter": true,
+      "dynamic_module_config": { "name": "n" }
+    }
+  }
+]`
+	invalidYAMLSyntax := "- name: ["
+	unknownTypeInput := `[
+  {
+    "name": "envoy.filters.http.example_unknown",
+    "typed_config": {
+      "@type": "type.googleapis.com/envoy.extensions.filters.http.example_unknown.v3.Unknown"
+    }
+  }
+]`
+
+	tests := []struct {
+		name        string
+		input       string
+		expect      string
+		expectedErr string
+	}{
+		{
+			name:  "valid JSON list",
+			input: bridgeJSON,
+			expect: `[
+  {
+    "name": "envoy.filters.http.mcp_json_rest_bridge",
+    "typed_config": {
+      "@type": "type.googleapis.com/envoy.extensions.filters.http.mcp_json_rest_bridge.v3.McpJsonRestBridge"
+    }
+  }
+]`,
+		},
+		{
+			name:  "valid YAML list",
+			input: validYAML,
+			expect: `[
+  {
+    "name": "envoy.filters.http.mcp_json_rest_bridge",
+    "typed_config": {
+      "@type": "type.googleapis.com/envoy.extensions.filters.http.mcp_json_rest_bridge.v3.McpJsonRestBridge"
+    }
+  }
+]`,
+		},
+		{
+			name:        "invalid YAML",
+			input:       invalidYAML,
+			expectedErr: "unmarshal filter list: json: cannot unmarshal string into Go value of type []json.RawMessage",
+		},
+		{
+			name:        "rejects terminal dynamic module",
+			input:       rejectTerminalDynamicModuleInput,
+			expectedErr: "entry[0]: envoy.filters.http.dynamic_modules with terminal_filter=true is not supported in nativeHttpFilters",
+		},
+		{
+			name:        "invalid YAML syntax",
+			input:       invalidYAMLSyntax,
+			expectedErr: "YAML to JSON: yaml: line 1: did not find expected node content",
+		},
+		{
+			name:        "unknown type in override entry",
+			input:       unknownTypeInput,
+			expectedErr: `entry[0]: proto: (line 1:70): unable to resolve "type.googleapis.com/envoy.extensions.filters.http.example_unknown.v3.Unknown": "not found"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := parseNativeHTTPFiltersAfterOverride(tt.input)
+			if tt.expectedErr != "" {
+				requireEqualError(t, err, tt.expectedErr)
+			} else {
+				require.NoError(t, err)
+				requireProtoJSON(t, tt.expect, result)
+			}
+		})
+	}
+
+	t.Run("@filepath", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "filters.yaml")
+		require.NoError(t, os.WriteFile(path, []byte(bridgeJSON), 0o600))
+
+		result, err := parseNativeHTTPFiltersAfterOverride("@" + path)
+		require.NoError(t, err)
+		requireProtoJSON(t, `[
+  {
+    "name": "envoy.filters.http.mcp_json_rest_bridge",
+    "typed_config": {
+      "@type": "type.googleapis.com/envoy.extensions.filters.http.mcp_json_rest_bridge.v3.McpJsonRestBridge"
+    }
+  }
+]`, result)
+	})
+
+	t.Run("@filepath missing", func(t *testing.T) {
+		path := "/definitely/missing/native-filters.yaml"
+		_, err := parseNativeHTTPFiltersAfterOverride("@" + path)
+		requireEqualError(t, err, `read file "/definitely/missing/native-filters.yaml": open /definitely/missing/native-filters.yaml: no such file or directory`)
+	})
+}
+
+func TestRenderConfigWithNativeHTTPFiltersAfterErrors(t *testing.T) {
+	t.Run("override parse error is wrapped", func(t *testing.T) {
+		ext, err := extensions.LoadLocalManifest("testdata/input_lua_inline.yaml")
+		require.NoError(t, err)
+		ext.Name = "override-error"
+		override := "- name: ["
+		_, err = yaml.YAMLToJSON([]byte(override))
+		require.Error(t, err)
+		expectedErr := fmt.Sprintf("failed to generate config resources: failed to parse --native-http-filter-after for extension %q: YAML to JSON: %v",
+			ext.Name, err)
+
+		_, err = RenderConfig(&ConfigGenerationParams{
+			Logger:                 internaltesting.NewTLogger(t),
+			AdminAddress:           "127.0.0.1:9901",
+			ListenerPort:           10000,
+			Extensions:             []*extensions.Manifest{ext},
+			NativeHTTPFiltersAfter: []string{override},
+		}, MinimalConfigRenderer)
+		requireEqualError(t, err, expectedErr)
+	})
+
+	t.Run("manifest parse error is wrapped", func(t *testing.T) {
+		ext, err := extensions.LoadLocalManifest("testdata/input_native_unknown_at_type_after.yaml")
+		require.NoError(t, err)
+		raw, err := json.Marshal(ext.NativeHTTPFilters.After[0])
+		require.NoError(t, err)
+
+		filter := &hcmv3.HttpFilter{}
+		err = protojson.Unmarshal(raw, filter)
+		require.Error(t, err)
+		expectedErr := fmt.Sprintf("failed to generate config resources: failed to parse nativeHttpFilters.after for extension %q: after[0]: %v",
+			ext.Name, err)
+
+		_, err = RenderConfig(&ConfigGenerationParams{
+			Logger:       internaltesting.NewTLogger(t),
+			AdminAddress: "127.0.0.1:9901",
+			ListenerPort: 10000,
+			Extensions:   []*extensions.Manifest{ext},
+		}, MinimalConfigRenderer)
+		requireEqualError(t, err, expectedErr)
+	})
+}
+
+func TestRenderConfigWithNativeHTTPFiltersAfterOverride(t *testing.T) {
+	tests := []struct {
+		name                    string
+		manifestNativeHTTPAfter *extensions.NativeHTTPFilters
+		nativeHTTPFiltersAfter  []string
+		expect                  string
+	}{
+		{
+			name: "override replaces manifest after",
+			manifestNativeHTTPAfter: &extensions.NativeHTTPFilters{
+				After: []map[string]any{{
+					"name": "envoy.filters.http.mcp_json_rest_bridge",
+					"typed_config": map[string]any{
+						"@type": "type.googleapis.com/envoy.extensions.filters.http.mcp_json_rest_bridge.v3.McpJsonRestBridge",
+					},
+				}},
+			},
+			nativeHTTPFiltersAfter: []string{`[
+  {
+    "name": "envoy.filters.http.mcp",
+    "typed_config": {
+      "@type": "type.googleapis.com/envoy.extensions.filters.http.mcp.v3.Mcp",
+      "traffic_mode": "PASS_THROUGH"
+    }
+  }
+]`},
+			expect: `http_filters:
+- name: ext-override-test
+  typed_config:
+    '@type': type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+    default_source_code:
+      inline_string: |
+        function envoy_on_request(request_handle)
+          request_handle:logInfo("Hello, World!")
+        end
+- name: envoy.filters.http.mcp
+  typed_config:
+    '@type': type.googleapis.com/envoy.extensions.filters.http.mcp.v3.Mcp
+`,
+		},
+		{
+			name: "empty override falls back to manifest",
+			manifestNativeHTTPAfter: &extensions.NativeHTTPFilters{
+				After: []map[string]any{{
+					"name": "envoy.filters.http.mcp_json_rest_bridge",
+					"typed_config": map[string]any{
+						"@type": "type.googleapis.com/envoy.extensions.filters.http.mcp_json_rest_bridge.v3.McpJsonRestBridge",
+					},
+				}},
+			},
+			nativeHTTPFiltersAfter: []string{""},
+			expect: `http_filters:
+- name: ext-override-test
+  typed_config:
+    '@type': type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+    default_source_code:
+      inline_string: |
+        function envoy_on_request(request_handle)
+          request_handle:logInfo("Hello, World!")
+        end
+- name: envoy.filters.http.mcp_json_rest_bridge
+  typed_config:
+    '@type': type.googleapis.com/envoy.extensions.filters.http.mcp_json_rest_bridge.v3.McpJsonRestBridge
+`,
+		},
+		{
+			name:                    "no manifest after and no override",
+			manifestNativeHTTPAfter: nil,
+			nativeHTTPFiltersAfter:  nil,
+			expect: `http_filters:
+- name: ext-override-test
+  typed_config:
+    '@type': type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+    default_source_code:
+      inline_string: |
+        function envoy_on_request(request_handle)
+          request_handle:logInfo("Hello, World!")
+        end
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ext, err := extensions.LoadLocalManifest("testdata/input_lua_inline.yaml")
+			require.NoError(t, err)
+			ext.Name = "ext-override-test"
+			ext.NativeHTTPFilters = tt.manifestNativeHTTPAfter
+
+			result, err := RenderConfig(&ConfigGenerationParams{
+				Logger:                 internaltesting.NewTLogger(t),
+				AdminAddress:           "127.0.0.1:9901",
+				ListenerPort:           10000,
+				Extensions:             []*extensions.Manifest{ext},
+				NativeHTTPFiltersAfter: tt.nativeHTTPFiltersAfter,
 			}, MinimalConfigRenderer)
 			require.NoError(t, err)
 			require.YAMLEq(t, tt.expect, result)

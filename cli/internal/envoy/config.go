@@ -39,8 +39,8 @@ import (
 type ConfigGenerationParams struct {
 	// Logger is used for logging during config generation.
 	Logger *slog.Logger
-	// AdminPort is the port for Envoy admin interface.
-	AdminPort uint32
+	// AdminAddress is the host:port for Envoy admin interface (e.g. "127.0.0.1:9901").
+	AdminAddress string
 	// ListenerPort is the port where Envoy listens for incoming traffic.
 	ListenerPort uint32
 	// Dirs provides access to XDG directories for locating extension resources.
@@ -53,6 +53,10 @@ type ConfigGenerationParams struct {
 	// for each extension (by index). When non-empty for a given extension position, it
 	// replaces the manifest's nativeHttpFilters.before.
 	NativeHTTPFiltersBefore []string
+	// NativeHTTPFiltersAfter specifies optional YAML/JSON native HTTP filter overrides
+	// for each extension (by index). When non-empty for a given extension position, it
+	// replaces the manifest's nativeHttpFilters.after.
+	NativeHTTPFiltersAfter []string
 	// Clusters specifies additional Envoy cluster (with TLS) from short names to include in the configuration.
 	Clusters []string
 	// ClustersInsecure specifies additional Envoy cluster (without TLS) from short names to include in the configuration.
@@ -137,7 +141,7 @@ func FullConfigRenderer(params *ConfigGenerationParams, gen *GeneratedConfigReso
 		hostRewrite = testUpstreamHost
 	}
 
-	cfg, err := buildFullConfig(params.AdminPort, params.ListenerPort, clusterName, hostRewrite, newCluster, gen.HTTPFilters, gen.NetworkFilters, gen.ListenerFilters, gen.Clusters)
+	cfg, err := buildFullConfig(params.AdminAddress, params.ListenerPort, clusterName, hostRewrite, newCluster, gen.HTTPFilters, gen.NetworkFilters, gen.ListenerFilters, gen.Clusters)
 	if err != nil {
 		return "", fmt.Errorf("failed to build config: %w", err)
 	}
@@ -223,6 +227,21 @@ func generateConfig(params *ConfigGenerationParams) (GeneratedConfigResources, e
 		}
 		httpFilters = append(httpFilters, nativeBefore...)
 		httpFilters = append(httpFilters, resources.HTTPFilters...)
+
+		var nativeAfter []*hcmv3.HttpFilter
+		if i < len(params.NativeHTTPFiltersAfter) && params.NativeHTTPFiltersAfter[i] != "" {
+			nativeAfter, err = parseNativeHTTPFiltersAfterOverride(params.NativeHTTPFiltersAfter[i])
+			if err != nil {
+				return GeneratedConfigResources{}, fmt.Errorf("failed to parse --native-http-filter-after for extension %q: %w", ext.Name, err)
+			}
+		} else {
+			nativeAfter, err = parseNativeHTTPFiltersAfter(ext)
+			if err != nil {
+				return GeneratedConfigResources{}, fmt.Errorf("failed to parse nativeHttpFilters.after for extension %q: %w", ext.Name, err)
+			}
+		}
+		httpFilters = append(httpFilters, nativeAfter...)
+
 		networkFilters = append(networkFilters, resources.NetworkFilters...)
 		listenerFilters = append(listenerFilters, resources.ListenerFilters...)
 		clusters = append(clusters, resources.Clusters...)
@@ -269,10 +288,10 @@ func parseJSONCluster(spec string) (*clusterv3.Cluster, error) {
 	return &cluster, nil
 }
 
-// parseNativeHTTPFiltersBeforeOverride parses a YAML/JSON string (or @filepath)
+// parseNativeHTTPFiltersOverride parses a YAML/JSON string (or @filepath)
 // into a list of HCM HttpFilter protos. The input is expected to be a YAML/JSON
 // list of objects, each with at least a "name" and "typed_config" field.
-func parseNativeHTTPFiltersBeforeOverride(raw string) ([]*hcmv3.HttpFilter, error) {
+func parseNativeHTTPFiltersOverride(raw string) ([]*hcmv3.HttpFilter, error) {
 	data := raw
 	if strings.HasPrefix(raw, "@") {
 		b, err := os.ReadFile(raw[1:])
@@ -303,35 +322,55 @@ func parseNativeHTTPFiltersBeforeOverride(raw string) ([]*hcmv3.HttpFilter, erro
 	return out, nil
 }
 
-// parseNativeHTTPFiltersBefore converts a manifest's nativeHttpFilters.before
-// entries (already decoded by yaml.v3 into map[string]any) into HCM HttpFilter
-// protos. Each entry is JSON-marshaled then protojson-unmarshaled so the
-// embedded typed_config @type is resolved against the proto type registry.
-//
-// Manifest-load validation has already rejected reserved names and the
-// no-HTTP-anchor cases. This helper additionally rejects a dynamic_modules
-// filter whose typed_config marks it terminal — that requires reading the
-// parsed proto, which is only available here.
-func parseNativeHTTPFiltersBefore(m *extensions.Manifest) ([]*hcmv3.HttpFilter, error) {
-	if m.NativeHTTPFilters == nil || len(m.NativeHTTPFilters.Before) == 0 {
+// parseNativeHTTPFiltersBeforeOverride delegates to parseNativeHTTPFiltersOverride.
+func parseNativeHTTPFiltersBeforeOverride(raw string) ([]*hcmv3.HttpFilter, error) {
+	return parseNativeHTTPFiltersOverride(raw)
+}
+
+// parseNativeHTTPFiltersAfterOverride delegates to parseNativeHTTPFiltersOverride.
+func parseNativeHTTPFiltersAfterOverride(raw string) ([]*hcmv3.HttpFilter, error) {
+	return parseNativeHTTPFiltersOverride(raw)
+}
+
+// parseNativeHTTPFiltersFromManifest converts manifest nativeHttpFilters entries
+// (already decoded by yaml.v3 into map[string]any) into HCM HttpFilter protos.
+// Each entry is JSON-marshaled then protojson-unmarshaled so the embedded
+// typed_config @type is resolved against the proto type registry. The label
+// parameter ("before" or "after") is used in error messages.
+func parseNativeHTTPFiltersFromManifest(entries []map[string]any, label string) ([]*hcmv3.HttpFilter, error) {
+	if len(entries) == 0 {
 		return nil, nil
 	}
-	out := make([]*hcmv3.HttpFilter, 0, len(m.NativeHTTPFilters.Before))
-	for i, entry := range m.NativeHTTPFilters.Before {
+	out := make([]*hcmv3.HttpFilter, 0, len(entries))
+	for i, entry := range entries {
 		raw, err := json.Marshal(entry)
 		if err != nil {
-			return nil, fmt.Errorf("before[%d]: marshal entry: %w", i, err)
+			return nil, fmt.Errorf("%s[%d]: marshal entry: %w", label, i, err)
 		}
 		filter := &hcmv3.HttpFilter{}
 		if err := protojson.Unmarshal(raw, filter); err != nil {
-			return nil, fmt.Errorf("before[%d]: %w", i, err)
+			return nil, fmt.Errorf("%s[%d]: %w", label, i, err)
 		}
 		if err := rejectTerminalDynamicModule(filter); err != nil {
-			return nil, fmt.Errorf("before[%d]: %w", i, err)
+			return nil, fmt.Errorf("%s[%d]: %w", label, i, err)
 		}
 		out = append(out, filter)
 	}
 	return out, nil
+}
+
+func parseNativeHTTPFiltersBefore(m *extensions.Manifest) ([]*hcmv3.HttpFilter, error) {
+	if m.NativeHTTPFilters == nil {
+		return nil, nil
+	}
+	return parseNativeHTTPFiltersFromManifest(m.NativeHTTPFilters.Before, "before")
+}
+
+func parseNativeHTTPFiltersAfter(m *extensions.Manifest) ([]*hcmv3.HttpFilter, error) {
+	if m.NativeHTTPFilters == nil {
+		return nil, nil
+	}
+	return parseNativeHTTPFiltersFromManifest(m.NativeHTTPFilters.After, "after")
 }
 
 // rejectTerminalDynamicModule rejects an envoy.filters.http.dynamic_modules
@@ -350,7 +389,7 @@ func rejectTerminalDynamicModule(f *hcmv3.HttpFilter) error {
 		return fmt.Errorf("unmarshal dynamic_modules typed_config: %w", err)
 	}
 	if dm.GetTerminalFilter() {
-		return fmt.Errorf("envoy.filters.http.dynamic_modules with terminal_filter=true is not supported in nativeHttpFilters.before")
+		return fmt.Errorf("envoy.filters.http.dynamic_modules with terminal_filter=true is not supported in nativeHttpFilters")
 	}
 	return nil
 }
@@ -389,7 +428,16 @@ func parseCluster(shortSpec string, tls bool) (*clusterv3.Cluster, error) {
 // and allows us to use the proto marshalling functions. Otherwise, we would have to create a wrapper
 // proto on our own, or marshal the config manually.
 // TODO(nacx): Is there a wrapper for `admin` and `static_resources` we could use other than Bootstrap?
-func buildFullConfig(adminPort, listenerPort uint32, testUpstreamClusterName, testUpstreamHostRewrite string, newCluster *clusterv3.Cluster, httpFilters []*hcmv3.HttpFilter, networkFilters []*listenerv3.Filter, listenerFilters []*listenerv3.ListenerFilter, clusters []*clusterv3.Cluster) (*bootstrapv3.Bootstrap, error) {
+func buildFullConfig(adminAddress string, listenerPort uint32, testUpstreamClusterName, testUpstreamHostRewrite string, newCluster *clusterv3.Cluster, httpFilters []*hcmv3.HttpFilter, networkFilters []*listenerv3.Filter, listenerFilters []*listenerv3.ListenerFilter, clusters []*clusterv3.Cluster) (*bootstrapv3.Bootstrap, error) {
+	adminHost, adminPortStr, err := net.SplitHostPort(adminAddress)
+	if err != nil {
+		return nil, fmt.Errorf("invalid admin address %q: %w", adminAddress, err)
+	}
+	adminPort, err := strconv.ParseUint(adminPortStr, 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("invalid admin port in %q: %w", adminAddress, err)
+	}
+
 	hcm, err := buildHTTPConnectionManager(httpFilters, testUpstreamClusterName, testUpstreamHostRewrite)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build HTTP connection manager: %w", err)
@@ -431,9 +479,9 @@ func buildFullConfig(adminPort, listenerPort uint32, testUpstreamClusterName, te
 		Address: &corev3.Address{
 			Address: &corev3.Address_SocketAddress{
 				SocketAddress: &corev3.SocketAddress{
-					Address: "127.0.0.1",
+					Address: adminHost,
 					PortSpecifier: &corev3.SocketAddress_PortValue{
-						PortValue: adminPort,
+						PortValue: uint32(adminPort),
 					},
 				},
 			},

@@ -59,7 +59,8 @@ Flags:
                                    the default timestamp-based ID ($BOE_RUN_ID).
       --listen-port=10000          Port for Envoy listener to accept incoming
                                    traffic.
-      --admin-port=9901            Port for Envoy admin interface.
+      --admin-port=9901            Port for Envoy admin interface
+                                   ($BOE_ADMIN_PORT).
       --extension=EXTENSION,...    Extensions to enable (in the format: "name"
                                    or "name:version").
       --local=LOCAL                Path to a directory containing a local
@@ -74,6 +75,10 @@ Flags:
                                    Optional YAML/JSON native HTTP filter list
                                    (or @filepath) per extension position.
                                    Overrides manifest nativeHttpFilters.before.
+      --native-http-filter-after=NATIVE-HTTP-FILTER-AFTER
+                                   Optional YAML/JSON native HTTP filter list
+                                   (or @filepath) per extension position.
+                                   Overrides manifest nativeHttpFilters.after.
       --cluster=CLUSTER,...        Optional additional Envoy cluster provided in
                                    the host:tlsPort pattern.
       --cluster-insecure=CLUSTER-INSECURE,...

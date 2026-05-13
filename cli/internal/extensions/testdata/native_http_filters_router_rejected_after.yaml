@@ -10,7 +10,7 @@ categories:
 author: Test Author
 description: A test extension
 longDescription: |
-  Valid: a Go extension declaring a native header-to-metadata filter to run before itself.
+  Invalid: nativeHttpFilters.after declares envoy.filters.http.router, which BOE owns.
 type: go
 composerVersion: 1.2.3
 tags:
@@ -22,13 +22,7 @@ examples:
     code: |
       boe run --extension test-extension
 nativeHttpFilters:
-  before:
-    - name: envoy.filters.http.header_to_metadata
+  after:
+    - name: envoy.filters.http.router
       typed_config:
-        "@type": type.googleapis.com/envoy.extensions.filters.http.header_to_metadata.v3.Config
-        request_rules:
-          - header: x-tenant-id
-            on_header_present:
-              metadata_namespace: boe.e2e
-              key: tenant
-            remove: true
+        "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router

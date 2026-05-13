@@ -682,14 +682,64 @@ func TestValidateNativeHTTPFilters(t *testing.T) {
 	validTests := []struct {
 		name    string
 		fixture string
+		expect  *NativeHTTPFilters
 	}{
 		{
-			name:    "valid_go_with_mcp_before",
+			name:    "valid header-to-metadata before",
 			fixture: "native_http_filters_valid.yaml",
+			expect: &NativeHTTPFilters{
+				Before: []map[string]any{{
+					"name": "envoy.filters.http.header_to_metadata",
+					"typed_config": map[string]any{
+						"@type": "type.googleapis.com/envoy.extensions.filters.http.header_to_metadata.v3.Config",
+						"request_rules": []any{
+							map[string]any{
+								"header": "x-tenant-id",
+								"on_header_present": map[string]any{
+									"metadata_namespace": "boe.e2e",
+									"key":                "tenant",
+								},
+								"remove": true,
+							},
+						},
+					},
+				}},
+			},
 		},
 		{
-			name:    "lua_with_stray_filter_type_is_accepted",
+			name:    "lua with stray filterType accepted",
 			fixture: "native_http_filters_lua_with_stray_filter_type.yaml",
+			expect: &NativeHTTPFilters{
+				Before: []map[string]any{{
+					"name": "envoy.filters.http.mcp",
+					"typed_config": map[string]any{
+						"@type":        "type.googleapis.com/envoy.extensions.filters.http.mcp.v3.Mcp",
+						"traffic_mode": "REJECT_NO_MCP",
+					},
+				}},
+			},
+		},
+		{
+			name:    "valid header-to-metadata after",
+			fixture: "native_http_filters_valid_after.yaml",
+			expect: &NativeHTTPFilters{
+				After: []map[string]any{{
+					"name": "envoy.filters.http.header_to_metadata",
+					"typed_config": map[string]any{
+						"@type": "type.googleapis.com/envoy.extensions.filters.http.header_to_metadata.v3.Config",
+						"request_rules": []any{
+							map[string]any{
+								"header": "x-boe-tenant-metadata",
+								"on_header_present": map[string]any{
+									"metadata_namespace": "boe.e2e",
+									"key":                "tenant",
+								},
+								"remove": true,
+							},
+						},
+					},
+				}},
+			},
 		},
 	}
 
@@ -698,8 +748,7 @@ func TestValidateNativeHTTPFilters(t *testing.T) {
 			manifestPath := filepath.Join("testdata", tt.fixture)
 			m, err := LoadLocalManifest(manifestPath)
 			require.NoError(t, err)
-			require.NotNil(t, m.NativeHTTPFilters)
-			require.NotEmpty(t, m.NativeHTTPFilters.Before)
+			require.Equal(t, tt.expect, m.NativeHTTPFilters)
 		})
 	}
 
@@ -721,27 +770,34 @@ func TestValidateNativeHTTPFilters(t *testing.T) {
 		{
 			name:        "duplicate name rejected",
 			fixture:     "native_http_filters_duplicate_name.yaml",
-			expectedErr: `validation failed for manifest native_http_filters_duplicate_name.yaml: invalid nativeHttpFilters: nativeHttpFilters.before contains duplicate name "envoy.filters.http.mcp"`,
+			expectedErr: `validation failed for manifest native_http_filters_duplicate_name.yaml: invalid nativeHttpFilters: nativeHttpFilters contains duplicate name "envoy.filters.http.mcp"`,
 		},
 		{
-			name:        "rust network type rejected",
-			fixture:     "native_http_filters_on_rust_network_type.yaml",
-			expectedErr: "validation failed for manifest native_http_filters_on_rust_network_type.yaml: jsonschema validation failed with 'SCHEMA#'\n- at '': 'allOf' failed\n  - at '/nativeHttpFilters': false schema",
+			name:    "rust network type rejected",
+			fixture: "native_http_filters_on_rust_network_type.yaml",
+			expectedErr: `validation failed for manifest native_http_filters_on_rust_network_type.yaml: jsonschema validation failed with 'SCHEMA#'
+- at '': 'allOf' failed
+  - at '/nativeHttpFilters': false schema`,
 		},
 		{
-			name:        "wasm type rejected",
-			fixture:     "native_http_filters_on_wasm_type.yaml",
-			expectedErr: "validation failed for manifest native_http_filters_on_wasm_type.yaml: jsonschema validation failed with 'SCHEMA#'\n- at '': 'allOf' failed\n  - at '/nativeHttpFilters': false schema",
+			name:    "wasm type rejected",
+			fixture: "native_http_filters_on_wasm_type.yaml",
+			expectedErr: `validation failed for manifest native_http_filters_on_wasm_type.yaml: jsonschema validation failed with 'SCHEMA#'
+- at '': 'allOf' failed
+  - at '/nativeHttpFilters': false schema`,
 		},
 		{
-			name:        "composer type rejected",
-			fixture:     "native_http_filters_on_composer_type.yaml",
-			expectedErr: "validation failed for manifest native_http_filters_on_composer_type.yaml: jsonschema validation failed with 'SCHEMA#'\n- at '': 'allOf' failed\n  - at '/nativeHttpFilters': false schema",
+			name:    "composer type rejected",
+			fixture: "native_http_filters_on_composer_type.yaml",
+			expectedErr: `validation failed for manifest native_http_filters_on_composer_type.yaml: jsonschema validation failed with 'SCHEMA#'
+- at '': 'allOf' failed
+  - at '/nativeHttpFilters': false schema`,
 		},
 		{
-			name:        "missing name rejected",
-			fixture:     "native_http_filters_missing_name.yaml",
-			expectedErr: "validation failed for manifest native_http_filters_missing_name.yaml: jsonschema validation failed with 'SCHEMA#'\n- at '/nativeHttpFilters/before/0': missing property 'name'",
+			name:    "missing name rejected",
+			fixture: "native_http_filters_missing_name.yaml",
+			expectedErr: `validation failed for manifest native_http_filters_missing_name.yaml: jsonschema validation failed with 'SCHEMA#'
+- at '/nativeHttpFilters/before/0': missing property 'name'`,
 		},
 		{
 			name:    "missing typed config rejected",
@@ -750,6 +806,40 @@ func TestValidateNativeHTTPFilters(t *testing.T) {
 		{
 			name:    "missing @type rejected",
 			fixture: "native_http_filters_missing_at_type.yaml",
+		},
+		{
+			name:        "after: router rejected",
+			fixture:     "native_http_filters_router_rejected_after.yaml",
+			expectedErr: `validation failed for manifest native_http_filters_router_rejected_after.yaml: invalid nativeHttpFilters: nativeHttpFilters.after[0]: "envoy.filters.http.router" is appended by BOE and cannot be declared`,
+		},
+		{
+			name:        "after: mcp router rejected",
+			fixture:     "native_http_filters_mcp_router_rejected_after.yaml",
+			expectedErr: `validation failed for manifest native_http_filters_mcp_router_rejected_after.yaml: invalid nativeHttpFilters: nativeHttpFilters.after[0]: "envoy.filters.http.mcp_router" is a terminal router replacement and is not supported`,
+		},
+		{
+			name:        "after: duplicate name rejected",
+			fixture:     "native_http_filters_duplicate_name_after.yaml",
+			expectedErr: `validation failed for manifest native_http_filters_duplicate_name_after.yaml: invalid nativeHttpFilters: nativeHttpFilters contains duplicate name "envoy.filters.http.mcp_json_rest_bridge"`,
+		},
+		{
+			name:    "after: missing name rejected",
+			fixture: "native_http_filters_missing_name_after.yaml",
+			expectedErr: `validation failed for manifest native_http_filters_missing_name_after.yaml: jsonschema validation failed with 'SCHEMA#'
+- at '/nativeHttpFilters/after/0': missing property 'name'
+- at '/nativeHttpFilters/after/0': 'oneOf' failed, none matched
+  - at '/nativeHttpFilters/after/0': missing property 'name'
+  - at '/nativeHttpFilters/after/0': validation failed
+    - at '/nativeHttpFilters/after/0': missing properties 'name', 'config_discovery'
+    - at '/nativeHttpFilters/after/0': additional properties 'typed_config' not allowed`,
+		},
+		{
+			name:    "after: missing typed config rejected",
+			fixture: "native_http_filters_missing_typed_config_after.yaml",
+		},
+		{
+			name:    "after: missing @type rejected",
+			fixture: "native_http_filters_missing_at_type_after.yaml",
 		},
 	}
 
@@ -820,6 +910,55 @@ func TestValidateNativeHTTPFiltersSemanticErrors(t *testing.T) {
 				},
 			},
 			expectedErr: "invalid nativeHttpFilters: nativeHttpFilters requires an extension that generates an HTTP filter; \"wasm\" with filterType \"\" has no HTTP anchor",
+		},
+		{
+			name: "after: missing name",
+			manifest: &Manifest{
+				Type: TypeLua,
+				NativeHTTPFilters: &NativeHTTPFilters{
+					After: []map[string]any{{}},
+				},
+			},
+			expectedErr: "invalid nativeHttpFilters: nativeHttpFilters.after[0] is missing a name",
+		},
+		{
+			name: "after: non string name",
+			manifest: &Manifest{
+				Type: TypeLua,
+				NativeHTTPFilters: &NativeHTTPFilters{
+					After: []map[string]any{{
+						"name": 123,
+					}},
+				},
+			},
+			expectedErr: "invalid nativeHttpFilters: nativeHttpFilters.after[0].name must be a string, got int",
+		},
+		{
+			name: "after: empty name",
+			manifest: &Manifest{
+				Type: TypeLua,
+				NativeHTTPFilters: &NativeHTTPFilters{
+					After: []map[string]any{{
+						"name": "",
+					}},
+				},
+			},
+			expectedErr: "invalid nativeHttpFilters: nativeHttpFilters.after[0].name is empty",
+		},
+		{
+			name: "cross-list duplicate rejected",
+			manifest: &Manifest{
+				Type: TypeLua,
+				NativeHTTPFilters: &NativeHTTPFilters{
+					Before: []map[string]any{{
+						"name": "envoy.filters.http.mcp",
+					}},
+					After: []map[string]any{{
+						"name": "envoy.filters.http.mcp",
+					}},
+				},
+			},
+			expectedErr: `invalid nativeHttpFilters: nativeHttpFilters contains duplicate name "envoy.filters.http.mcp"`,
 		},
 	}
 
