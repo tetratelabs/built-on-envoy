@@ -51,7 +51,7 @@ examples:
       Downstream filters can access `io.builtonenvoy.anthropic.llm.model_name`,
       `io.builtonenvoy.anthropic.llm.input_messages.0.message.role`, etc.
     code: |
-      boe run --extension anthropic-decoder \
+      boe run --extension anthropic-messages-decoder \
         --test-upstream-host api.anthropic.com
 
       # Send a messages request
@@ -82,7 +82,7 @@ examples:
       Use a custom namespace to avoid conflicts with other filters that also write
       to filter metadata.
     code: |
-      boe run --extension anthropic-decoder \
+      boe run --extension anthropic-messages-decoder \
         --config '{"metadata_namespace": "llm-request"}' \
         --test-upstream-host api.anthropic.com
 
@@ -98,7 +98,7 @@ examples:
       When the request includes tool definitions, each tool is stored under
       `llm.tools.N.tool.json_schema` as a JSON string, following the OpenInference spec.
     code: |
-      boe run --extension anthropic-decoder \
+      boe run --extension anthropic-messages-decoder \
         --test-upstream-host api.anthropic.com
 
       curl -X POST http://localhost:10000/v1/messages \
@@ -124,7 +124,7 @@ examples:
       captures the tool call details from the request. The response metadata includes the
       assistant reply and token usage.
     code: |
-      boe run --extension anthropic-decoder \
+      boe run --extension anthropic-messages-decoder \
         --test-upstream-host api.anthropic.com
 
       curl -X POST http://localhost:10000/v1/messages \
