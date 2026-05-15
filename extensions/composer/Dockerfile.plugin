@@ -26,4 +26,5 @@ FROM scratch AS final
 
 ARG EXTENSION_PATH
 COPY --from=builder /workspace/plugin.so /
-COPY --from=builder /workspace/${EXTENSION_PATH}/manifest.yaml /
+COPY --from=builder /workspace/$EXTENSION_PATH/manifest.yaml /
+COPY --from=builder /workspace/manifest.yaml /manifest-composer.yaml

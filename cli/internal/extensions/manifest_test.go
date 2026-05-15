@@ -638,6 +638,7 @@ examples: []
 		assert.Equal(t, "9.9.9", m.Version)
 		assert.Equal(t, "9.9.9", m.ComposerVersion)
 		assert.Equal(t, "1.99.0", m.MinEnvoyVersion)
+		assert.Equal(t, "1.100.0", m.MaxEnvoyVersion) // Automatically computed when loading the manifest
 	})
 
 	t.Run("no-local-parent-falls-back-to-embedded", func(t *testing.T) {

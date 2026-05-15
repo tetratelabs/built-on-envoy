@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -97,6 +98,19 @@ func (d *Downloader) DownloadExtension(ctx context.Context, name, version string
 				return DownloadedExtension{},
 					fmt.Errorf("failed to load manifest from downloaded extension at %q: %w", manifestPath, err)
 			}
+
+			// Composer plugin extension packages contain the extension manifest and the parent composer manifest as well.
+			// If it exists, load it and resolve the versions
+			composerParent := filepath.Join(LocalCacheExtensionDir(d.Dirs, artifact.Manifest), "manifest-composer.yaml")
+			if _, err = os.Stat(composerParent); err == nil {
+				p, err := LoadLocalManifest(composerParent)
+				if err != nil {
+					return DownloadedExtension{},
+						fmt.Errorf("failed to load parent manifest from downloaded extension at %q: %w", composerParent, err)
+				}
+				ResolveVersionsWithParent(m, p)
+			}
+
 			mergeManifestFromOCI(m, fromOCI)
 			artifact.Manifest = m
 		}

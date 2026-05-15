@@ -331,23 +331,28 @@ func resolveVersions(m *Manifest, all map[string]*Manifest) error {
 		if !ok {
 			return fmt.Errorf("%w: %s", ErrParentManifestNotFound, m.Parent)
 		}
-		if m.Version == "" {
-			m.Version = parent.Version
-		}
-		if m.ComposerVersion == "" {
-			m.ComposerVersion = parent.Version
-		}
-		if m.MinEnvoyVersion == "" {
-			m.MinEnvoyVersion = parent.MinEnvoyVersion
-		}
-		if m.MaxEnvoyVersion == "" {
-			m.MaxEnvoyVersion = parent.MaxEnvoyVersion
-		}
-		if m.MinEnvoyVersion != "" && m.MaxEnvoyVersion == "" {
-			m.MaxEnvoyVersion = ImplicitMaxEnvoyVersion(m.MinEnvoyVersion)
-		}
+		ResolveVersionsWithParent(m, parent)
 	}
 	return nil
+}
+
+// ResolveVersionsWithParent resolves the version fields for a manifest using its parent manifest.
+func ResolveVersionsWithParent(m *Manifest, parent *Manifest) {
+	if m.Version == "" {
+		m.Version = parent.Version
+	}
+	if m.ComposerVersion == "" {
+		m.ComposerVersion = parent.Version
+	}
+	if m.MinEnvoyVersion == "" {
+		m.MinEnvoyVersion = parent.MinEnvoyVersion
+	}
+	if m.MaxEnvoyVersion == "" {
+		m.MaxEnvoyVersion = parent.MaxEnvoyVersion
+	}
+	if m.MinEnvoyVersion != "" && m.MaxEnvoyVersion == "" {
+		m.MaxEnvoyVersion = ImplicitMaxEnvoyVersion(m.MinEnvoyVersion)
+	}
 }
 
 // ManifestsIndex returns a list of manifests that should be included in the catalog.
@@ -390,7 +395,8 @@ func ResolveLocalVersions(m *Manifest) error {
 	// Try to find the parent manifest on the local filesystem.
 	parent, err := findLocalParentManifest(m)
 	if err == nil {
-		return resolveVersions(m, map[string]*Manifest{parent.Name: parent})
+		ResolveVersionsWithParent(m, parent)
+		return nil
 	}
 
 	// Fall back to the embedded manifests.
