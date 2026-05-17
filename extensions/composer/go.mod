@@ -9,11 +9,11 @@ go 1.26.3
 
 require (
 	github.com/beevik/etree v1.6.0
-	github.com/cedar-policy/cedar-go v1.6.0
+	github.com/cedar-policy/cedar-go v1.6.1
 	github.com/corazawaf/coraza-coreruleset/v4 v4.25.0
 	github.com/corazawaf/coraza/v3 v3.7.0
 	github.com/crewjam/saml v0.5.1
-	github.com/docker/cli v29.4.3+incompatible
+	github.com/docker/cli v29.5.0+incompatible
 	// This SDK is come from Envoy 1.39-dev but it's compatible with Envoy 1.38 because there is no API change
 	// between Envoy 1.38 and this SDK version.
 	github.com/envoyproxy/envoy/source/extensions/dynamic_modules v0.0.0-20260425100846-90594f45b3ed
@@ -22,7 +22,7 @@ require (
 	github.com/jcchavezs/mergefs v0.1.1
 	github.com/lestrrat-go/jwx/v3 v3.1.1
 	github.com/mccutchen/go-httpbin/v2 v2.22.1
-	github.com/open-policy-agent/opa v1.16.1
+	github.com/open-policy-agent/opa v1.16.2
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/stretchr/testify v1.11.1
 	go.uber.org/mock v0.6.0
