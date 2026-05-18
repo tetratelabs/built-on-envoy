@@ -21,6 +21,14 @@ import (
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 
+// loadExtensionManifests loads manifests from the source extensions directory.
+func loadExtensionManifests(t *testing.T) map[string]*extensions.Manifest {
+	t.Helper()
+	manifests, err := extensions.LoadManifests(internaltesting.ExtensionsFS(t), ".", false)
+	require.NoError(t, err)
+	return manifests
+}
+
 func TestParseCmdListHelp(t *testing.T) {
 	var cli struct {
 		List List `cmd:"" help:"List available extensions"`
@@ -49,7 +57,8 @@ Flags:
 }
 
 func TestListCommand(t *testing.T) {
-	ts := serveIndex(t)
+	manifests := loadExtensionManifests(t)
+	ts := serveIndex(t, manifests)
 
 	var buf bytes.Buffer
 	cmd := &List{indexURL: ts.URL, output: &buf}
@@ -71,7 +80,7 @@ func TestListCommand(t *testing.T) {
 			continue
 		}
 		fields := fieldsN(line, 5)
-		m, ok := extensions.Manifests[fields[0]]
+		m, ok := manifests[fields[0]]
 
 		require.Truef(t, ok, "extension %s not found in manifests", fields[0])
 		require.Equal(t,
@@ -81,7 +90,7 @@ func TestListCommand(t *testing.T) {
 
 		names[m.Name] = struct{}{}
 	}
-	require.Len(t, names, len(extensions.ManifestsIndex()))
+	require.Len(t, names, len(extensions.ManifestsIndex(manifests)))
 }
 
 func fieldsN(s string, n int) []string {
@@ -100,11 +109,11 @@ func fieldsN(s string, n int) []string {
 }
 
 // serveIndex starts a test HTTP server that serves the ManifestsIndex as JSON.
-func serveIndex(t *testing.T) *httptest.Server {
+func serveIndex(t *testing.T, manifests map[string]*extensions.Manifest) *httptest.Server {
 	t.Helper()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		err := json.NewEncoder(w).Encode(extensions.ManifestsIndex())
+		err := json.NewEncoder(w).Encode(extensions.ManifestsIndex(manifests))
 		require.NoError(t, err)
 	}))
 	t.Cleanup(ts.Close)
@@ -112,7 +121,7 @@ func serveIndex(t *testing.T) *httptest.Server {
 }
 
 func TestListCommandAlphabeticalOrder(t *testing.T) {
-	ts := serveIndex(t)
+	ts := serveIndex(t, loadExtensionManifests(t))
 
 	var buf bytes.Buffer
 	cmd := &List{indexURL: ts.URL, output: &buf}

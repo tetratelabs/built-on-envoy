@@ -129,20 +129,22 @@ func main() {
 		schemaPath         string
 		outputPath         string
 		extensionIndexPath string
+		extensionsDir      string
 	)
 
 	flag.StringVar(&schemaPath, "schema", "", "Path to the JSON schema file (required)")
 	flag.StringVar(&outputPath, "output", "", "Output path for the MDX file (required)")
 	flag.StringVar(&extensionIndexPath, "extension-index", "", "Output path for the extension index file (required)")
+	flag.StringVar(&extensionsDir, "extensions", "", "Path to the extensions directory (required)")
 	flag.Parse()
 
-	if schemaPath == "" || outputPath == "" || extensionIndexPath == "" {
-		fmt.Fprintln(os.Stderr, "Usage: gen-manifest-reference -schema <path> -output <path> -extension-index <path>")
+	if schemaPath == "" || outputPath == "" || extensionIndexPath == "" || extensionsDir == "" {
+		fmt.Fprintln(os.Stderr, "Usage: gen-manifest-reference -schema <path> -output <path> -extension-index <path> -extensions <path>")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
 
-	if err := generateExtensionIndex(extensionIndexPath); err != nil {
+	if err := generateExtensionIndex(extensionIndexPath, extensionsDir); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to generate extension index: %v\n", err)
 		os.Exit(1)
 	}
@@ -218,9 +220,12 @@ func main() {
 	fmt.Printf("Generated: %s\n", outputPath)
 }
 
-func generateExtensionIndex(path string) error {
-	manifests := extensions.ManifestsIndex()
-	index, err := json.MarshalIndent(manifests, "", "  ")
+func generateExtensionIndex(path string, extensionsDir string) error {
+	all, err := extensions.LoadManifests(os.DirFS(extensionsDir), ".", false)
+	if err != nil {
+		return fmt.Errorf("failed to load manifests from %s: %w", extensionsDir, err)
+	}
+	index, err := json.MarshalIndent(extensions.ManifestsIndex(all), "", "  ")
 	if err != nil {
 		return err
 	}

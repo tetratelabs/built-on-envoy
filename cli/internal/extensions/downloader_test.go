@@ -427,6 +427,50 @@ func TestCheckOrDownloadLibComposerCacheMiss(t *testing.T) {
 	require.NoError(t, CheckOrDownloadLibComposer(t.Context(), d, version, ComposerArtifactLite))
 }
 
+func TestResolveLatestComposerVersion(t *testing.T) {
+	tests := []struct {
+		name        string
+		tags        []string
+		clientErr   error
+		expected    string
+		expectedErr string
+	}{
+		{
+			name:     "resolves latest tag including dev",
+			tags:     []string{"0.7.0-dev", "0.6.0"},
+			expected: "0.7.0-dev",
+		},
+		{
+			name:        "client creation error",
+			clientErr:   errors.New("connection refused"),
+			expectedErr: `failed to create OCI client for "ghcr.io/tetratelabs/built-on-envoy/composer-lite": connection refused`,
+		},
+		{
+			name:        "no tags",
+			tags:        []string{},
+			expectedErr: "failed to resolve latest composer version: no tags found for repository: ghcr.io/tetratelabs/built-on-envoy/composer-lite",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			version, err := resolveLatestComposerVersion(t.Context(), internaltesting.NewTLogger(t),
+				func(_ *slog.Logger, _, _, _ string, _ bool) (oci.RepositoryClient, error) {
+					if tc.clientErr != nil {
+						return nil, tc.clientErr
+					}
+					return &mockRepositoryClient{tags: tc.tags}, nil
+				})
+			if tc.expectedErr != "" {
+				require.EqualError(t, err, tc.expectedErr)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tc.expected, version)
+			}
+		})
+	}
+}
+
 func TestMergeManifestFromOCI(t *testing.T) {
 	tests := []struct {
 		name     string

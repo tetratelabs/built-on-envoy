@@ -17,7 +17,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 
@@ -25,14 +24,15 @@ func TestCreateWithDockerSupport(t *testing.T) {
 	tmpDir := t.TempDir()
 	ctx := t.Context()
 
-	// Create a new extension
-	process := internaltesting.RunCLI(t, cliBin, "create", "test-docker", "--path", tmpDir)
+	// Create a new extension with an explicit composer version to avoid registry lookup in tests.
+	version := "0.1.0"
+	process := internaltesting.RunCLI(t, cliBin, "create", "test-docker", "--path", tmpDir,
+		"--composer-version", version)
 	status, err := process.Wait()
 	require.NoError(t, err)
 	require.Equal(t, 0, status.ExitCode())
 
 	extensionDir := filepath.Join(tmpDir, "test-docker")
-	version := extensions.LibComposerVersion
 
 	t.Run("makefile_build_target", func(t *testing.T) {
 		// #nosec G204

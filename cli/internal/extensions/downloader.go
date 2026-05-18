@@ -252,6 +252,28 @@ func getLatestTag(ctx context.Context, client oci.RepositoryClient, repository s
 	return "", fmt.Errorf("%w: %s", errNoTags, repository)
 }
 
+// ResolveLatestComposerVersion queries the default OCI registry for the
+// latest composer version tag, including dev versions.
+func ResolveLatestComposerVersion(ctx context.Context, logger *slog.Logger) (string, error) {
+	return resolveLatestComposerVersion(ctx, logger, newOCIRepositoryClient)
+}
+
+func resolveLatestComposerVersion(ctx context.Context, logger *slog.Logger,
+	newClient func(*slog.Logger, string, string, string, bool) (oci.RepositoryClient, error),
+) (string, error) {
+	repository := DefaultOCIRegistry + "/" + ComposerArtifactLite
+	client, err := newClient(logger, repository, "", "", false)
+	if err != nil {
+		return "", fmt.Errorf("failed to create OCI client for %q: %w", repository, err)
+	}
+	version, err := getLatestTag(ctx, client, repository, true)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve latest composer version: %w", err)
+	}
+	logger.Info("resolved composer version from registry", "version", version)
+	return version, nil
+}
+
 // mergeManifestFromOCI preserves fields from the OCI-annotation-derived
 // manifest when the embedded YAML manifest has them empty. Composer plugins
 // have incomplete manifests because version and composerVersion are inherited

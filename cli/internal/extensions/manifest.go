@@ -3,14 +3,10 @@
 // The full text of the Apache license is available in the LICENSE file at
 // the root of the repo.
 
-// Synchronize the manifests so they can be go:embed-d in the CLI binary.
-//go:generate sh sync-manifests.sh
-
 // Package extensions defines types for managing extension manifests.
 package extensions
 
 import (
-	"embed"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -23,6 +19,8 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"golang.org/x/mod/semver"
 	"gopkg.in/yaml.v3"
+
+	rootext "github.com/tetratelabs/built-on-envoy/extensions"
 )
 
 type (
@@ -211,17 +209,7 @@ const (
 	schemaURL = "manifest.schema.json"
 )
 
-var (
-	//go:embed manifests
-	manifestFS embed.FS
-
-	//go:embed manifests/manifest.schema.json
-	manifestSchemaFile []byte
-	manifestSchema     *jsonschema.Schema
-
-	// Manifests contains all loaded extension manifests.
-	Manifests map[string]*Manifest
-)
+var manifestSchema *jsonschema.Schema
 
 var (
 	// ErrDuplicateManifestName is returned when there are duplicate manifest names.
@@ -240,9 +228,8 @@ var (
 )
 
 func init() {
-	// Parse the schema JSON
 	var schemaDoc any
-	if err := json.Unmarshal(manifestSchemaFile, &schemaDoc); err != nil {
+	if err := json.Unmarshal(rootext.ManifestSchemaJSON, &schemaDoc); err != nil {
 		panic(fmt.Errorf("failed to parse manifest schema JSON: %w", err))
 	}
 
@@ -256,17 +243,12 @@ func init() {
 	if err != nil {
 		panic(fmt.Errorf("failed to compile manifest schema: %w", err))
 	}
-
-	Manifests, err = loadManifests(manifestFS, false)
-	if err != nil {
-		panic(err)
-	}
 }
 
-// loadManifests walks the filesystem and loads all manifest.yaml files.
-func loadManifests(fsys fs.FS, validate bool) (map[string]*Manifest, error) {
+// LoadManifests walks the filesystem rooted at root and loads all manifest.yaml files.
+func LoadManifests(fsys fs.FS, root string, validate bool) (map[string]*Manifest, error) {
 	result := make(map[string]*Manifest)
-	err := fs.WalkDir(fsys, "manifests", func(path string, d fs.DirEntry, err error) error {
+	err := fs.WalkDir(fsys, root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || filepath.Base(path) != "manifest.yaml" {
 			return nil
 		}
@@ -357,13 +339,13 @@ func ResolveVersionsWithParent(m *Manifest, parent *Manifest) {
 
 // ManifestsIndex returns a list of manifests that should be included in the catalog.
 // This filters out manifests that are only used as parents for version inheritance.
-func ManifestsIndex() []*ManifestIndexEntry {
-	manifests := make([]*ManifestIndexEntry, 0, len(Manifests))
-	for _, m := range Manifests {
+func ManifestsIndex(all map[string]*Manifest) []*ManifestIndexEntry {
+	manifests := make([]*ManifestIndexEntry, 0, len(all))
+	for _, m := range all {
 		if !m.ExtensionSet {
 			manifests = append(manifests, &ManifestIndexEntry{
 				Manifest:   m,
-				SourcePath: filepath.Dir(strings.TrimPrefix(m.Path, "manifests/")),
+				SourcePath: filepath.Dir(m.Path),
 			})
 		}
 	}
@@ -384,23 +366,18 @@ func LoadLocalManifest(path string) (*Manifest, error) {
 }
 
 // ResolveLocalVersions resolves version fields for a local manifest that has a parent.
-// It first tries to find the parent manifest on the local filesystem by walking up the
-// directory tree from the manifest's path. If not found locally, it falls back to the
-// embedded manifests.
+// It walks up the directory tree from the manifest's path looking for the parent.
 func ResolveLocalVersions(m *Manifest) error {
 	if m.Type != TypeGo || m.Parent == "" {
 		return nil
 	}
 
-	// Try to find the parent manifest on the local filesystem.
 	parent, err := findLocalParentManifest(m)
-	if err == nil {
-		ResolveVersionsWithParent(m, parent)
-		return nil
+	if err != nil {
+		return err
 	}
-
-	// Fall back to the embedded manifests.
-	return resolveVersions(m, Manifests)
+	ResolveVersionsWithParent(m, parent)
+	return nil
 }
 
 // findLocalParentManifest walks up the directory tree from the manifest's path

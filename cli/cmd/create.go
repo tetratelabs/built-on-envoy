@@ -6,6 +6,7 @@
 package cmd
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"log/slog"
@@ -25,10 +26,13 @@ var templateFS embed.FS
 
 // Create is a command to create a new extension template.
 type Create struct {
-	Type       string `help:"Type of the extension (go, rust, ext_proc)." default:"go" enum:"go,rust,ext_proc"`
-	FilterType string `help:"Filter type (http, network). Network filters are only supported for rust." default:"http" enum:"http,network"`
-	Name       string `arg:"" help:"Name of the extension."`
-	Path       string `help:"Output directory for the extension. Defaults to the extension name." type:"path"`
+	Type            string `help:"Type of the extension (go, rust, ext_proc)." default:"go" enum:"go,rust,ext_proc"`
+	FilterType      string `help:"Filter type (http, network). Network filters are only supported for rust." default:"http" enum:"http,network"`
+	Name            string `arg:"" help:"Name of the extension."`
+	Path            string `help:"Output directory for the extension. Defaults to the extension name." type:"path"`
+	ComposerVersion string `name:"composer-version" help:"Composer version for Go extensions. Resolved from the registry if not set."`
+
+	resolveComposerVersion func(context.Context, *slog.Logger) (string, error) `kong:"-"`
 }
 
 //go:embed create_help.md
@@ -49,12 +53,20 @@ func (c *Create) Validate() error {
 }
 
 // Run executes the create command.
-func (c *Create) Run(dirs *xdg.Directories, logger *slog.Logger) error {
+func (c *Create) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logger) error {
 	logger.Debug("handling create command", "cmd", c)
 
 	switch c.Type {
 	case "go":
-		return createGoExtension(logger, dirs, c.Path, c.Name)
+		composerVersion := c.ComposerVersion
+		if composerVersion == "" {
+			var err error
+			composerVersion, err = c.resolveComposerVersion(ctx, logger)
+			if err != nil {
+				return fmt.Errorf("failed to resolve composer version (use --composer-version to set it explicitly): %w", err)
+			}
+		}
+		return createGoExtension(logger, dirs, c.Path, c.Name, composerVersion)
 	case "rust":
 		return createRustExtension(logger, c.Path, c.Name, c.FilterType)
 	case "ext_proc":
@@ -64,12 +76,12 @@ func (c *Create) Run(dirs *xdg.Directories, logger *slog.Logger) error {
 	}
 }
 
-func createGoExtension(logger *slog.Logger, dirs *xdg.Directories, path, name string) error {
+func createGoExtension(logger *slog.Logger, dirs *xdg.Directories, path, name, composerVersion string) error {
 	repoPath := filepath.Join(path, name)
 
 	data := map[string]string{
 		"Name":               name,
-		"LibComposerVersion": extensions.LibComposerVersion,
+		"LibComposerVersion": composerVersion,
 		"DataHome":           dirs.DataHome,
 	}
 
