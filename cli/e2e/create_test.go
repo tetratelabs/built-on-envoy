@@ -17,12 +17,16 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 
 func TestCreateGoWithDockerSupport(t *testing.T) {
 	tmpDir := t.TempDir()
 	ctx := t.Context()
+
+	t.Setenv("BOE_REGISTRY_INSECURE", "true")
+	t.Setenv("BOE_REGISTRY", registryAddr)
 
 	// Create a new extension with an explicit composer version to avoid registry lookup in tests.
 	version := "0.1.0"
@@ -33,6 +37,8 @@ func TestCreateGoWithDockerSupport(t *testing.T) {
 	require.Equal(t, 0, status.ExitCode())
 
 	extensionDir := filepath.Join(tmpDir, "test-docker")
+	// Create a dummy config.schema.json to test it gets included in the download for Go extensions.
+	require.NoError(t, os.WriteFile(filepath.Join(extensionDir, "config.schema.json"), []byte(`{}`), 0o600))
 
 	t.Run("cshared", func(t *testing.T) {
 		t.Run("makefile_build", func(t *testing.T) {
@@ -62,36 +68,34 @@ func TestCreateGoWithDockerSupport(t *testing.T) {
 		t.Run("makefile_build_image", func(t *testing.T) {
 			internaltesting.MaybeSkipLongRunningTest(t)
 			// #nosec G204
-			makeCmd := exec.CommandContext(ctx, "make", "build_image", fmt.Sprintf("OCI_REGISTRY=%s", registryAddr))
+			makeCmd := exec.CommandContext(ctx, "make", "build_image")
 			makeCmd.Dir = extensionDir
 			output, err := makeCmd.CombinedOutput()
 			t.Logf("make build_image output: %s", string(output))
 			require.NoError(t, err, "Makefile build_image target should be valid")
 
+			// Tag the image to remove the arch suffix so that we can use boe download cleanly to
+			// verify the contents of the image
+			// #nosec G204
+			pushCmd := exec.CommandContext(ctx, "docker", "tag",
+				fmt.Sprintf("%s/extension-test-docker:%s-linux-%s", registryAddr, version, runtime.GOARCH),
+				fmt.Sprintf("%s/extension-test-docker:%s", registryAddr, version),
+			)
+			output, err = pushCmd.CombinedOutput()
+			t.Logf("docker tag output: %s", string(output))
+			require.NoError(t, err, "Should be able to tag image")
+
 			// Push local image to registry and check its annotations
 			// #nosec G204
-			pushCmd := exec.CommandContext(ctx, "docker", "push",
-				fmt.Sprintf("%s/built-on-envoy/extension-test-docker:%s-linux-%s", registryAddr, version, runtime.GOARCH))
+			pushCmd = exec.CommandContext(ctx, "docker", "push",
+				fmt.Sprintf("%s/extension-test-docker:%s", registryAddr, version))
 			output, err = pushCmd.CombinedOutput()
 			t.Logf("docker push output: %s", string(output))
 			require.NoError(t, err, "Should be able to push image to local registry")
 
-			// Pull the image manifest and check annotations
-			fetchManifest(t, registryAddr, "built-on-envoy/extension-test-docker", fmt.Sprintf("%s-linux-%s", version, runtime.GOARCH))
-		})
-
-		t.Run("makefile_push_image", func(t *testing.T) {
-			internaltesting.MaybeSkipLongRunningTest(t)
-			// #nosec G204
-			makeCmd := exec.CommandContext(ctx, "make", "push_image",
-				fmt.Sprintf("OCI_REGISTRY=%s", registryAddr), "BOE_REGISTRY_INSECURE=true")
-			makeCmd.Dir = extensionDir
-			output, err := makeCmd.CombinedOutput()
-			t.Logf("make push_image output: %s", string(output))
-			require.NoError(t, err, "Makefile push_image target should be valid")
-
-			// Pull the image manifest and check annotations
-			fetchManifest(t, registryAddr, "built-on-envoy/extension-test-docker", version)
+			// Pull the image manifest and check contents
+			manifest := &extensions.Manifest{Name: "test-docker", Version: version, Type: extensions.TypeGo, CShared: true}
+			requireDownloadHasFiles(t, manifest, "manifest.yaml", "config.schema.json")
 		})
 	})
 
@@ -123,56 +127,56 @@ func TestCreateGoWithDockerSupport(t *testing.T) {
 		t.Run("makefile_build_image_plugin", func(t *testing.T) {
 			internaltesting.MaybeSkipLongRunningTest(t)
 			// #nosec G204
-			makeCmd := exec.CommandContext(ctx, "make", "build_image_plugin", fmt.Sprintf("OCI_REGISTRY=%s", registryAddr))
+			makeCmd := exec.CommandContext(ctx, "make", "build_image_plugin")
 			makeCmd.Dir = extensionDir
 			output, err := makeCmd.CombinedOutput()
 			t.Logf("make build_image_plugin output: %s", string(output))
 			require.NoError(t, err, "Makefile build_image_plugin target should be valid")
 
+			// Tag the image to remove the arch suffix so that we can use boe download cleanly to
+			// verify the contents of the image
+			// #nosec G204
+			pushCmd := exec.CommandContext(ctx, "docker", "tag",
+				fmt.Sprintf("%s/extension-test-docker:%s-linux-%s", registryAddr, version, runtime.GOARCH),
+				fmt.Sprintf("%s/extension-test-docker:%s", registryAddr, version),
+			)
+			output, err = pushCmd.CombinedOutput()
+			t.Logf("docker tag output: %s", string(output))
+			require.NoError(t, err, "Should be able to tag image")
+
 			// Push local image to registry and check its annotations
 			// #nosec G204
-			pushCmd := exec.CommandContext(ctx, "docker", "push",
-				fmt.Sprintf("%s/built-on-envoy/extension-test-docker:%s-linux-%s", registryAddr, version, runtime.GOARCH))
+			pushCmd = exec.CommandContext(ctx, "docker", "push",
+				fmt.Sprintf("%s/extension-test-docker:%s", registryAddr, version))
 			output, err = pushCmd.CombinedOutput()
 			t.Logf("docker push output: %s", string(output))
 			require.NoError(t, err, "Should be able to push image to local registry")
 
-			// Pull the image manifest and check annotations
-			fetchManifest(t, registryAddr, "built-on-envoy/extension-test-docker", fmt.Sprintf("%s-linux-%s", version, runtime.GOARCH))
-		})
-
-		t.Run("makefile_push_image_plugin", func(t *testing.T) {
-			internaltesting.MaybeSkipLongRunningTest(t)
-			// #nosec G204
-			makeCmd := exec.CommandContext(ctx, "make", "push_image_plugin",
-				fmt.Sprintf("OCI_REGISTRY=%s", registryAddr), "BOE_REGISTRY_INSECURE=true")
-			makeCmd.Dir = extensionDir
-			output, err := makeCmd.CombinedOutput()
-			t.Logf("make push_image_plugin output: %s", string(output))
-			require.NoError(t, err, "Makefile push_image_plugin target should be valid")
-
-			// Pull the image manifest and check annotations
-			fetchManifest(t, registryAddr, "built-on-envoy/extension-test-docker", version)
+			// Pull the image manifest and check contents
+			manifest := &extensions.Manifest{Name: "test-docker", Version: version, Type: extensions.TypeGo, CShared: false}
+			requireDownloadHasFiles(t, manifest, "manifest.yaml", "config.schema.json")
 		})
 	})
 
 	t.Run("makefile_code_target", func(t *testing.T) {
 		// #nosec G204
-		makeCmd := exec.CommandContext(ctx, "make", "push_code",
-			fmt.Sprintf("OCI_REGISTRY=%s", registryAddr), "BOE_REGISTRY_INSECURE=true")
+		makeCmd := exec.CommandContext(ctx, "make", "push_code")
 		makeCmd.Dir = extensionDir
 		output, err := makeCmd.CombinedOutput()
 		t.Logf("make push_code output: %s", string(output))
 		require.NoError(t, err, "Makefile push_code target should be valid")
 
 		// Pull the image manifest and check annotations
-		fetchManifest(t, registryAddr, "built-on-envoy/extension-src-test-docker", version)
+		fetchManifest(t, registryAddr, "extension-src-test-docker", version)
 	})
 }
 
 func TestCreateRustWithDockerSupport(t *testing.T) {
 	tmpDir := t.TempDir()
 	ctx := t.Context()
+
+	t.Setenv("BOE_REGISTRY_INSECURE", "true")
+	t.Setenv("BOE_REGISTRY", registryAddr)
 
 	// Create a new extension
 	process := internaltesting.RunCLI(t, cliBin, "create", "test-docker", "--path", tmpDir,
@@ -181,62 +185,62 @@ func TestCreateRustWithDockerSupport(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 0, status.ExitCode())
 
-	extensionDir := filepath.Join(tmpDir, "test-docker")
 	version := "0.1.0"
+	extensionDir := filepath.Join(tmpDir, "test-docker")
+	// Create a dummy config.schema.json to test it gets included in the download for Go extensions.
+	require.NoError(t, os.WriteFile(filepath.Join(extensionDir, "config.schema.json"), []byte(`{}`), 0o600))
 
 	t.Run("makefile_image_target", func(t *testing.T) {
 		// #nosec G204
-		makeCmd := exec.CommandContext(ctx, "make", "build_image",
-			fmt.Sprintf("OCI_REGISTRY=%s", registryAddr))
+		makeCmd := exec.CommandContext(ctx, "make", "build_image")
 		makeCmd.Dir = extensionDir
 		output, err := makeCmd.CombinedOutput()
 		t.Logf("make build_image output: %s", string(output))
 		require.NoError(t, err, "Makefile build_image target should be valid")
 
+		// Tag the image to remove the arch suffix so that we can use boe download cleanly to
+		// verify the contents of the image
+		// #nosec G204
+		pushCmd := exec.CommandContext(ctx, "docker", "tag",
+			fmt.Sprintf("%s/extension-test-docker:%s-linux-%s", registryAddr, version, runtime.GOARCH),
+			fmt.Sprintf("%s/extension-test-docker:%s", registryAddr, version),
+		)
+		output, err = pushCmd.CombinedOutput()
+		t.Logf("docker tag output: %s", string(output))
+		require.NoError(t, err, "Should be able to tag image")
+
 		// Push local image to registry and check its annotations
 		// #nosec G204
-		pushCmd := exec.CommandContext(ctx, "docker", "push",
-			fmt.Sprintf("%s/built-on-envoy/extension-test-docker:%s-linux-%s", registryAddr, version, runtime.GOARCH))
+		pushCmd = exec.CommandContext(ctx, "docker", "push",
+			fmt.Sprintf("%s/extension-test-docker:%s", registryAddr, version))
 		output, err = pushCmd.CombinedOutput()
 		t.Logf("docker push output: %s", string(output))
 		require.NoError(t, err, "Should be able to push image to local registry")
 
-		// Pull the image manifest and check annotations
-		fetchManifest(t, registryAddr, "built-on-envoy/extension-test-docker", fmt.Sprintf("%s-linux-%s", version, runtime.GOARCH))
-	})
-
-	t.Run("makefile_push_target", func(t *testing.T) {
-		internaltesting.MaybeSkipLongRunningTest(t)
-
-		// #nosec G204
-		makeCmd := exec.CommandContext(ctx, "make", "push_image",
-			fmt.Sprintf("OCI_REGISTRY=%s", registryAddr), "BOE_REGISTRY_INSECURE=true")
-		makeCmd.Dir = extensionDir
-		output, err := makeCmd.CombinedOutput()
-		t.Logf("make push_image output: %s", string(output))
-		require.NoError(t, err, "Makefile push_image target should be valid")
-
-		// Pull the image manifest and check annotations
-		fetchManifest(t, registryAddr, "built-on-envoy/extension-test-docker", version)
+		// Pull the image manifest and check contents
+		manifest := &extensions.Manifest{Name: "test-docker", Version: version, Type: extensions.TypeRust}
+		requireDownloadHasFiles(t, manifest, "manifest.yaml", "config.schema.json")
 	})
 
 	t.Run("makefile_code_target", func(t *testing.T) {
 		// #nosec G204
-		makeCmd := exec.CommandContext(ctx, "make", "push_code",
-			fmt.Sprintf("OCI_REGISTRY=%s", registryAddr), "BOE_REGISTRY_INSECURE=true")
+		makeCmd := exec.CommandContext(ctx, "make", "push_code")
 		makeCmd.Dir = extensionDir
 		output, err := makeCmd.CombinedOutput()
 		t.Logf("make push_code output: %s", string(output))
 		require.NoError(t, err, "Makefile push_code target should be valid")
 
 		// Pull the image manifest and check annotations
-		fetchManifest(t, registryAddr, "built-on-envoy/extension-src-test-docker", version)
+		fetchManifest(t, registryAddr, "extension-src-test-docker", version)
 	})
 }
 
 func TestCreateRustNetworkWithDockerSupport(t *testing.T) {
 	tmpDir := t.TempDir()
 	ctx := t.Context()
+
+	t.Setenv("BOE_REGISTRY_INSECURE", "true")
+	t.Setenv("BOE_REGISTRY", registryAddr)
 
 	// Create a new rust network filter extension
 	process := internaltesting.RunCLI(t, cliBin, "create", "test-docker-network",
@@ -253,8 +257,7 @@ func TestCreateRustNetworkWithDockerSupport(t *testing.T) {
 		// project end-to-end, catching template regressions that unit tests
 		// (which only check file contents) can't catch.
 		// #nosec G204
-		makeCmd := exec.CommandContext(ctx, "make", "build_image",
-			fmt.Sprintf("OCI_REGISTRY=%s", registryAddr))
+		makeCmd := exec.CommandContext(ctx, "make", "build_image")
 		makeCmd.Dir = extensionDir
 		output, err := makeCmd.CombinedOutput()
 		t.Logf("make build_image output: %s", string(output))
@@ -263,27 +266,26 @@ func TestCreateRustNetworkWithDockerSupport(t *testing.T) {
 		// Push local image to registry and check its annotations
 		// #nosec G204
 		pushCmd := exec.CommandContext(ctx, "docker", "push",
-			fmt.Sprintf("%s/built-on-envoy/extension-test-docker-network:%s-linux-%s", registryAddr, version, runtime.GOARCH))
+			fmt.Sprintf("%s/extension-test-docker-network:%s-linux-%s", registryAddr, version, runtime.GOARCH))
 		output, err = pushCmd.CombinedOutput()
 		t.Logf("docker push output: %s", string(output))
 		require.NoError(t, err, "Should be able to push image to local registry")
 
 		// Pull the image manifest and check annotations
-		fetchManifest(t, registryAddr, "built-on-envoy/extension-test-docker-network",
+		fetchManifest(t, registryAddr, "extension-test-docker-network",
 			fmt.Sprintf("%s-linux-%s", version, runtime.GOARCH))
 	})
 
 	t.Run("makefile_code_target", func(t *testing.T) {
 		// #nosec G204
-		makeCmd := exec.CommandContext(ctx, "make", "push_code",
-			fmt.Sprintf("OCI_REGISTRY=%s", registryAddr), "BOE_REGISTRY_INSECURE=true")
+		makeCmd := exec.CommandContext(ctx, "make", "push_code")
 		makeCmd.Dir = extensionDir
 		output, err := makeCmd.CombinedOutput()
 		t.Logf("make push_code output: %s", string(output))
 		require.NoError(t, err, "Makefile push_code target should be valid")
 
 		// Pull the image manifest and check annotations
-		fetchManifest(t, registryAddr, "built-on-envoy/extension-src-test-docker-network", version)
+		fetchManifest(t, registryAddr, "extension-src-test-docker-network", version)
 	})
 }
 

@@ -23,6 +23,12 @@ func TestLocalCacheManifest(t *testing.T) {
 
 	require.Equal(t, "/home/user/.local/share/extensions/goplugin/test/1.0.1/manifest.yaml",
 		LocalCacheManifest(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeGo}))
+
+	require.Equal(t, "/home/user/.local/share/extensions/dym/composer/1.0.1/manifest.yaml",
+		LocalCacheManifest(dirs, &Manifest{Name: "composer", Version: "1.0.1", Type: TypeComposer}))
+
+	require.Equal(t, "/home/user/.local/share/extensions/extproc/test/1.0.1/manifest.yaml",
+		LocalCacheManifest(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeExtProc}))
 }
 
 func TestLocalCacheExtensionDirs(t *testing.T) {
@@ -62,6 +68,13 @@ func TestLocalCacheExtensionDirs(t *testing.T) {
 
 	require.Equal(t, "/home/user/.local/share/extensions/extproc/test/1.0.1/ext_proc-server",
 		LocalCacheExtension(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeExtProc}))
+
+	// Test composer type
+	require.Equal(t, "/home/user/.local/share/extensions/dym/composer/1.0.1",
+		LocalCacheExtensionDir(dirs, &Manifest{Name: "composer", Version: "1.0.1", Type: TypeComposer}))
+
+	require.Equal(t, "/home/user/.local/share/extensions/dym/composer/1.0.1/libcomposer.so",
+		LocalCacheExtension(dirs, &Manifest{Name: "composer", Version: "1.0.1", Type: TypeComposer}))
 
 	// Test other types (default)
 	require.Equal(t, "/home/user/.local/share/extensions/test/1.0.1",

@@ -50,3 +50,4 @@ RUN ZIG_TARGET=$(echo $TARGETARCH | sed 's/arm64/aarch64/;s/amd64/x86_64/') && \
 FROM scratch AS final
 
 COPY --from=builder /workspace/libcomposer* /
+COPY --from=builder /workspace/manifest.yaml /

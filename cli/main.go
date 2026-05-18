@@ -29,7 +29,8 @@ func main() {
 		cancel()
 	}()
 
-	kongCtx := kong.Parse(cmd.NewCLI(),
+	cli := cmd.NewCLI()
+	kongCtx := kong.Parse(cli,
 		kong.Name(cmd.CLIName),
 		kong.Description("Built On Envoy CLI - Discover, run, and build custom filters with zero friction"),
 		kong.UsageOnError(),
@@ -37,5 +38,12 @@ func main() {
 		cmd.Vars,
 	)
 
-	kongCtx.FatalIfErrorf(kongCtx.Run(ctx))
+	err := kongCtx.Run(ctx)
+
+	// If the logger is initialized, capture errors to the log file
+	if err != nil && cli.Logger != nil {
+		cli.Logger.Error("command failed", "error", err)
+	}
+
+	kongCtx.FatalIfErrorf(err)
 }

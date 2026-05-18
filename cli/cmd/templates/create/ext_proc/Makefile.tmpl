@@ -59,7 +59,7 @@ SOURCE_ARTIFACT := --annotation "io.tetratelabs.built-on-envoy.extension.artifac
 comma := ,
 MULTI_OCI_ANNOTATIONS := \
 	$(subst --annotation ",--annotation "index$(comma)manifest:,$(BASE_OCI_ANNOTATIONS)) \
-	--annotation "index,manifest:io.tetratelabs.built-on-envoy.extension.artifact=binary"
+	$(subst --annotation ",--annotation "index$(comma)manifest:,$(BINARY_ARTIFACT))
 
 BUILDER_NAME := boe-builder
 .PHONY: create_builder

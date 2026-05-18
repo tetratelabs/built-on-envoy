@@ -66,3 +66,7 @@ FROM scratch AS final
 
 COPY --from=builder /output/lib*.* /
 COPY --from=builder /workspace/manifest.yaml /
+# Use a wildcard to copy config.schema.json if it exists, since COPY will fail if the file does not exist and we want to
+# allow for optional presence of this file.
+COPY --from=builder /workspace/config.schema.json* /
+

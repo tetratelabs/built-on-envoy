@@ -56,14 +56,15 @@ BASE_OCI_ANNOTATIONS := \
 	--annotation "io.tetratelabs.built-on-envoy.extension.composer_version=$(COMPOSER_VERSION)"
 
 # Artifact type annotations
-BINARY_ARTIFACT := --annotation "io.tetratelabs.built-on-envoy.extension.artifact=binary"
-SOURCE_ARTIFACT := --annotation "io.tetratelabs.built-on-envoy.extension.artifact=source"
+BINARY_ARTIFACT  := --annotation "io.tetratelabs.built-on-envoy.extension.artifact=binary"
+SOURCE_ARTIFACT  := --annotation "io.tetratelabs.built-on-envoy.extension.artifact=source"
+CSHARED_ARTIFACT := --annotation "io.tetratelabs.built-on-envoy.extension.cshared=true"
 
 # Multi-platform OCI annotations (with index,manifest prefix, for binary artifacts)
 comma := ,
 MULTI_OCI_ANNOTATIONS := \
 	$(subst --annotation ",--annotation "index$(comma)manifest:,$(BASE_OCI_ANNOTATIONS)) \
-	--annotation "index,manifest:io.tetratelabs.built-on-envoy.extension.artifact=binary"
+	$(subst --annotation ",--annotation "index$(comma)manifest:,$(BINARY_ARTIFACT))
 
 BUILDER_NAME := boe-builder
 .PHONY: create_builder
@@ -116,6 +117,7 @@ build_image:  ## Build the OCI image for the extension Dynamic Module
 		--output type=docker,oci-mediatypes=true \
 		--provenance=false \
 		$(BASE_OCI_ANNOTATIONS) \
+		$(CSHARED_ARTIFACT) \
 		$(BINARY_ARTIFACT) \
 		--build-arg NAME="$(NAME)" \
 		-t $(IMAGE)-linux-$(ARCH) \
@@ -155,6 +157,7 @@ push_image: create_builder  ## Build and push the OCI image for the extension Dy
 		--provenance=false \
 		--build-arg NAME="$(NAME)" \
 		$(PUSH_ANNOTATIONS) \
+		$(subst --annotation ",--annotation "index$(comma)manifest:,$(CSHARED_ARTIFACT)) \
 		--tag $(IMAGE) \
 		-f ./Dockerfile .
 
