@@ -15,16 +15,20 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 
 func TestAllManifestsAreValid(t *testing.T) {
-	_, err := loadManifests(manifestFS, true)
+	_, err := LoadManifests(internaltesting.ExtensionsFS(t), ".", true)
 	require.NoError(t, err)
 }
 
 func TestAllManifestsAreLoaded(t *testing.T) {
+	fsys := internaltesting.ExtensionsFS(t)
+
 	count := 0
-	err := fs.WalkDir(manifestFS, "manifests", func(path string, d fs.DirEntry, err error) error {
+	err := fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -33,9 +37,11 @@ func TestAllManifestsAreLoaded(t *testing.T) {
 		}
 		return nil
 	})
-
 	require.NoError(t, err)
-	require.Len(t, Manifests, count)
+
+	manifests, err := LoadManifests(fsys, ".", false)
+	require.NoError(t, err)
+	require.Len(t, manifests, count)
 }
 
 func TestValidateGoManifest(t *testing.T) {
@@ -139,8 +145,10 @@ func TestValidateExtProcManifest(t *testing.T) {
 }
 
 func TestManifestsForCatalog(t *testing.T) {
-	manifests := ManifestsIndex()
-	require.Less(t, len(manifests), len(Manifests))
+	all, err := LoadManifests(internaltesting.ExtensionsFS(t), ".", false)
+	require.NoError(t, err)
+	manifests := ManifestsIndex(all)
+	require.Less(t, len(manifests), len(all))
 	for _, m := range manifests {
 		require.Falsef(t, m.ExtensionSet, "manifest %s should not be included in catalog", m.Name)
 	}
@@ -556,10 +564,10 @@ license: Apache-2.0
 examples: []
 `
 	fsys := fstest.MapFS{
-		"manifests/ext1/manifest.yaml": &fstest.MapFile{Data: []byte(manifest)},
-		"manifests/ext2/manifest.yaml": &fstest.MapFile{Data: []byte(manifest)},
+		"ext1/manifest.yaml": &fstest.MapFile{Data: []byte(manifest)},
+		"ext2/manifest.yaml": &fstest.MapFile{Data: []byte(manifest)},
 	}
-	_, err := loadManifests(fsys, false)
+	_, err := LoadManifests(fsys, ".", false)
 	require.ErrorIs(t, err, ErrDuplicateManifestName)
 }
 
@@ -641,7 +649,7 @@ examples: []
 		assert.Equal(t, "1.100.0", m.MaxEnvoyVersion) // Automatically computed when loading the manifest
 	})
 
-	t.Run("no-local-parent-falls-back-to-embedded", func(t *testing.T) {
+	t.Run("no-local-parent-returns-error", func(t *testing.T) {
 		// Create a child manifest in an isolated temp dir (no parent on filesystem).
 		tmpDir := t.TempDir()
 		childManifest := `name: test-child
@@ -660,10 +668,8 @@ examples: []
 		m, err := LoadLocalManifest(filepath.Join(tmpDir, "manifest.yaml"))
 		require.NoError(t, err)
 
-		// Should fall back to embedded manifests (composer exists in embedded).
-		require.NoError(t, ResolveLocalVersions(m))
-		assert.Equal(t, Manifests["composer"].Version, m.Version)
-		assert.Equal(t, Manifests["composer"].Version, m.ComposerVersion)
+		// Without the parent manifest on disk, version resolution fails.
+		require.ErrorIs(t, ResolveLocalVersions(m), ErrParentManifestNotFound)
 	})
 
 	t.Run("noop-for-non-go-type", func(t *testing.T) {

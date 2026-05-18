@@ -199,6 +199,11 @@ Flags:
 	require.Equal(t, expected, buf.String())
 }
 
+func TestNewCLI(t *testing.T) {
+	cli := NewCLI()
+	require.NotNil(t, cli.Create.resolveComposerVersion)
+}
+
 func TestVersionRun(t *testing.T) {
 	var buf bytes.Buffer
 	v := &Version{output: &buf}

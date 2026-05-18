@@ -526,7 +526,7 @@ func TestLoadLocalManifests(t *testing.T) {
 		// Create a temporary directory and create an template Go plugin with
 		// createGoExtension.
 		tempDir := t.TempDir()
-		err := createGoExtension(logger, downloader.Dirs, tempDir, "test_custom")
+		err := createGoExtension(logger, downloader.Dirs, tempDir, "test_custom", "0.1.0")
 		require.NoError(t, err)
 
 		// Remove go.mod and go.sum to simulate invalid Go extension.
@@ -544,7 +544,7 @@ func TestLoadLocalManifests(t *testing.T) {
 		// Create a temporary directory and create an template Go plugin with
 		// createGoExtension.
 		tempDir := t.TempDir()
-		err := createGoExtension(logger, downloader.Dirs, tempDir, "test_valid")
+		err := createGoExtension(logger, downloader.Dirs, tempDir, "test_valid", "0.1.0")
 		require.NoError(t, err)
 
 		manifests, err := loadLocalManifests(t.Context(), logger, downloader, []string{tempDir + "/test_valid"}, false)

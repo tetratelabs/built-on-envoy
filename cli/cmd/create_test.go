@@ -7,7 +7,10 @@ package cmd
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -45,13 +48,15 @@ Arguments:
   <name>    Name of the extension.
 
 Flags:
-  -h, --help                  Show context-sensitive help.
+  -h, --help                       Show context-sensitive help.
 
-      --type="go"             Type of the extension (go, rust, ext_proc).
-      --filter-type="http"    Filter type (http, network). Network filters are
-                              only supported for rust.
-      --path=STRING           Output directory for the extension. Defaults to
-                              the extension name.
+      --type="go"                  Type of the extension (go, rust, ext_proc).
+      --filter-type="http"         Filter type (http, network). Network filters
+                                   are only supported for rust.
+      --path=STRING                Output directory for the extension. Defaults
+                                   to the extension name.
+      --composer-version=STRING    Composer version for Go extensions. Resolved
+                                   from the registry if not set.
 `, internaltesting.WrapHelp(createHelp))
 	require.Equal(t, expected, buf.String())
 }
@@ -66,14 +71,15 @@ func TestCreateGo_Run(t *testing.T) {
 	name := "my-extension"
 
 	c := &Create{
-		Type: "go",
-		Name: name,
-		Path: tmpDir,
+		Type:            "go",
+		Name:            name,
+		Path:            tmpDir,
+		ComposerVersion: "0.1.0",
 	}
 
 	// This might fail if network is not available due to `go mod tidy`
 	// failing to fetch dependencies.
-	err := c.Run(&xdg.Directories{}, internaltesting.NewTLogger(t))
+	err := c.Run(t.Context(), &xdg.Directories{}, internaltesting.NewTLogger(t))
 	if err != nil {
 		// Attempt to differentiate network error from logic error if possible,
 		// but for now we'll just fail the test if the command fails.
@@ -115,6 +121,51 @@ func TestCreateGo_Run(t *testing.T) {
 	}
 }
 
+func TestCreateGo_ResolveComposerVersion(t *testing.T) {
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skip("go not found in PATH")
+	}
+
+	tests := []struct {
+		name        string
+		resolveFunc func(context.Context, *slog.Logger) (string, error)
+		expectedErr string
+	}{
+		{
+			name: "resolved from registry",
+			resolveFunc: func(context.Context, *slog.Logger) (string, error) {
+				return "0.1.0", nil
+			},
+		},
+		{
+			name: "error",
+			resolveFunc: func(context.Context, *slog.Logger) (string, error) {
+				return "", errors.New("registry unavailable")
+			},
+			expectedErr: "failed to resolve composer version (use --composer-version to set it explicitly): registry unavailable",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := &Create{
+				Type:                   "go",
+				Name:                   "my-extension",
+				Path:                   t.TempDir(),
+				resolveComposerVersion: tc.resolveFunc,
+			}
+
+			err := c.Run(t.Context(), &xdg.Directories{}, internaltesting.NewTLogger(t))
+			if tc.expectedErr != "" {
+				require.EqualError(t, err, tc.expectedErr)
+			} else {
+				require.NoError(t, err)
+				require.DirExists(t, filepath.Join(c.Path, c.Name))
+			}
+		})
+	}
+}
+
 func TestCreateExtProc_Run(t *testing.T) {
 	// Ensure go is available as the command runs `go mod tidy`
 	if _, err := exec.LookPath("go"); err != nil {
@@ -130,7 +181,7 @@ func TestCreateExtProc_Run(t *testing.T) {
 		Path: tmpDir,
 	}
 
-	err := c.Run(&xdg.Directories{}, internaltesting.NewTLogger(t))
+	err := c.Run(t.Context(), &xdg.Directories{}, internaltesting.NewTLogger(t))
 	require.NoError(t, err)
 
 	repoPath := filepath.Join(tmpDir, name)
@@ -182,7 +233,7 @@ func TestCreateRust_Run(t *testing.T) {
 		Path: tmpDir,
 	}
 
-	err := c.Run(&xdg.Directories{}, internaltesting.NewTLogger(t))
+	err := c.Run(t.Context(), &xdg.Directories{}, internaltesting.NewTLogger(t))
 	require.NoError(t, err)
 
 	repoPath := filepath.Join(tmpDir, name)
@@ -233,7 +284,7 @@ func TestUnsupportedType(t *testing.T) {
 		Name: "test-extension",
 	}
 
-	err := c.Run(&xdg.Directories{}, internaltesting.NewTLogger(t))
+	err := c.Run(t.Context(), &xdg.Directories{}, internaltesting.NewTLogger(t))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported extension type")
 }
@@ -249,7 +300,7 @@ func TestCreateRust_NetworkFilter_Run(t *testing.T) {
 		Path:       tmpDir,
 	}
 
-	err := c.Run(&xdg.Directories{}, internaltesting.NewTLogger(t))
+	err := c.Run(t.Context(), &xdg.Directories{}, internaltesting.NewTLogger(t))
 	require.NoError(t, err)
 
 	repoPath := filepath.Join(tmpDir, name)

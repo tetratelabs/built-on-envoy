@@ -13,17 +13,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"golang.org/x/mod/semver"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/oci"
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
-
-func TestLibComposerVersion(t *testing.T) {
-	require.Truef(t, semver.IsValid("v"+LibComposerVersion),
-		"ComposerVersion %q is not a valid semver", LibComposerVersion)
-}
 
 func TestDownloadLibComposerAndBuildIfNeeded_DownloadError(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
@@ -51,15 +45,22 @@ func TestBuildLibComposer(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 	fakeDirs := &xdg.Directories{DataHome: t.TempDir()}
 	composerPath := "../../../extensions/composer"
-	err := BuildLibComposer(logger, fakeDirs, composerPath, LibComposerVersion, true)
+
+	composerManifest, err := LoadLocalManifest(filepath.Join(composerPath, "manifest.yaml"))
+	require.NoError(t, err)
+	composerVersion := composerManifest.Version
+
+	err = BuildLibComposer(logger, fakeDirs, composerPath, composerVersion, true)
 	require.NoError(t, err)
 
 	// Ensure the libcomposer.so is created.
-	_, err = os.Stat(LocalCacheComposerLib(fakeDirs, LibComposerVersion))
+	_, err = os.Stat(LocalCacheComposerLib(fakeDirs, composerVersion))
 	require.NoError(t, err)
 
 	// Ensure plugins are built
-	_, err = os.Stat(LocalCacheExtension(fakeDirs, Manifests["example-go"]))
+	manifests, loadErr := LoadManifests(internaltesting.ExtensionsFS(t), ".", false)
+	require.NoError(t, loadErr)
+	_, err = os.Stat(LocalCacheExtension(fakeDirs, manifests["example-go"]))
 	require.NoError(t, err)
 }
 
