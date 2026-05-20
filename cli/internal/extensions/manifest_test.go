@@ -250,6 +250,37 @@ func TestSupportsEnvoyVersion(t *testing.T) {
 			version:         "1.30.2",
 			want:            true,
 		},
+		{
+			name:    "dev - no constraints",
+			version: "dev",
+			want:    true,
+		},
+		{
+			name:            "dev - with min",
+			minEnvoyVersion: "1.38.0",
+			version:         "dev",
+			want:            true,
+		},
+		{
+			name:            "dev - with max",
+			maxEnvoyVersion: "1.39.0",
+			version:         "dev",
+			want:            true,
+		},
+		{
+			name:            "dev - with min and max",
+			minEnvoyVersion: "1.38.0",
+			maxEnvoyVersion: "1.39.0",
+			version:         "dev",
+			want:            true,
+		},
+		{
+			name:            "dev-latest - with min and max",
+			minEnvoyVersion: "1.38.0",
+			maxEnvoyVersion: "1.39.0",
+			version:         "dev-latest",
+			want:            true,
+		},
 	}
 
 	for _, tt := range tests {

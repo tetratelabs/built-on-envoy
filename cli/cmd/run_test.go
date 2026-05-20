@@ -50,8 +50,8 @@ Run Envoy with extensions
 Flags:
   -h, --help                       Show context-sensitive help.
 
-      --envoy-version=STRING       Envoy version to use (e.g., 1.31.0)
-                                   ($ENVOY_VERSION)
+      --envoy-version=STRING       Envoy version to use (e.g., 1.31.0, dev,
+                                   dev-latest) ($ENVOY_VERSION)
       --envoy-path=STRING          Path to a custom Envoy binary. Skips Envoy
                                    download and version selection ($ENVOY_PATH).
       --log-level="all:error"      Envoy component log level ($ENVOY_LOG_LEVEL).
@@ -594,6 +594,20 @@ func TestValidateEnvoyCompat(t *testing.T) {
 				`incompatible Envoy version 1.31.0: extension ext-1 (1.0.0) requires Envoy ">= 1.32.0"`,
 				`incompatible Envoy version 1.31.0: extension ext-2 (2.0.0) requires Envoy "<= 1.30.0"`,
 				`incompatible Envoy version 1.31.0: extension ext-3 (2.0.0) requires Envoy ">= 1.31.1 && <= 1.32.0"`,
+			},
+		},
+		{
+			name:         "dev aliases are compatible with constrained extensions",
+			envoyVersion: "dev",
+			extensions: []*extensions.Manifest{
+				{Name: "ext-1", Version: "1.0.0", MinEnvoyVersion: "1.38.0", MaxEnvoyVersion: "1.39.0"},
+			},
+		},
+		{
+			name:         "dev-latest alias is compatible with constrained extensions",
+			envoyVersion: "dev-latest",
+			extensions: []*extensions.Manifest{
+				{Name: "ext-1", Version: "1.0.0", MinEnvoyVersion: "1.38.0", MaxEnvoyVersion: "1.39.0"},
 			},
 		},
 	}

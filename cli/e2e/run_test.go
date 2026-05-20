@@ -66,6 +66,17 @@ func TestLuaRemoteExecution(t *testing.T) {
 	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
 }
 
+func TestDevEnvoyVersion(t *testing.T) {
+	ports := internaltesting.FreePorts(t, 2)
+	proxyPort, adminPort := ports[0], ports[1]
+	internaltesting.RunEnvoy(t, cliBin, proxyPort, adminPort, "--envoy-version", "dev-latest")
+
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	t.Cleanup(cancel)
+
+	require.NoError(t, internaltesting.CheckGet(ctx, fmt.Sprintf("http://localhost:%d/status/200", proxyPort), internaltesting.EqualStatus(200)))
+}
+
 func TestLuaLocalExtension(t *testing.T) {
 	ports := internaltesting.FreePorts(t, 2)
 	proxyPort := ports[0]

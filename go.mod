@@ -9,7 +9,7 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.42.0
-	github.com/tetratelabs/func-e v1.5.0
+	github.com/tetratelabs/func-e v1.6.0
 	golang.org/x/mod v0.36.0
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1

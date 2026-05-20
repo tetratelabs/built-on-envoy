@@ -247,10 +247,13 @@ func copyFile(srcPath, dstPath string, logger *slog.Logger) error {
 // printExportSummary prints information about how to use the exported configuration.
 func printExportSummary(stdout io.Writer, outputPath string, files []string, listenPort, adminPort uint32, envoyVersion string) {
 	adminPortStr := strconv.FormatUint(uint64(adminPort), 10)
-	if envoyVersion == "" {
-		envoyVersion = "dev"
-	} else if !strings.HasPrefix(envoyVersion, "v") {
-		envoyVersion = "v" + envoyVersion
+	funcEEnvoyVersion := envoyVersion
+	if funcEEnvoyVersion == "" {
+		funcEEnvoyVersion = "dev"
+	}
+	dockerEnvoyTag := funcEEnvoyVersion
+	if dockerEnvoyTag != "dev" && !strings.HasPrefix(dockerEnvoyTag, "v") {
+		dockerEnvoyTag = "v" + dockerEnvoyTag
 	}
 
 	_, _ = fmt.Fprintf(stdout, "\n%v✓ Config exported to:%v %s\n",
@@ -262,7 +265,7 @@ func printExportSummary(stdout io.Writer, outputPath string, files []string, lis
 %[1]s→ Run locally with with func-e:%[2]s (https://func-e.io/)
     cd %[3]s
     export GODEBUG=cgocheck=0
-    func-e run -c envoy.yaml --log-level info --component-log-level dynamic_modules:debug
+    ENVOY_VERSION=%[6]s func-e run -c envoy.yaml --log-level info --component-log-level dynamic_modules:debug
 
 %[1]s→ Run locally in Docker:%[2]s (not supported in Darwin hosts yet)
     docker run --rm \
@@ -272,6 +275,6 @@ func printExportSummary(stdout io.Writer, outputPath string, files []string, lis
         -e GODEBUG=cgocheck=0 \
         -v /tmp/boe-export:/boe \
         -w /boe \
-        envoyproxy/envoy:%[6]s -c /boe/envoy.yaml --log-level info --component-log-level dynamic_modules:debug
-`, internal.ANSIBold, internal.ANSIReset, outputPath, listenPort, adminPortStr, envoyVersion)
+        envoyproxy/envoy:%[7]s -c /boe/envoy.yaml --log-level info --component-log-level dynamic_modules:debug
+`, internal.ANSIBold, internal.ANSIReset, outputPath, listenPort, adminPortStr, funcEEnvoyVersion, dockerEnvoyTag)
 }
