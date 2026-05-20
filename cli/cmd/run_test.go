@@ -552,6 +552,61 @@ func TestLoadLocalManifests(t *testing.T) {
 		require.Len(t, manifests, 1)
 		require.Equal(t, "test_valid", manifests[0].Name)
 	})
+
+	t.Run("Go child resolves parent locally", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		childDir := filepath.Join(tmpDir, "child")
+		require.NoError(t, os.MkdirAll(childDir, 0o750))
+
+		parentYAML := `name: test-parent
+version: 9.9.9
+composerVersion: 9.9.9
+minEnvoyVersion: 1.99.0
+type: composer
+extensionSet: true
+`
+		childYAML := `name: test-child
+parent: test-parent
+categories: [Misc]
+author: Test
+description: A child extension
+longDescription: A child extension
+type: go
+tags: [test]
+license: Apache-2.0
+examples: []
+`
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "manifest.yaml"), []byte(parentYAML), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(childDir, "manifest.yaml"), []byte(childYAML), 0o600))
+
+		manifests, err := loadLocalManifests(t.Context(), logger, downloader, []string{childDir}, false)
+		require.NoError(t, err)
+		require.Len(t, manifests, 1)
+		require.Equal(t, "test-child", manifests[0].Name)
+		require.Equal(t, "9.9.9", manifests[0].Version)
+	})
+
+	t.Run("Go child fails when parent not found", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		childYAML := `name: test-child
+parent: composer
+categories: [Misc]
+author: Test
+description: A child extension
+longDescription: A child extension
+type: go
+tags: [test]
+license: Apache-2.0
+examples: []
+`
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "manifest.yaml"), []byte(childYAML), 0o600))
+
+		mock := &mockOCIClient{pullErr: errors.New("registry unavailable")}
+		d := newTestDownloader(t, t.TempDir(), mock)
+		_, err := loadLocalManifests(t.Context(), logger, d, []string{tmpDir}, false)
+		require.ErrorIs(t, err, errFailedToLoadLocalManifest)
+		require.ErrorContains(t, err, "downloading parent composer")
+	})
 }
 
 func TestValidateEnvoyCompat(t *testing.T) {
@@ -965,6 +1020,92 @@ func TestDownloadExtensions(t *testing.T) {
 
 		_, err := downloadExtensions(t.Context(), d, []string{"ext-ok:1.0.0", "ext-fail:1.0.0"}, false)
 		require.ErrorIs(t, err, errFail)
+	})
+}
+
+func TestResolveParent(t *testing.T) {
+	parentYAML := `name: test-parent
+version: 9.9.9
+composerVersion: 9.9.9
+minEnvoyVersion: 1.99.0
+type: composer
+extensionSet: true
+`
+	childYAML := `name: test-child
+parent: test-parent
+categories: [Misc]
+author: Test
+description: A child extension
+longDescription: A child extension
+type: go
+tags: [test]
+license: Apache-2.0
+examples: []
+`
+	childComposerYAML := `name: test-child
+parent: composer
+categories: [Misc]
+author: Test
+description: A child extension
+longDescription: A child extension
+type: go
+tags: [test]
+license: Apache-2.0
+examples: []
+`
+
+	t.Run("found locally", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		childDir := filepath.Join(tmpDir, "child")
+		require.NoError(t, os.MkdirAll(childDir, 0o750))
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "manifest.yaml"), []byte(parentYAML), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(childDir, "manifest.yaml"), []byte(childYAML), 0o600))
+
+		m, err := extensions.LoadLocalManifest(filepath.Join(childDir, "manifest.yaml"))
+		require.NoError(t, err)
+
+		d := &extensions.Downloader{Logger: internaltesting.NewTLogger(t)}
+		parent, err := resolveParent(t.Context(), d, m)
+		require.NoError(t, err)
+		require.Equal(t, "test-parent", parent.Name)
+		require.Equal(t, "9.9.9", parent.Version)
+	})
+
+	t.Run("fallback to registry", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "manifest.yaml"), []byte(childComposerYAML), 0o600))
+
+		m, err := extensions.LoadLocalManifest(filepath.Join(tmpDir, "manifest.yaml"))
+		require.NoError(t, err)
+
+		mock := &mockOCIClient{
+			annotations: map[string]string{
+				ocispec.AnnotationTitle:                 extensions.ComposerArtifactLite,
+				extensions.OCIAnnotationExtensionType:   string(extensions.TypeComposer),
+				extensions.OCIAnnotationComposerVersion: "0.5.0",
+			},
+			tags: []string{"0.5.0", "0.4.0"},
+		}
+		d := newTestDownloader(t, t.TempDir(), mock)
+
+		parent, err := resolveParent(t.Context(), d, m)
+		require.NoError(t, err)
+		require.Equal(t, "0.5.0", parent.Version)
+	})
+
+	t.Run("registry error", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "manifest.yaml"), []byte(childComposerYAML), 0o600))
+
+		m, err := extensions.LoadLocalManifest(filepath.Join(tmpDir, "manifest.yaml"))
+		require.NoError(t, err)
+
+		mock := &mockOCIClient{pullErr: errors.New("registry unavailable")}
+		d := newTestDownloader(t, t.TempDir(), mock)
+
+		_, err = resolveParent(t.Context(), d, m)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "downloading parent composer")
 	})
 }
 

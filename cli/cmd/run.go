@@ -360,8 +360,12 @@ func loadLocalManifests(ctx context.Context, logger *slog.Logger, downloader *ex
 			return nil, fmt.Errorf("%w from %s: %w", errFailedToLoadLocalManifest, path, err)
 		}
 
-		if err := extensions.ResolveLocalVersions(manifest); err != nil {
-			return nil, fmt.Errorf("%w from %s: %w", errFailedToLoadLocalManifest, path, err)
+		if manifest.Type == extensions.TypeGo && manifest.Parent != "" {
+			parent, err := resolveParent(ctx, downloader, manifest)
+			if err != nil {
+				return nil, fmt.Errorf("%w from %s: %w", errFailedToLoadLocalManifest, path, err)
+			}
+			extensions.ResolveVersionsWithParent(manifest, parent)
 		}
 
 		if build {
@@ -400,6 +404,22 @@ func loadLocalManifests(ctx context.Context, logger *slog.Logger, downloader *ex
 	}
 
 	return manifests, nil
+}
+
+// resolveParent finds the parent manifest locally, falling back to the registry.
+func resolveParent(ctx context.Context, downloader *extensions.Downloader, m *extensions.Manifest) (*extensions.Manifest, error) {
+	parent, err := extensions.FindLocalParentManifest(m)
+	if err != nil {
+		return nil, err
+	}
+	if parent != nil {
+		return parent, nil
+	}
+	dl, err := downloader.DownloadComposer(ctx, "latest", extensions.ComposerArtifactLite)
+	if err != nil {
+		return nil, fmt.Errorf("downloading parent %s: %w", m.Parent, err)
+	}
+	return dl.Manifest, nil
 }
 
 // extractTag extracts the tag from a full OCI reference.

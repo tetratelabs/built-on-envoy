@@ -368,31 +368,14 @@ func LoadLocalManifest(path string) (*Manifest, error) {
 	return m, nil
 }
 
-// ResolveLocalVersions resolves version fields for a local manifest that has a parent.
-// It walks up the directory tree from the manifest's path looking for the parent.
-func ResolveLocalVersions(m *Manifest) error {
-	if m.Type != TypeGo || m.Parent == "" {
-		return nil
-	}
-
-	parent, err := findLocalParentManifest(m)
-	if err != nil {
-		return err
-	}
-	ResolveVersionsWithParent(m, parent)
-	return nil
-}
-
-// findLocalParentManifest walks up the directory tree from the manifest's path
-// looking for a manifest.yaml whose name matches the parent field.
-func findLocalParentManifest(m *Manifest) (*Manifest, error) {
-	// Start from the directory containing the child manifest and walk up.
+// FindLocalParentManifest walks up the directory tree from the manifest's path
+// looking for a parent manifest. Returns (nil, nil) if not found.
+func FindLocalParentManifest(m *Manifest) (*Manifest, error) {
 	dir := filepath.Dir(m.Path)
 	for {
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			// Reached filesystem root without finding the parent.
-			return nil, fmt.Errorf("%w: %s", ErrParentManifestNotFound, m.Parent)
+			return nil, nil
 		}
 		dir = parent
 
@@ -401,7 +384,6 @@ func findLocalParentManifest(m *Manifest) (*Manifest, error) {
 			continue
 		}
 
-		// Load without validation since the parent may have a different type (e.g. composer).
 		cm, err := loadManifest(os.DirFS(dir), "manifest.yaml", false)
 		if err != nil {
 			continue
