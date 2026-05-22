@@ -40,6 +40,8 @@ type RunnerFuncE struct {
 	Logger *slog.Logger
 	// EnvoyVersion specifies the Envoy version to run. If empty, the default version is used.
 	EnvoyVersion string
+	// EnvoyVersionsURL overrides the Envoy versions JSON URL (e.g. for debug builds).
+	EnvoyVersionsURL string
 	// EnvoyPath specifies a custom Envoy binary path. If set, download and version selection are skipped.
 	EnvoyPath string
 	// DefaultLogLevel specifies the base Envoy log level.
@@ -175,6 +177,9 @@ Press Ctrl+C to stop
 	}
 	if r.EnvoyVersion != "" {
 		opts = append(opts, api.EnvoyVersion(r.EnvoyVersion))
+	}
+	if r.EnvoyVersionsURL != "" {
+		opts = append(opts, api.EnvoyVersionsURL(r.EnvoyVersionsURL))
 	}
 	if r.EnvoyPath != "" {
 		opts = append(opts, api.EnvoyPath(r.EnvoyPath))

@@ -31,15 +31,16 @@ const defaultLogLevel = "error"
 
 // Run is a command to run Envoy with extensions.
 type Run struct {
-	EnvoyVersion string   `help:"Envoy version to use (e.g., 1.31.0)" env:"ENVOY_VERSION"`
-	EnvoyPath    string   `name:"envoy-path" help:"Path to a custom Envoy binary. Skips Envoy download and version selection." env:"ENVOY_PATH" type:"existingfile"`
-	LogLevel     string   `help:"Envoy component log level." default:"all:error" env:"ENVOY_LOG_LEVEL"`
-	RunID        string   `name:"run-id" env:"BOE_RUN_ID" help:"Run identifier for this invocation. Overrides the default timestamp-based ID."`
-	ListenPort   uint32   `help:"Port for Envoy listener to accept incoming traffic." default:"10000"`
-	AdminPort    uint32   `name:"admin-port" help:"Port for Envoy admin interface." default:"9901" env:"BOE_ADMIN_PORT"`
-	Extensions   []string `name:"extension" help:"Extensions to enable (in the format: \"name\" or \"name:version\")."`
-	Local        []string `name:"local" sep:"none" help:"Path to a directory containing a local Extension to enable." type:"existingdir"`
-	Dev          bool     `help:"Whether to allow downloading dev versions of extensions (with -dev suffix). By default, only stable versions are allowed." default:"false"`
+	EnvoyVersion     string   `help:"Envoy version to use (e.g., 1.31.0, dev, dev-latest)" env:"ENVOY_VERSION"`
+	EnvoyVersionsURL string   `name:"envoy-versions-url" help:"URL of the Envoy versions JSON. Override to use debug builds (see archive-envoy)." env:"ENVOY_VERSIONS_URL" hidden:""`
+	EnvoyPath        string   `name:"envoy-path" help:"Path to a custom Envoy binary. Skips Envoy download and version selection." env:"ENVOY_PATH" type:"existingfile"`
+	LogLevel         string   `help:"Envoy component log level." default:"all:error" env:"ENVOY_LOG_LEVEL"`
+	RunID            string   `name:"run-id" env:"BOE_RUN_ID" help:"Run identifier for this invocation. Overrides the default timestamp-based ID."`
+	ListenPort       uint32   `help:"Port for Envoy listener to accept incoming traffic." default:"10000"`
+	AdminPort        uint32   `name:"admin-port" help:"Port for Envoy admin interface." default:"9901" env:"BOE_ADMIN_PORT"`
+	Extensions       []string `name:"extension" help:"Extensions to enable (in the format: \"name\" or \"name:version\")."`
+	Local            []string `name:"local" sep:"none" help:"Path to a directory containing a local Extension to enable." type:"existingdir"`
+	Dev              bool     `help:"Whether to allow downloading dev versions of extensions (with -dev suffix). By default, only stable versions are allowed." default:"false"`
 	// sep:"none" disables Kong's default comma-separated splitting for []string flags.
 	// JSON config values contain commas (e.g. {"a":"1","b":"2"}) which would otherwise
 	// be split into separate invalid fragments, causing protobuf unmarshal failures.
@@ -190,6 +191,7 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 	runner := &envoy.RunnerFuncE{
 		Logger:                  logger,
 		EnvoyVersion:            r.EnvoyVersion,
+		EnvoyVersionsURL:        r.EnvoyVersionsURL,
 		EnvoyPath:               r.EnvoyPath,
 		DefaultLogLevel:         r.defaultLogLevel,
 		ComponentLogLevel:       r.componentLogLevel,
