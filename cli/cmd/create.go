@@ -93,6 +93,7 @@ func createGoExtension(logger *slog.Logger, dirs *xdg.Directories, path, name, c
 		"Makefile":           "templates/create/go/Makefile.tmpl",
 		"go.mod":             "templates/create/go/go.mod.tmpl",
 		"Dockerfile":         "templates/create/go/Dockerfile.tmpl",
+		"Dockerfile.plugin":  "templates/create/go/Dockerfile.plugin.tmpl",
 		"Dockerfile.code":    "templates/create/go/Dockerfile.code.tmpl",
 		".dockerignore":      "templates/create/go/dockerignore.tmpl",
 		"embedded/host.go":   "templates/create/go/host.go.tmpl",

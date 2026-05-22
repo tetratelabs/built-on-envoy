@@ -3,6 +3,8 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
+default: build
+
 # WARNING: This Makefile is auto-generated. Do not modify it directly.
 # If you need to customize the build process, consider using environment variables
 # or wrapper scripts instead of editing this file.
@@ -71,33 +73,34 @@ MULTI_OCI_ANNOTATIONS := \
 	$(subst --annotation ",--annotation "index$(comma)manifest:,$(BASE_OCI_ANNOTATIONS)) \
 	--annotation "index,manifest:io.tetratelabs.built-on-envoy.extension.artifact=binary"
 
-.PHONY: test
-test:
-	cargo test
+##@ Build
 
 .PHONY: format
-format:
+format:  ## Check code formatting
 	cargo fmt --check
 
 .PHONY: lint
-lint:
+lint:  ## Run linter
 	cargo clippy -- -D warnings
 
 .PHONY: build
-build:
+build:  ## Compile the Rust extension into an Envoy Dynamic Module
 	cargo build --release
 
 .PHONY: test
-test:
+test:  ## Run the tests
 	cargo test
 
 COVERAGE_THRESHOLD ?= 80
 .PHONY: test-coverage
-test-coverage:
+test-coverage:  ## Run tests and check coverage
 	cargo llvm-cov --lcov --output-path lcov.info --fail-under-lines $(COVERAGE_THRESHOLD); \
 		status=$$?; \
 		cargo llvm-cov report --summary-only; \
 		exit $$status
+
+
+##@ Packaging
 
 BUILDER_NAME := boe-builder
 .PHONY: create_builder
@@ -110,7 +113,7 @@ create_builder:
 # For single local platform build, we will add the OS and ARCH to the image tag to avoid confusion.
 # And we will not push it to the registry by default.
 .PHONY: build_image
-build_image: create_builder  ## Build docker image for the extension for local platform
+build_image: create_builder  ## Build the OCI image for the extension Dynamic Module
 	@echo "Building image for local platform ($(OS)/$(ARCH))..."
 	docker buildx build \
 		--builder $(BUILDER_NAME) \
@@ -125,7 +128,7 @@ build_image: create_builder  ## Build docker image for the extension for local p
 # both amd64 and arm64 architectures, and push it to the registry.
 PLATFORMS ?= linux/arm64,linux/amd64
 .PHONY: push_image
-push_image: create_builder  ## Build and push docker image for the extension for cross-platform support
+push_image: create_builder  ## Build and push the OCI image for the extension Dynamic Module
 	@echo "Building and pushing image..."
 	docker buildx build --platform=$(PLATFORMS) \
 		--builder $(BUILDER_NAME) \
@@ -138,7 +141,7 @@ push_image: create_builder  ## Build and push docker image for the extension for
 # Package source code into an image and push it to the registry.
 CODE_IMAGE := $(HUB)/extension-src-$(NAME):$(VERSION)$(IMAGE_NONCE)
 .PHONY: push_code
-push_code: create_builder  ## Build and push source code image
+push_code: create_builder  ## Build and push the OCI image with the extension source code
 	@echo "Building and pushing source code image..."
 	docker buildx build \
 		--builder $(BUILDER_NAME) \
@@ -148,3 +151,11 @@ push_code: create_builder  ## Build and push source code image
 		$(SOURCE_ARTIFACT) \
 		--tag $(CODE_IMAGE) \
 		-f ./Dockerfile.code .
+
+##@ Help
+
+.PHONY: help
+help:  ## Show this help info
+	@echo "Built On Envoy. Discover, run, and build custom filters with zero friction.\n"
+	@echo "Usage:\n  make \033[36m<Target>\033[0m \n\nTargets:"
+	@awk 'BEGIN {FS = ":.*##"; printf ""} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)

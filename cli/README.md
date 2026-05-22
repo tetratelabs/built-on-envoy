@@ -74,5 +74,5 @@ cli/
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `GO_TEST_ARGS` | Extra args for `go test` | `make test GO_TEST_ARGS="-run TestRun -v"` |
+| `GO_TEST_ARGS` | Extra args for `go test` | `make test GO_TEST_ARGS="-test.short -run TestRun -v"` |
 | `TAG` | Docker image tag | `make build_image TAG=v1.0.0` |

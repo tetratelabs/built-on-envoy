@@ -96,8 +96,10 @@ func TestCreateGo_Run(t *testing.T) {
 			"Makefile",
 			"go.mod",
 			"Dockerfile",
+			"Dockerfile.plugin",
 			"Dockerfile.code",
 			".dockerignore",
+			"main/main.go",
 			"embedded/host.go",
 			"standalone/main.go",
 		}

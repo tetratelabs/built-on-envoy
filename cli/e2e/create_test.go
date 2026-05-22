@@ -20,7 +20,7 @@ import (
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 
-func TestCreateWithDockerSupport(t *testing.T) {
+func TestCreateGoWithDockerSupport(t *testing.T) {
 	tmpDir := t.TempDir()
 	ctx := t.Context()
 
@@ -34,62 +34,126 @@ func TestCreateWithDockerSupport(t *testing.T) {
 
 	extensionDir := filepath.Join(tmpDir, "test-docker")
 
-	t.Run("makefile_build_target", func(t *testing.T) {
-		// #nosec G204
-		makeCmd := exec.CommandContext(ctx, "make", "build")
-		makeCmd.Dir = extensionDir
-		output, err := makeCmd.CombinedOutput()
-		t.Logf("make build output: %s", string(output))
-		require.NoError(t, err, "Makefile build target should be valid")
+	t.Run("cshared", func(t *testing.T) {
+		t.Run("makefile_build", func(t *testing.T) {
+			// #nosec G204
+			makeCmd := exec.CommandContext(ctx, "make", "build")
+			makeCmd.Dir = extensionDir
+			output, err := makeCmd.CombinedOutput()
+			t.Logf("make build output: %s", string(output))
+			require.NoError(t, err, "Makefile build target should be valid")
 
-		// List the extension directory after build to check for output files
-		files, err := os.ReadDir(extensionDir)
-		require.NoError(t, err, "Should be able to read extension directory after build")
-		var fileNames []string
-		for _, file := range files {
-			fileNames = append(fileNames, file.Name())
-		}
-		t.Logf("Files in extension directory after build: %v", fileNames)
+			// List the extension directory after build to check for output files
+			files, err := os.ReadDir(extensionDir)
+			require.NoError(t, err, "Should be able to read extension directory after build")
+			var fileNames []string
+			for _, file := range files {
+				fileNames = append(fileNames, file.Name())
+			}
+			t.Logf("Files in extension directory after build: %v", fileNames)
 
-		// Check there is the c-shared library output file (lib<name>.so).
-		_, fileCheckError := os.Stat(filepath.Join(extensionDir, "libtest-docker.so"))
-		if fileCheckError != nil {
-			t.Errorf("Makefile build target should produce libtest-docker.so, but got error: %v", fileCheckError)
-		}
+			// Check there is the c-shared library output file (lib<name>.so).
+			_, fileCheckError := os.Stat(filepath.Join(extensionDir, "libtest-docker.so"))
+			if fileCheckError != nil {
+				t.Errorf("Makefile build target should produce libtest-docker.so, but got error: %v", fileCheckError)
+			}
+		})
+
+		t.Run("makefile_build_image", func(t *testing.T) {
+			internaltesting.MaybeSkipLongRunningTest(t)
+			// #nosec G204
+			makeCmd := exec.CommandContext(ctx, "make", "build_image", fmt.Sprintf("OCI_REGISTRY=%s", registryAddr))
+			makeCmd.Dir = extensionDir
+			output, err := makeCmd.CombinedOutput()
+			t.Logf("make build_image output: %s", string(output))
+			require.NoError(t, err, "Makefile build_image target should be valid")
+
+			// Push local image to registry and check its annotations
+			// #nosec G204
+			pushCmd := exec.CommandContext(ctx, "docker", "push",
+				fmt.Sprintf("%s/built-on-envoy/extension-test-docker:%s-linux-%s", registryAddr, version, runtime.GOARCH))
+			output, err = pushCmd.CombinedOutput()
+			t.Logf("docker push output: %s", string(output))
+			require.NoError(t, err, "Should be able to push image to local registry")
+
+			// Pull the image manifest and check annotations
+			fetchManifest(t, registryAddr, "built-on-envoy/extension-test-docker", fmt.Sprintf("%s-linux-%s", version, runtime.GOARCH))
+		})
+
+		t.Run("makefile_push_image", func(t *testing.T) {
+			internaltesting.MaybeSkipLongRunningTest(t)
+			// #nosec G204
+			makeCmd := exec.CommandContext(ctx, "make", "push_image",
+				fmt.Sprintf("OCI_REGISTRY=%s", registryAddr), "BOE_REGISTRY_INSECURE=true")
+			makeCmd.Dir = extensionDir
+			output, err := makeCmd.CombinedOutput()
+			t.Logf("make push_image output: %s", string(output))
+			require.NoError(t, err, "Makefile push_image target should be valid")
+
+			// Pull the image manifest and check annotations
+			fetchManifest(t, registryAddr, "built-on-envoy/extension-test-docker", version)
+		})
 	})
 
-	t.Run("makefile_image_target", func(t *testing.T) {
-		// #nosec G204
-		makeCmd := exec.CommandContext(ctx, "make", "build_image",
-			fmt.Sprintf("OCI_REGISTRY=%s", registryAddr))
-		makeCmd.Dir = extensionDir
-		output, err := makeCmd.CombinedOutput()
-		t.Logf("make build_image output: %s", string(output))
-		require.NoError(t, err, "Makefile build_image target should be valid")
+	t.Run("goplugin", func(t *testing.T) {
+		t.Run("makefile_build_plugin", func(t *testing.T) {
+			// #nosec G204
+			makeCmd := exec.CommandContext(ctx, "make", "build-plugin")
+			makeCmd.Dir = extensionDir
+			output, err := makeCmd.CombinedOutput()
+			t.Logf("make build_plugin output: %s", string(output))
+			require.NoError(t, err, "Makefile build_plugin target should be valid")
 
-		// Push local image to registry and check its annotations
-		// #nosec G204
-		pushCmd := exec.CommandContext(ctx, "docker", "push",
-			fmt.Sprintf("%s/built-on-envoy/extension-test-docker:%s-linux-%s", registryAddr, version, runtime.GOARCH))
-		output, err = pushCmd.CombinedOutput()
-		t.Logf("docker push output: %s", string(output))
-		require.NoError(t, err, "Should be able to push image to local registry")
+			// List the extension directory after build to check for output files
+			files, err := os.ReadDir(extensionDir)
+			require.NoError(t, err, "Should be able to read extension directory after build")
+			var fileNames []string
+			for _, file := range files {
+				fileNames = append(fileNames, file.Name())
+			}
+			t.Logf("Files in extension directory after build: %v", fileNames)
 
-		// Pull the image manifest and check annotations
-		fetchManifest(t, registryAddr, "built-on-envoy/extension-test-docker", fmt.Sprintf("%s-linux-%s", version, runtime.GOARCH))
-	})
+			// Check there is the plugin output file (plugin.so).
+			_, fileCheckError := os.Stat(filepath.Join(extensionDir, "plugin.so"))
+			if fileCheckError != nil {
+				t.Errorf("Makefile build_plugin target should produce plugin.so, but got error: %v", fileCheckError)
+			}
+		})
 
-	t.Run("makefile_push_target", func(t *testing.T) {
-		// #nosec G204
-		makeCmd := exec.CommandContext(ctx, "make", "push_image",
-			fmt.Sprintf("OCI_REGISTRY=%s", registryAddr), "BOE_REGISTRY_INSECURE=true")
-		makeCmd.Dir = extensionDir
-		output, err := makeCmd.CombinedOutput()
-		t.Logf("make push_image output: %s", string(output))
-		require.NoError(t, err, "Makefile push_image target should be valid")
+		t.Run("makefile_build_image_plugin", func(t *testing.T) {
+			internaltesting.MaybeSkipLongRunningTest(t)
+			// #nosec G204
+			makeCmd := exec.CommandContext(ctx, "make", "build_image_plugin", fmt.Sprintf("OCI_REGISTRY=%s", registryAddr))
+			makeCmd.Dir = extensionDir
+			output, err := makeCmd.CombinedOutput()
+			t.Logf("make build_image_plugin output: %s", string(output))
+			require.NoError(t, err, "Makefile build_image_plugin target should be valid")
 
-		// Pull the image manifest and check annotations
-		fetchManifest(t, registryAddr, "built-on-envoy/extension-test-docker", version)
+			// Push local image to registry and check its annotations
+			// #nosec G204
+			pushCmd := exec.CommandContext(ctx, "docker", "push",
+				fmt.Sprintf("%s/built-on-envoy/extension-test-docker:%s-linux-%s", registryAddr, version, runtime.GOARCH))
+			output, err = pushCmd.CombinedOutput()
+			t.Logf("docker push output: %s", string(output))
+			require.NoError(t, err, "Should be able to push image to local registry")
+
+			// Pull the image manifest and check annotations
+			fetchManifest(t, registryAddr, "built-on-envoy/extension-test-docker", fmt.Sprintf("%s-linux-%s", version, runtime.GOARCH))
+		})
+
+		t.Run("makefile_push_image_plugin", func(t *testing.T) {
+			internaltesting.MaybeSkipLongRunningTest(t)
+			// #nosec G204
+			makeCmd := exec.CommandContext(ctx, "make", "push_image_plugin",
+				fmt.Sprintf("OCI_REGISTRY=%s", registryAddr), "BOE_REGISTRY_INSECURE=true")
+			makeCmd.Dir = extensionDir
+			output, err := makeCmd.CombinedOutput()
+			t.Logf("make push_image_plugin output: %s", string(output))
+			require.NoError(t, err, "Makefile push_image_plugin target should be valid")
+
+			// Pull the image manifest and check annotations
+			fetchManifest(t, registryAddr, "built-on-envoy/extension-test-docker", version)
+		})
 	})
 
 	t.Run("makefile_code_target", func(t *testing.T) {
@@ -141,19 +205,20 @@ func TestCreateRustWithDockerSupport(t *testing.T) {
 		fetchManifest(t, registryAddr, "built-on-envoy/extension-test-docker", fmt.Sprintf("%s-linux-%s", version, runtime.GOARCH))
 	})
 
-	// This Take too much time to run. Uncomment after we have a better solution for it.
-	// t.Run("makefile_push_target", func(t *testing.T) {
-	// 	// #nosec G204
-	// 	makeCmd := exec.CommandContext(ctx, "make", "push_image",
-	// 		fmt.Sprintf("OCI_REGISTRY=%s", registryAddr), "BOE_REGISTRY_INSECURE=true")
-	// 	makeCmd.Dir = extensionDir
-	// 	output, err := makeCmd.CombinedOutput()
-	// 	t.Logf("make push_image output: %s", string(output))
-	// 	require.NoError(t, err, "Makefile push_image target should be valid")
+	t.Run("makefile_push_target", func(t *testing.T) {
+		internaltesting.MaybeSkipLongRunningTest(t)
 
-	// 	// Pull the image manifest and check annotations
-	// 	fetchManifest(t, registryAddr, "built-on-envoy/extension-test-docker", version)
-	// })
+		// #nosec G204
+		makeCmd := exec.CommandContext(ctx, "make", "push_image",
+			fmt.Sprintf("OCI_REGISTRY=%s", registryAddr), "BOE_REGISTRY_INSECURE=true")
+		makeCmd.Dir = extensionDir
+		output, err := makeCmd.CombinedOutput()
+		t.Logf("make push_image output: %s", string(output))
+		require.NoError(t, err, "Makefile push_image target should be valid")
+
+		// Pull the image manifest and check annotations
+		fetchManifest(t, registryAddr, "built-on-envoy/extension-test-docker", version)
+	})
 
 	t.Run("makefile_code_target", func(t *testing.T) {
 		// #nosec G204
