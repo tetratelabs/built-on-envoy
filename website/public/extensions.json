@@ -294,6 +294,44 @@
     "sourcePath": "composer/chat-completions-decoder"
   },
   {
+    "name": "cluster-router",
+    "version": "0.7.0-dev",
+    "parent": "composer",
+    "categories": [
+      "Traffic Control",
+      "Network"
+    ],
+    "author": "Anton Kanugalawattage",
+    "description": "Traffic routing in a peered Envoy mesh.",
+    "longDescription": "This extension routes HTTP requests across a peered Envoy mesh using a path vector\nprotocol inspired by [BGP](https://datatracker.ietf.org/doc/html/rfc4271). Each\nEnvoy advertises its locally reachable clusters to its peers and learns transitively\nreachable clusters back. Connection targeting a cluster will be routed to the next hop,\nto achieve the shortest path.\n\n## How it works\n\nThe cluster-router plugin reads `x-target-cluster` header, looks up the next-hop in\nthe routing table, and writes `x-next-hop` so Envoy's `cluster_header` route resolves\nto that cluster. The plugin strips any incoming `x-next-hop` at filter entry, so \nclients and prior filters cannot pre-set the next hop.\n\nA background daemon polls the local Envoy admin and pulls `/advertisements` from\neach configured peer every `poll_interval`. After each tick it recomputes the\nroutes and publishes them via an `atomic.Pointer` snapshot so request handlers\nobserve a consistent table without locking.\n\n## Wiring with Envoy\n\nThe Envoy route must use `cluster_header: x-next-hop` (matching the plugin's\n`next_hop_header`). Add `request_headers_to_remove: [x-next-hop]` to the route\nif you do not want the header forwarded upstream:\n\n```yaml\nroutes:\n  - match: { prefix: \"/\" }\n    route:\n      cluster_header: x-next-hop\n      request_headers_to_remove: [x-next-hop]\n```\n\nLocal clusters can be tagged with `filter_metadata.boe.cluster_router.role` to\ncontrol how discovery classifies them: `terminal` (advertised as a destination),\n`peer` (used as a next-hop, never advertised as a destination), or `ignore`\n(excluded entirely). Untagged clusters are classified by matching their name\nagainst the configured `peers[].local_cluster`; the rest default to `terminal`.\n\n## Connecting two Envoys\n\nEach edge in the mesh involves four artifacts on the originating Envoy: the\nplugin config lists the peer, the Envoy cluster points at the peer's data-plane\nlistener, and matching `peer_id` metadata tags it. The receiving Envoy needs\nnothing about the sender — it just exposes its `advertise_listen` and the\nterminal cluster it fronts. Concretely, for `envoy1 -\u003e envoy2 -\u003e backend`:\n\n**envoy1 (upstream side):**\n\n```yaml\nstatic_resources:\n  listeners:\n    - name: ingress\n      address: { socket_address: { address: 0.0.0.0, port_value: 10001 } }\n      filter_chains:\n        - filters:\n            - name: envoy.filters.network.http_connection_manager\n              typed_config:\n                \"@type\": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager\n                stat_prefix: envoy1\n                route_config:\n                  virtual_hosts:\n                    - name: vh\n                      domains: [\"*\"]\n                      routes:\n                        - match: { prefix: \"/\", headers: [{ name: x-target-cluster, present_match: true }] }\n                          route:\n                            cluster_header: x-next-hop\n                http_filters:\n                  - name: cluster-router\n                    typed_config:\n                      \"@type\": type.googleapis.com/envoy.extensions.filters.http.dynamic_modules.v3.DynamicModuleFilter\n                      dynamic_module_config: { name: composer, do_not_close: true }\n                      filter_name: cluster-router\n                      filter_config:\n                        \"@type\": type.googleapis.com/google.protobuf.StringValue\n                        value: '{\"envoy_id\":\"envoy1\",\"envoy_admin_url\":\"http://127.0.0.1:9901\",\"advertise_listen\":\"0.0.0.0:7001\",\"peers\":[{\"id\":\"envoy2\",\"endpoint\":\"http://envoy2.internal:7002\",\"local_cluster\":\"peer_envoy2\",\"weight\":10}]}'\n                  - name: envoy.filters.http.router\n                    typed_config: { \"@type\": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router }\n  clusters:\n    - name: peer_envoy2\n      connect_timeout: 1s\n      type: STRICT_DNS\n      metadata:\n        filter_metadata:\n          boe.cluster_router: { role: peer, peer_id: envoy2 }\n      load_assignment:\n        cluster_name: peer_envoy2\n        endpoints:\n          - lb_endpoints:\n              - endpoint: { address: { socket_address: { address: envoy2.internal, port_value: 10002 } } }\n```\n\n**envoy2 (downstream side):** identical filter-chain shape, with these\ndifferences:\n\n- listener on `10002`, admin on `9902`, advertise on `7002`\n- `\"peers\": []` in the plugin config\n- **no** `peer_envoy2` cluster\n- **one** terminal cluster (e.g. `remote_svc`) pointing at the real backend,\n  tagged `filter_metadata.boe.cluster_router: { role: terminal }`\n\nThen a request to `curl -H 'x-target-cluster: remote_svc' envoy1:10001/`\nflows: client → envoy1 → `peer_envoy2` cluster → envoy2 → `remote_svc` cluster\n→ backend. Each Envoy makes its own next-hop decision from its own table.\n\n## Configuration Reference\n\n| Field | Required | Default | Description |\n|---|---|---|---|\n| `envoy_id` | yes | — | Stable identifier for this Envoy in the federation. Appears in AS-PATH. |\n| `envoy_admin_url` | yes | — | Base URL of the local Envoy admin endpoint. |\n| `advertise_listen` | yes | — | `host:port` to serve `/advertisements` on for peer pulls. |\n| `peers` | no | `[]` | Outbound peers this Envoy pulls advertisements from and routes traffic to. |\n| `peers[].id` | yes | — | Peer's `envoy_id`. |\n| `peers[].endpoint` | yes | — | Base URL of the peer's `advertise_listen`. |\n| `peers[].local_cluster` | yes | — | Name of the local Envoy cluster that points at this peer. |\n| `peers[].weight` | no | `10` | Per-link cost added to advertised distance. Must be \u003e= 0. |\n| `poll_interval` | no | `\"10s\"` | How often to poll local admin and peer advertisements. Must be \u003e= 100ms. |\n| `stale_after` | no | `\"60s\"` | Drop routes from a peer whose last successful sync is older than this. Must be \u003e= `poll_interval`. |\n| `target_cluster_source` | no | `\"header\"` | Where to read the target cluster name from. `\"metadata\"` is reserved and rejected. |\n| `target_cluster_header` | no | `\"x-target-cluster\"` | Request header name when `target_cluster_source` is `\"header\"`. |\n| `next_hop_header` | no | `\"x-next-hop\"` | Header the plugin writes for `cluster_header` routes. |\n",
+    "type": "go",
+    "filterType": "http",
+    "tags": [
+      "go",
+      "http",
+      "filter",
+      "routing",
+      "mesh"
+    ],
+    "license": "Apache-2.0",
+    "examples": [
+      {
+        "title": "envoy1 — upstream side of a two-Envoy mesh",
+        "description": "Client-facing Envoy. Peers with envoy2 and routes traffic toward it.\nNeeds an Envoy cluster `peer_envoy2` pointing at envoy2's listener,\ntagged with `filter_metadata.boe.cluster_router.role: peer`.\n",
+        "code": "boe run --extension cluster-router --config '\n  {\n    \"envoy_id\": \"envoy1\",\n    \"envoy_admin_url\": \"http://127.0.0.1:9901\",\n    \"advertise_listen\": \"0.0.0.0:7001\",\n    \"peers\": [\n      { \"id\": \"envoy2\", \"endpoint\": \"http://envoy2.internal:7002\", \"local_cluster\": \"peer_envoy2\", \"weight\": 10 }\n    ],\n    \"poll_interval\": \"10s\",\n    \"stale_after\": \"60s\"\n  }'\n"
+      },
+      {
+        "title": "envoy2 — downstream side of a two-Envoy mesh",
+        "description": "Terminal-side Envoy. Has no outbound peers; serves /advertisements\nto envoy1 and fronts the real upstream cluster(s) tagged with\n`filter_metadata.boe.cluster_router.role: terminal`.\n",
+        "code": "boe run --extension cluster-router --config '\n  {\n    \"envoy_id\": \"envoy2\",\n    \"envoy_admin_url\": \"http://127.0.0.1:9902\",\n    \"advertise_listen\": \"0.0.0.0:7002\",\n    \"peers\": [],\n    \"poll_interval\": \"10s\",\n    \"stale_after\": \"60s\"\n  }'\n"
+      }
+    ],
+    "minEnvoyVersion": "1.38.0",
+    "maxEnvoyVersion": "1.39.0",
+    "composerVersion": "0.7.0-dev",
+    "sourcePath": "composer/cluster-router"
+  },
+  {
     "name": "coraza-waf",
     "version": "0.7.0-dev",
     "parent": "composer",
