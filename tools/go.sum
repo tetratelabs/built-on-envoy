@@ -774,8 +774,8 @@ github.com/tenntenn/text/transform v0.0.0-20200319021203-7eef512accb3 h1:f+jULpR
 github.com/tenntenn/text/transform v0.0.0-20200319021203-7eef512accb3/go.mod h1:ON8b8w4BN/kE1EOhwT0o+d62W65a6aPw1nouo9LMgyY=
 github.com/tetafro/godot v1.5.4 h1:u1ww+gqpRLiIA16yF2PV1CV1n/X3zhyezbNXC3E14Sg=
 github.com/tetafro/godot v1.5.4/go.mod h1:eOkMrVQurDui411nBY2FA05EYH01r14LuWY/NrVDVcU=
-github.com/tetratelabs/func-e v1.5.0 h1:usqnwqIlLereQdua/BYLwFNfnNX7qGOFUGPihp8KMo0=
-github.com/tetratelabs/func-e v1.5.0/go.mod h1:9d/4Wne/HSg8pM+6fNhUePCsbQLeDrajn+wwbiN5WS4=
+github.com/tetratelabs/func-e v1.6.0 h1:TlTVVCSX/I+SBg6NWtU8On7EjrGz2/kxHQUtOo5tl1U=
+github.com/tetratelabs/func-e v1.6.0/go.mod h1:9d/4Wne/HSg8pM+6fNhUePCsbQLeDrajn+wwbiN5WS4=
 github.com/tidwall/gjson v1.18.0 h1:FIDeeyB800efLX89e5a8Y0BNH+LOngJyGrIWxG2FKQY=
 github.com/tidwall/gjson v1.18.0/go.mod h1:/wbyibRr2FHMks5tjHJ5F8dMZh3AcwJEMf5vlfC0lxk=
 github.com/tidwall/match v1.1.1 h1:+Ho715JplO36QYgwN9PGYNhgZvoUSc9X2c80KVTi+GA=

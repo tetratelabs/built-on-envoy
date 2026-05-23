@@ -132,6 +132,9 @@ type (
 
 // SupportsEnvoyVersion checks if the extension supports the given Envoy version.
 func (m *Manifest) SupportsEnvoyVersion(version string) bool {
+	if version == "dev" || version == "dev-latest" {
+		return true
+	}
 	envoySemver := "v" + version
 	if m.MinEnvoyVersion != "" && semver.Compare(envoySemver, "v"+m.MinEnvoyVersion) < 0 {
 		return false

@@ -371,7 +371,7 @@ func TestPrintExportSummary(t *testing.T) {
 %[1]s→ Run locally with with func-e:%[2]s (https://func-e.io/)
     cd /tmp/boe-export
     export GODEBUG=cgocheck=0
-    func-e run -c envoy.yaml --log-level info --component-log-level dynamic_modules:debug
+    ENVOY_VERSION=%[3]s func-e run -c envoy.yaml --log-level info --component-log-level dynamic_modules:debug
 
 %[1]s→ Run locally in Docker:%[2]s (not supported in Darwin hosts yet)
     docker run --rm \
@@ -381,18 +381,18 @@ func TestPrintExportSummary(t *testing.T) {
         -e GODEBUG=cgocheck=0 \
         -v /tmp/boe-export:/boe \
         -w /boe \
-        envoyproxy/envoy:%[3]s -c /boe/envoy.yaml --log-level info --component-log-level dynamic_modules:debug
+        envoyproxy/envoy:%[4]s -c /boe/envoy.yaml --log-level info --component-log-level dynamic_modules:debug
 `
 
 	t.Run("with Envoy version", func(t *testing.T) {
 		var buf bytes.Buffer
 		printExportSummary(&buf, "/tmp/boe-export", []string{"envoy.yaml", "libcomposer.so"}, 10000, 9901, "1.38.0")
-		require.Equal(t, fmt.Sprintf(wantTemplate, internal.ANSIBold, internal.ANSIReset, "v1.38.0"), buf.String())
+		require.Equal(t, fmt.Sprintf(wantTemplate, internal.ANSIBold, internal.ANSIReset, "1.38.0", "v1.38.0"), buf.String())
 	})
 
-	t.Run("without Envoy version defaults to 'dev' for Docker", func(t *testing.T) {
+	t.Run("without Envoy version defaults to 'dev'", func(t *testing.T) {
 		var buf bytes.Buffer
 		printExportSummary(&buf, "/tmp/boe-export", []string{"envoy.yaml", "libcomposer.so"}, 10000, 9901, "")
-		require.Equal(t, fmt.Sprintf(wantTemplate, internal.ANSIBold, internal.ANSIReset, "dev"), buf.String())
+		require.Equal(t, fmt.Sprintf(wantTemplate, internal.ANSIBold, internal.ANSIReset, "dev", "dev"), buf.String())
 	})
 }
