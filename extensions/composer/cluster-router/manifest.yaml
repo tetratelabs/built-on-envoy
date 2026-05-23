@@ -19,15 +19,22 @@ longDescription: |
 
   ## How it works
 
-  The cluster-router plugin reads `x-target-cluster` header, looks up the next-hop in
-  the routing table, and writes `x-next-hop` so Envoy's `cluster_header` route resolves
-  to that cluster. The plugin strips any incoming `x-next-hop` at filter entry, so 
-  clients and prior filters cannot pre-set the next hop.
+  The cluster-router plugin reads the `x-target-cluster` header, looks up the next-hop
+  in the routing table, and writes `x-next-hop` so Envoy's `cluster_header` route
+  resolves to that cluster. The plugin strips any incoming `x-next-hop` at filter
+  entry, so clients and prior filters cannot pre-set the next hop.
 
-  A background daemon polls the local Envoy admin and pulls `/advertisements` from
-  each configured peer every `poll_interval`. After each tick it recomputes the
-  routes and publishes them via an `atomic.Pointer` snapshot so request handlers
-  observe a consistent table without locking.
+  A background daemon pulls `/advertisements` from each configured peer every
+  `poll_interval`. After each tick it recomputes the routes and publishes them
+  via an `atomic.Pointer` snapshot so request handlers observe a consistent
+  table without locking.
+
+  Peers and locally-fronted terminals are declared explicitly in the plugin
+  config (`peers[]`, `terminals[]`). The plugin does not poll Envoy admin or
+  read cluster `filter_metadata`; the operator (or control plane) is the
+  authoritative source. With xDS, push a new cluster via CDS and a matching
+  filter-config update via LDS together so the new cluster name appears in
+  `terminals` at the moment the cluster goes live.
 
   ## Wiring with Envoy
 
@@ -43,19 +50,18 @@ longDescription: |
         request_headers_to_remove: [x-next-hop]
   ```
 
-  Local clusters can be tagged with `filter_metadata.boe.cluster_router.role` to
-  control how discovery classifies them: `terminal` (advertised as a destination),
-  `peer` (used as a next-hop, never advertised as a destination), or `ignore`
-  (excluded entirely). Untagged clusters are classified by matching their name
-  against the configured `peers[].local_cluster`; the rest default to `terminal`.
+  The plugin strips `x-next-hop` only at *its own* filter entry. If you insert
+  additional filters between cluster-router and the router that may write
+  `x-next-hop`, place cluster-router *after* them so its decision wins.
 
   ## Connecting two Envoys
 
-  Each edge in the mesh involves four artifacts on the originating Envoy: the
-  plugin config lists the peer, the Envoy cluster points at the peer's data-plane
-  listener, and matching `peer_id` metadata tags it. The receiving Envoy needs
-  nothing about the sender — it just exposes its `advertise_listen` and the
-  terminal cluster it fronts. Concretely, for `envoy1 -> envoy2 -> backend`:
+  Each edge in the mesh involves two artifacts on the originating Envoy: the
+  plugin config lists the peer (id, endpoint, local_cluster) and the Envoy
+  cluster named `local_cluster` points at the peer's data-plane listener.
+  The receiving Envoy needs nothing about the sender — it just exposes its
+  `advertise_listen` and the terminal clusters it fronts (declared in
+  `terminals[]`). Concretely, for `envoy1 -> envoy2 -> backend`:
 
   **envoy1 (upstream side):**
 
@@ -86,16 +92,13 @@ longDescription: |
                         filter_name: cluster-router
                         filter_config:
                           "@type": type.googleapis.com/google.protobuf.StringValue
-                          value: '{"envoy_id":"envoy1","envoy_admin_url":"http://127.0.0.1:9901","advertise_listen":"0.0.0.0:7001","peers":[{"id":"envoy2","endpoint":"http://envoy2.internal:7002","local_cluster":"peer_envoy2","weight":10}]}'
+                          value: '{"envoy_id":"envoy1","advertise_listen":"0.0.0.0:7001","peers":[{"id":"envoy2","endpoint":"http://envoy2.internal:7002","local_cluster":"peer_envoy2","weight":10}]}'
                     - name: envoy.filters.http.router
                       typed_config: { "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router }
     clusters:
       - name: peer_envoy2
         connect_timeout: 1s
         type: STRICT_DNS
-        metadata:
-          filter_metadata:
-            boe.cluster_router: { role: peer, peer_id: envoy2 }
         load_assignment:
           cluster_name: peer_envoy2
           endpoints:
@@ -106,11 +109,10 @@ longDescription: |
   **envoy2 (downstream side):** identical filter-chain shape, with these
   differences:
 
-  - listener on `10002`, admin on `9902`, advertise on `7002`
-  - `"peers": []` in the plugin config
+  - listener on `10002`, advertise on `7002`
+  - `"peers": []` and `"terminals": ["remote_svc"]` in the plugin config
   - **no** `peer_envoy2` cluster
-  - **one** terminal cluster (e.g. `remote_svc`) pointing at the real backend,
-    tagged `filter_metadata.boe.cluster_router: { role: terminal }`
+  - **one** Envoy cluster named `remote_svc` pointing at the real backend
 
   Then a request to `curl -H 'x-target-cluster: remote_svc' envoy1:10001/`
   flows: client → envoy1 → `peer_envoy2` cluster → envoy2 → `remote_svc` cluster
@@ -121,14 +123,14 @@ longDescription: |
   | Field | Required | Default | Description |
   |---|---|---|---|
   | `envoy_id` | yes | — | Stable identifier for this Envoy in the federation. Appears in AS-PATH. |
-  | `envoy_admin_url` | yes | — | Base URL of the local Envoy admin endpoint. |
   | `advertise_listen` | yes | — | `host:port` to serve `/advertisements` on for peer pulls. |
   | `peers` | no | `[]` | Outbound peers this Envoy pulls advertisements from and routes traffic to. |
   | `peers[].id` | yes | — | Peer's `envoy_id`. |
   | `peers[].endpoint` | yes | — | Base URL of the peer's `advertise_listen`. |
   | `peers[].local_cluster` | yes | — | Name of the local Envoy cluster that points at this peer. |
   | `peers[].weight` | no | `10` | Per-link cost added to advertised distance. Must be >= 0. |
-  | `poll_interval` | no | `"10s"` | How often to poll local admin and peer advertisements. Must be >= 100ms. |
+  | `terminals` | no | `[]` | Local cluster names this Envoy fronts and advertises as destinations. |
+  | `poll_interval` | no | `"10s"` | How often to pull peer advertisements. Must be >= 100ms. |
   | `stale_after` | no | `"60s"` | Drop routes from a peer whose last successful sync is older than this. Must be >= `poll_interval`. |
   | `target_cluster_source` | no | `"header"` | Where to read the target cluster name from. `"metadata"` is reserved and rejected. |
   | `target_cluster_header` | no | `"x-target-cluster"` | Request header name when `target_cluster_source` is `"header"`. |
@@ -145,13 +147,11 @@ examples:
   - title: envoy1 — upstream side of a two-Envoy mesh
     description: |
       Client-facing Envoy. Peers with envoy2 and routes traffic toward it.
-      Needs an Envoy cluster `peer_envoy2` pointing at envoy2's listener,
-      tagged with `filter_metadata.boe.cluster_router.role: peer`.
+      The Envoy cluster `peer_envoy2` points at envoy2's listener.
     code: |
       boe run --extension cluster-router --config '
         {
           "envoy_id": "envoy1",
-          "envoy_admin_url": "http://127.0.0.1:9901",
           "advertise_listen": "0.0.0.0:7001",
           "peers": [
             { "id": "envoy2", "endpoint": "http://envoy2.internal:7002", "local_cluster": "peer_envoy2", "weight": 10 }
@@ -162,15 +162,14 @@ examples:
   - title: envoy2 — downstream side of a two-Envoy mesh
     description: |
       Terminal-side Envoy. Has no outbound peers; serves /advertisements
-      to envoy1 and fronts the real upstream cluster(s) tagged with
-      `filter_metadata.boe.cluster_router.role: terminal`.
+      to envoy1 and fronts the `remote_svc` terminal cluster.
     code: |
       boe run --extension cluster-router --config '
         {
           "envoy_id": "envoy2",
-          "envoy_admin_url": "http://127.0.0.1:9902",
           "advertise_listen": "0.0.0.0:7002",
           "peers": [],
+          "terminals": ["remote_svc"],
           "poll_interval": "10s",
           "stale_after": "60s"
         }'

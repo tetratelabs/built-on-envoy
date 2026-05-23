@@ -16,9 +16,9 @@ import (
 // DaemonConfig configures a Daemon.
 type DaemonConfig struct {
 	EnvoyID         string
-	EnvoyAdminURL   string
 	AdvertiseListen string
 	Peers           []PeerSpec
+	Terminals       []string
 	PollInterval    time.Duration
 	StaleAfter      time.Duration
 	HTTPClient      *http.Client
@@ -105,19 +105,7 @@ func (d *Daemon) loop(ctx context.Context) {
 }
 
 func (d *Daemon) tick(ctx context.Context) {
-	locals, err := DiscoverLocal(ctx, d.cfg.EnvoyAdminURL, d.cfg.Peers, d.httpClient)
-	if err != nil {
-		log.Printf("cluster-router: local discovery failed: %v", err)
-		// Preserve previous locals so a transient admin failure doesn't blow
-		// away terminals and cause spurious 503s. Clone so the published
-		// snapshot doesn't alias the prior one's map.
-		prev := d.Table.Load().LocalClusters
-		locals = make(map[string]LocalCluster, len(prev))
-		for k, v := range prev {
-			locals[k] = v
-		}
-	}
-
+	locals := d.buildLocals()
 	advs := d.collectPeers(ctx)
 
 	d.Table.Store(&Table{
@@ -125,6 +113,18 @@ func (d *Daemon) tick(ctx context.Context) {
 		Routes:        Compute(d.cfg.EnvoyID, locals, advs),
 		LocalClusters: locals,
 	})
+}
+
+// buildLocals synthesizes the LocalClusters map from configured peers and terminals.
+func (d *Daemon) buildLocals() map[string]LocalCluster {
+	out := make(map[string]LocalCluster, len(d.cfg.Peers)+len(d.cfg.Terminals))
+	for _, p := range d.cfg.Peers {
+		out[p.LocalCluster] = LocalCluster{Name: p.LocalCluster, Role: RolePeer, PeerID: p.ID}
+	}
+	for _, name := range d.cfg.Terminals {
+		out[name] = LocalCluster{Name: name, Role: RoleTerminal}
+	}
+	return out
 }
 
 func (d *Daemon) collectPeers(ctx context.Context) []PeerAdvertisement {
