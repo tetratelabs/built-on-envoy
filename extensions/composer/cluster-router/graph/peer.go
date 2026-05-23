@@ -14,8 +14,12 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"syscall"
 	"time"
 )
+
+// maxResponseBytes caps a single peer advertisement response.
+const maxResponseBytes = 8 << 20 // 8 MiB
 
 // AdvertisementServer serves this Envoy's current advertisement to peer pullers.
 type AdvertisementServer struct {
@@ -25,9 +29,12 @@ type AdvertisementServer struct {
 	lis     net.Listener
 }
 
-// NewAdvertisementServer binds the listener and prepares (but does not start) the HTTP server.
+// NewAdvertisementServer binds the listener and prepares (but does not start)
+// the HTTP server. SO_REUSEADDR is set so an LDS reload that recreates the
+// filter chain can rebind the port without waiting for TIME_WAIT.
 func NewAdvertisementServer(envoyID, listen string, table *AtomicTable) (*AdvertisementServer, error) {
-	lis, err := net.Listen("tcp", listen)
+	lc := net.ListenConfig{Control: setReuseAddr}
+	lis, err := lc.Listen(context.Background(), "tcp", listen)
 	if err != nil {
 		return nil, fmt.Errorf("advertise listen %q: %w", listen, err)
 	}
@@ -36,6 +43,16 @@ func NewAdvertisementServer(envoyID, listen string, table *AtomicTable) (*Advert
 	mux.HandleFunc("/advertisements", as.handle)
 	as.srv = &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	return as, nil
+}
+
+func setReuseAddr(_ /* network */, _ /* address */ string, c syscall.RawConn) error {
+	var setErr error
+	if err := c.Control(func(fd uintptr) {
+		setErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
+	}); err != nil {
+		return err
+	}
+	return setErr
 }
 
 // Addr returns the bound listener address.

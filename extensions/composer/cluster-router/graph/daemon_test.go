@@ -17,7 +17,6 @@ import (
 )
 
 func TestDaemon_TwoEnvoyConvergence(t *testing.T) {
-	// envoyB hosts a "remote_svc" terminal and serves /advertisements.
 	tblB := NewAtomicTable("envoyB")
 	tblB.Store(&Table{
 		EnvoyID:       "envoyB",
@@ -31,22 +30,13 @@ func TestDaemon_TwoEnvoyConvergence(t *testing.T) {
 	bServer.Start()
 	defer func() { _ = bServer.Stop(context.Background()) }()
 
-	// envoyA's admin lists peer_envoy_b and a local terminal.
-	adminA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"configs":[
-			{"cluster":{"name":"peer_envoy_b"}},
-			{"cluster":{"name":"local_a"}}
-		]}`))
-	}))
-	defer adminA.Close()
-
 	d := NewDaemon(&DaemonConfig{
 		EnvoyID:         "envoyA",
-		EnvoyAdminURL:   adminA.URL,
 		AdvertiseListen: "127.0.0.1:0",
 		Peers: []PeerSpec{{
 			ID: "envoyB", Endpoint: "http://" + bServer.Addr(), LocalCluster: "peer_envoy_b", Weight: 10,
 		}},
+		Terminals:    []string{"local_a"},
 		PollInterval: 20 * time.Millisecond,
 		StaleAfter:   1 * time.Second,
 	})
@@ -63,7 +53,6 @@ func TestDaemon_TwoEnvoyConvergence(t *testing.T) {
 }
 
 func TestDaemon_StalePeerRoutesExpire(t *testing.T) {
-	// Peer that returns success once then 500s forever.
 	var calls int
 	peer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		calls++
@@ -78,14 +67,8 @@ func TestDaemon_StalePeerRoutesExpire(t *testing.T) {
 	}))
 	defer peer.Close()
 
-	adminA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"configs":[{"cluster":{"name":"peer_envoy_b"}}]}`))
-	}))
-	defer adminA.Close()
-
 	d := NewDaemon(&DaemonConfig{
 		EnvoyID:         "envoyA",
-		EnvoyAdminURL:   adminA.URL,
 		AdvertiseListen: "127.0.0.1:0",
 		Peers: []PeerSpec{{
 			ID: "envoyB", Endpoint: peer.URL, LocalCluster: "peer_envoy_b", Weight: 10,
@@ -122,17 +105,8 @@ func TestDaemon_PollsPeersInParallel(t *testing.T) {
 	defer pb.Close()
 	defer pc.Close()
 
-	adminA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"configs":[
-			{"cluster":{"name":"peer_envoy_b"}},
-			{"cluster":{"name":"peer_envoy_c"}}
-		]}`))
-	}))
-	defer adminA.Close()
-
 	d := NewDaemon(&DaemonConfig{
 		EnvoyID:         "envoyA",
-		EnvoyAdminURL:   adminA.URL,
 		AdvertiseListen: "127.0.0.1:0",
 		Peers: []PeerSpec{
 			{ID: "envoyB", Endpoint: pb.URL, LocalCluster: "peer_envoy_b", Weight: 10},

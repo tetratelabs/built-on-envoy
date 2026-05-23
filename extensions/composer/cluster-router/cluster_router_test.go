@@ -137,7 +137,6 @@ func TestPlugin_ClientSuppliedNextHopOverwrittenOnHit(t *testing.T) {
 func TestParseConfig_Defaults(t *testing.T) {
 	c, err := parseConfig([]byte(`{
 		"envoy_id":"envoyA",
-		"envoy_admin_url":"http://127.0.0.1:9901",
 		"advertise_listen":"0.0.0.0:7000"
 	}`))
 	require.NoError(t, err)
@@ -149,15 +148,14 @@ func TestParseConfig_Defaults(t *testing.T) {
 func TestParseConfig_RejectsPeerSelfReference(t *testing.T) {
 	_, err := parseConfig([]byte(`{
 		"envoy_id":"envoyA",
-		"envoy_admin_url":"http://x",
-		"advertise_listen":"0.0.0.0:0",
+				"advertise_listen":"0.0.0.0:0",
 		"peers":[{"id":"envoyA","endpoint":"http://x","local_cluster":"peer_a"}]
 	}`))
 	require.ErrorContains(t, err, "must not equal envoy_id")
 }
 
 func TestParseConfig_RejectsUnknownField(t *testing.T) {
-	_, err := parseConfig([]byte(`{"envoy_id":"a","envoy_admin_url":"http://x","advertise_listen":"0.0.0.0:0","bogus":1}`))
+	_, err := parseConfig([]byte(`{"envoy_id":"a","advertise_listen":"0.0.0.0:0","bogus":1}`))
 	require.ErrorContains(t, err, "unknown field")
 }
 
@@ -168,7 +166,7 @@ func TestParseConfig_RejectsEmpty(t *testing.T) {
 
 func TestParseConfig_RejectsMetadataSource(t *testing.T) {
 	_, err := parseConfig([]byte(`{
-		"envoy_id":"a","envoy_admin_url":"http://x","advertise_listen":"0.0.0.0:0",
+		"envoy_id":"a","advertise_listen":"0.0.0.0:0",
 		"target_cluster_source":"metadata"
 	}`))
 	require.ErrorContains(t, err, "target_cluster_source")
@@ -176,7 +174,7 @@ func TestParseConfig_RejectsMetadataSource(t *testing.T) {
 
 func TestParseConfig_RejectsNegativeWeight(t *testing.T) {
 	_, err := parseConfig([]byte(`{
-		"envoy_id":"a","envoy_admin_url":"http://x","advertise_listen":"0.0.0.0:0",
+		"envoy_id":"a","advertise_listen":"0.0.0.0:0",
 		"peers":[{"id":"b","endpoint":"http://b","local_cluster":"peer_b","weight":-1}]
 	}`))
 	require.ErrorContains(t, err, "weight")
@@ -184,7 +182,7 @@ func TestParseConfig_RejectsNegativeWeight(t *testing.T) {
 
 func TestParseConfig_RejectsSubFloorPollInterval(t *testing.T) {
 	_, err := parseConfig([]byte(`{
-		"envoy_id":"a","envoy_admin_url":"http://x","advertise_listen":"0.0.0.0:0",
+		"envoy_id":"a","advertise_listen":"0.0.0.0:0",
 		"poll_interval":"1ms"
 	}`))
 	require.ErrorContains(t, err, "poll_interval")
@@ -192,7 +190,7 @@ func TestParseConfig_RejectsSubFloorPollInterval(t *testing.T) {
 
 func TestParseConfig_RejectsStaleAfterShorterThanPollInterval(t *testing.T) {
 	_, err := parseConfig([]byte(`{
-		"envoy_id":"a","envoy_admin_url":"http://x","advertise_listen":"0.0.0.0:0",
+		"envoy_id":"a","advertise_listen":"0.0.0.0:0",
 		"poll_interval":"10s","stale_after":"1s"
 	}`))
 	require.ErrorContains(t, err, "stale_after")

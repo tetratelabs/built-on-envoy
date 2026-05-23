@@ -36,12 +36,12 @@ const (
 // Config is the JSON-deserialized plugin configuration.
 type Config struct {
 	EnvoyID             string           `json:"envoy_id"`
-	EnvoyAdminURL       string           `json:"envoy_admin_url"`
 	AdvertiseListen     string           `json:"advertise_listen"`
 	TargetClusterSource targetSource     `json:"target_cluster_source"`
 	TargetClusterHeader string           `json:"target_cluster_header"`
 	NextHopHeader       string           `json:"next_hop_header"`
 	Peers               []graph.PeerSpec `json:"peers"`
+	Terminals           []string         `json:"terminals"`
 	PollInterval        string           `json:"poll_interval"`
 	StaleAfter          string           `json:"stale_after"`
 
@@ -65,9 +65,6 @@ func parseConfig(raw []byte) (*Config, error) {
 func (c *Config) validate() error {
 	if c.EnvoyID == "" {
 		return fmt.Errorf("envoy_id is required")
-	}
-	if c.EnvoyAdminURL == "" {
-		return fmt.Errorf("envoy_admin_url is required")
 	}
 	if c.AdvertiseListen == "" {
 		return fmt.Errorf("advertise_listen is required")
@@ -108,6 +105,7 @@ func (c *Config) validate() error {
 	}
 	c.staleAfter = d
 	seen := map[string]bool{}
+	peerLocals := map[string]bool{}
 	for i, p := range c.Peers {
 		if p.ID == "" || p.Endpoint == "" || p.LocalCluster == "" {
 			return fmt.Errorf("peers[%d]: id, endpoint, local_cluster required", i)
@@ -125,6 +123,20 @@ func (c *Config) validate() error {
 		if p.Weight == 0 {
 			c.Peers[i].Weight = 10
 		}
+		peerLocals[p.LocalCluster] = true
+	}
+	seenTerm := map[string]bool{}
+	for i, name := range c.Terminals {
+		if name == "" {
+			return fmt.Errorf("terminals[%d]: name required", i)
+		}
+		if seenTerm[name] {
+			return fmt.Errorf("terminals[%d]: duplicate name %q", i, name)
+		}
+		if peerLocals[name] {
+			return fmt.Errorf("terminals[%d]: %q is also a peer local_cluster", i, name)
+		}
+		seenTerm[name] = true
 	}
 	return nil
 }
@@ -214,9 +226,9 @@ func (f *PluginConfigFactory) Create(handle shared.HttpFilterConfigHandle, unpar
 
 	d := graph.NewDaemon(&graph.DaemonConfig{
 		EnvoyID:         cfg.EnvoyID,
-		EnvoyAdminURL:   cfg.EnvoyAdminURL,
 		AdvertiseListen: cfg.AdvertiseListen,
 		Peers:           cfg.Peers,
+		Terminals:       cfg.Terminals,
 		PollInterval:    cfg.pollInterval,
 		StaleAfter:      cfg.staleAfter,
 	})
