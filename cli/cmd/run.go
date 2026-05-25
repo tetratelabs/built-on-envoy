@@ -361,7 +361,7 @@ func loadLocalManifests(ctx context.Context, logger *slog.Logger, downloader *ex
 			return nil, fmt.Errorf("%w from %s: %w", errFailedToLoadLocalManifest, path, err)
 		}
 
-		if manifest.Type == extensions.TypeGo && manifest.Parent != "" {
+		if manifest.Parent != "" {
 			parent, err := resolveParent(ctx, downloader, manifest)
 			if err != nil {
 				return nil, fmt.Errorf("%w from %s: %w", errFailedToLoadLocalManifest, path, err)
