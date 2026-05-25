@@ -113,7 +113,7 @@ func RunCLI(t *testing.T, cliBin string, args ...string) *os.Process {
 	cmd.Stdout = buffers[0]
 	cmd.Stderr = buffers[1]
 	cmd.WaitDelay = 3 * time.Second // auto-kill after 3 seconds.
-	cmd.Env = append(os.Environ(), "ENVOY_VERSION=1.38.0", fmt.Sprintf("BOE_STATE_HOME=%s", logDir))
+	cmd.Env = append(os.Environ(), fmt.Sprintf("BOE_STATE_HOME=%s", logDir))
 
 	require.NoError(t, cmd.Start())
 
