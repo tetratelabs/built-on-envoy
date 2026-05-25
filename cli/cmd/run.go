@@ -6,6 +6,7 @@
 package cmd
 
 import (
+	"cmp"
 	"context"
 	_ "embed"
 	"errors"
@@ -415,7 +416,15 @@ func resolveParent(ctx context.Context, downloader *extensions.Downloader, m *ex
 	if parent != nil {
 		return parent, nil
 	}
-	dl, err := downloader.DownloadComposer(ctx, "latest", extensions.ComposerArtifactLite)
+
+	var dl extensions.DownloadedExtension
+	if m.Parent == "composer" {
+		version := cmp.Or(m.ComposerVersion, m.Version, "latest")
+		dl, err = downloader.DownloadComposer(ctx, version, extensions.ComposerArtifactLite)
+	} else {
+		version := cmp.Or(m.Version, "latest")
+		dl, err = downloader.DownloadExtension(ctx, m.Parent, version)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("downloading parent %s: %w", m.Parent, err)
 	}

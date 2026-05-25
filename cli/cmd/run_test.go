@@ -1093,6 +1093,48 @@ examples: []
 		require.Equal(t, "0.5.0", parent.Version)
 	})
 
+	t.Run("fallback uses composerVersion from manifest", func(t *testing.T) {
+		m := &extensions.Manifest{
+			Name:            "test-child",
+			Parent:          "composer",
+			ComposerVersion: "0.4.0",
+		}
+
+		mock := &mockOCIClient{
+			annotations: map[string]string{
+				ocispec.AnnotationTitle:                 extensions.ComposerArtifactLite,
+				extensions.OCIAnnotationExtensionType:   string(extensions.TypeComposer),
+				extensions.OCIAnnotationComposerVersion: "0.4.0",
+			},
+			tags: []string{"0.5.0", "0.4.0"},
+		}
+		d := newTestDownloader(t, t.TempDir(), mock)
+
+		parent, err := resolveParent(t.Context(), d, m)
+		require.NoError(t, err)
+		require.Equal(t, "0.4.0", parent.Version)
+	})
+
+	t.Run("fallback for non-composer parent", func(t *testing.T) {
+		m := &extensions.Manifest{
+			Name:    "test-child",
+			Parent:  "custom-parent",
+			Version: "1.2.3",
+		}
+
+		mock := &mockOCIClient{
+			annotations: map[string]string{
+				extensions.OCIAnnotationExtensionType: string(extensions.TypeComposer),
+			},
+			tags: []string{"1.2.3"},
+		}
+		d := newTestDownloader(t, t.TempDir(), mock)
+
+		parent, err := resolveParent(t.Context(), d, m)
+		require.NoError(t, err)
+		require.NotNil(t, parent)
+	})
+
 	t.Run("registry error", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "manifest.yaml"), []byte(childComposerYAML), 0o600))
