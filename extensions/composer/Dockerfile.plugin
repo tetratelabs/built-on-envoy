@@ -51,7 +51,7 @@ RUN ZIG_TARGET=$(echo $TARGETARCH | sed 's/arm64/aarch64/;s/amd64/x86_64/') && \
     case "$TARGETOS" in darwin) ZIG_TARGET="$ZIG_TARGET-macos" ;; *) ZIG_TARGET="$ZIG_TARGET-linux-gnu" ;; esac && \
     CC="zigcc -target $ZIG_TARGET" \
     CGO_ENABLED=1 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -ldflags="-s" -buildmode=plugin ${BUILD_TAG} -o plugin.so ./$EXTENSION_PATH/standalone
+    go build -trimpath -ldflags="-s -w" -buildmode=plugin ${BUILD_TAG} -o plugin.so ./$EXTENSION_PATH/standalone
 
 FROM scratch AS final
 
