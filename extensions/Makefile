@@ -151,7 +151,7 @@ push_lua: create_builder
 		--tag $(IMAGE) $(DEV_TAG) \
 		--file Dockerfile.code ./$(EXTENSION_PATH)
 
-PLATFORMS ?= linux/arm64,linux/amd64
+PLATFORMS ?= linux/arm64,linux/amd64,darwin/arm64
 .PHONY: push_rust
 push_rust: create_builder
 	@echo "Building and pushing Rust extension image for multiple architectures: $(IMAGE)"

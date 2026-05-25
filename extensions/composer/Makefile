@@ -163,7 +163,7 @@ build_image:
 
 # For default push operation, we will also prefer to build a multi-platform image to support
 # both amd64 and arm64 architectures, and push it to the registry.
-PLATFORMS ?= linux/arm64,linux/amd64
+PLATFORMS ?= linux/arm64,linux/amd64,darwin/arm64
 .PHONY: push_image
 push_image: create_builder  ## Build and push docker image for the plugin for cross-platform support
 	@echo "Building and pushing image..."
