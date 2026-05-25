@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -74,27 +75,8 @@ func TestCreateGoWithDockerSupport(t *testing.T) {
 			t.Logf("make build_image output: %s", string(output))
 			require.NoError(t, err, "Makefile build_image target should be valid")
 
-			// Tag the image to remove the arch suffix so that we can use boe download cleanly to
-			// verify the contents of the image
-			// #nosec G204
-			pushCmd := exec.CommandContext(ctx, "docker", "tag",
-				fmt.Sprintf("%s/extension-test-docker:%s-linux-%s", registryAddr, version, runtime.GOARCH),
-				fmt.Sprintf("%s/extension-test-docker:%s", registryAddr, version),
-			)
-			output, err = pushCmd.CombinedOutput()
-			t.Logf("docker tag output: %s", string(output))
-			require.NoError(t, err, "Should be able to tag image")
-
-			// Push local image to registry and check its annotations
-			// #nosec G204
-			pushCmd = exec.CommandContext(ctx, "docker", "push",
-				fmt.Sprintf("%s/extension-test-docker:%s", registryAddr, version))
-			output, err = pushCmd.CombinedOutput()
-			t.Logf("docker push output: %s", string(output))
-			require.NoError(t, err, "Should be able to push image to local registry")
-
-			// Pull the image manifest and check contents
 			manifest := &extensions.Manifest{Name: "test-docker", Version: version, Type: extensions.TypeGo, CShared: true}
+			pushOCIImageForDownload(t, extensionDir, "./Dockerfile", manifest)
 			requireDownloadHasFiles(t, manifest, "manifest.yaml", "config.schema.json")
 		})
 	})
@@ -133,27 +115,8 @@ func TestCreateGoWithDockerSupport(t *testing.T) {
 			t.Logf("make build_image_plugin output: %s", string(output))
 			require.NoError(t, err, "Makefile build_image_plugin target should be valid")
 
-			// Tag the image to remove the arch suffix so that we can use boe download cleanly to
-			// verify the contents of the image
-			// #nosec G204
-			pushCmd := exec.CommandContext(ctx, "docker", "tag",
-				fmt.Sprintf("%s/extension-test-docker:%s-linux-%s", registryAddr, version, runtime.GOARCH),
-				fmt.Sprintf("%s/extension-test-docker:%s", registryAddr, version),
-			)
-			output, err = pushCmd.CombinedOutput()
-			t.Logf("docker tag output: %s", string(output))
-			require.NoError(t, err, "Should be able to tag image")
-
-			// Push local image to registry and check its annotations
-			// #nosec G204
-			pushCmd = exec.CommandContext(ctx, "docker", "push",
-				fmt.Sprintf("%s/extension-test-docker:%s", registryAddr, version))
-			output, err = pushCmd.CombinedOutput()
-			t.Logf("docker push output: %s", string(output))
-			require.NoError(t, err, "Should be able to push image to local registry")
-
-			// Pull the image manifest and check contents
 			manifest := &extensions.Manifest{Name: "test-docker", Version: version, Type: extensions.TypeGo, CShared: false}
+			pushOCIImageForDownload(t, extensionDir, "./Dockerfile.plugin", manifest)
 			requireDownloadHasFiles(t, manifest, "manifest.yaml", "config.schema.json")
 		})
 	})
@@ -198,27 +161,9 @@ func TestCreateRustWithDockerSupport(t *testing.T) {
 		t.Logf("make build_image output: %s", string(output))
 		require.NoError(t, err, "Makefile build_image target should be valid")
 
-		// Tag the image to remove the arch suffix so that we can use boe download cleanly to
-		// verify the contents of the image
-		// #nosec G204
-		pushCmd := exec.CommandContext(ctx, "docker", "tag",
-			fmt.Sprintf("%s/extension-test-docker:%s-linux-%s", registryAddr, version, runtime.GOARCH),
-			fmt.Sprintf("%s/extension-test-docker:%s", registryAddr, version),
-		)
-		output, err = pushCmd.CombinedOutput()
-		t.Logf("docker tag output: %s", string(output))
-		require.NoError(t, err, "Should be able to tag image")
-
-		// Push local image to registry and check its annotations
-		// #nosec G204
-		pushCmd = exec.CommandContext(ctx, "docker", "push",
-			fmt.Sprintf("%s/extension-test-docker:%s", registryAddr, version))
-		output, err = pushCmd.CombinedOutput()
-		t.Logf("docker push output: %s", string(output))
-		require.NoError(t, err, "Should be able to push image to local registry")
-
 		// Pull the image manifest and check contents
 		manifest := &extensions.Manifest{Name: "test-docker", Version: version, Type: extensions.TypeRust}
+		pushOCIImageForDownload(t, extensionDir, "./Dockerfile", manifest)
 		requireDownloadHasFiles(t, manifest, "manifest.yaml", "config.schema.json")
 	})
 
@@ -252,6 +197,13 @@ func TestCreateRustNetworkWithDockerSupport(t *testing.T) {
 	extensionDir := filepath.Join(tmpDir, "test-docker-network")
 	version := "0.1.0"
 
+	manifest := &extensions.Manifest{
+		Name:       "test-docker-network",
+		Version:    version,
+		Type:       extensions.TypeRust,
+		FilterType: extensions.FilterTypeNetwork,
+	}
+
 	t.Run("makefile_image_target", func(t *testing.T) {
 		// Building the image compiles the scaffolded Rust network filter
 		// project end-to-end, catching template regressions that unit tests
@@ -264,16 +216,8 @@ func TestCreateRustNetworkWithDockerSupport(t *testing.T) {
 		require.NoError(t, err, "Makefile build_image target should be valid")
 
 		// Push local image to registry and check its annotations
-		// #nosec G204
-		pushCmd := exec.CommandContext(ctx, "docker", "push",
-			fmt.Sprintf("%s/extension-test-docker-network:%s-linux-%s", registryAddr, version, runtime.GOARCH))
-		output, err = pushCmd.CombinedOutput()
-		t.Logf("docker push output: %s", string(output))
-		require.NoError(t, err, "Should be able to push image to local registry")
-
-		// Pull the image manifest and check annotations
-		fetchManifest(t, registryAddr, "extension-test-docker-network",
-			fmt.Sprintf("%s-linux-%s", version, runtime.GOARCH))
+		pushOCIImageForDownload(t, extensionDir, "./Dockerfile", manifest)
+		requireDownloadHasFiles(t, manifest, "manifest.yaml")
 	})
 
 	t.Run("makefile_code_target", func(t *testing.T) {
@@ -287,6 +231,52 @@ func TestCreateRustNetworkWithDockerSupport(t *testing.T) {
 		// Pull the image manifest and check annotations
 		fetchManifest(t, registryAddr, "extension-src-test-docker-network", version)
 	})
+}
+
+// pushOCIImageForDownload pushes the extension image to the test registry in OCI format,
+// preserving the manifest annotations required by boe download.
+// It does not use the `make push_image` target because it is meant for multi-platform builds
+// and here we want to build for a single platform. We call directly buildx build with the
+// minimum set of annotations and config.
+func pushOCIImageForDownload(t *testing.T, extensionDir, dockerfile string, manifest *extensions.Manifest) {
+	t.Helper()
+	ctx := t.Context()
+
+	// Ensure boe-builder exists; the Makefile's create_builder target is idempotent.
+	// #nosec G204
+	createBuilderCmd := exec.CommandContext(ctx, "make", "create_builder")
+	createBuilderCmd.Dir = extensionDir
+	out, err := createBuilderCmd.CombinedOutput()
+	t.Logf("make create_builder output: %s", string(out))
+	require.NoError(t, err, "Should be able to ensure boe-builder exists")
+
+	args := []string{
+		"buildx", "build",
+		"--builder", "boe-builder",
+		"--platform", fmt.Sprintf("linux/%s", runtime.GOARCH),
+		"--output", "type=registry,oci-mediatypes=true,registry.insecure=true",
+		"--provenance=false",
+		"--tag", fmt.Sprintf("%s/extension-%s:%s", registryAddr, manifest.Name, manifest.Version),
+		"-f", dockerfile,
+		"--annotation", fmt.Sprintf("manifest:org.opencontainers.image.title=%s", manifest.Name),
+		"--annotation", fmt.Sprintf("manifest:org.opencontainers.image.version=%s", manifest.Version),
+		"--annotation", fmt.Sprintf("manifest:%s=%s", extensions.OCIAnnotationExtensionType, string(manifest.Type)),
+		"--annotation", fmt.Sprintf("manifest:%s=%s", extensions.OCIAnnotationCShared, strconv.FormatBool(manifest.CShared)),
+	}
+	if manifest.Type == extensions.TypeGo {
+		args = append(args, "--build-arg", fmt.Sprintf("NAME=%s", manifest.Name))
+	}
+	if manifest.FilterType != "" {
+		args = append(args, "--annotation", fmt.Sprintf("manifest:%s=%s", extensions.OCIAnnotationFilterType, string(manifest.FilterType)))
+	}
+	args = append(args, ".")
+
+	// #nosec G204
+	pushCmd := exec.CommandContext(ctx, "docker", args...)
+	pushCmd.Dir = extensionDir
+	output, err := pushCmd.CombinedOutput()
+	t.Logf("pushOCIImageForDownload output: %s", string(output))
+	require.NoError(t, err, "Should be able to push OCI image to local registry")
 }
 
 func fetchManifest(t *testing.T, registry, repository, reference string) {
