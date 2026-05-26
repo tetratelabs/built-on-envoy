@@ -5,7 +5,18 @@
 
 package internal
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	"golang.org/x/mod/semver"
+)
+
+func TestGoversion(t *testing.T) {
+	require.NotEmpty(t, GoVersion)
+	require.True(t, semver.IsValid("v"+GoVersion))
+	require.NotEmpty(t, semver.MajorMinor("v"+GoVersion))
+}
 
 func TestParseVersion(t *testing.T) {
 	type versionStringTest struct {

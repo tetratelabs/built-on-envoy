@@ -23,8 +23,9 @@ GO_TEST_ARGS ?=
 
 # Use a specific go tool invocation that uses the tools module for linters and other tools so that
 # the main go.mod is not polluted with tool dependencies.
-ROOT     := $(shell git rev-parse --show-toplevel)
-GO_TOOL  := go tool -modfile=$(ROOT)/tools/go.mod
+ROOT       := $(shell git rev-parse --show-toplevel)
+GO_VERSION := $(shell sed -ne 's/^go //gp' $(ROOT)/go.mod)
+GO_TOOL    := go tool -modfile=$(ROOT)/tools/go.mod
 
 # Base OCI image annotations (shared by all image types)
 BASE_OCI_ANNOTATIONS := \
@@ -138,6 +139,7 @@ build_image:  ## Build the Docker image
 	docker buildx build \
 		--output type=docker,oci-mediatypes=true \
 		--provenance=false \
+		--build-arg GO_VERSION="$(GO_VERSION)" \
 		$(BASE_OCI_ANNOTATIONS) \
 		-t $(OCI_REGISTRY)/$(NAME):$(TAG) \
 		-f ./Dockerfile .
@@ -151,6 +153,7 @@ push_image: create_builder  ## Push the Docker image to the registry
 		--builder $(BUILDER_NAME) \
 		--output type=registry,oci-mediatypes=true$(registry_output) \
 		--provenance=false \
+		--build-arg GO_VERSION="$(GO_VERSION)" \
 		$(MULTI_OCI_ANNOTATIONS) \
 		-t $(OCI_REGISTRY)/$(NAME):$(TAG) \
 		-f ./Dockerfile .

@@ -7,8 +7,11 @@
 # If you need to customize the build process, consider creating a separate
 # Dockerfile (e.g., Dockerfile.custom) instead of editing this file.
 
-# Build the manager binary
-FROM golang:1.26.3 AS builder
+ARG GO_VERSION
+
+# Pin the builder to the CI runner platform so cross-OS compilation
+# (e.g. darwin from a Linux runner) works without OS-level emulation.
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION} AS builder
 
 WORKDIR /workspace
 COPY . .

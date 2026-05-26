@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tetratelabs/built-on-envoy/cli/internal"
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
@@ -120,6 +121,18 @@ func TestCreateGo_Run(t *testing.T) {
 		require.NoError(t, err)
 		assert.Contains(t, string(plugin), "x-"+name)
 		assert.Contains(t, string(plugin), "WellKnownHttpFilterConfigFactories")
+
+		// verify go.mod content
+		// #nosec G304
+		gomod, err := os.ReadFile(filepath.Join(repoPath, "go.mod"))
+		require.NoError(t, err)
+		assert.Contains(t, string(gomod), `go `+internal.GoVersion)
+
+		// verify Dockerfile content
+		// #nosec G304
+		dockerfile, err := os.ReadFile(filepath.Join(repoPath, "Dockerfile"))
+		require.NoError(t, err)
+		assert.Contains(t, string(dockerfile), "FROM golang:"+internal.GoVersion)
 	}
 }
 

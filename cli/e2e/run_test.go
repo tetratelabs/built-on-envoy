@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tetratelabs/built-on-envoy/cli/internal"
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 
@@ -297,7 +298,7 @@ func addDummyDependencyToExtension(t *testing.T, path string) {
 	// of the extension are not subset of the composer's dependencies.
 
 	goModContent := `module inner
-go 1.26.3
+go %s
 `
 
 	goFileContent := `package inner
@@ -312,7 +313,7 @@ func Inner() string {
 	require.NoError(t, err, "failed to create inner module directory")
 
 	goModPath := newModulePath + "/go.mod"
-	err = os.WriteFile(goModPath, []byte(goModContent), 0o600)
+	err = os.WriteFile(goModPath, []byte(fmt.Sprintf(goModContent, internal.GoVersion)), 0o600)
 	require.NoError(t, err, "failed to write go.mod for inner module")
 
 	goFilePath := newModulePath + "/inner.go"

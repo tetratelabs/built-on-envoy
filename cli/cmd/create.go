@@ -17,6 +17,7 @@ import (
 	"slices"
 	"text/template"
 
+	"github.com/tetratelabs/built-on-envoy/cli/internal"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
@@ -83,6 +84,7 @@ func createGoExtension(logger *slog.Logger, dirs *xdg.Directories, path, name, c
 		"Name":               name,
 		"LibComposerVersion": composerVersion,
 		"DataHome":           dirs.DataHome,
+		"GoVersion":          internal.GoVersion,
 	}
 
 	// Map of output filename to template filename
@@ -161,7 +163,8 @@ func createExtProcExtension(logger *slog.Logger, path, name string) error {
 	repoPath := filepath.Join(path, name)
 
 	data := map[string]string{
-		"Name": name,
+		"Name":      name,
+		"GoVersion": internal.GoVersion,
 	}
 
 	files := map[string]string{

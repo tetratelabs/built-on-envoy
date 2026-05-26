@@ -23,8 +23,9 @@ ifeq ($(EXTENSION_PATH),)
   $(error "EXTENSION_PATH is not set. Please set it to the path of the extension.")
 endif
 
-ROOT    := $(shell git rev-parse --show-toplevel)
-GO_TOOL := go -C $(EXTENSION_PATH) tool -modfile=$(ROOT)/tools/go.mod
+ROOT       := $(shell git rev-parse --show-toplevel)
+GO_VERSION := $(shell sed -ne 's/^go //gp' $(EXTENSION_PATH)/go.mod)
+GO_TOOL    := go -C $(EXTENSION_PATH) tool -modfile=$(ROOT)/tools/go.mod
 
 # Labels for this lua extension image.
 NAME             := $(shell grep "^name:" ./$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
@@ -172,6 +173,7 @@ push_extproc: create_builder
 		--platform=$(PLATFORMS) \
 		--output type=registry,oci-mediatypes=true$(registry_output) \
 		--provenance=false \
+		--build-arg GO_VERSION="$(GO_VERSION)" \
 		$(MULTI_OCI_ANNOTATIONS) \
 		--tag $(IMAGE) $(DEV_TAG) \
 		--file Dockerfile.extproc ./$(EXTENSION_PATH)

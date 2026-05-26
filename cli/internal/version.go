@@ -9,10 +9,27 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"golang.org/x/tools/go/packages"
 )
 
 // version is the current version of build. This is populated by the Go linker.
 var version string
+
+// GoVersion is the Go version used to build the project.
+var GoVersion string
+
+func init() {
+	cfg := &packages.Config{Mode: packages.NeedModule}
+	pkgs, err := packages.Load(cfg, ".")
+	if err != nil {
+		panic(err)
+	}
+	if len(pkgs) == 0 || pkgs[0].Module == nil {
+		panic("could not determine module root directory")
+	}
+	GoVersion = pkgs[0].Module.GoVersion
+}
 
 // CurrentVersion version with the Git information.
 func CurrentVersion() Version {

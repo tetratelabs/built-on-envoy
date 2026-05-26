@@ -3,9 +3,11 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
+ARG GO_VERSION
+
 # Pin the builder to the CI runner platform so cross-OS compilation
 # (e.g. darwin from a Linux runner) works without OS-level emulation.
-FROM --platform=$BUILDPLATFORM golang:1.26.3 AS builder
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION} AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
