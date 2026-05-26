@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -70,7 +72,7 @@ func CaptureOutput(labels ...string) OutBuffers {
 
 // DumpLogsOnFail creates labeled log capture writers that dump only on test failure.
 // Returns WriterStringers in the same order as labels.
-func DumpLogsOnFail(t testing.TB, labels ...string) OutBuffers {
+func DumpLogsOnFail(t testing.TB, logDir string, labels ...string) OutBuffers {
 	buffers := CaptureOutput(labels...)
 
 	t.Cleanup(func() {
@@ -81,6 +83,11 @@ func DumpLogsOnFail(t testing.TB, labels ...string) OutBuffers {
 					continue
 				}
 				t.Logf("=== %s ===\n%s", label, out)
+			}
+
+			logs, err := os.ReadFile(filepath.Join(filepath.Clean(logDir), "boe.log"))
+			if err == nil {
+				t.Logf("=== boe logs ===\n%s", string(logs))
 			}
 		}
 	})

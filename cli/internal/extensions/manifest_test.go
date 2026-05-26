@@ -640,11 +640,9 @@ func TestLoadLocalManifest(t *testing.T) {
 	})
 }
 
-func TestResolveLocalVersions(t *testing.T) {
-	t.Run("local-parent-found", func(t *testing.T) {
-		// Create a directory structure: parent/child/manifest.yaml
+func TestFindLocalParentManifest(t *testing.T) {
+	t.Run("found-in-ancestor", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		parentDir := tmpDir
 		childDir := filepath.Join(tmpDir, "child")
 		require.NoError(t, os.MkdirAll(childDir, 0o750))
 
@@ -666,22 +664,25 @@ tags: [test]
 license: Apache-2.0
 examples: []
 `
-		require.NoError(t, os.WriteFile(filepath.Join(parentDir, "manifest.yaml"), []byte(parentManifest), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "manifest.yaml"), []byte(parentManifest), 0o600))
 		require.NoError(t, os.WriteFile(filepath.Join(childDir, "manifest.yaml"), []byte(childManifest), 0o600))
 
 		m, err := LoadLocalManifest(filepath.Join(childDir, "manifest.yaml"))
 		require.NoError(t, err)
-		require.Empty(t, m.Version)
 
-		require.NoError(t, ResolveLocalVersions(m))
-		assert.Equal(t, "9.9.9", m.Version)
-		assert.Equal(t, "9.9.9", m.ComposerVersion)
-		assert.Equal(t, "1.99.0", m.MinEnvoyVersion)
-		assert.Equal(t, "1.100.0", m.MaxEnvoyVersion) // Automatically computed when loading the manifest
+		parent, err := FindLocalParentManifest(m)
+		require.NoError(t, err)
+		require.NotNil(t, parent)
+		require.Equal(t, "test-parent", parent.Name)
+
+		ResolveVersionsWithParent(m, parent)
+		require.Equal(t, "9.9.9", m.Version)
+		require.Equal(t, "9.9.9", m.ComposerVersion)
+		require.Equal(t, "1.99.0", m.MinEnvoyVersion)
+		require.Equal(t, "1.100.0", m.MaxEnvoyVersion)
 	})
 
-	t.Run("no-local-parent-returns-error", func(t *testing.T) {
-		// Create a child manifest in an isolated temp dir (no parent on filesystem).
+	t.Run("not-found-returns-nil", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		childManifest := `name: test-child
 parent: composer
@@ -699,20 +700,9 @@ examples: []
 		m, err := LoadLocalManifest(filepath.Join(tmpDir, "manifest.yaml"))
 		require.NoError(t, err)
 
-		// Without the parent manifest on disk, version resolution fails.
-		require.ErrorIs(t, ResolveLocalVersions(m), ErrParentManifestNotFound)
-	})
-
-	t.Run("noop-for-non-go-type", func(t *testing.T) {
-		m := &Manifest{Name: "test", Type: TypeWasm, Version: "1.0.0"}
-		require.NoError(t, ResolveLocalVersions(m))
-		assert.Equal(t, "1.0.0", m.Version)
-	})
-
-	t.Run("noop-for-no-parent", func(t *testing.T) {
-		m := &Manifest{Name: "test", Type: TypeGo, Version: "1.0.0"}
-		require.NoError(t, ResolveLocalVersions(m))
-		assert.Equal(t, "1.0.0", m.Version)
+		parent, err := FindLocalParentManifest(m)
+		require.NoError(t, err)
+		require.Nil(t, parent)
 	})
 }
 

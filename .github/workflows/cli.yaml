@@ -97,7 +97,8 @@ jobs:
       run:
         working-directory: ./cli
     env:
-      GO_TEST_ARGS: -v
+      # For PRs, skip the long running tests. For pushes to main or release branches, run all tests.
+      GO_TEST_ARGS: ${{ github.event_name == 'pull_request' && '-v -test.short' || '-v' }}
       TEST_BOE_REGISTRY: ghcr.io/tetratelabs/built-on-envoy
       TEST_BOE_REGISTRY_USERNAME: ${{ github.actor }}
       TEST_BOE_REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}

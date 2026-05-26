@@ -3,45 +3,69 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-# Multi-stage build for Rust dynamic modules
+# Pin the builder to the CI runner platform so cross-OS compilation
+# (e.g. darwin from a Linux runner) works without OS-level emulation.
+FROM --platform=$BUILDPLATFORM rust:1.84-bookworm AS builder
 
-# Build stage
-FROM rust:1.84-bookworm AS builder
+ARG TARGETOS
+ARG TARGETARCH
+ARG ZIG_VERSION=0.16.0
 
-# Install build dependencies
 RUN apt-get update && \
-    apt-get install -y clang libclang-dev && \
+    apt-get install -y --no-install-recommends clang libclang-dev xz-utils && \
     rm -rf /var/lib/apt/lists/*
 
-WORKDIR /workspace
+RUN wget -qO zig.tar.xz "https://ziglang.org/download/${ZIG_VERSION}/zig-$(uname -m)-linux-${ZIG_VERSION}.tar.xz" && \
+    tar xf zig.tar.xz && mv zig-*/zig /usr/local/bin/ && mv zig-*/lib /usr/local/lib/zig && \
+    rm -rf zig.tar.xz zig-*
 
-# The extension source will be mounted at build time
+# zig cc cannot resolve macOS SDK flags without a full SDK install.
+COPY <<'ZIGCC' /usr/local/bin/zigcc
+#!/bin/sh
+skip=false; f=
+for a in "$@"; do
+  if $skip; then skip=false; continue; fi
+  case "$a" in
+    -Wl,-flat_namespace|-Wl,-bind_at_load|-Wl,--unresolved-symbols*|-lresolv) ;;
+    -framework|-arch) skip=true ;;
+    *) f="$f $a" ;;
+  esac
+done
+exec zig cc $f
+ZIGCC
+RUN chmod +x /usr/local/bin/zigcc
+
+WORKDIR /workspace
 COPY . .
 
-# Build the Rust extension
-RUN cargo build --release --target-dir ./target
+RUN RUST_ARCH=$(echo $TARGETARCH | sed 's/amd64/x86_64/;s/arm64/aarch64/') && \
+    case "$TARGETOS" in \
+      darwin) \
+        RUST_TARGET="${RUST_ARCH}-apple-darwin"; \
+        ZIG_TARGET="${RUST_ARCH}-macos"; \
+        EXT=dylib; \
+        export BINDGEN_EXTRA_CLANG_ARGS="--target=${RUST_TARGET} -isystem /usr/local/lib/zig/libc/include/any-darwin-any"; \
+        ;; \
+      *) \
+        RUST_TARGET="${RUST_ARCH}-unknown-linux-gnu"; \
+        ZIG_TARGET="${RUST_ARCH}-linux-gnu"; \
+        EXT=so; \
+        ;; \
+    esac && \
+    rustup target add $RUST_TARGET && \
+    printf '#!/bin/sh\nexec zigcc -target %s "$@"\n' "$ZIG_TARGET" > /usr/local/bin/zigcc-target && \
+    chmod +x /usr/local/bin/zigcc-target && \
+    eval "export CARGO_TARGET_$(echo $RUST_TARGET | tr 'a-z-' 'A-Z_')_LINKER=zigcc-target" && \
+    cargo build --release --target $RUST_TARGET --target-dir ./target && \
+    ORIGINAL_NAME=$(grep "^name:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"') && \
+    RUST_LIB_NAME=$(echo "$ORIGINAL_NAME" | tr '-' '_') && \
+    mkdir -p /output && \
+    cp ./target/$RUST_TARGET/release/lib${RUST_LIB_NAME}.$EXT /output/lib${ORIGINAL_NAME}.$EXT
 
-# Copy the library from Rust output (with underscores) to original name (with dashes)
-RUN mkdir -p /output
-RUN ORIGINAL_NAME=$(grep "^name:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"'); \
-    RUST_LIB_NAME=$(echo "$ORIGINAL_NAME" | tr '-' '_'); \
-    cp ./target/release/lib${RUST_LIB_NAME}.so /output/lib${ORIGINAL_NAME}.so
-
-# Final stage - minimal image with just the compiled library
 FROM scratch AS final
 
-# Copy the compiled library from builder
-COPY --from=builder /output/*.so /
+COPY --from=builder /output/lib*.* /
 COPY --from=builder /workspace/manifest.yaml /
-
-
-
-
-
-
-
-
-
-
-
-
+# Use a wildcard to copy config.schema.json if it exists, since COPY will fail if the file does not exist and we want to
+# allow for optional presence of this file.
+COPY --from=builder /workspace/config.schema.json* /

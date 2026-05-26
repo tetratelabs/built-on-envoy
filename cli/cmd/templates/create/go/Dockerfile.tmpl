@@ -8,19 +8,31 @@
 # Dockerfile (e.g., Dockerfile.custom) instead of editing this file.
 
 # Build the manager binary
-FROM golang:1.26.3 AS builder
+FROM golang:{{ .GoVersion }} AS builder
+
+ARG NAME
 
 WORKDIR /workspace
 COPY . .
 
+# Install necessary tools for cgo
+RUN apt-get update
+RUN apt-get install -y --no-install-recommends \
+    ca-certificates wget git ssh netcat-openbsd gcc build-essential binutils binutils-gold
+
 RUN go mod download all
 
-# Build go plugin
-RUN CGO_ENABLED=1 go build -buildmode=plugin -o plugin.so ./standalone
+# Build go shared library
+RUN CGO_ENABLED=1 go build -buildmode=c-shared -o lib${NAME}.so ./main
 
 FROM scratch AS final
 
-COPY --from=builder /workspace/plugin.so /
+ARG NAME
+
+COPY --from=builder /workspace/lib${NAME}.so /
 # Preserve manifest.yaml so downloaded artifacts retain manifest-owned fields
 # (e.g. nativeHttpFilters) that the OCI annotation fallback cannot represent.
 COPY --from=builder /workspace/manifest.yaml /
+# Use a wildcard to copy config.schema.json if it exists, since COPY will fail if the file does not exist and we want to
+# allow for optional presence of this file.
+COPY --from=builder /workspace/config.schema.json* /

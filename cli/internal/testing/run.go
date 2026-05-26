@@ -93,7 +93,8 @@ func FreePorts(t *testing.T, count int) []int {
 // RunCLI starts the CLI as a subprocess with the given arguments.
 func RunCLI(t *testing.T, cliBin string, args ...string) *os.Process {
 	// Capture logs, only dump on failure.
-	buffers := DumpLogsOnFail(t, "boe Stdout", "boe Stderr")
+	logDir := t.TempDir()
+	buffers := DumpLogsOnFail(t, logDir, "boe Stdout", "boe Stderr")
 
 	t.Logf("Starting boe with args: %v", args)
 
@@ -112,6 +113,7 @@ func RunCLI(t *testing.T, cliBin string, args ...string) *os.Process {
 	cmd.Stdout = buffers[0]
 	cmd.Stderr = buffers[1]
 	cmd.WaitDelay = 3 * time.Second // auto-kill after 3 seconds.
+	cmd.Env = append(os.Environ(), fmt.Sprintf("BOE_STATE_HOME=%s", logDir))
 
 	require.NoError(t, cmd.Start())
 

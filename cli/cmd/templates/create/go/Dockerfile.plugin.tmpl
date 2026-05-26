@@ -7,28 +7,23 @@
 # If you need to customize the build process, consider creating a separate
 # Dockerfile (e.g., Dockerfile.custom) instead of editing this file.
 
-ARG GO_VERSION
-
-# Pin the builder to the CI runner platform so cross-OS compilation
-# (e.g. darwin from a Linux runner) works without OS-level emulation.
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION} AS builder
+# Build the manager binary
+FROM golang:{{ .GoVersion }} AS builder
 
 WORKDIR /workspace
 COPY . .
 
 RUN go mod download all
 
-# Build the ext_proc server binary
-RUN CGO_ENABLED=0 go build -a -ldflags="-s -w" -o ./out/ext_proc-server .
+# Build go plugin
+RUN CGO_ENABLED=1 go build -buildmode=plugin -o plugin.so ./standalone
 
 FROM scratch AS final
 
-# ext_proc extension manifests contain information such as the ext_proc config that we need to
-# include in the image.
+COPY --from=builder /workspace/plugin.so /
+# Preserve manifest.yaml so downloaded artifacts retain manifest-owned fields
+# (e.g. nativeHttpFilters) that the OCI annotation fallback cannot represent.
 COPY --from=builder /workspace/manifest.yaml /
-COPY --from=builder /workspace/out/ext_proc-server /
 # Use a wildcard to copy config.schema.json if it exists, since COPY will fail if the file does not exist and we want to
 # allow for optional presence of this file.
 COPY --from=builder /workspace/config.schema.json* /
-
-ENTRYPOINT [ "/ext_proc-server" ]

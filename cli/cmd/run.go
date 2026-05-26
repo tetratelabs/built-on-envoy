@@ -6,6 +6,7 @@
 package cmd
 
 import (
+	"cmp"
 	"context"
 	_ "embed"
 	"errors"
@@ -360,8 +361,12 @@ func loadLocalManifests(ctx context.Context, logger *slog.Logger, downloader *ex
 			return nil, fmt.Errorf("%w from %s: %w", errFailedToLoadLocalManifest, path, err)
 		}
 
-		if err := extensions.ResolveLocalVersions(manifest); err != nil {
-			return nil, fmt.Errorf("%w from %s: %w", errFailedToLoadLocalManifest, path, err)
+		if manifest.Parent != "" {
+			parent, err := resolveParent(ctx, downloader, manifest)
+			if err != nil {
+				return nil, fmt.Errorf("%w from %s: %w", errFailedToLoadLocalManifest, path, err)
+			}
+			extensions.ResolveVersionsWithParent(manifest, parent)
 		}
 
 		if build {
@@ -400,6 +405,30 @@ func loadLocalManifests(ctx context.Context, logger *slog.Logger, downloader *ex
 	}
 
 	return manifests, nil
+}
+
+// resolveParent finds the parent manifest locally, falling back to the registry.
+func resolveParent(ctx context.Context, downloader *extensions.Downloader, m *extensions.Manifest) (*extensions.Manifest, error) {
+	parent, err := extensions.FindLocalParentManifest(m)
+	if err != nil {
+		return nil, err
+	}
+	if parent != nil {
+		return parent, nil
+	}
+
+	var dl extensions.DownloadedExtension
+	if m.Parent == "composer" {
+		version := cmp.Or(m.ComposerVersion, m.Version, "latest")
+		dl, err = downloader.DownloadComposer(ctx, version, extensions.ComposerArtifactLite)
+	} else {
+		version := cmp.Or(m.Version, "latest")
+		dl, err = downloader.DownloadExtension(ctx, m.Parent, version)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("downloading parent %s: %w", m.Parent, err)
+	}
+	return dl.Manifest, nil
 }
 
 // extractTag extracts the tag from a full OCI reference.
