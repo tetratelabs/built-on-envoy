@@ -1,26 +1,37 @@
 ---
 layout: ../../../layouts/DocsLayout.astro
-title: {{.Title}}
-description: {{.Description}}
+title: Schema Reference
+description: Schema Reference Documentation
 ---
 
 import ToC from '../../../components/ToC.astro';
 
-# {{.Title}}
-
-{{.Description}}
+# Schema Reference
 
 <ToC maxDepth="4"/>
 
+{{- range .}}
+
+{{ $parentTitle := .Title }}
+{{ $parentHref := .Href }}
+
+<a id="{{.Href}}"></a>
+## {{.Title}}
+
+{{.Description}}
+{{- if .OneOf}}
+**Requires one of:** {{range $i, $v := .OneOf}}{{if $i}}, {{end}}`{{$v}}`{{end}}s
+{{- end}}
+
 {{- range .Properties}}
 
-## {{.Name}}
+### {{.Name}}
 
 {{.Description}}
 
 | | |
 |---|---|
-| **Type** | `{{.Type}}` |
+| **Type** | {{if .Type.Href}}[{{.Type.Name}}]({{.Type.Href}}){{else}}`{{.Type.Name}}`{{end}} |
 | **Required** | {{if .Required}}Yes{{else}}No{{end}} |
 {{- if .EnumValues}}
 | **Allowed values** | {{range $i, $v := .EnumValues}}{{if $i}}, {{end}}`{{$v}}`{{end}} |
@@ -32,25 +43,70 @@ import ToC from '../../../components/ToC.astro';
 | **Requires one of** | {{range $i, $v := .OneOf}}{{if $i}}, {{end}}`{{$v}}`{{end}} |
 {{- end}}
 
+[↑ Top](#) | [↑ {{$parentTitle}}](#{{$parentHref}})
+
 {{- if .SubProperties}}
 {{ $prop := . }}
 {{range .SubProperties}}
 
-### {{$prop.Name}}.{{.Name}}
+#### {{$prop.Name}}.{{.Name}}
 
 {{.Description}}
 
 | | |
 |---|---|
-| **Type** | `{{.Type}}` |
+| **Type** | {{if .Type.Href}}[{{.Type.Name}}]({{.Type.Href}}){{else}}`{{.Type.Name}}`{{end}} |
 | **Required** | {{if .Required}}Yes{{else}}No{{end}} |
 {{- range .Constraints}}
 | **{{.Name}}** | {{.Value}} |
 {{- end}}
 {{- if .OneOf}}
-| **Reqiutes one of** | {{range $i, $v := .OneOf}}{{if $i}}, {{end}}`{{$v}}`{{end}} |
-{{- end}}
-{{end}}
+| **Requires one of** | {{range $i, $v := .OneOf}}{{if $i}}, {{end}}`{{$v}}`{{end}} |
 {{- end}}
 
-{{end}}
+[↑ Top](#) | [↑ {{$parentTitle}}](#{{$parentHref}})
+
+{{end}}   {/* range .SubProperties */}
+{{- end}} {/* if .SubProperties */}
+{{- end}} {/* range .Properties */}
+
+{{- if .CustomTypes}}
+{{ $parentTitle := .Title }}
+{{ $parentHref := .Href }}
+{{- range .CustomTypes}}
+
+<a id="{{.Href}}"></a>
+### Custom type: {{.Title}}
+
+{{.Description}}
+{{- if .OneOf}}
+**Requires one of:** {{range $i, $v := .OneOf}}{{if $i}}, {{end}}`{{$v}}`{{end}}
+{{- end}}
+
+{{- range .Properties}}
+
+#### {{.Name}}
+
+{{.Description}}
+
+| | |
+|---|---|
+| **Type** | {{if .Type.Href}}[{{.Type.Name}}]({{.Type.Href}}){{else}}`{{.Type.Name}}`{{end}} |
+| **Required** | {{if .Required}}Yes{{else}}No{{end}} |
+{{- if .EnumValues}}
+| **Allowed values** | {{range $i, $v := .EnumValues}}{{if $i}}, {{end}}`{{$v}}`{{end}} |
+{{- end}}
+{{- range .Constraints}}
+| **{{.Name}}** | {{.Value}} |
+{{- end}}
+{{- if .OneOf}}
+| **Requires one of** | {{range $i, $v := .OneOf}}{{if $i}}, {{end}}`{{$v}}`{{end}} |
+{{- end}}
+
+[↑ Top](#) | [↑ {{$parentTitle}}](#{{$parentHref}})
+
+{{- end}} {/* range .Properties */}
+{{- end}} {/* range .CustomTypes */}
+{{- end}} {/* if .CustomTypes */}
+
+{{- end}} {/* range . */}

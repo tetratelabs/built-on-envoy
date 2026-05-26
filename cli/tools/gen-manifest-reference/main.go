@@ -10,10 +10,13 @@ package main
 import (
 	"embed"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"text/template"
@@ -29,17 +32,20 @@ var templateFS embed.FS
 
 // JSONSchema represents a JSON Schema document.
 type JSONSchema struct {
-	Title       string               `json:"title"`
-	Description string               `json:"description"`
-	Type        string               `json:"type"`
-	Required    []string             `json:"required"`
-	Properties  map[string]*Property `json:"properties"`
-	AllOf       []*ConditionalSchema `json:"allOf"`
+	Title       string                 `json:"title"`
+	Description string                 `json:"description"`
+	Type        string                 `json:"type"`
+	Required    []string               `json:"required"`
+	Properties  map[string]*Property   `json:"properties"`
+	AllOf       []*ConditionalSchema   `json:"allOf"`
+	OneOf       []*OneOfItem           `json:"oneOf"`
+	Defs        map[string]*JSONSchema `json:"$defs"`
 }
 
 // Property represents a property in the JSON schema.
 type Property struct {
 	Type        any                  `json:"type"`
+	Ref         string               `json:"$ref"`
 	Description string               `json:"description"`
 	MinLength   *int                 `json:"minLength"`
 	MaxLength   *int                 `json:"maxLength"`
@@ -56,6 +62,7 @@ type Property struct {
 // Items represents the items definition for array types.
 type Items struct {
 	Type       string               `json:"type"`
+	Ref        string               `json:"$ref"`
 	Enum       []string             `json:"enum"`
 	MinLength  *int                 `json:"minLength"`
 	Pattern    string               `json:"pattern"`
@@ -108,7 +115,7 @@ type Constraint struct {
 // DocProperty represents a property for documentation.
 type DocProperty struct {
 	Name          string
-	Type          string
+	Type          TypeRef
 	Description   string
 	Required      bool
 	Constraints   []Constraint
@@ -117,74 +124,133 @@ type DocProperty struct {
 	OneOf         []string
 }
 
+// TypeRef represents a reference to another type in the documentation.
+type TypeRef struct {
+	Name string
+	Href string
+}
+
 // TemplateData holds the data for the template.
 type TemplateData struct {
+	Name        string
+	Href        string
 	Title       string
 	Description string
 	Properties  []DocProperty
+	OneOf       []string
+	CustomTypes []TemplateData
 }
 
 func main() {
 	var (
 		schemaPath         string
-		outputPath         string
+		docsOutputPath     string
 		extensionIndexPath string
 		extensionsDir      string
 	)
 
 	flag.StringVar(&schemaPath, "schema", "", "Path to the JSON schema file (required)")
-	flag.StringVar(&outputPath, "output", "", "Output path for the MDX file (required)")
+	flag.StringVar(&docsOutputPath, "docs-output", "", "Output path for the docs (required)")
 	flag.StringVar(&extensionIndexPath, "extension-index", "", "Output path for the extension index file (required)")
 	flag.StringVar(&extensionsDir, "extensions", "", "Path to the extensions directory (required)")
 	flag.Parse()
 
-	if schemaPath == "" || outputPath == "" || extensionIndexPath == "" || extensionsDir == "" {
-		fmt.Fprintln(os.Stderr, "Usage: gen-manifest-reference -schema <path> -output <path> -extension-index <path> -extensions <path>")
+	if schemaPath == "" || docsOutputPath == "" || extensionIndexPath == "" || extensionsDir == "" {
+		fmt.Fprintln(os.Stderr, "Usage: gen-manifest-reference -schema <path> -docs-output <path> -extension-index <path> -extensions <path>")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
 
-	if err := generateExtensionIndex(extensionIndexPath, extensionsDir); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to generate extension index: %v\n", err)
+	manifestSchema, err := loadSchema(schemaPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load manifest schema: %v\n", err)
+		os.Exit(1)
+	}
+	manifestSchemaOutputPath := filepath.Join(docsOutputPath, "reference", "manifest.mdx")
+	if err = generateJSONSchemaReference(map[string]*JSONSchema{"reference": manifestSchema}, manifestSchemaOutputPath); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to generate JSON schema reference: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Read and parse the schema
+	configSchemas, err := generateExtensionIndex(extensionIndexPath, extensionsDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to generate extension index: %v\n", err)
+		os.Exit(1)
+	}
+	if len(configSchemas) > 0 {
+		if err = generateJSONSchemaReference(configSchemas, filepath.Join(docsOutputPath, "reference", "extensions.mdx")); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to generate extension config reference: %v\n", err)
+			os.Exit(1)
+		}
+	}
+}
+
+func generateExtensionIndex(path string, extensionsDir string) (map[string]*JSONSchema, error) {
+	fs := os.DirFS(extensionsDir)
+	all, err := extensions.LoadManifests(fs, ".", false)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load manifests from %s: %w", extensionsDir, err)
+	}
+	extensionIndex := extensions.ManifestsIndex(all)
+
+	type ManifestWithConfigSchema struct {
+		*extensions.ManifestIndexEntry
+		ConfigReferencePath string `json:"configReferencePath,omitempty"`
+	}
+
+	entries := make([]*ManifestWithConfigSchema, 0, len(extensionIndex))
+	schemas := make(map[string]*JSONSchema)
+	for _, ext := range extensionIndex {
+		entry := &ManifestWithConfigSchema{ManifestIndexEntry: ext}
+		entries = append(entries, entry)
+
+		var configSchema *JSONSchema
+		configSchema, err = loadSchema(filepath.Join(extensionsDir, ext.SourcePath, "config.schema.json"))
+		if err == nil {
+			entry.ConfigReferencePath = "/docs/reference/extensions#" + ext.Name
+			schemas[ext.Name] = configSchema
+			continue
+		}
+
+		if errors.Is(err, os.ErrNotExist) {
+			fmt.Printf("No config.schema.json found for extension %s, skipping\n", ext.Name)
+		} else {
+			return nil, fmt.Errorf("failed to load config schema for extension %s: %w", ext.Name, err)
+		}
+	}
+
+	index, err := json.MarshalIndent(entries, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal extension index: %w", err)
+	}
+	if err := os.WriteFile(path, index, 0o600); err != nil {
+		return nil, fmt.Errorf("failed to write extension index to %s: %w", path, err)
+	}
+	fmt.Printf("Generated: %s\n", path)
+	return schemas, nil
+}
+
+func loadSchema(schemaPath string) (*JSONSchema, error) {
 	schemaData, err := os.ReadFile(filepath.Clean(schemaPath))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to read schema file: %v\n", err)
-		os.Exit(1)
+		return nil, fmt.Errorf("failed to read schema file: %w", err)
 	}
 
 	var schema JSONSchema
 	if err = json.Unmarshal(schemaData, &schema); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to parse schema: %v\n", err)
-		os.Exit(1)
+		return nil, fmt.Errorf("failed to parse schema: %w", err)
 	}
+	return &schema, nil
+}
 
-	// Build required fields set
-	requiredSet := make(map[string]bool)
-	for _, r := range schema.Required {
-		requiredSet[r] = true
-	}
+func generateJSONSchemaReference(schemas map[string]*JSONSchema, outputPath string) error {
+	var data []TemplateData
 
-	// Convert schema properties to doc properties
-	var properties []DocProperty
-	for name, prop := range schema.Properties {
-		docProp := convertProperty(name, prop, requiredSet[name], schema.AllOf)
-		properties = append(properties, docProp)
-	}
+	sortedKeys := slices.Collect(maps.Keys(schemas))
+	sort.Strings(sortedKeys)
 
-	// Sort properties alphabetically
-	sort.Slice(properties, func(i, j int) bool {
-		return properties[i].Name < properties[j].Name
-	})
-
-	// Prepare template data
-	data := TemplateData{
-		Title:       schema.Title,
-		Description: schema.Description,
-		Properties:  properties,
+	for _, name := range sortedKeys {
+		data = append(data, convertSchema(name, name, schemas[name]))
 	}
 
 	// Load and execute template
@@ -193,51 +259,76 @@ func main() {
 		"title": titleCase.String,
 	}).ParseFS(templateFS, "templates/*.tmpl")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to parse templates: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to parse templates: %w", err)
 	}
 
 	// Ensure output directory exists
 	if err = os.MkdirAll(filepath.Dir(outputPath), 0o750); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create output directory: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
 	// Write output file
 	f, err := os.Create(filepath.Clean(outputPath))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create output file: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to create output file: %w", err)
 	}
+	defer func() { _ = f.Close() }()
 
 	if err = tmpl.ExecuteTemplate(f, "manifest.mdx.tmpl", data); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to execute template: %v\n", err)
-		_ = f.Close()
-		os.Exit(1)
+		return fmt.Errorf("failed to execute template: %w", err)
 	}
-	_ = f.Close()
 
 	fmt.Printf("Generated: %s\n", outputPath)
-}
-
-func generateExtensionIndex(path string, extensionsDir string) error {
-	all, err := extensions.LoadManifests(os.DirFS(extensionsDir), ".", false)
-	if err != nil {
-		return fmt.Errorf("failed to load manifests from %s: %w", extensionsDir, err)
-	}
-	index, err := json.MarshalIndent(extensions.ManifestsIndex(all), "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(path, index, 0o600); err != nil {
-		return err
-	}
-	fmt.Printf("Generated: %s\n", path)
 	return nil
 }
 
+// convertSchema converts a JSON schema to template data for documentation.
+func convertSchema(name, href string, schema *JSONSchema) TemplateData {
+	requiredSet := make(map[string]bool)
+	for _, r := range schema.Required {
+		requiredSet[r] = true
+	}
+
+	// Convert schema properties to doc properties
+	var properties []DocProperty
+	for propName, prop := range schema.Properties {
+		docProp := convertProperty(propName, prop, requiredSet[propName], schema.AllOf, name)
+		properties = append(properties, docProp)
+	}
+	// Sort properties alphabetically
+	sort.Slice(properties, func(i, j int) bool {
+		return properties[i].Name < properties[j].Name
+	})
+
+	customTypes := make([]TemplateData, 0, len(schema.Defs))
+	for typeName, def := range schema.Defs {
+		typeHref := fmt.Sprintf("%s-%s", name, typeName)
+		if def.Title == "" {
+			def.Title = typeName
+		}
+		customTypes = append(customTypes, convertSchema(name, typeHref, def))
+	}
+	// Sort custom types alphabetically
+	sort.Slice(customTypes, func(i, j int) bool {
+		return customTypes[i].Title < customTypes[j].Title
+	})
+
+	if schema.Title == "" {
+		schema.Title = name
+	}
+	return TemplateData{
+		Name:        name,
+		Href:        href,
+		Title:       schema.Title,
+		Description: schema.Description,
+		Properties:  properties,
+		OneOf:       collectOneOfOptions(schema.OneOf),
+		CustomTypes: customTypes,
+	}
+}
+
 // convertProperty converts a schema property to a documentation property.
-func convertProperty(name string, prop *Property, required bool, allOf []*ConditionalSchema) DocProperty {
+func convertProperty(name string, prop *Property, required bool, allOf []*ConditionalSchema, baseType string) DocProperty {
 	docProp := DocProperty{
 		Name:        name,
 		Description: prop.Description,
@@ -245,7 +336,7 @@ func convertProperty(name string, prop *Property, required bool, allOf []*Condit
 	}
 
 	// Determine type
-	docProp.Type = getTypeString(prop)
+	docProp.Type = getTypeString(prop, baseType)
 
 	// Build constraints
 	var constraints []Constraint
@@ -285,15 +376,7 @@ func convertProperty(name string, prop *Property, required bool, allOf []*Condit
 	}
 
 	// Handle oneOf constraints
-	if len(prop.OneOf) > 0 {
-		var oneOfOptions []string
-		for _, o := range prop.OneOf {
-			if len(o.Required) > 0 {
-				oneOfOptions = append(oneOfOptions, strings.Join(o.Required, ", "))
-			}
-		}
-		docProp.OneOf = oneOfOptions
-	}
+	docProp.OneOf = collectOneOfOptions(prop.OneOf)
 
 	// Check for conditional requirements in allOf
 	for _, cond := range allOf {
@@ -314,7 +397,7 @@ func convertProperty(name string, prop *Property, required bool, allOf []*Condit
 
 		var subProps []DocProperty
 		for subName, subProp := range prop.Properties {
-			subDocProp := convertProperty(subName, subProp, nestedRequired[subName], nil)
+			subDocProp := convertProperty(subName, subProp, nestedRequired[subName], nil, baseType)
 			subProps = append(subProps, subDocProp)
 		}
 		sort.Slice(subProps, func(i, j int) bool {
@@ -332,7 +415,7 @@ func convertProperty(name string, prop *Property, required bool, allOf []*Condit
 
 		var subProps []DocProperty
 		for subName, subProp := range prop.Items.Properties {
-			subDocProp := convertProperty(subName, subProp, nestedRequired[subName], nil)
+			subDocProp := convertProperty(subName, subProp, nestedRequired[subName], nil, baseType)
 			subProps = append(subProps, subDocProp)
 		}
 		sort.Slice(subProps, func(i, j int) bool {
@@ -342,6 +425,17 @@ func convertProperty(name string, prop *Property, required bool, allOf []*Condit
 	}
 
 	return docProp
+}
+
+// collectOneOfOptions collects the required fields from oneOf constraints for documentation.
+func collectOneOfOptions(oneOf []*OneOfItem) []string {
+	var options []string
+	for _, o := range oneOf {
+		if len(o.Required) > 0 {
+			options = append(options, strings.Join(o.Required, ", "))
+		}
+	}
+	return options
 }
 
 // conditionalConstraints returns constraints for a property based on a conditional allOf rule.
@@ -475,7 +569,7 @@ func describeNegatedCondition(cif *ConditionIf) string {
 }
 
 // getTypeString returns a human-readable type string from a property.
-func getTypeString(prop *Property) string {
+func getTypeString(prop *Property, baseType string) TypeRef {
 	typeStr := "unknown"
 
 	switch t := prop.Type.(type) {
@@ -492,14 +586,33 @@ func getTypeString(prop *Property) string {
 		typeStr = strings.Join(types, " | ")
 	}
 
+	ref := TypeRef{Name: typeStr}
+
 	// Handle arrays
 	if typeStr == "array" && prop.Items != nil {
-		if prop.Items.Type == "object" {
-			typeStr = "[]object"
-		} else if prop.Items.Type != "" {
-			typeStr = "[]" + prop.Items.Type
+		if prop.Items.Type != "" {
+			ref.Name = "[]" + prop.Items.Type
+		} else if prop.Items.Ref != "" {
+			name := referencedTypeName(prop.Items.Ref)
+			ref.Name = "[]" + name
+			ref.Href = fmt.Sprintf("#%s-%s", baseType, name)
 		}
 	}
 
-	return typeStr
+	// Handle custom types
+	if prop.Ref != "" {
+		name := referencedTypeName(prop.Ref)
+		ref.Name = name
+		ref.Href = fmt.Sprintf("#%s-%s", baseType, name)
+	}
+
+	return ref
+}
+
+// referencedTypeName extracts the type name from a $ref string, removing the "#/$defs/" prefix if present.
+func referencedTypeName(ref string) string {
+	if after, ok := strings.CutPrefix(ref, "#/$defs/"); ok {
+		return after
+	}
+	return ref
 }
