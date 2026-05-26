@@ -200,3 +200,123 @@ func TestWellKnownHttpFilterConfigFactories_ExportsName(t *testing.T) {
 	got := WellKnownHttpFilterConfigFactories()
 	require.Contains(t, got, ExtensionName)
 }
+
+func TestParseConfig_RejectsMissingAdvertiseListen(t *testing.T) {
+	_, err := parseConfig([]byte(`{"envoy_id":"a"}`))
+	require.ErrorContains(t, err, "advertise_listen")
+}
+
+func TestParseConfig_RejectsBadPollInterval(t *testing.T) {
+	_, err := parseConfig([]byte(`{"envoy_id":"a","advertise_listen":"0.0.0.0:0","poll_interval":"not-a-duration"}`))
+	require.ErrorContains(t, err, "poll_interval")
+}
+
+func TestParseConfig_RejectsBadStaleAfter(t *testing.T) {
+	_, err := parseConfig([]byte(`{"envoy_id":"a","advertise_listen":"0.0.0.0:0","stale_after":"not-a-duration"}`))
+	require.ErrorContains(t, err, "stale_after")
+}
+
+func TestParseConfig_RejectsPeerMissingFields(t *testing.T) {
+	_, err := parseConfig([]byte(`{
+		"envoy_id":"a","advertise_listen":"0.0.0.0:0",
+		"peers":[{"id":"b","endpoint":"http://b"}]
+	}`))
+	require.ErrorContains(t, err, "local_cluster")
+}
+
+func TestParseConfig_RejectsDuplicatePeerID(t *testing.T) {
+	_, err := parseConfig([]byte(`{
+		"envoy_id":"a","advertise_listen":"0.0.0.0:0",
+		"peers":[
+			{"id":"b","endpoint":"http://b","local_cluster":"peer_b"},
+			{"id":"b","endpoint":"http://b","local_cluster":"peer_b2"}
+		]
+	}`))
+	require.ErrorContains(t, err, "duplicate")
+}
+
+func TestParseConfig_RejectsEmptyTerminal(t *testing.T) {
+	_, err := parseConfig([]byte(`{
+		"envoy_id":"a","advertise_listen":"0.0.0.0:0",
+		"terminals":[""]
+	}`))
+	require.ErrorContains(t, err, "terminals[0]")
+}
+
+func TestParseConfig_RejectsDuplicateTerminal(t *testing.T) {
+	_, err := parseConfig([]byte(`{
+		"envoy_id":"a","advertise_listen":"0.0.0.0:0",
+		"terminals":["x","x"]
+	}`))
+	require.ErrorContains(t, err, "duplicate")
+}
+
+func TestParseConfig_RejectsTerminalCollidingWithPeerLocalCluster(t *testing.T) {
+	_, err := parseConfig([]byte(`{
+		"envoy_id":"a","advertise_listen":"0.0.0.0:0",
+		"peers":[{"id":"b","endpoint":"http://b","local_cluster":"shared"}],
+		"terminals":["shared"]
+	}`))
+	require.ErrorContains(t, err, "peer local_cluster")
+}
+
+func TestPluginFactory_CreateReturnsPluginBoundToHandle(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	handle := mocks.NewMockHttpFilterHandle(ctrl)
+	tbl := graph.NewAtomicTable("envoyA")
+	d := &graph.Daemon{Table: tbl}
+
+	f := &PluginFactory{cfg: &Config{}, daemon: d}
+	filter := f.Create(handle)
+	require.NotNil(t, filter)
+	p, ok := filter.(*Plugin)
+	require.True(t, ok)
+	require.Equal(t, handle, p.handle)
+	require.Equal(t, tbl, p.table)
+}
+
+func TestPluginFactory_OnDestroyNilDaemonIsSafe(t *testing.T) {
+	f := &PluginFactory{}
+	require.NotPanics(t, f.OnDestroy)
+}
+
+func TestPluginConfigFactory_CreatePerRouteIsNoOp(t *testing.T) {
+	f := &PluginConfigFactory{}
+	v, err := f.CreatePerRoute([]byte(`{"any":"thing"}`))
+	require.NoError(t, err)
+	require.Nil(t, v)
+}
+
+func TestPluginConfigFactory_CreateRejectsBadConfig(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	handle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	handle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	f := &PluginConfigFactory{}
+	got, err := f.Create(handle, []byte(`{"envoy_id":""}`))
+	require.Error(t, err)
+	require.Nil(t, got)
+}
+
+func TestPluginConfigFactory_CreateHappyPath(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	handle := mocks.NewMockHttpFilterConfigHandle(ctrl)
+	handle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	f := &PluginConfigFactory{}
+	got, err := f.Create(handle, []byte(`{
+		"envoy_id":"envoyA",
+		"advertise_listen":"127.0.0.1:0",
+		"poll_interval":"1s",
+		"stale_after":"5s"
+	}`))
+	require.NoError(t, err)
+	require.NotNil(t, got)
+
+	pf, ok := got.(*PluginFactory)
+	require.True(t, ok)
+	require.NotNil(t, pf.daemon)
+
+	// OnDestroy must stop the daemon cleanly.
+	pf.OnDestroy()
+}

@@ -66,6 +66,19 @@ func TestFetchAdvertisement_OversizedBody(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestAdvertisementServer_RejectsNonGET(t *testing.T) {
+	tbl := NewAtomicTable("envoyA")
+	s, err := NewAdvertisementServer("envoyA", "127.0.0.1:0", tbl)
+	require.NoError(t, err)
+	s.Start()
+	defer func() { _ = s.Stop(context.Background()) }()
+
+	resp, err := http.Post("http://"+s.Addr()+"/advertisements", "application/json", strings.NewReader("{}"))
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	require.Equal(t, http.StatusMethodNotAllowed, resp.StatusCode)
+}
+
 func TestAdvertisementServer_StopHaltsServing(t *testing.T) {
 	tbl := NewAtomicTable("envoyA")
 	s, err := NewAdvertisementServer("envoyA", "127.0.0.1:0", tbl)
