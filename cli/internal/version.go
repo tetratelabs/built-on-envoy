@@ -7,28 +7,24 @@ package internal
 
 import (
 	"fmt"
+	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
-
-	"golang.org/x/tools/go/packages"
 )
 
 // version is the current version of build. This is populated by the Go linker.
 var version string
 
-// GoVersion is the Go version used to build the project.
+// GoVersion is the runtime Go version.
 var GoVersion string
 
 func init() {
-	cfg := &packages.Config{Mode: packages.NeedModule}
-	pkgs, err := packages.Load(cfg, ".")
-	if err != nil {
-		panic(err)
+	re := regexp.MustCompile(`go(\d+\.\d+(?:\.\d+)?)`)
+	m := re.FindStringSubmatch(runtime.Version())
+	if len(m) > 1 {
+		GoVersion = m[1]
 	}
-	if len(pkgs) == 0 || pkgs[0].Module == nil {
-		panic("could not determine module root directory")
-	}
-	GoVersion = pkgs[0].Module.GoVersion
 }
 
 // CurrentVersion version with the Git information.
