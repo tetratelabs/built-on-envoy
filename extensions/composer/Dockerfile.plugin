@@ -7,9 +7,11 @@
 # If you need to customize the build process, consider creating a separate
 # Dockerfile (e.g., Dockerfile.custom) instead of editing this file.
 
+ARG GO_VERSION
+
 # Pin the builder to the CI runner platform so cross-OS compilation
 # (e.g. darwin from a Linux runner) works without OS-level emulation.
-FROM --platform=$BUILDPLATFORM golang:1.26.3 AS builder
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION} AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -59,3 +61,6 @@ ARG EXTENSION_PATH
 COPY --from=builder /workspace/plugin.so /
 COPY --from=builder /workspace/$EXTENSION_PATH/manifest.yaml /
 COPY --from=builder /workspace/manifest.yaml /manifest-composer.yaml
+# Use a wildcard to copy config.schema.json if it exists, since COPY will fail if the file does not exist and we want to
+# allow for optional presence of this file.
+COPY --from=builder /workspace/config.schema.json* /

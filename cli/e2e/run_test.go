@@ -6,6 +6,7 @@
 package e2e
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"net/http"
@@ -18,7 +19,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tetratelabs/built-on-envoy/cli/internal"
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
+)
+
+var (
+	defaultRequestTimeoutFromEnv, _ = time.ParseDuration(os.Getenv("TEST_BOE_REQUEST_TIMEOUT"))
+	defaultRequestTimeout           = cmp.Or(defaultRequestTimeoutFromEnv, 5*time.Second)
 )
 
 func TestDefaultProxy(t *testing.T) {
@@ -26,7 +33,7 @@ func TestDefaultProxy(t *testing.T) {
 	proxyPort, adminPort := ports[0], ports[1]
 	internaltesting.RunEnvoy(t, cliBin, proxyPort, adminPort)
 
-	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), defaultRequestTimeout)
 	t.Cleanup(cancel)
 
 	require.NoError(t, internaltesting.CheckGet(ctx, fmt.Sprintf("http://localhost:%d/status/200", proxyPort), internaltesting.EqualStatus(200)))
@@ -38,7 +45,7 @@ func TestCustomPorts(t *testing.T) {
 	proxyPort, adminPort := ports[0], ports[1]
 	internaltesting.RunEnvoy(t, cliBin, proxyPort, adminPort)
 
-	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), defaultRequestTimeout)
 	t.Cleanup(cancel)
 
 	require.NoError(t, internaltesting.CheckGet(ctx, fmt.Sprintf("http://localhost:%d/status/200", proxyPort), internaltesting.EqualStatus(200)))
@@ -60,7 +67,7 @@ func TestLuaRemoteExecution(t *testing.T) {
 		return r.Header.Get("x-lua-response-processed") == "true"
 	}
 
-	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), defaultRequestTimeout)
 	t.Cleanup(cancel)
 
 	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
@@ -71,7 +78,7 @@ func TestDevEnvoyVersion(t *testing.T) {
 	proxyPort, adminPort := ports[0], ports[1]
 	internaltesting.RunEnvoy(t, cliBin, proxyPort, adminPort, "--envoy-version", "dev-latest")
 
-	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), defaultRequestTimeout)
 	t.Cleanup(cancel)
 
 	require.NoError(t, internaltesting.CheckGet(ctx, fmt.Sprintf("http://localhost:%d/status/200", proxyPort), internaltesting.EqualStatus(200)))
@@ -90,7 +97,7 @@ func TestLuaLocalExtension(t *testing.T) {
 		return r.Header.Get("x-lua-response-processed") == "true"
 	}
 
-	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), defaultRequestTimeout)
 	t.Cleanup(cancel)
 
 	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
@@ -115,7 +122,7 @@ func TestDockerRemoteExtension(t *testing.T) {
 	}
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+		ctx, cancel := context.WithTimeout(t.Context(), defaultRequestTimeout)
 		defer cancel()
 
 		assert.NoError(c, internaltesting.CheckGet(ctx, url, checkHeader))
@@ -140,7 +147,7 @@ func TestRustRemoteExtension(t *testing.T) {
 		return r.StatusCode == http.StatusForbidden
 	}
 
-	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), defaultRequestTimeout)
 	t.Cleanup(cancel)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -194,7 +201,7 @@ func TestExtProcLocalExtension(t *testing.T) {
 		return r.Header.Get("x-ext-proc") == "processed"
 	}
 
-	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), defaultRequestTimeout)
 	t.Cleanup(cancel)
 
 	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
@@ -216,7 +223,7 @@ func TestExtProcRemoteExtension(t *testing.T) {
 		return r.Header.Get("x-ext-proc") == "processed"
 	}
 
-	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), defaultRequestTimeout)
 	t.Cleanup(cancel)
 
 	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
@@ -291,7 +298,7 @@ func addDummyDependencyToExtension(t *testing.T, path string) {
 	// of the extension are not subset of the composer's dependencies.
 
 	goModContent := `module inner
-go 1.26.3
+go %s
 `
 
 	goFileContent := `package inner
@@ -306,7 +313,7 @@ func Inner() string {
 	require.NoError(t, err, "failed to create inner module directory")
 
 	goModPath := newModulePath + "/go.mod"
-	err = os.WriteFile(goModPath, []byte(goModContent), 0o600)
+	err = os.WriteFile(goModPath, []byte(fmt.Sprintf(goModContent, internal.GoVersion)), 0o600)
 	require.NoError(t, err, "failed to write go.mod for inner module")
 
 	goFilePath := newModulePath + "/inner.go"

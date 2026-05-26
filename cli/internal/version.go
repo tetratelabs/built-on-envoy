@@ -7,12 +7,25 @@ package internal
 
 import (
 	"fmt"
+	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 )
 
 // version is the current version of build. This is populated by the Go linker.
 var version string
+
+// GoVersion is the runtime Go version.
+var GoVersion string
+
+func init() {
+	re := regexp.MustCompile(`go(\d+\.\d+(?:\.\d+)?)`)
+	m := re.FindStringSubmatch(runtime.Version())
+	if len(m) > 1 {
+		GoVersion = m[1]
+	}
+}
 
 // CurrentVersion version with the Git information.
 func CurrentVersion() Version {

@@ -5,7 +5,27 @@
 
 package internal
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	"golang.org/x/mod/semver"
+	"golang.org/x/tools/go/packages"
+)
+
+func TestGoversion(t *testing.T) {
+	require.NotEmpty(t, GoVersion)
+	require.True(t, semver.IsValid("v"+GoVersion))
+	require.NotEmpty(t, semver.MajorMinor("v"+GoVersion))
+
+	// check that the version amtches the one in go.mod
+	cfg := &packages.Config{Mode: packages.NeedModule}
+	pkgs, err := packages.Load(cfg, ".")
+	require.NoError(t, err)
+	require.NotEmpty(t, pkgs)
+	require.NotNil(t, pkgs[0].Module)
+	require.Equal(t, pkgs[0].Module.GoVersion, GoVersion)
+}
 
 func TestParseVersion(t *testing.T) {
 	type versionStringTest struct {

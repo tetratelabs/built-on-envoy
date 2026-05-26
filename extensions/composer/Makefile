@@ -3,8 +3,9 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-ROOT    := $(shell git rev-parse --show-toplevel)
-GO_TOOL := go tool -modfile=$(ROOT)/tools/go.mod
+ROOT       := $(shell git rev-parse --show-toplevel)
+GO_VERSION := $(shell sed -ne 's/^go //gp' $(ROOT)/extensions/composer/go.mod)
+GO_TOOL    := go tool -modfile=$(ROOT)/tools/go.mod
 
 GO_TEST_ARGS ?=
 
@@ -117,13 +118,14 @@ BASE_OCI_ANNOTATIONS := \
 	--annotation "io.tetratelabs.built-on-envoy.extension.composer_version=$(COMPOSER_VERSION)"
 
 # Artifact type annotations
-BINARY_ARTIFACT := --annotation "io.tetratelabs.built-on-envoy.extension.artifact=binary"
-SOURCE_ARTIFACT := --annotation "io.tetratelabs.built-on-envoy.extension.artifact=source"
+BINARY_ARTIFACT  := --annotation "io.tetratelabs.built-on-envoy.extension.artifact=binary"
+SOURCE_ARTIFACT  := --annotation "io.tetratelabs.built-on-envoy.extension.artifact=source"
+CSHARED_ARTIFACT := --annotation "io.tetratelabs.built-on-envoy.extension.cshared=true"
 
 # Multi-platform OCI annotations (with index,manifest prefix, for binary artifacts)
 MULTI_OCI_ANNOTATIONS := \
 	$(subst --annotation ",--annotation "index$(comma)manifest:,$(BASE_OCI_ANNOTATIONS)) \
-	--annotation "index,manifest:io.tetratelabs.built-on-envoy.extension.artifact=binary"
+	$(subst --annotation ",--annotation "index$(comma)manifest:,$(BINARY_ARTIFACT))
 
 BUILDER_NAME := boe-builder
 .PHONY: create_builder
@@ -156,8 +158,10 @@ build_image:
 		--output type=docker,oci-mediatypes=true \
 		--provenance=false \
 		$(BASE_OCI_ANNOTATIONS) \
+		$(CSHARED_ARTIFACT) \
 		$(BINARY_ARTIFACT) \
 		--build-arg BUILD_TAG="$(COMPOSER_BUILD_TAG)" \
+		--build-arg GO_VERSION="$(GO_VERSION)" \
 		-t $(IMAGE)-$(OS)-$(ARCH) \
 		-f ./Dockerfile .
 
@@ -172,7 +176,9 @@ push_image: create_builder  ## Build and push docker image for the plugin for cr
 		--output type=registry,oci-mediatypes=true$(registry_output) \
 		--provenance=false \
 		$(MULTI_OCI_ANNOTATIONS) \
+		$(subst --annotation ",--annotation "index$(comma)manifest:,$(CSHARED_ARTIFACT)) \
 		--build-arg BUILD_TAG="$(COMPOSER_BUILD_TAG)" \
+		--build-arg GO_VERSION="$(GO_VERSION)" \
 		--tag $(IMAGE) $(DEV_TAG) \
 		-f ./Dockerfile .
 

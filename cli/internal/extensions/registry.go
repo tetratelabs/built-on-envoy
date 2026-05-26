@@ -6,6 +6,7 @@
 package extensions
 
 import (
+	"strconv"
 	"strings"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -23,6 +24,8 @@ const (
 	OCIAnnotationExtensionType = "io.tetratelabs.built-on-envoy.extension.type"
 	// OCIAnnotationFilterType is the OCI annotation key for the extension filter type.
 	OCIAnnotationFilterType = "io.tetratelabs.built-on-envoy.extension.filter_type"
+	// OCIAnnotationCShared is the OCO annotation key for the cshared flag for Go extensions.
+	OCIAnnotationCShared = "io.tetratelabs.built-on-envoy.extension.cshared"
 	// OCIAnnotationComposerVersion is the OCI annotation key for the composer version that
 	// the extension depends on, if any.
 	OCIAnnotationComposerVersion = "io.tetratelabs.built-on-envoy.extension.composer_version"
@@ -72,6 +75,7 @@ func OCIAnnotationsForManifest(manifest *Manifest) map[string]string {
 		ocispec.AnnotationLicenses:    manifest.License,
 		OCIAnnotationExtensionType:    string(manifest.Type),
 		OCIAnnotationFilterType:       string(manifest.FilterType),
+		OCIAnnotationCShared:          strconv.FormatBool(manifest.CShared),
 	}
 }
 
@@ -86,6 +90,7 @@ func ManifestFromOCI(manifest *ocispec.Manifest) *Manifest {
 		License:         manifest.Annotations[ocispec.AnnotationLicenses],
 		Type:            Type(manifest.Annotations[OCIAnnotationExtensionType]),
 		FilterType:      FilterType(manifest.Annotations[OCIAnnotationFilterType]),
+		CShared:         manifest.Annotations[OCIAnnotationCShared] == "true",
 	}
 	fromOCI.ApplyDefaults()
 	return fromOCI

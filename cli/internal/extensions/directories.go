@@ -36,6 +36,8 @@ func LocalCacheExtensionDir(dirs *xdg.Directories, manifest *Manifest) string {
 		return filepath.Join(dirs.DataHome, "extensions", "dym", manifest.Name, manifest.Version)
 	case TypeExtProc:
 		return filepath.Join(dirs.DataHome, "extensions", "extproc", manifest.Name, manifest.Version)
+	case TypeComposer:
+		return LocalCacheComposerDir(dirs, manifest.Version)
 	default:
 		return filepath.Join(dirs.DataHome, "extensions", manifest.Name, manifest.Version)
 	}
@@ -62,6 +64,8 @@ func LocalCacheExtension(dirs *xdg.Directories, manifest *Manifest) string {
 	case TypeExtProc:
 		// ext_proc extensions are not Go plugins, so we return the path to the ext_proc server binary instead
 		return filepath.Join(dir, "ext_proc-server")
+	case TypeComposer:
+		return LocalCacheComposerLib(dirs, manifest.Version)
 	default:
 		return filepath.Join(dir, "plugin.so")
 	}

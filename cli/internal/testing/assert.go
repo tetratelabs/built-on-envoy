@@ -13,6 +13,13 @@ import (
 	"testing"
 )
 
+// MaybeSkipLongRunningTest skips the test if the -short flag is set.
+func MaybeSkipLongRunningTest(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping long-running test in short mode")
+	}
+}
+
 // SkipIfTestRegistryNotConfigured skips the test if the TEST_BOE_REGISTRY environment variable is not set.
 func SkipIfTestRegistryNotConfigured(t *testing.T) {
 	if os.Getenv("TEST_BOE_REGISTRY") == "" {

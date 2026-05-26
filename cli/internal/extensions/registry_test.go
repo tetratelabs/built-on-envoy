@@ -84,6 +84,7 @@ func TestOCIAnnotationsForManifest(t *testing.T) {
 		License:     "Apache-2.0",
 		Type:        TypeLua,
 		FilterType:  FilterTypeNetwork,
+		CShared:     true,
 	}
 
 	annotations := OCIAnnotationsForManifest(manifest)
@@ -95,6 +96,7 @@ func TestOCIAnnotationsForManifest(t *testing.T) {
 	require.Equal(t, "Apache-2.0", annotations[ocispec.AnnotationLicenses])
 	require.Equal(t, "lua", annotations[OCIAnnotationExtensionType])
 	require.Equal(t, "network", annotations[OCIAnnotationFilterType])
+	require.Equal(t, "true", annotations[OCIAnnotationCShared])
 }
 
 func TestManifestFromOCI(t *testing.T) {
@@ -108,6 +110,7 @@ func TestManifestFromOCI(t *testing.T) {
 				ocispec.AnnotationLicenses:    "Apache-2.0",
 				OCIAnnotationExtensionType:    "lua",
 				OCIAnnotationFilterType:       "network",
+				OCIAnnotationCShared:          "true",
 			},
 		}
 
@@ -120,6 +123,7 @@ func TestManifestFromOCI(t *testing.T) {
 		require.Equal(t, "Apache-2.0", manifest.License)
 		require.Equal(t, TypeLua, manifest.Type)
 		require.Equal(t, FilterTypeNetwork, manifest.FilterType)
+		require.True(t, manifest.CShared)
 	})
 
 	t.Run("without filter type", func(t *testing.T) {
