@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -215,7 +216,14 @@ func generateConfig(params *ConfigGenerationParams) (GeneratedConfigResources, e
 			// Apply --filter-type override: if provided for this position, replace the manifest's
 			// FilterTypes with a single-element slice containing the specified type.
 			if i < len(params.FilterTypes) && params.FilterTypes[i] != "" {
-				ext.FilterTypes = []extensions.FilterType{extensions.FilterType(params.FilterTypes[i])}
+				if !slices.Contains(ext.FilterTypes, extensions.FilterType(params.FilterTypes[i])) {
+					return GeneratedConfigResources{}, fmt.Errorf("invalid filter type override %q for extension %q: not one of the manifest-defined filter types %v",
+						params.FilterTypes[i], ext.Name, ext.FilterTypes)
+				}
+				// Create a copy of the extension when overwritingthe fields to avoid mutating the original manifest
+				extCopy := *ext
+				extCopy.FilterTypes = []extensions.FilterType{extensions.FilterType(params.FilterTypes[i])}
+				ext = &extCopy
 			} else {
 				return GeneratedConfigResources{},
 					fmt.Errorf("extension %q defines multiple filter types but no filter-type override was provided for its position; filter types: %v",
