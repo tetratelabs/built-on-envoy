@@ -58,11 +58,15 @@ func (l *List) Run(logger *slog.Logger) error {
 	_, _ = fmt.Fprintln(w, "NAME\tVERSION\tTYPE\tFILTER_TYPE\tDESCRIPTION")
 
 	for _, m := range index {
+		filterTypes := make([]string, len(m.FilterTypes))
+		for i, ft := range m.FilterTypes {
+			filterTypes[i] = string(ft)
+		}
 		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
 			m.Name,
 			m.Version,
 			m.Type,
-			m.FilterType,
+			strings.Join(filterTypes, ","),
 			truncateDescription(m.Description, 60),
 		)
 	}

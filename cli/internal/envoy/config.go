@@ -49,6 +49,9 @@ type ConfigGenerationParams struct {
 	Extensions []*extensions.Manifest
 	// Configs specifies optional JSON config strings for each extension (by index).
 	Configs []string
+	// FilterTypes specifies optional filter type overrides for each extension (by index).
+	// When non-empty for a given extension position, it overrides the manifest's filterTypes.
+	FilterTypes []string
 	// NativeHTTPFiltersBefore specifies optional YAML/JSON native HTTP filter overrides
 	// for each extension (by index). When non-empty for a given extension position, it
 	// replaces the manifest's nativeHttpFilters.before.
@@ -205,6 +208,21 @@ func generateConfig(params *ConfigGenerationParams) (GeneratedConfigResources, e
 		if i < len(params.Configs) {
 			config = params.Configs[i]
 		}
+
+		// If the extension manifest defines more than one filter type, we require the user to explicitly set what
+		// filter to enable for the extension.
+		if len(ext.FilterTypes) > 1 {
+			// Apply --filter-type override: if provided for this position, replace the manifest's
+			// FilterTypes with a single-element slice containing the specified type.
+			if i < len(params.FilterTypes) && params.FilterTypes[i] != "" {
+				ext.FilterTypes = []extensions.FilterType{extensions.FilterType(params.FilterTypes[i])}
+			} else {
+				return GeneratedConfigResources{},
+					fmt.Errorf("extension %q defines multiple filter types but no filter-type override was provided for its position; filter types: %v",
+						ext.Name, ext.FilterTypes)
+			}
+		}
+
 		resources, err := GenerateFilterConfig(params.Logger, ext, params.Dirs, config)
 		if err != nil {
 			return GeneratedConfigResources{}, fmt.Errorf("failed to generate filter config for extension %q: %w", ext.Name, err)

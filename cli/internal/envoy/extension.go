@@ -176,70 +176,64 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 	var networkFilters []*listenerv3.Filter
 	var listenerFilters []*listenerv3.ListenerFilter
 
-	switch manifest.FilterType {
-	case extensions.FilterTypeNetwork:
-		protoConfig := &dymnetv3.DynamicModuleNetworkFilter{
-			DynamicModuleConfig: moduleConfig,
-			FilterName:          manifest.Name,
-			FilterConfig:        anyConfig,
-		}
-		dynamicModuleAny, err := anypb.New(protoConfig)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal dynamic module network filter to Any: %w", err)
-		}
-		networkFilters = []*listenerv3.Filter{
-			{
+	for _, filterType := range manifest.FilterTypes {
+		switch filterType {
+		case extensions.FilterTypeNetwork:
+			protoConfig := &dymnetv3.DynamicModuleNetworkFilter{
+				DynamicModuleConfig: moduleConfig,
+				FilterName:          manifest.Name,
+				FilterConfig:        anyConfig,
+			}
+			dynamicModuleAny, err := anypb.New(protoConfig)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal dynamic module network filter to Any: %w", err)
+			}
+			networkFilters = append(networkFilters, &listenerv3.Filter{
 				Name:       manifest.Name,
 				ConfigType: &listenerv3.Filter_TypedConfig{TypedConfig: dynamicModuleAny},
-			},
-		}
-	case extensions.FilterTypeListener:
-		protoConfig := &dymlistv3.DynamicModuleListenerFilter{
-			DynamicModuleConfig: moduleConfig,
-			FilterName:          manifest.Name,
-			FilterConfig:        anyConfig,
-		}
-		dynamicModuleAny, err := anypb.New(protoConfig)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal dynamic module listener filter to Any: %w", err)
-		}
-		listenerFilters = []*listenerv3.ListenerFilter{
-			{
+			})
+		case extensions.FilterTypeListener:
+			protoConfig := &dymlistv3.DynamicModuleListenerFilter{
+				DynamicModuleConfig: moduleConfig,
+				FilterName:          manifest.Name,
+				FilterConfig:        anyConfig,
+			}
+			dynamicModuleAny, err := anypb.New(protoConfig)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal dynamic module listener filter to Any: %w", err)
+			}
+			listenerFilters = append(listenerFilters, &listenerv3.ListenerFilter{
 				Name:       manifest.Name,
 				ConfigType: &listenerv3.ListenerFilter_TypedConfig{TypedConfig: dynamicModuleAny},
-			},
-		}
-	case extensions.FilterTypeUDPListener:
-		protoConfig := &dymudpv3.DynamicModuleUdpListenerFilter{
-			DynamicModuleConfig: moduleConfig,
-			FilterName:          manifest.Name,
-			FilterConfig:        anyConfig,
-		}
-		dynamicModuleAny, err := anypb.New(protoConfig)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal dynamic module UDP listener filter to Any: %w", err)
-		}
-		listenerFilters = []*listenerv3.ListenerFilter{
-			{
+			})
+		case extensions.FilterTypeUDPListener:
+			protoConfig := &dymudpv3.DynamicModuleUdpListenerFilter{
+				DynamicModuleConfig: moduleConfig,
+				FilterName:          manifest.Name,
+				FilterConfig:        anyConfig,
+			}
+			dynamicModuleAny, err := anypb.New(protoConfig)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal dynamic module UDP listener filter to Any: %w", err)
+			}
+			listenerFilters = append(listenerFilters, &listenerv3.ListenerFilter{
 				Name:       manifest.Name,
 				ConfigType: &listenerv3.ListenerFilter_TypedConfig{TypedConfig: dynamicModuleAny},
-			},
-		}
-	default:
-		protoConfig := &dymhttpv3.DynamicModuleFilter{
-			DynamicModuleConfig: moduleConfig,
-			FilterName:          manifest.Name,
-			FilterConfig:        anyConfig,
-		}
-		dynamicModuleAny, err := anypb.New(protoConfig)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal dynamic module filter to Any: %w", err)
-		}
-		httpFilters = []*hcmv3.HttpFilter{
-			{
+			})
+		default: // FilterTypeHTTP or empty
+			protoConfig := &dymhttpv3.DynamicModuleFilter{
+				DynamicModuleConfig: moduleConfig,
+				FilterName:          manifest.Name,
+				FilterConfig:        anyConfig,
+			}
+			dynamicModuleAny, err := anypb.New(protoConfig)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal dynamic module filter to Any: %w", err)
+			}
+			httpFilters = append(httpFilters, &hcmv3.HttpFilter{
 				Name:       manifest.Name,
 				ConfigType: &hcmv3.HttpFilter_TypedConfig{TypedConfig: dynamicModuleAny},
-			},
+			})
 		}
 	}
 

@@ -60,6 +60,9 @@ type RunnerFuncE struct {
 	Extensions []*extensions.Manifest
 	// Configs specifies optional JSON config strings for each extension (by index).
 	Configs []string
+	// FilterTypes specifies optional filter type overrides for each extension (by index).
+	// When non-empty for a given extension position, it overrides the manifest's filterTypes.
+	FilterTypes []string
 	// NativeHTTPFiltersBefore specifies optional YAML/JSON native HTTP filter overrides
 	// for each extension (by index). When non-empty for a given extension position, it
 	// replaces the manifest's nativeHttpFilters.before.
@@ -93,6 +96,7 @@ func (r *RunnerFuncE) Run(ctx context.Context) error {
 		Dirs:                    r.Dirs,
 		Extensions:              r.Extensions,
 		Configs:                 r.Configs,
+		FilterTypes:             r.FilterTypes,
 		NativeHTTPFiltersBefore: r.NativeHTTPFiltersBefore,
 		NativeHTTPFiltersAfter:  r.NativeHTTPFiltersAfter,
 		Clusters:                r.Clusters,

@@ -83,8 +83,12 @@ func TestListCommand(t *testing.T) {
 		m, ok := manifests[fields[0]]
 
 		require.Truef(t, ok, "extension %s not found in manifests", fields[0])
+		filterTypesStr := make([]string, len(m.FilterTypes))
+		for i, ft := range m.FilterTypes {
+			filterTypesStr[i] = string(ft)
+		}
 		require.Equal(t,
-			[]string{m.Name, m.Version, string(m.Type), string(m.FilterType), truncateDescription(m.Description, 60)},
+			[]string{m.Name, m.Version, string(m.Type), strings.Join(filterTypesStr, ","), truncateDescription(m.Description, 60)},
 			fields,
 		)
 
