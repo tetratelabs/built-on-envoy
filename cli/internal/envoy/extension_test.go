@@ -145,10 +145,11 @@ func TestDynamicModuleFilterGeneratorHTTP(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 	dirs := &xdg.Directories{DataHome: t.TempDir()}
 	manifest := &extensions.Manifest{
-		Name:    "test-dynamic-module",
-		Type:    extensions.TypeRust,
-		Version: "v1.0.0",
-		Remote:  true,
+		Name:        "test-dynamic-module",
+		Type:        extensions.TypeRust,
+		FilterTypes: []extensions.FilterType{extensions.FilterTypeHTTP},
+		Version:     "v1.0.0",
+		Remote:      true,
 	}
 
 	// Case 1: Generate config for HTTP Filter written as Rust dynamic module
@@ -220,11 +221,11 @@ func TestDynamicModuleFilterGeneratorNetwork(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 	dirs := &xdg.Directories{DataHome: t.TempDir()}
 	manifest := &extensions.Manifest{
-		Name:       "test-network-module",
-		Type:       extensions.TypeRust,
-		FilterType: extensions.FilterTypeNetwork,
-		Version:    "v1.0.0",
-		Remote:     true,
+		Name:        "test-network-module",
+		Type:        extensions.TypeRust,
+		FilterTypes: []extensions.FilterType{extensions.FilterTypeNetwork},
+		Version:     "v1.0.0",
+		Remote:      true,
 	}
 
 	// Case 1: Generate config for Network Filter written as Rust dynamic module
@@ -298,11 +299,11 @@ func TestDynamicModuleFilterGeneratorListener(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 	dirs := &xdg.Directories{DataHome: t.TempDir()}
 	manifest := &extensions.Manifest{
-		Name:       "test-listener-module",
-		Type:       extensions.TypeRust,
-		FilterType: extensions.FilterTypeListener,
-		Version:    "v1.0.0",
-		Remote:     true,
+		Name:        "test-listener-module",
+		Type:        extensions.TypeRust,
+		FilterTypes: []extensions.FilterType{extensions.FilterTypeListener},
+		Version:     "v1.0.0",
+		Remote:      true,
 	}
 
 	// Case 1: Generate config for Listener Filter written as Rust dynamic module
@@ -378,11 +379,11 @@ func TestDynamicModuleFilterGeneratorUDPListener(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 	dirs := &xdg.Directories{DataHome: t.TempDir()}
 	manifest := &extensions.Manifest{
-		Name:       "test-udp-listener-module",
-		Type:       extensions.TypeRust,
-		FilterType: extensions.FilterTypeUDPListener,
-		Version:    "v1.0.0",
-		Remote:     true,
+		Name:        "test-udp-listener-module",
+		Type:        extensions.TypeRust,
+		FilterTypes: []extensions.FilterType{extensions.FilterTypeUDPListener},
+		Version:     "v1.0.0",
+		Remote:      true,
 	}
 
 	// Case 1: Generate config for UDP Listener Filter written as Rust dynamic module
@@ -696,6 +697,63 @@ func TestExtProcFilterGenerator(t *testing.T) {
 	wantFull := buildExtProcResources(t, manifest.Name, clusterName, 50052, true, processingMode, 500*time.Millisecond)
 	checkProtos(t, wantFull.HTTPFilters, got.HTTPFilters)
 	checkProtos(t, wantFull.Clusters, got.Clusters)
+}
+
+func TestDynamicModuleFilterGeneratorHTTPAndNetwork(t *testing.T) {
+	logger := internaltesting.NewTLogger(t)
+	dirs := &xdg.Directories{DataHome: t.TempDir()}
+	manifest := &extensions.Manifest{
+		Name:        "test-multi-filter",
+		Type:        extensions.TypeRust,
+		FilterTypes: []extensions.FilterType{extensions.FilterTypeHTTP, extensions.FilterTypeNetwork},
+		Version:     "v1.0.0",
+		Remote:      true,
+	}
+
+	got, err := GenerateFilterConfig(logger, manifest, dirs, "")
+	require.NoError(t, err)
+
+	moduleConfig := &dymv3.DynamicModuleConfig{
+		Name:             manifest.Name,
+		LoadGlobally:     false,
+		MetricsNamespace: "builtonenvoy",
+	}
+
+	wantHTTP := []*hcmv3.HttpFilter{
+		{
+			Name: manifest.Name,
+			ConfigType: &hcmv3.HttpFilter_TypedConfig{
+				TypedConfig: func() *anypb.Any {
+					cfg, err := anypb.New(&dymhttpv3.DynamicModuleFilter{
+						DynamicModuleConfig: moduleConfig,
+						FilterName:          manifest.Name,
+					})
+					require.NoError(t, err)
+					return cfg
+				}(),
+			},
+		},
+	}
+
+	wantNetwork := []*listenerv3.Filter{
+		{
+			Name: manifest.Name,
+			ConfigType: &listenerv3.Filter_TypedConfig{
+				TypedConfig: func() *anypb.Any {
+					cfg, err := anypb.New(&dymnetv3.DynamicModuleNetworkFilter{
+						DynamicModuleConfig: moduleConfig,
+						FilterName:          manifest.Name,
+					})
+					require.NoError(t, err)
+					return cfg
+				}(),
+			},
+		},
+	}
+
+	checkProtos(t, wantHTTP, got.HTTPFilters)
+	checkProtos(t, wantNetwork, got.NetworkFilters)
+	require.Empty(t, got.ListenerFilters)
 }
 
 // buildExtProcResources constructs the expected ExtensionResources for an ext_proc extension.

@@ -14,7 +14,7 @@ description: A test extension
 longDescription: |
   Lua extension with a stray filterType set; nativeHttpFilters must still validate.
 type: lua
-filterType: network
+filterType: [network]
 lua:
   inline: |
     function envoy_on_request(request_handle)

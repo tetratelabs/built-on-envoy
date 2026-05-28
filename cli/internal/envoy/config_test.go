@@ -1291,6 +1291,54 @@ func TestRenderConfigWithNativeHTTPFiltersAfterOverride(t *testing.T) {
 	}
 }
 
+func TestGenerateConfigFilterTypeOverrideRequired(t *testing.T) {
+	multiTypeManifest := &extensions.Manifest{
+		Name:        "test-multi",
+		Type:        extensions.TypeRust,
+		FilterTypes: []extensions.FilterType{extensions.FilterTypeHTTP, extensions.FilterTypeNetwork},
+	}
+
+	tests := []struct {
+		name        string
+		filterTypes []string
+		expectedErr string
+	}{
+		{
+			name:        "no override provided",
+			filterTypes: nil,
+			expectedErr: `failed to generate config resources: extension "test-multi" defines multiple filter types but no filter-type override was provided for its position; filter types: [http network]`,
+		},
+		{
+			name:        "empty override for position",
+			filterTypes: []string{""},
+			expectedErr: `failed to generate config resources: extension "test-multi" defines multiple filter types but no filter-type override was provided for its position; filter types: [http network]`,
+		},
+		{
+			name:        "override provided",
+			filterTypes: []string{"http"},
+			expectedErr: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			params := &ConfigGenerationParams{
+				Logger:       internaltesting.NewTLogger(t),
+				AdminAddress: "127.0.0.1:9901",
+				ListenerPort: 10000,
+				Extensions:   []*extensions.Manifest{multiTypeManifest},
+				FilterTypes:  tt.filterTypes,
+			}
+			_, err := RenderConfig(params, MinimalConfigRenderer)
+			if tt.expectedErr != "" {
+				require.ErrorContains(t, err, tt.expectedErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 // requireEqualError compares error strings while normalizing protobuf NBSP output.
 func requireEqualError(t *testing.T, err error, expected string) {
 	t.Helper()

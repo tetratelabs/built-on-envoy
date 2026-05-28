@@ -91,15 +91,18 @@
       ]
     },
     "filterType": {
-      "type": "string",
-      "description": "Envoy filter type. Defaults to `http` if not specified.",
-      "enum": [
-        "http",
-        "network",
-        "listener",
-        "udp_listener"
-      ],
-      "default": "http"
+      "type": "array",
+      "description": "Envoy filter types. Defaults to `[http]` if not specified.",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "http",
+          "network",
+          "listener",
+          "udp_listener"
+        ]
+      }
     },
     "composerVersion": {
       "type": "string",
@@ -388,20 +391,6 @@
       },
       "then": {
         "required": ["composerVersion"]
-      }
-    },
-    {
-      "if": {
-        "properties": {
-          "type": { "const": "rust" },
-          "filterType": { "enum": ["network", "listener", "udp_listener"] }
-        },
-        "required": ["filterType"]
-      },
-      "then": {
-        "properties": {
-          "nativeHttpFilters": false
-        }
       }
     },
     {

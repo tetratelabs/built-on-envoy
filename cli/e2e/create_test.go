@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -198,10 +199,10 @@ func TestCreateRustNetworkWithDockerSupport(t *testing.T) {
 	version := "0.1.0"
 
 	manifest := &extensions.Manifest{
-		Name:       "test-docker-network",
-		Version:    version,
-		Type:       extensions.TypeRust,
-		FilterType: extensions.FilterTypeNetwork,
+		Name:        "test-docker-network",
+		Version:     version,
+		Type:        extensions.TypeRust,
+		FilterTypes: []extensions.FilterType{extensions.FilterTypeNetwork},
 	}
 
 	t.Run("makefile_image_target", func(t *testing.T) {
@@ -266,8 +267,12 @@ func pushOCIImageForDownload(t *testing.T, extensionDir, dockerfile string, mani
 	if manifest.Type == extensions.TypeGo {
 		args = append(args, "--build-arg", fmt.Sprintf("NAME=%s", manifest.Name))
 	}
-	if manifest.FilterType != "" {
-		args = append(args, "--annotation", fmt.Sprintf("manifest:%s=%s", extensions.OCIAnnotationFilterType, string(manifest.FilterType)))
+	if len(manifest.FilterTypes) > 0 {
+		filterTypes := make([]string, len(manifest.FilterTypes))
+		for i, ft := range manifest.FilterTypes {
+			filterTypes[i] = string(ft)
+		}
+		args = append(args, "--annotation", fmt.Sprintf("manifest:%s=%s", extensions.OCIAnnotationFilterType, strings.Join(filterTypes, ",")))
 	}
 	args = append(args, ".")
 

@@ -62,6 +62,10 @@ Flags:
       --config=CONFIG              Optional JSON config string for extensions.
                                    Applied in order to combined --extension and
                                    --local flags.
+      --filter-type=FILTER-TYPE    Set the filter type for an extension. Applied
+                                   positionally to the combined --extension
+                                   and --local flags. Accepted values: http,
+                                   network, listener, udp_listener.
       --native-http-filter-before=NATIVE-HTTP-FILTER-BEFORE
                                    Optional YAML/JSON native HTTP filter list
                                    (or @filepath) per extension position.
