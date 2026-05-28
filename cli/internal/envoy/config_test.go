@@ -1318,6 +1318,11 @@ func TestGenerateConfigFilterTypeOverrideRequired(t *testing.T) {
 			filterTypes: []string{"http"},
 			expectedErr: "",
 		},
+		{
+			name:        "override not in declared filter types",
+			filterTypes: []string{"udp_listener"},
+			expectedErr: `failed to generate config resources: invalid filter type override "udp_listener" for extension "test-multi": not one of the manifest-defined filter types [http network]`,
+		},
 	}
 
 	for _, tt := range tests {
