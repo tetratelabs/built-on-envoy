@@ -28,14 +28,14 @@ GO_VERSION := $(shell sed -ne 's/^go //gp' $(EXTENSION_PATH)/go.mod)
 GO_TOOL    := go -C $(EXTENSION_PATH) tool -modfile=$(ROOT)/tools/go.mod
 
 # Labels for this lua extension image.
-NAME             := $(shell grep "^name:" ./$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-VERSION          := $(shell grep "^version:" ./$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-TYPE             := $(shell grep "^type:" ./$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-FILTER_TYPE      := $(shell grep "^filterType:" ./$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-DESCRIPTION      := $(shell grep "^description:" ./$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+NAME             := $(shell $(GO_TOOL) yq '.name' ./$(EXTENSION_PATH)/manifest.yaml)
+VERSION          := $(shell $(GO_TOOL) yq '.version' ./$(EXTENSION_PATH)/manifest.yaml)
+TYPE             := $(shell $(GO_TOOL) yq '.type' ./$(EXTENSION_PATH)/manifest.yaml)
+FILTER_TYPE      := $(shell $(GO_TOOL) yq '(.filterType // []) | join(",")' ./$(EXTENSION_PATH)/manifest.yaml)
+DESCRIPTION      := $(shell $(GO_TOOL) yq '.description' ./$(EXTENSION_PATH)/manifest.yaml)
 TIMESTAMP        := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 COMMIT_SHA       := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
-AUTHOR           := $(shell grep "^author:" ./$(EXTENSION_PATH)/manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+AUTHOR           := $(shell $(GO_TOOL) yq '.author' ./$(EXTENSION_PATH)/manifest.yaml)
 LICENSE          := Apache-2.0
 
 HUB    := $(or $(BOE_REGISTRY),$(OCI_REGISTRY)/built-on-envoy)
