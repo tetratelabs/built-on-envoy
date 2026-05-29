@@ -62,6 +62,8 @@ impl<ENF: EnvoyNetworkFilter> NetworkFilter<ENF> for CacheLookupFilter {
             }
         };
 
+        envoy_log_info!("Recovered domain '{}' for virtual IP {}", domain, ip);
+
         envoy_filter.set_filter_state_bytes(b"envoy.dns_gateway.domain", domain.as_bytes());
         for (key, value) in &metadata {
             envoy_filter.set_filter_state_bytes(

@@ -5,7 +5,7 @@
 
 name: dns-gateway
 version: 0.1.0
-minEnvoyVersion: 1.37.1
+minEnvoyVersion: 1.38.0
 categories:
   - Network
   - Security
