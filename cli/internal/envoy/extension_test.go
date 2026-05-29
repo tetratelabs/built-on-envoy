@@ -393,7 +393,7 @@ func TestDynamicModuleFilterGeneratorUDPListener(t *testing.T) {
 	require.Empty(t, got.NetworkFilters, "UDP listener filter should not produce network filters")
 
 	want := &ExtensionResources{
-		ListenerFilters: []*listenerv3.ListenerFilter{
+		UDPListenerFilters: []*listenerv3.ListenerFilter{
 			{
 				Name: manifest.Name,
 				ConfigType: &listenerv3.ListenerFilter_TypedConfig{
@@ -415,7 +415,8 @@ func TestDynamicModuleFilterGeneratorUDPListener(t *testing.T) {
 		},
 	}
 
-	checkProtos(t, want.ListenerFilters, got.ListenerFilters)
+	require.Empty(t, got.ListenerFilters, "UDP listener filter should not produce (TCP) listener filters")
+	checkProtos(t, want.UDPListenerFilters, got.UDPListenerFilters)
 
 	// Case 2: Success with config for UDP Listener Filter written as Rust dynamic module
 	configJSON := `{"key":"value","nested":{"foo":"bar"}}`
@@ -425,7 +426,7 @@ func TestDynamicModuleFilterGeneratorUDPListener(t *testing.T) {
 	require.Empty(t, got.NetworkFilters, "UDP listener filter should not produce network filters")
 
 	wantWithConfig := &ExtensionResources{
-		ListenerFilters: []*listenerv3.ListenerFilter{
+		UDPListenerFilters: []*listenerv3.ListenerFilter{
 			{
 				Name: manifest.Name,
 				ConfigType: &listenerv3.ListenerFilter_TypedConfig{
@@ -452,7 +453,8 @@ func TestDynamicModuleFilterGeneratorUDPListener(t *testing.T) {
 		},
 	}
 
-	checkProtos(t, wantWithConfig.ListenerFilters, got.ListenerFilters)
+	require.Empty(t, got.ListenerFilters, "UDP listener filter should not produce (TCP) listener filters")
+	checkProtos(t, wantWithConfig.UDPListenerFilters, got.UDPListenerFilters)
 }
 
 func TestComposerFilterGenerator(t *testing.T) {

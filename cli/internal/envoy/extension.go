@@ -59,6 +59,10 @@ type (
 		Clusters        []*clusterv3.Cluster
 		NetworkFilters  []*listenerv3.Filter
 		ListenerFilters []*listenerv3.ListenerFilter
+		// UDPListenerFilters are listener filters that must be hosted on a UDP listener
+		// (i.e. one whose socket address protocol is UDP), kept separate from ListenerFilters
+		// (TCP listener filters) so the config renderer can build the right kind of listener.
+		UDPListenerFilters []*listenerv3.ListenerFilter
 		// TODO(huabing): may need to add more resources
 	}
 )
@@ -175,6 +179,7 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 	var httpFilters []*hcmv3.HttpFilter
 	var networkFilters []*listenerv3.Filter
 	var listenerFilters []*listenerv3.ListenerFilter
+	var udpListenerFilters []*listenerv3.ListenerFilter
 
 	for _, filterType := range manifest.FilterTypes {
 		switch filterType {
@@ -216,7 +221,7 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 			if err != nil {
 				return nil, fmt.Errorf("failed to marshal dynamic module UDP listener filter to Any: %w", err)
 			}
-			listenerFilters = append(listenerFilters, &listenerv3.ListenerFilter{
+			udpListenerFilters = append(udpListenerFilters, &listenerv3.ListenerFilter{
 				Name:       manifest.Name,
 				ConfigType: &listenerv3.ListenerFilter_TypedConfig{TypedConfig: dynamicModuleAny},
 			})
@@ -238,9 +243,10 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 	}
 
 	return &ExtensionResources{
-		HTTPFilters:     httpFilters,
-		NetworkFilters:  networkFilters,
-		ListenerFilters: listenerFilters,
+		HTTPFilters:        httpFilters,
+		NetworkFilters:     networkFilters,
+		ListenerFilters:    listenerFilters,
+		UDPListenerFilters: udpListenerFilters,
 	}, nil
 }
 
