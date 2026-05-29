@@ -122,7 +122,7 @@ type (
 		After []map[string]any `yaml:"after,omitempty" json:"after,omitempty"`
 	}
 
-	// ManifestIndexEntry represents manifest entry in the manifext index JSON that is used
+	// ManifestIndexEntry represents manifest entry in the manifest index JSON that is used
 	// as the source of truth of manifests and served in the public site.
 	ManifestIndexEntry struct {
 		*Manifest  `yaml:",inline" json:",inline"`

@@ -26,6 +26,7 @@ export interface Extension {
 	examples?: Example[];
 	sourcePath: string;
 	sourceUrl: string;
+	configReferencePath?: string;
 }
 
 /**

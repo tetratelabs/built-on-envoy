@@ -49,7 +49,8 @@
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.7.0-dev",
-    "sourcePath": "composer/anthropic-decoder"
+    "sourcePath": "composer/anthropic-decoder",
+    "configReferencePath": "/docs/reference/extensions#anthropic-messages-decoder"
   },
   {
     "name": "azure-content-safety",
@@ -114,7 +115,8 @@
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.7.0-dev",
-    "sourcePath": "composer/azure-content-safety"
+    "sourcePath": "composer/azure-content-safety",
+    "configReferencePath": "/docs/reference/extensions#azure-content-safety"
   },
   {
     "name": "bedrock-guardrails",
@@ -162,7 +164,8 @@
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.7.0-dev",
-    "sourcePath": "composer/bedrock-guardrails"
+    "sourcePath": "composer/bedrock-guardrails",
+    "configReferencePath": "/docs/reference/extensions#bedrock-guardrails"
   },
   {
     "name": "cedar-auth",
@@ -239,7 +242,8 @@
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.7.0-dev",
-    "sourcePath": "composer/cedar"
+    "sourcePath": "composer/cedar",
+    "configReferencePath": "/docs/reference/extensions#cedar-auth"
   },
   {
     "name": "chat-completions-decoder",
@@ -291,7 +295,8 @@
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.7.0-dev",
-    "sourcePath": "composer/chat-completions-decoder"
+    "sourcePath": "composer/chat-completions-decoder",
+    "configReferencePath": "/docs/reference/extensions#chat-completions-decoder"
   },
   {
     "name": "cluster-router",
@@ -370,7 +375,8 @@
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.7.0-dev",
-    "sourcePath": "composer/waf"
+    "sourcePath": "composer/waf",
+    "configReferencePath": "/docs/reference/extensions#coraza-waf"
   },
   {
     "name": "example-ext-proc",
@@ -511,7 +517,8 @@
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.7.0-dev",
-    "sourcePath": "composer/file-server"
+    "sourcePath": "composer/file-server",
+    "configReferencePath": "/docs/reference/extensions#file-server"
   },
   {
     "name": "ip-restriction",
@@ -558,7 +565,8 @@
     ],
     "minEnvoyVersion": "1.37.1",
     "maxEnvoyVersion": "1.38.0",
-    "sourcePath": "ip-restriction"
+    "sourcePath": "ip-restriction",
+    "configReferencePath": "/docs/reference/extensions#ip-restriction"
   },
   {
     "name": "jwe-decrypt",
@@ -617,7 +625,8 @@
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.7.0-dev",
-    "sourcePath": "composer/jwe-decrypt"
+    "sourcePath": "composer/jwe-decrypt",
+    "configReferencePath": "/docs/reference/extensions#jwe-decrypt"
   },
   {
     "name": "llm-proxy",
@@ -668,7 +677,8 @@
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.7.0-dev",
-    "sourcePath": "composer/llm-proxy"
+    "sourcePath": "composer/llm-proxy",
+    "configReferencePath": "/docs/reference/extensions#llm-proxy"
   },
   {
     "name": "opa",
@@ -745,7 +755,8 @@
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.7.0-dev",
-    "sourcePath": "composer/opa"
+    "sourcePath": "composer/opa",
+    "configReferencePath": "/docs/reference/extensions#opa"
   },
   {
     "name": "openapi-validator",
@@ -795,7 +806,8 @@
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.7.0-dev",
-    "sourcePath": "composer/openapi-validator"
+    "sourcePath": "composer/openapi-validator",
+    "configReferencePath": "/docs/reference/extensions#openapi-validator"
   },
   {
     "name": "openfga",
@@ -865,7 +877,8 @@
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.7.0-dev",
-    "sourcePath": "composer/openfga"
+    "sourcePath": "composer/openfga",
+    "configReferencePath": "/docs/reference/extensions#openfga"
   },
   {
     "name": "saml",
@@ -921,7 +934,8 @@
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.7.0-dev",
-    "sourcePath": "composer/saml"
+    "sourcePath": "composer/saml",
+    "configReferencePath": "/docs/reference/extensions#saml"
   },
   {
     "name": "token-exchange",
@@ -956,6 +970,7 @@
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.7.0-dev",
-    "sourcePath": "composer/token-exchange"
+    "sourcePath": "composer/token-exchange",
+    "configReferencePath": "/docs/reference/extensions#token-exchange"
   }
 ]

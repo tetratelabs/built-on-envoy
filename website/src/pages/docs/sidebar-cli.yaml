@@ -25,3 +25,5 @@ sections:
         href: /docs/reference/environment-variables
       - title: Extension manifest
         href: /docs/reference/manifest
+      - title: Extension configuration
+        href: /docs/reference/extensions

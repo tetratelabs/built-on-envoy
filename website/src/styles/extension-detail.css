@@ -461,6 +461,17 @@
 	letter-spacing: 0.5px;
 }
 
+.sidebar-ref-link {
+	color: var(--primary);
+	text-decoration: none;
+	font-size: 14px;
+	font-weight: 500;
+}
+
+.sidebar-ref-link:hover {
+	text-decoration: underline;
+}
+
 .categories {
 	display: flex;
 	flex-wrap: wrap;

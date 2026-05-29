@@ -1,0 +1,1986 @@
+---
+layout: ../../../layouts/DocsLayout.astro
+title: Schema Reference
+description: Schema Reference Documentation
+---
+
+import ToC from '../../../components/ToC.astro';
+
+# Schema Reference
+
+<ToC maxDepth="4"/>
+
+
+
+
+<a id="anthropic-messages-decoder"></a>
+## Anthropic Messages Decoder Configuration
+
+Configuration for the Anthropic Messages Decoder extension. Decodes Anthropic Messages API requests and responses, exposing structured metadata for downstream filters.
+
+### metadata_namespace
+
+Filter metadata namespace for decoded fields. Defaults to "io.builtonenvoy.anthropic" if not set.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Anthropic Messages Decoder Configuration](#anthropic-messages-decoder) {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */}
+
+
+
+
+<a id="azure-content-safety"></a>
+## Azure Content Safety Configuration
+
+Configuration for the Azure AI Content Safety extension. Integrates with Azure Content Safety to analyze LLM prompts and responses for harmful content.
+
+### api_key
+
+API subscription key for the Azure Content Safety resource.
+
+| | |
+|---|---|
+| **Type** | [DataSource](#azure-content-safety-DataSource) |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ Azure Content Safety Configuration](#azure-content-safety) {/* if .SubProperties */}
+
+### api_version
+
+Azure API version string. Defaults to "2024-09-01".
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Azure Content Safety Configuration](#azure-content-safety) {/* if .SubProperties */}
+
+### categories
+
+Content categories to analyze. Defaults to ["Hate", "SelfHarm", "Sexual", "Violence"].
+
+| | |
+|---|---|
+| **Type** | `[]string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Azure Content Safety Configuration](#azure-content-safety) {/* if .SubProperties */}
+
+### enable_protected_material
+
+Enable protected material detection on responses. Defaults to false.
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Azure Content Safety Configuration](#azure-content-safety) {/* if .SubProperties */}
+
+### enable_task_adherence
+
+Enable task adherence detection on requests. Defaults to false.
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Azure Content Safety Configuration](#azure-content-safety) {/* if .SubProperties */}
+
+### endpoint
+
+Azure Content Safety resource endpoint URL (e.g. "https://my-resource.cognitiveservices.azure.com").
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ Azure Content Safety Configuration](#azure-content-safety) {/* if .SubProperties */}
+
+### fail_open
+
+If true, allow traffic when the Azure API returns an error. Defaults to false.
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Azure Content Safety Configuration](#azure-content-safety) {/* if .SubProperties */}
+
+### hate_threshold
+
+Severity threshold for hate content (0-6). Content at or above this level is flagged. Defaults to 2.
+
+| | |
+|---|---|
+| **Type** | `integer` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Azure Content Safety Configuration](#azure-content-safety) {/* if .SubProperties */}
+
+### mode
+
+Operating mode. "block" rejects harmful content, "monitor" logs but allows it. Defaults to "block".
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+| **Allowed values** | `block`, `monitor` |
+
+[↑ Top](#) | [↑ Azure Content Safety Configuration](#azure-content-safety) {/* if .SubProperties */}
+
+### self_harm_threshold
+
+Severity threshold for self-harm content (0-6). Content at or above this level is flagged. Defaults to 2.
+
+| | |
+|---|---|
+| **Type** | `integer` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Azure Content Safety Configuration](#azure-content-safety) {/* if .SubProperties */}
+
+### sexual_threshold
+
+Severity threshold for sexual content (0-6). Content at or above this level is flagged. Defaults to 2.
+
+| | |
+|---|---|
+| **Type** | `integer` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Azure Content Safety Configuration](#azure-content-safety) {/* if .SubProperties */}
+
+### task_adherence_api_version
+
+Azure API version for the task adherence endpoint. Defaults to "2025-09-15-preview".
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Azure Content Safety Configuration](#azure-content-safety) {/* if .SubProperties */}
+
+### violence_threshold
+
+Severity threshold for violence content (0-6). Content at or above this level is flagged. Defaults to 2.
+
+| | |
+|---|---|
+| **Type** | `integer` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Azure Content Safety Configuration](#azure-content-safety) {/* if .SubProperties */} {/* range .Properties */}
+
+
+
+<a id="azure-content-safety-DataSource"></a>
+### Custom type: DataSource
+
+A data source provided either inline or as a file path. Exactly one must be set.
+**Requires one of:** `inline`, `file`
+
+#### file
+
+Path to a file containing the data.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Azure Content Safety Configuration](#azure-content-safety)
+
+#### inline
+
+Data provided directly as a string.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Azure Content Safety Configuration](#azure-content-safety) {/* range .Properties */} {/* range .CustomTypes */} {/* if .CustomTypes */}
+
+
+
+
+<a id="bedrock-guardrails"></a>
+## Bedrock Guardrails Configuration
+
+Configuration for the AWS Bedrock Guardrails extension. Applies Bedrock Guardrails to evaluate LLM prompts for content moderation.
+
+### bedrock_api_key
+
+API key for AWS Bedrock authentication.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ Bedrock Guardrails Configuration](#bedrock-guardrails) {/* if .SubProperties */}
+
+### bedrock_cluster
+
+Envoy cluster name configured to reach the Bedrock endpoint.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ Bedrock Guardrails Configuration](#bedrock-guardrails) {/* if .SubProperties */}
+
+### bedrock_endpoint
+
+AWS Bedrock API endpoint URL (e.g. "https://bedrock-runtime.us-east-1.amazonaws.com").
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ Bedrock Guardrails Configuration](#bedrock-guardrails) {/* if .SubProperties */}
+
+### bedrock_guardrails
+
+List of Bedrock guardrails to apply. Duplicate identifiers are removed automatically.
+
+| | |
+|---|---|
+| **Type** | `[]object` |
+| **Required** | Yes |
+| **Min items** | 1 |
+
+[↑ Top](#) | [↑ Bedrock Guardrails Configuration](#bedrock-guardrails)
+
+
+
+#### bedrock_guardrails.identifier
+
+Unique guardrail identifier.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ Bedrock Guardrails Configuration](#bedrock-guardrails)
+
+
+
+#### bedrock_guardrails.version
+
+Guardrail version to apply.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ Bedrock Guardrails Configuration](#bedrock-guardrails)
+
+   {/* range .SubProperties */} {/* if .SubProperties */}
+
+### bedrock_timeoutms
+
+API request timeout in milliseconds. Defaults to 20000 (20 seconds).
+
+| | |
+|---|---|
+| **Type** | `integer` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Bedrock Guardrails Configuration](#bedrock-guardrails) {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */}
+
+
+
+
+<a id="cedar-auth"></a>
+## Cedar Authorization Configuration
+
+Configuration for the Cedar authorization extension. Evaluates Cedar policies inline to authorize HTTP requests.
+
+### action_type
+
+Cedar entity type for actions. Defaults to "Action".
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Cedar Authorization Configuration](#cedar-auth) {/* if .SubProperties */}
+
+### deny_body
+
+Response body returned when a request is denied. Defaults to "Forbidden".
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Cedar Authorization Configuration](#cedar-auth) {/* if .SubProperties */}
+
+### deny_headers
+
+Additional headers to include in deny responses.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Cedar Authorization Configuration](#cedar-auth) {/* if .SubProperties */}
+
+### deny_status
+
+HTTP status code returned when a request is denied. Defaults to 403.
+
+| | |
+|---|---|
+| **Type** | `integer` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Cedar Authorization Configuration](#cedar-auth) {/* if .SubProperties */}
+
+### dry_run
+
+If true, log authorization decisions without enforcing them. Defaults to false.
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Cedar Authorization Configuration](#cedar-auth) {/* if .SubProperties */}
+
+### entities_file
+
+Path to a JSON file containing Cedar entities for hierarchy support.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Cedar Authorization Configuration](#cedar-auth) {/* if .SubProperties */}
+
+### fail_open
+
+If true, allow requests when policy evaluation fails. Defaults to false.
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Cedar Authorization Configuration](#cedar-auth) {/* if .SubProperties */}
+
+### metadata_namespaces
+
+List of dynamic metadata namespaces to include in the Cedar context record under the "dynamic_metadata" key.
+
+| | |
+|---|---|
+| **Type** | `[]string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Cedar Authorization Configuration](#cedar-auth) {/* if .SubProperties */}
+
+### policy
+
+Cedar policy set to evaluate.
+
+| | |
+|---|---|
+| **Type** | [DataSource](#cedar-auth-DataSource) |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ Cedar Authorization Configuration](#cedar-auth) {/* if .SubProperties */}
+
+### principal_id_header
+
+Request header from which to extract the principal ID.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ Cedar Authorization Configuration](#cedar-auth) {/* if .SubProperties */}
+
+### principal_type
+
+Cedar entity type for the principal (e.g. "User").
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ Cedar Authorization Configuration](#cedar-auth) {/* if .SubProperties */}
+
+### resource_type
+
+Cedar entity type for resources. Defaults to "Resource".
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Cedar Authorization Configuration](#cedar-auth) {/* if .SubProperties */} {/* range .Properties */}
+
+
+
+<a id="cedar-auth-DataSource"></a>
+### Custom type: DataSource
+
+A data source provided either inline or as a file path. Exactly one must be set.
+**Requires one of:** `inline`, `file`
+
+#### file
+
+Path to a file containing the data.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Cedar Authorization Configuration](#cedar-auth)
+
+#### inline
+
+Data provided directly as a string.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Cedar Authorization Configuration](#cedar-auth) {/* range .Properties */} {/* range .CustomTypes */} {/* if .CustomTypes */}
+
+
+
+
+<a id="chat-completions-decoder"></a>
+## Chat Completions Decoder Configuration
+
+Configuration for the Chat Completions Decoder extension. Decodes OpenAI Chat Completion requests and responses, exposing structured metadata for downstream filters.
+
+### metadata_namespace
+
+Filter metadata namespace for decoded fields. Defaults to "io.builtonenvoy.openai" if not set.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Chat Completions Decoder Configuration](#chat-completions-decoder) {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */}
+
+
+
+
+<a id="coraza-waf"></a>
+## Coraza WAF Configuration
+
+Configuration for the Coraza WAF extension. Provides Web Application Firewall protection using SecLang directives.
+
+### directives
+
+List of Coraza SecLang directives. Each entry is a single directive string. Special includes are supported: "Include @recommended.conf", "Include @crs-setup.conf", "Include @owasp_crs/*.conf".
+
+| | |
+|---|---|
+| **Type** | `[]string` |
+| **Required** | Yes |
+| **Min items** | 1 |
+| **Item min length** | 1 |
+
+[↑ Top](#) | [↑ Coraza WAF Configuration](#coraza-waf) {/* if .SubProperties */}
+
+### mode
+
+WAF inspection mode. Defaults to "REQUEST_ONLY" if not set.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+| **Allowed values** | `REQUEST_ONLY`, `RESPONSE_ONLY`, `FULL` |
+
+[↑ Top](#) | [↑ Coraza WAF Configuration](#coraza-waf) {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */}
+
+
+
+
+<a id="file-server"></a>
+## File Server Configuration
+
+Configuration for the File Server extension. Serves static files from the local filesystem through Envoy.
+
+### content_types
+
+Custom file extension to content-type mappings. Keys are file suffixes without dots (e.g. "html", "css").
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ File Server Configuration](#file-server) {/* if .SubProperties */}
+
+### default_content_type
+
+Default content-type when the file extension is not found in content_types.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ File Server Configuration](#file-server) {/* if .SubProperties */}
+
+### directory_index_files
+
+Files to serve for directory requests (e.g. ["index.html"]). File names must not contain slashes.
+
+| | |
+|---|---|
+| **Type** | `[]string` |
+| **Required** | No |
+| **Item pattern** | `^[^/]*$` |
+
+[↑ Top](#) | [↑ File Server Configuration](#file-server) {/* if .SubProperties */}
+
+### path_mappings
+
+Mappings from URL path prefixes to filesystem path prefixes. At least one mapping is required. Duplicate request path prefixes are not allowed.
+
+| | |
+|---|---|
+| **Type** | `[]object` |
+| **Required** | Yes |
+| **Min items** | 1 |
+
+[↑ Top](#) | [↑ File Server Configuration](#file-server)
+
+
+
+#### path_mappings.file_path_prefix
+
+Filesystem path prefix to map to (e.g. "/var/www/").
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Min length** | 1 |
+
+[↑ Top](#) | [↑ File Server Configuration](#file-server)
+
+
+
+#### path_mappings.request_path_prefix
+
+URL path prefix to match (e.g. "/static/").
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Min length** | 1 |
+
+[↑ Top](#) | [↑ File Server Configuration](#file-server)
+
+   {/* range .SubProperties */} {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */}
+
+
+
+
+<a id="ip-restriction"></a>
+## IP Restriction Configuration
+
+Configuration for the IP Restriction extension. Controls access based on IP allowlists or denylists. Exactly one of allow_addresses or deny_addresses must be provided.
+**Requires one of:** `allow_addresses`, `deny_addresses`s
+
+### allow_addresses
+
+IP addresses or CIDR ranges to allow. When set, only requests from these addresses are permitted.
+
+| | |
+|---|---|
+| **Type** | `[]string` |
+| **Required** | No |
+| **Unique items** | Yes |
+
+[↑ Top](#) | [↑ IP Restriction Configuration](#ip-restriction) {/* if .SubProperties */}
+
+### deny_addresses
+
+IP addresses or CIDR ranges to deny. When set, requests from these addresses are blocked with 403 Forbidden.
+
+| | |
+|---|---|
+| **Type** | `[]string` |
+| **Required** | No |
+| **Unique items** | Yes |
+
+[↑ Top](#) | [↑ IP Restriction Configuration](#ip-restriction) {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */}
+
+
+
+
+<a id="jwe-decrypt"></a>
+## JWE Decrypt Configuration
+
+Configuration for the JWE Decrypt extension. Decrypts JWE tokens and recovers the inner JWT for Envoy to process.
+
+### algorithm
+
+JWE key management algorithm (e.g. "RSA-OAEP", "A256KW", "dir").
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ JWE Decrypt Configuration](#jwe-decrypt) {/* if .SubProperties */}
+
+### input_header
+
+Request header containing the JWE token. Defaults to "Authorization".
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ JWE Decrypt Configuration](#jwe-decrypt) {/* if .SubProperties */}
+
+### output_header
+
+Request header where the decrypted JWT payload is placed.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ JWE Decrypt Configuration](#jwe-decrypt) {/* if .SubProperties */}
+
+### output_metadata
+
+Envoy dynamic metadata location for the decrypted JWT payload. Namespace defaults to "jwe-decrypt".
+
+| | |
+|---|---|
+| **Type** | [MetadataKey](#jwe-decrypt-MetadataKey) |
+| **Required** | No |
+
+[↑ Top](#) | [↑ JWE Decrypt Configuration](#jwe-decrypt) {/* if .SubProperties */}
+
+### prefix
+
+Prefix to strip from the header value before decryption (e.g. "Bearer ").
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ JWE Decrypt Configuration](#jwe-decrypt) {/* if .SubProperties */}
+
+### private_key
+
+PKCS8 private key used for JWE decryption.
+
+| | |
+|---|---|
+| **Type** | [DataSource](#jwe-decrypt-DataSource) |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ JWE Decrypt Configuration](#jwe-decrypt) {/* if .SubProperties */} {/* range .Properties */}
+
+
+
+<a id="jwe-decrypt-DataSource"></a>
+### Custom type: DataSource
+
+A data source provided either inline or as a file path. Exactly one must be set.
+**Requires one of:** `inline`, `file`
+
+#### file
+
+Path to a file containing the data.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ JWE Decrypt Configuration](#jwe-decrypt)
+
+#### inline
+
+Data provided directly as a string.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ JWE Decrypt Configuration](#jwe-decrypt) {/* range .Properties */}
+
+<a id="jwe-decrypt-MetadataKey"></a>
+### Custom type: MetadataKey
+
+Identifies a location in Envoy dynamic metadata.
+
+#### key
+
+Key within the namespace.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ JWE Decrypt Configuration](#jwe-decrypt)
+
+#### namespace
+
+Filter-state namespace for the metadata entry.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ JWE Decrypt Configuration](#jwe-decrypt) {/* range .Properties */} {/* range .CustomTypes */} {/* if .CustomTypes */}
+
+
+
+
+<a id="llm-proxy"></a>
+## LLM Proxy Configuration
+
+Configuration for the LLM Proxy extension. Routes LLM API requests by model name and monitors token usage via Envoy metadata.
+
+### clear_route_cache
+
+Clear Envoy route cache after setting metadata, enabling route re-selection. Defaults to false.
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ LLM Proxy Configuration](#llm-proxy) {/* if .SubProperties */}
+
+### llm_configs
+
+Path-matcher rules mapping request paths to LLM API kinds. If empty, default rules for OpenAI and Anthropic are auto-configured.
+
+| | |
+|---|---|
+| **Type** | `[]object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ LLM Proxy Configuration](#llm-proxy)
+
+
+
+#### llm_configs.kind
+
+LLM API kind for matched requests.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ LLM Proxy Configuration](#llm-proxy)
+
+
+
+#### llm_configs.matcher
+
+Path matcher for this rule.
+
+| | |
+|---|---|
+| **Type** | [StringMatcher](#llm-proxy-StringMatcher) |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ LLM Proxy Configuration](#llm-proxy)
+
+   {/* range .SubProperties */} {/* if .SubProperties */}
+
+### llm_model_header
+
+Request header to set with the extracted model name.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ LLM Proxy Configuration](#llm-proxy) {/* if .SubProperties */}
+
+### metadata_namespace
+
+Filter metadata namespace for LLM proxy data. Defaults to "io.builtonenvoy.llm-proxy".
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ LLM Proxy Configuration](#llm-proxy) {/* if .SubProperties */} {/* range .Properties */}
+
+
+
+<a id="llm-proxy-StringMatcher"></a>
+### Custom type: StringMatcher
+
+Matches a string by prefix, suffix, or regex. Exactly one must be set.
+**Requires one of:** `prefix`, `suffix`, `regex`
+
+#### prefix
+
+Match strings starting with this value.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ LLM Proxy Configuration](#llm-proxy)
+
+#### regex
+
+Match strings satisfying this regular expression.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ LLM Proxy Configuration](#llm-proxy)
+
+#### suffix
+
+Match strings ending with this value.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ LLM Proxy Configuration](#llm-proxy) {/* range .Properties */} {/* range .CustomTypes */} {/* if .CustomTypes */}
+
+
+
+
+<a id="opa"></a>
+## OPA Authorization Configuration
+
+Configuration for the OPA authorization extension. Evaluates Open Policy Agent policies inline to authorize HTTP requests.
+
+### decision_path
+
+OPA rule path to query for the authorization decision. Defaults to "envoy.authz.allow".
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OPA Authorization Configuration](#opa) {/* if .SubProperties */}
+
+### dry_run
+
+If true, log authorization decisions without enforcing them. Defaults to false.
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OPA Authorization Configuration](#opa) {/* if .SubProperties */}
+
+### fail_open
+
+If true, allow requests when policy evaluation fails. Defaults to false.
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OPA Authorization Configuration](#opa) {/* if .SubProperties */}
+
+### metadata_namespaces
+
+List of dynamic metadata namespaces to include in the OPA input document under the "dynamic_metadata" key.
+
+| | |
+|---|---|
+| **Type** | `[]string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OPA Authorization Configuration](#opa) {/* if .SubProperties */}
+
+### policies
+
+OPA policies to load and evaluate. At least one policy is required.
+
+| | |
+|---|---|
+| **Type** | [[]DataSource](#opa-DataSource) |
+| **Required** | Yes |
+| **Min items** | 1 |
+
+[↑ Top](#) | [↑ OPA Authorization Configuration](#opa) {/* if .SubProperties */}
+
+### with_body
+
+If true, buffer the request body and include it as parsed JSON in the OPA input. Defaults to false.
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OPA Authorization Configuration](#opa) {/* if .SubProperties */} {/* range .Properties */}
+
+
+
+<a id="opa-DataSource"></a>
+### Custom type: DataSource
+
+A data source provided either inline or as a file path. Exactly one must be set.
+**Requires one of:** `inline`, `file`
+
+#### file
+
+Path to a file containing the data.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OPA Authorization Configuration](#opa)
+
+#### inline
+
+Data provided directly as a string.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OPA Authorization Configuration](#opa) {/* range .Properties */} {/* range .CustomTypes */} {/* if .CustomTypes */}
+
+
+
+
+<a id="openapi-validator"></a>
+## OpenAPI Validator Configuration
+
+Configuration for the OpenAPI Validator extension. Validates HTTP requests against an OpenAPI specification.
+
+### allow_unmatched_paths
+
+If true, allow requests to paths not defined in the spec. Defaults to false.
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenAPI Validator Configuration](#openapi-validator) {/* if .SubProperties */}
+
+### deny_response
+
+Custom response returned when validation fails.
+
+| | |
+|---|---|
+| **Type** | [LocalResponse](#openapi-validator-LocalResponse) |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenAPI Validator Configuration](#openapi-validator) {/* if .SubProperties */}
+
+### dry_run
+
+If true, log validation failures without rejecting requests. Defaults to false.
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenAPI Validator Configuration](#openapi-validator) {/* if .SubProperties */}
+
+### max_body_bytes
+
+Maximum request body size in bytes for validation. 0 means no limit. Defaults to 0.
+
+| | |
+|---|---|
+| **Type** | `integer` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenAPI Validator Configuration](#openapi-validator) {/* if .SubProperties */}
+
+### spec
+
+OpenAPI specification in YAML or JSON format.
+
+| | |
+|---|---|
+| **Type** | [DataSource](#openapi-validator-DataSource) |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ OpenAPI Validator Configuration](#openapi-validator) {/* if .SubProperties */} {/* range .Properties */}
+
+
+
+<a id="openapi-validator-DataSource"></a>
+### Custom type: DataSource
+
+A data source provided either inline or as a file path. Exactly one must be set.
+**Requires one of:** `inline`, `file`
+
+#### file
+
+Path to a file containing the data.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenAPI Validator Configuration](#openapi-validator)
+
+#### inline
+
+Data provided directly as a string.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenAPI Validator Configuration](#openapi-validator) {/* range .Properties */}
+
+<a id="openapi-validator-LocalResponse"></a>
+### Custom type: LocalResponse
+
+Custom local HTTP response to send to the client.
+
+#### body
+
+Response body.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenAPI Validator Configuration](#openapi-validator)
+
+#### headers
+
+Additional response headers.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenAPI Validator Configuration](#openapi-validator)
+
+#### status
+
+HTTP status code.
+
+| | |
+|---|---|
+| **Type** | `integer` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenAPI Validator Configuration](#openapi-validator) {/* range .Properties */} {/* range .CustomTypes */} {/* if .CustomTypes */}
+
+
+
+
+<a id="openfga"></a>
+## OpenFGA Authorization Configuration
+
+Configuration for the OpenFGA authorization extension. Checks authorization via the OpenFGA Check API through Envoy's async HTTP callout mechanism.
+
+### authorization_model_id
+
+OpenFGA authorization model ID. Uses the store's latest model if omitted.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga) {/* if .SubProperties */}
+
+### callout_headers
+
+Additional headers to include in callouts to OpenFGA (e.g. Authorization).
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga) {/* if .SubProperties */}
+
+### cluster
+
+Envoy cluster name routing to the OpenFGA server.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga) {/* if .SubProperties */}
+
+### consistency
+
+OpenFGA Check consistency preference.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+| **Allowed values** | `UNSPECIFIED`, `MINIMIZE_LATENCY`, `HIGHER_CONSISTENCY` |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga) {/* if .SubProperties */}
+
+### context
+
+ABAC condition context values. Maps field names to ValueSource objects. Fields that resolve to an empty value are omitted.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga) {/* if .SubProperties */}
+
+### contextual_tuples
+
+Contextual tuples included in the Check request for request-scoped relationships. Tuples with unresolvable fields are silently skipped.
+
+| | |
+|---|---|
+| **Type** | [[]ContextualTuple](#openfga-ContextualTuple) |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga) {/* if .SubProperties */}
+
+### deny_body
+
+Response body for denied requests. Defaults to 'Forbidden'.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga) {/* if .SubProperties */}
+
+### deny_status
+
+HTTP status code for denied requests. Defaults to 403.
+
+| | |
+|---|---|
+| **Type** | `integer` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga) {/* if .SubProperties */}
+
+### dry_run
+
+Log authorization decisions without enforcing them. Defaults to false.
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga) {/* if .SubProperties */}
+
+### fail_open
+
+Allow requests when the filter cannot enforce a decision. Defaults to false.
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga) {/* if .SubProperties */}
+
+### metadata
+
+When set, writes the authorization decision to dynamic metadata for downstream filters.
+
+| | |
+|---|---|
+| **Type** | [MetadataKey](#openfga-MetadataKey) |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga) {/* if .SubProperties */}
+
+### object
+
+How to extract the object for the Check call. Required when not using rules.
+
+| | |
+|---|---|
+| **Type** | [ValueSource](#openfga-ValueSource) |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga) {/* if .SubProperties */}
+
+### openfga_host
+
+Hostname for the Host header in callouts to OpenFGA.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga) {/* if .SubProperties */}
+
+### relation
+
+How to extract the relation for the Check call. Required when not using rules.
+
+| | |
+|---|---|
+| **Type** | [ValueSource](#openfga-ValueSource) |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga) {/* if .SubProperties */}
+
+### rules
+
+Multi-rule config evaluated in order; first match wins. A rule with no match is a catch-all and must be last.
+
+| | |
+|---|---|
+| **Type** | [[]CheckRule](#openfga-CheckRule) |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga) {/* if .SubProperties */}
+
+### store_id
+
+OpenFGA store ID.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga) {/* if .SubProperties */}
+
+### timeout_ms
+
+HTTP callout timeout in milliseconds. Defaults to 5000.
+
+| | |
+|---|---|
+| **Type** | `integer` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga) {/* if .SubProperties */}
+
+### user
+
+How to extract the user for the Check call. Required when using rules.
+
+| | |
+|---|---|
+| **Type** | [ValueSource](#openfga-ValueSource) |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga) {/* if .SubProperties */} {/* range .Properties */}
+
+
+
+<a id="openfga-CheckRule"></a>
+### Custom type: CheckRule
+
+A rule defining how to build the Check tuple for a matched request.
+
+#### match
+
+Conditions for this rule to match. Omit for a catch-all rule.
+
+| | |
+|---|---|
+| **Type** | [RuleMatch](#openfga-RuleMatch) |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga)
+
+#### object
+
+How to extract the object for this rule.
+
+| | |
+|---|---|
+| **Type** | [ValueSource](#openfga-ValueSource) |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga)
+
+#### relation
+
+How to extract the relation for this rule.
+
+| | |
+|---|---|
+| **Type** | [ValueSource](#openfga-ValueSource) |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga)
+
+#### user
+
+Per-rule user override. Falls back to top-level user if omitted.
+
+| | |
+|---|---|
+| **Type** | [ValueSource](#openfga-ValueSource) |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga) {/* range .Properties */}
+
+<a id="openfga-ContextualTuple"></a>
+### Custom type: ContextualTuple
+
+A contextual tuple with user, relation, and object value sources.
+
+#### object
+
+
+
+| | |
+|---|---|
+| **Type** | [ValueSource](#openfga-ValueSource) |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga)
+
+#### relation
+
+
+
+| | |
+|---|---|
+| **Type** | [ValueSource](#openfga-ValueSource) |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga)
+
+#### user
+
+
+
+| | |
+|---|---|
+| **Type** | [ValueSource](#openfga-ValueSource) |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga) {/* range .Properties */}
+
+<a id="openfga-MetadataKey"></a>
+### Custom type: MetadataKey
+
+Dynamic metadata configuration for writing authorization decisions.
+
+#### key
+
+Key under which the decision is stored within the namespace.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga)
+
+#### namespace
+
+Filter-state namespace for the metadata entry.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga) {/* range .Properties */}
+
+<a id="openfga-RuleMatch"></a>
+### Custom type: RuleMatch
+
+Conditions for a rule to match. All specified headers must match.
+
+#### headers
+
+Header name to match value. Use "*" to require the header to be present with any non-empty value.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga) {/* range .Properties */}
+
+<a id="openfga-ValueSource"></a>
+### Custom type: ValueSource
+
+Extracts a value from the request. Exactly one of value, header, path_segment, or query_param must be set.
+
+#### header
+
+Read value from this request header.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga)
+
+#### path_segment
+
+Extract the URL path segment at this 0-based index. Negative values count from the end.
+
+| | |
+|---|---|
+| **Type** | `integer` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga)
+
+#### prefix
+
+Prepend this string to the extracted value.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga)
+
+#### query_param
+
+Extract the first value of this named query parameter.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga)
+
+#### value
+
+Static value used as-is.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ OpenFGA Authorization Configuration](#openfga) {/* range .Properties */} {/* range .CustomTypes */} {/* if .CustomTypes */}
+
+
+
+
+<a id="saml"></a>
+## SAML Configuration
+
+Configuration for the SAML 2.0 Service Provider authentication extension.
+**Requires one of:** `idp_metadata_xml`, `idp_metadata_url`s
+
+### acs_path
+
+Assertion Consumer Service endpoint path (e.g. "/saml/acs").
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ SAML Configuration](#saml) {/* if .SubProperties */}
+
+### allowed_clock_skew
+
+Allowed clock skew for time validation as a Go duration string. Defaults to "5s".
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ SAML Configuration](#saml) {/* if .SubProperties */}
+
+### attribute_headers
+
+Map of SAML attribute names to request header names for forwarding assertions.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ SAML Configuration](#saml) {/* if .SubProperties */}
+
+### bypass_paths
+
+URL paths that bypass SAML authentication.
+
+| | |
+|---|---|
+| **Type** | `[]string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ SAML Configuration](#saml) {/* if .SubProperties */}
+
+### default_redirect_path
+
+Post-login redirect path when RelayState is empty. Defaults to "/".
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ SAML Configuration](#saml) {/* if .SubProperties */}
+
+### entity_id
+
+Service Provider entity ID (audience URI).
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ SAML Configuration](#saml) {/* if .SubProperties */}
+
+### idp_metadata_cluster
+
+Envoy cluster used to reach idp_metadata_url. Required when idp_metadata_url is set.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ SAML Configuration](#saml) {/* if .SubProperties */}
+
+### idp_metadata_fetch_delay
+
+Delay before the IdP metadata HttpCallout is issued, as a Go duration string (e.g. "1s", "30s"). Defaults to "1s". Gives Envoy time to start the cluster referenced by idp_metadata_cluster before the callout fires. Only valid in URL mode.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ SAML Configuration](#saml) {/* if .SubProperties */}
+
+### idp_metadata_fetch_max_attempts
+
+Total number of IdP metadata fetch attempts (initial + retries) before giving up. Retries are separated by idp_metadata_fetch_delay. Defaults to 3. Only valid in URL mode.
+
+| | |
+|---|---|
+| **Type** | `integer` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ SAML Configuration](#saml) {/* if .SubProperties */}
+
+### idp_metadata_url
+
+URL to fetch the Identity Provider SAML metadata XML at config-load time. Requires idp_metadata_cluster. Mutually exclusive with idp_metadata_xml.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ SAML Configuration](#saml) {/* if .SubProperties */}
+
+### idp_metadata_xml
+
+Identity Provider SAML metadata XML, supplied inline or read from a file at config-load time. Mutually exclusive with idp_metadata_url.
+
+| | |
+|---|---|
+| **Type** | [DataSource](#saml-DataSource) |
+| **Required** | No |
+
+[↑ Top](#) | [↑ SAML Configuration](#saml) {/* if .SubProperties */}
+
+### metadata_path
+
+SP metadata endpoint path. Defaults to "/saml/metadata".
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ SAML Configuration](#saml) {/* if .SubProperties */}
+
+### name_id_format
+
+NameID format to request from the IdP. Defaults to "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified".
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ SAML Configuration](#saml) {/* if .SubProperties */}
+
+### session
+
+Session and cookie configuration.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ SAML Configuration](#saml)
+
+
+
+#### session.cookie_domain
+
+Cookie domain attribute. If empty, the cookie is scoped to the request host.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ SAML Configuration](#saml)
+
+
+
+#### session.cookie_name
+
+Session cookie name. Defaults to "_saml_session".
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ SAML Configuration](#saml)
+
+
+
+#### session.cookie_secure
+
+Set the Secure flag on the session cookie. Defaults to true.
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ SAML Configuration](#saml)
+
+
+
+#### session.cookie_signing_key
+
+64 hex characters (32 bytes) used as HMAC key for cookie signing. Auto-generated if not set.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+| **Pattern** | `^[0-9a-fA-F]{64}$` |
+
+[↑ Top](#) | [↑ SAML Configuration](#saml)
+
+
+
+#### session.duration
+
+Session duration as a Go duration string (e.g. "8h", "30m"). Defaults to "8h".
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ SAML Configuration](#saml)
+
+   {/* range .SubProperties */} {/* if .SubProperties */}
+
+### sign_authn_requests
+
+Sign AuthnRequests sent to the IdP. Defaults to true.
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ SAML Configuration](#saml) {/* if .SubProperties */}
+
+### slo_path
+
+Single Logout endpoint path. Defaults to "/saml/slo".
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ SAML Configuration](#saml) {/* if .SubProperties */}
+
+### sp_cert_pem
+
+SP certificate in PEM format. If omitted, a self-signed certificate is auto-generated. Must be provided together with sp_key_pem.
+
+| | |
+|---|---|
+| **Type** | [DataSource](#saml-DataSource) |
+| **Required** | No |
+
+[↑ Top](#) | [↑ SAML Configuration](#saml) {/* if .SubProperties */}
+
+### sp_key_pem
+
+SP private key in PEM format. Must be provided together with sp_cert_pem.
+
+| | |
+|---|---|
+| **Type** | [DataSource](#saml-DataSource) |
+| **Required** | No |
+
+[↑ Top](#) | [↑ SAML Configuration](#saml) {/* if .SubProperties */}
+
+### subject_header
+
+Request header for the authenticated user's NameID. Defaults to "x-saml-subject".
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ SAML Configuration](#saml) {/* if .SubProperties */} {/* range .Properties */}
+
+
+
+<a id="saml-DataSource"></a>
+### Custom type: DataSource
+
+A data source provided either inline or as a file path. Exactly one must be set.
+**Requires one of:** `inline`, `file`
+
+#### file
+
+Path to a file containing the data.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ SAML Configuration](#saml)
+
+#### inline
+
+Data provided directly as a string.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ SAML Configuration](#saml) {/* range .Properties */} {/* range .CustomTypes */} {/* if .CustomTypes */}
+
+
+
+
+<a id="token-exchange"></a>
+## Token Exchange Configuration
+
+Configuration for the OAuth2 Token Exchange (RFC 8693) extension.
+
+### actor_token
+
+Actor token for delegation scenarios. Requires actor_token_type.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Token Exchange Configuration](#token-exchange) {/* if .SubProperties */}
+
+### actor_token_type
+
+Token type URI for the actor token. Required when actor_token is set.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Token Exchange Configuration](#token-exchange) {/* if .SubProperties */}
+
+### audience
+
+Logical name of the target service.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Token Exchange Configuration](#token-exchange) {/* if .SubProperties */}
+
+### client_id
+
+Client ID for HTTP Basic authentication with the STS endpoint.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ Token Exchange Configuration](#token-exchange) {/* if .SubProperties */}
+
+### client_secret
+
+Client secret for HTTP Basic authentication with the STS endpoint.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ Token Exchange Configuration](#token-exchange) {/* if .SubProperties */}
+
+### cluster
+
+Envoy cluster name configured to reach the token exchange (STS) endpoint.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ Token Exchange Configuration](#token-exchange) {/* if .SubProperties */}
+
+### requested_token_type
+
+Desired output token type URI.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Token Exchange Configuration](#token-exchange) {/* if .SubProperties */}
+
+### resource
+
+Target resource URI. Must be an absolute URI without a fragment component.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Token Exchange Configuration](#token-exchange) {/* if .SubProperties */}
+
+### scope
+
+Space-delimited list of requested scopes.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Token Exchange Configuration](#token-exchange) {/* if .SubProperties */}
+
+### subject_token_type
+
+Token type URI for the input subject token. Defaults to "urn:ietf:params:oauth:token-type:access_token".
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Token Exchange Configuration](#token-exchange) {/* if .SubProperties */}
+
+### timeout_ms
+
+HTTP callout timeout in milliseconds. Defaults to 5000.
+
+| | |
+|---|---|
+| **Type** | `integer` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Token Exchange Configuration](#token-exchange) {/* if .SubProperties */}
+
+### token_exchange_url
+
+Token exchange endpoint URL. Must contain a host and path (e.g. "https://idp.example.com/token").
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ Token Exchange Configuration](#token-exchange) {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */} {/* range . */}

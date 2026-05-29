@@ -55,7 +55,7 @@ const { minDepth = 2, maxDepth = 3 } = Astro.props;
         let text = heading.textContent || '';
         text = text.substring(text.lastIndexOf('.') + 1);
         // Capitalize the text
-        link.textContent = text.charAt(0).toUpperCase() + text.slice(1);
+        link.textContent = text
 
         li.appendChild(link);
         list.appendChild(li);
