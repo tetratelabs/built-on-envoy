@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/dns-gateway/config.schema.json",
+  "title": "DNS Gateway Configuration",
+  "description": "Configuration for the dns_gateway UDP listener filter. Defines domain patterns, virtual IP CIDR ranges, and metadata for DNS interception and routing.",
+  "type": "object",
+  "required": ["domains"],
+  "additionalProperties": false,
+  "properties": {
+    "domains": {
+      "type": "array",
+      "description": "Domain matchers, each with its own CIDR range for virtual IP allocation.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["domain", "base_ip", "prefix_len"],
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "type": "string",
+            "description": "Exact domain (\"example.com\") or single-level wildcard pattern (\"*.example.com\").",
+            "minLength": 1
+          },
+          "base_ip": {
+            "type": "string",
+            "description": "Base IPv4 address for virtual IP allocation (e.g. \"10.239.0.0\").",
+            "pattern": "^(?:(?:25[0-5]|2[0-4]\\d|[01]?\\d\\d?)\\.){3}(?:25[0-5]|2[0-4]\\d|[01]?\\d\\d?)$"
+          },
+          "prefix_len": {
+            "type": "integer",
+            "description": "CIDR prefix length (1-32). A /24 gives 256 virtual IPs.",
+            "minimum": 1,
+            "maximum": 32
+          },
+          "metadata": {
+            "type": "object",
+            "description": "String key-value pairs exposed in Envoy filter state as envoy.dns_gateway.metadata.<key>.",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {}
+          }
+        }
+      }
+    }
+  }
+}
