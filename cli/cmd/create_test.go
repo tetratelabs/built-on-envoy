@@ -420,10 +420,21 @@ func TestCreateRust_ListenerFilter_Run(t *testing.T) {
 	assert.NotContains(t, string(libRs), "NetworkFilterConfig")
 }
 
-func TestCreateFilter_Unsupported(t *testing.T) {
+func TestValidate(t *testing.T) {
+	t.Run("valid", func(t *testing.T) {
+		c := &Create{
+			Type: "go",
+			Name: "test-extension",
+		}
+
+		err := c.Validate()
+		require.NoError(t, err)
+		require.Equal(t, "http", c.FilterType) // default filter type is set
+	})
+
 	for _, extensionType := range []string{"go", "ext_proc"} {
 		for _, filterType := range []string{"network", "listener", "udp_listener"} {
-			t.Run(fmt.Sprintf("%s_%s", extensionType, filterType), func(t *testing.T) {
+			t.Run(fmt.Sprintf("invalid_%s_%s", extensionType, filterType), func(t *testing.T) {
 				c := &Create{
 					Type:       extensionType,
 					FilterType: filterType,
