@@ -37,6 +37,18 @@ Create a Rust network (L4) filter extension:
     boe create my-tcp-extension --type rust --filter-type network
     ```
 
+Create a Rust listener (L4) filter extension:
+
+    ```shell
+    boe create my-listener-extension --type rust --filter-type listener
+    ```
+
+Create a Rust UDP listener filter extension:
+
+    ```shell
+    boe create my-udp-extension --type rust --filter-type udp_listener
+    ```
+
 Create an ExtProc extension:
 
     ```shell
@@ -50,6 +62,7 @@ Create an ExtProc extension:
       Network filters are not currently supported for Go extensions.
     - **rust**: A dynamic module extension using the Envoy dynamic modules SDK for Rust.
       Generates Rust source files and Cargo.toml for building a dynamic library.
-      Supports both HTTP filters (default) and network (L4) filters via `--filter-type`.
+      Supports HTTP filters (default), network (L4) filters, listener (L4) filters,
+      and UDP listener filters via `--filter-type`.
     - **ext_proc**: An extension that runs as an Envoy External Processor server as an
       independent process.
