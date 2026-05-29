@@ -52,9 +52,9 @@ jobs:
             fi
 
             ext_path=$(echo "$ext_dir" | cut -d'/' -f2)
-            ext_name=$(grep "^name:" "$manifest" | sed 's/name: *//' | tr -d '\r')
-            type=$(grep "^type:" "$manifest" | sed 's/type: *//' | tr -d '\r')
-            version=$(grep '^version:' "$manifest" | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"' || echo "")
+            ext_name=$(yq '.name' "$manifest")
+            type=$(yq '.type' "$manifest")
+            version=$(yq '.version' "$manifest")
 
             echo "Extension: $ext_name (type=$type, path=$ext_path)"
             echo "Version: $version"
