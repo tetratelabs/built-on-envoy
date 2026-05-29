@@ -7,6 +7,8 @@
 package waf
 
 import (
+	"fmt"
+	"io"
 	"net"
 	"strconv"
 	"strings"
@@ -26,16 +28,48 @@ const (
 	metadataKeyBlockPhase    = "block_phase"
 )
 
+// wafRegistry tracks all WAF instances created for a single Envoy config version
+// (main config + per-route overrides) so they can be closed together in OnDestroy
+// to release memoized regex patterns from Coraza's global cache.
+type wafRegistry struct {
+	wafs []coraza.WAF
+}
+
+func (r *wafRegistry) add(w coraza.WAF) {
+	if w != nil {
+		r.wafs = append(r.wafs, w)
+	}
+}
+
+func (r *wafRegistry) closeAll(l *logger.Logger) {
+	for _, w := range r.wafs {
+		if c, ok := w.(io.Closer); ok {
+			if err := c.Close(); err != nil {
+				l.Error(fmt.Sprintf("waf: error closing WAF instance: %v", err))
+			}
+		}
+	}
+}
+
 type wafPluginFactory struct {
 	shared.EmptyHttpFilterFactory
-	config  coraza.WAF
-	mode    waf.WAFMode
-	metrics *metrics
+	config   coraza.WAF
+	mode     waf.WAFMode
+	metrics  *metrics
+	registry *wafRegistry
 }
 
 type perRouteWafPluginConfig struct {
 	config coraza.WAF
 	mode   waf.WAFMode
+}
+
+// OnDestroy releases memoized regex caches held by all WAF instances (main + per-route)
+// created by this factory. Called by Envoy when the factory is destroyed (e.g. config update).
+func (f *wafPluginFactory) OnDestroy() {
+	l := logger.GetLogger()
+	l.Sugar().Infof("waf: closing %d WAF instances", len(f.registry.wafs))
+	f.registry.closeAll(l)
 }
 
 func (f *wafPluginFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
@@ -66,6 +100,9 @@ func (f *wafPluginFactory) Create(handle shared.HttpFilterHandle) shared.HttpFil
 
 type wafPluginConfigFactory struct {
 	shared.EmptyHttpFilterConfigFactory
+	// registry is shared between the config factory and the plugin factory it creates,
+	// so per-route WAFs added after the factory is created can still be closed on destroy.
+	registry *wafRegistry
 }
 
 func (f *wafPluginConfigFactory) Create(
@@ -88,10 +125,14 @@ func (f *wafPluginConfigFactory) Create(
 		handle.Log(shared.LogLevelInfo, "waf: empty filter config")
 	}
 
+	f.registry = &wafRegistry{}
+	f.registry.add(wafConfig)
+
 	return &wafPluginFactory{
-		config:  wafConfig,
-		mode:    mode,
-		metrics: newMetrics(handle),
+		config:   wafConfig,
+		mode:     mode,
+		metrics:  newMetrics(handle),
+		registry: f.registry,
 	}, nil
 }
 
@@ -99,6 +140,9 @@ func (f *wafPluginConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, err
 	wafConfig, mode, err := waf.NewWAFConfigFromBytes(unparsedConfig, logger.GetLogger())
 	if err != nil {
 		return nil, err
+	}
+	if f.registry != nil {
+		f.registry.add(wafConfig)
 	}
 	return &perRouteWafPluginConfig{
 		config: wafConfig,
