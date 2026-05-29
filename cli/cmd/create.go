@@ -28,7 +28,7 @@ var templateFS embed.FS
 // Create is a command to create a new extension template.
 type Create struct {
 	Type            string `help:"Type of the extension (go, rust, ext_proc)." default:"go" enum:"go,rust,ext_proc"`
-	FilterType      string `help:"Filter type (http, network). Network filters are only supported for rust." default:"http" enum:"http,network"`
+	FilterType      string `help:"Filter type (http, network, listener, udp_listener). Network, listener, and udp_listener filters are only supported for rust." default:"http" enum:"http,network,listener,udp_listener"`
 	Name            string `arg:"" help:"Name of the extension."`
 	Path            string `help:"Output directory for the extension. Defaults to the extension name." type:"path"`
 	ComposerVersion string `name:"composer-version" help:"Composer version for Go extensions. Resolved from the registry if not set."`
@@ -44,11 +44,15 @@ func (c *Create) Help() string { return createHelp }
 
 // Validate is called by Kong after parsing to validate the command arguments.
 func (c *Create) Validate() error {
-	if c.Type == "go" && c.FilterType == "network" {
-		return fmt.Errorf("network filter scaffolding is not supported for %q extensions; use --type rust", c.Type)
+	if c.FilterType == "" {
+		c.FilterType = "http"
 	}
-	if c.Type == "ext_proc" && c.FilterType == "network" {
-		return fmt.Errorf("network filter scaffolding is not supported for %q extensions", c.Type)
+
+	if c.Type == "go" && c.FilterType != "http" {
+		return fmt.Errorf("only http filter scaffolding is supported for %q extensions; use --type rust for other filter types", c.Type)
+	}
+	if c.Type == "ext_proc" && c.FilterType != "http" {
+		return fmt.Errorf("only http filter scaffolding is supported for %q extensions; use --type rust for other filter types", c.Type)
 	}
 	return nil
 }
@@ -204,12 +208,8 @@ func createRustExtension(logger *slog.Logger, path, name, filterType string) err
 		"LibName": extensions.RustLibNameFromName(name),
 	}
 
-	libTemplate := "templates/create/rust/lib_http.rs.tmpl"
-	manifestTemplate := "templates/create/rust/manifest_http.yaml.tmpl"
-	if filterType == "network" {
-		libTemplate = "templates/create/rust/lib_network.rs.tmpl"
-		manifestTemplate = "templates/create/rust/manifest_network.yaml.tmpl"
-	}
+	libTemplate := fmt.Sprintf("templates/create/rust/lib_%s.rs.tmpl", filterType)
+	manifestTemplate := fmt.Sprintf("templates/create/rust/manifest_%s.yaml.tmpl", filterType)
 
 	// Map of output filename to template filename
 	files := map[string]string{
