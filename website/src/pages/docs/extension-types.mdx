@@ -39,6 +39,18 @@ type: rust
    expects from a dynamic module.
 4. At runtime, Envoy loads the shared library directly with no additional host module.
 
+### Filter Types
+
+Rust extensions support four filter types, controlled by the optional `filterType` field in your manifest.
+The default is `http`.
+
+| Filter Type | Envoy Layer | Description |
+|---|---|---|
+| `http` (default) | HTTP (L7) | Inspect and modify HTTP requests and responses |
+| `network` | TCP/TLS (L4) | Process raw byte streams before HTTP decoding; useful for custom protocols or connection-level access policies |
+| `listener` | Listener (pre-routing) | Run logic before a TCP connection is routed to a filter chain; useful for connection acceptance policies and pre-routing inspection |
+| `udp_listener` | UDP Listener | Process UDP datagrams at the listener level |
+
 ### Getting Started with Rust Extensions
 
 See the [Writing Rust Extensions](/docs/writing-rust-extensions) guide for a complete walkthrough of the
