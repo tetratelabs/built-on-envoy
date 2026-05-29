@@ -61,8 +61,8 @@ jobs:
             [ -f "$manifest" ] || continue
             
             # Read name and type from manifest
-            ext_name=$(grep "^name:" "$manifest" | sed 's/name: *//' | tr -d '\r')
-            type=$(grep "^type:" "$manifest" | sed 's/type: *//' | tr -d '\r')
+            ext_name=$(yq '.name' "$manifest")
+            type=$(yq '.type' "$manifest")
             
             # Detect language
             lang=""
@@ -70,7 +70,7 @@ jobs:
               lang="rust"
             elif [ -f "$dir/go.mod" ]; then
               lang="go"
-            elif grep -q "^lua:" "$manifest"; then
+            elif [ "$type" = "lua" ]; then
               lang="lua"
             fi
             
