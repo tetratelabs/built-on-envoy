@@ -615,7 +615,7 @@ func TestLoadLocalManifest(t *testing.T) {
 			Description:     "A test extension",
 			LongDescription: "This is a longer description of the test extension.\n",
 			Type:            TypeWasm,
-			FilterType:      FilterTypeHTTP,
+			FilterTypes:     []FilterType{FilterTypeHTTP},
 			Tags:            []string{"test"},
 			License:         "Apache-2.0",
 			Examples: []Example{
@@ -801,11 +801,9 @@ func TestValidateNativeHTTPFilters(t *testing.T) {
 			expectedErr: `validation failed for manifest native_http_filters_duplicate_name.yaml: invalid nativeHttpFilters: nativeHttpFilters contains duplicate name "envoy.filters.http.mcp"`,
 		},
 		{
-			name:    "rust network type rejected",
-			fixture: "native_http_filters_on_rust_network_type.yaml",
-			expectedErr: `validation failed for manifest native_http_filters_on_rust_network_type.yaml: jsonschema validation failed with 'SCHEMA#'
-- at '': 'allOf' failed
-  - at '/nativeHttpFilters': false schema`,
+			name:        "rust network type rejected",
+			fixture:     "native_http_filters_on_rust_network_type.yaml",
+			expectedErr: `validation failed for manifest native_http_filters_on_rust_network_type.yaml: invalid nativeHttpFilters: nativeHttpFilters requires an extension that generates an HTTP filter; "rust" with filterTypes [network] has no HTTP anchor`,
 		},
 		{
 			name:    "wasm type rejected",
@@ -937,7 +935,7 @@ func TestValidateNativeHTTPFiltersSemanticErrors(t *testing.T) {
 					}},
 				},
 			},
-			expectedErr: "invalid nativeHttpFilters: nativeHttpFilters requires an extension that generates an HTTP filter; \"wasm\" with filterType \"\" has no HTTP anchor",
+			expectedErr: "invalid nativeHttpFilters: nativeHttpFilters requires an extension that generates an HTTP filter; \"wasm\" with filterTypes [] has no HTTP anchor",
 		},
 		{
 			name: "after: missing name",
@@ -1026,12 +1024,12 @@ func TestHasHTTPAnchor(t *testing.T) {
 		},
 		{
 			name:     "rust explicit http",
-			manifest: &Manifest{Type: TypeRust, FilterType: FilterTypeHTTP},
+			manifest: &Manifest{Type: TypeRust, FilterTypes: []FilterType{FilterTypeHTTP}},
 			expect:   true,
 		},
 		{
 			name:     "rust network",
-			manifest: &Manifest{Type: TypeRust, FilterType: FilterTypeNetwork},
+			manifest: &Manifest{Type: TypeRust, FilterTypes: []FilterType{FilterTypeNetwork}},
 			expect:   false,
 		},
 		{

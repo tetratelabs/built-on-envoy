@@ -44,7 +44,7 @@ jobs:
             echo "Error: Extension 'extensions/${{ inputs.extension }}/manifest.yaml' not found"
             exit 1
           fi
-          if ! grep -q "type: lua" "extensions/${{ inputs.extension }}/manifest.yaml"; then
+          if [ "$(yq '.type' "extensions/${{ inputs.extension }}/manifest.yaml")" != "lua" ]; then
             echo "Error: Extension '${{ inputs.extension }}' is not a lua extension"
             exit 1
           fi

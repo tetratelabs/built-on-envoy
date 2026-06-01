@@ -83,7 +83,7 @@ func TestOCIAnnotationsForManifest(t *testing.T) {
 		Author:      "Test Author",
 		License:     "Apache-2.0",
 		Type:        TypeLua,
-		FilterType:  FilterTypeNetwork,
+		FilterTypes: []FilterType{FilterTypeHTTP, FilterTypeNetwork},
 		CShared:     true,
 	}
 
@@ -95,7 +95,7 @@ func TestOCIAnnotationsForManifest(t *testing.T) {
 	require.Equal(t, "Test Author", annotations[ocispec.AnnotationAuthors])
 	require.Equal(t, "Apache-2.0", annotations[ocispec.AnnotationLicenses])
 	require.Equal(t, "lua", annotations[OCIAnnotationExtensionType])
-	require.Equal(t, "network", annotations[OCIAnnotationFilterType])
+	require.Equal(t, "http,network", annotations[OCIAnnotationFilterType])
 	require.Equal(t, "true", annotations[OCIAnnotationCShared])
 }
 
@@ -109,7 +109,7 @@ func TestManifestFromOCI(t *testing.T) {
 				ocispec.AnnotationAuthors:     "Test Author",
 				ocispec.AnnotationLicenses:    "Apache-2.0",
 				OCIAnnotationExtensionType:    "lua",
-				OCIAnnotationFilterType:       "network",
+				OCIAnnotationFilterType:       "http,network",
 				OCIAnnotationCShared:          "true",
 			},
 		}
@@ -122,7 +122,9 @@ func TestManifestFromOCI(t *testing.T) {
 		require.Equal(t, "Test Author", manifest.Author)
 		require.Equal(t, "Apache-2.0", manifest.License)
 		require.Equal(t, TypeLua, manifest.Type)
-		require.Equal(t, FilterTypeNetwork, manifest.FilterType)
+		require.Len(t, manifest.FilterTypes, 2)
+		require.Equal(t, FilterTypeHTTP, manifest.FilterTypes[0])
+		require.Equal(t, FilterTypeNetwork, manifest.FilterTypes[1])
 		require.True(t, manifest.CShared)
 	})
 
@@ -146,6 +148,7 @@ func TestManifestFromOCI(t *testing.T) {
 		require.Equal(t, "Test Author", manifest.Author)
 		require.Equal(t, "Apache-2.0", manifest.License)
 		require.Equal(t, TypeLua, manifest.Type)
-		require.Equal(t, FilterTypeHTTP, manifest.FilterType) // Default filter type
+		require.Len(t, manifest.FilterTypes, 1)
+		require.Equal(t, FilterTypeHTTP, manifest.FilterTypes[0]) // Default filter type
 	})
 }

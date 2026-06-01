@@ -12,7 +12,7 @@ description: A test extension
 longDescription: |
   Invalid: a Rust network filter has no HTTP anchor for nativeHttpFilters.
 type: rust
-filterType: network
+filterType: [network]
 tags:
   - test
 license: Apache-2.0

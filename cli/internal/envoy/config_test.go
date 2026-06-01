@@ -14,7 +14,10 @@ import (
 	"strings"
 	"testing"
 
+	bootstrapv3 "github.com/envoyproxy/go-control-plane/envoy/config/bootstrap/v3"
 	clusterv3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
+	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	listenerv3 "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
 	dymv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/dynamic_modules/v3"
 	dymhttpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/dynamic_modules/v3"
 	routerv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/router/v3"
@@ -1289,6 +1292,111 @@ func TestRenderConfigWithNativeHTTPFiltersAfterOverride(t *testing.T) {
 			require.YAMLEq(t, tt.expect, result)
 		})
 	}
+}
+
+func TestGenerateConfigFilterTypeOverrideRequired(t *testing.T) {
+	multiTypeManifest := &extensions.Manifest{
+		Name:        "test-multi",
+		Type:        extensions.TypeRust,
+		FilterTypes: []extensions.FilterType{extensions.FilterTypeHTTP, extensions.FilterTypeNetwork},
+	}
+
+	tests := []struct {
+		name        string
+		filterTypes []string
+		expectedErr string
+	}{
+		{
+			name:        "no override provided",
+			filterTypes: nil,
+			expectedErr: `failed to generate config resources: extension "test-multi" defines multiple filter types but no filter-type override was provided for its position; filter types: [http network]`,
+		},
+		{
+			name:        "empty override for position",
+			filterTypes: []string{""},
+			expectedErr: `failed to generate config resources: extension "test-multi" defines multiple filter types but no filter-type override was provided for its position; filter types: [http network]`,
+		},
+		{
+			name:        "override provided",
+			filterTypes: []string{"http"},
+			expectedErr: "",
+		},
+		{
+			name:        "override not in declared filter types",
+			filterTypes: []string{"udp_listener"},
+			expectedErr: `failed to generate config resources: invalid filter type override "udp_listener" for extension "test-multi": not one of the manifest-defined filter types [http network]`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			params := &ConfigGenerationParams{
+				Logger:       internaltesting.NewTLogger(t),
+				AdminAddress: "127.0.0.1:9901",
+				ListenerPort: 10000,
+				Extensions:   []*extensions.Manifest{multiTypeManifest},
+				FilterTypes:  tt.filterTypes,
+			}
+			_, err := RenderConfig(params, MinimalConfigRenderer)
+			if tt.expectedErr != "" {
+				require.ErrorContains(t, err, tt.expectedErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestRenderConfigUDPListener verifies that a udp_listener extension is routed into
+// UDPListenerFilters and that FullConfigRenderer stands up a dedicated UDP listener
+// (protocol UDP + udp_listener_config) to host it, separate from the TCP listener.
+func TestRenderConfigUDPListener(t *testing.T) {
+	manifest := &extensions.Manifest{
+		Name:        "dns-gateway",
+		Type:        extensions.TypeRust,
+		FilterTypes: []extensions.FilterType{extensions.FilterTypeUDPListener},
+	}
+	params := &ConfigGenerationParams{
+		Logger:       internaltesting.NewTLogger(t),
+		AdminAddress: "127.0.0.1:9901",
+		ListenerPort: 10000,
+		Extensions:   []*extensions.Manifest{manifest},
+	}
+
+	// The udp_listener filter must land in UDPListenerFilters, not the TCP ListenerFilters.
+	gen, err := generateConfig(params)
+	require.NoError(t, err)
+	require.Len(t, gen.UDPListenerFilters, 1)
+	require.Empty(t, gen.ListenerFilters)
+
+	out, err := RenderConfig(params, FullConfigRenderer)
+	require.NoError(t, err)
+
+	jsonBytes, err := yaml.YAMLToJSON([]byte(out))
+	require.NoError(t, err)
+	var bootstrap bootstrapv3.Bootstrap
+	require.NoError(t, protojson.Unmarshal(jsonBytes, &bootstrap))
+
+	listeners := bootstrap.GetStaticResources().GetListeners()
+	require.Len(t, listeners, 2, "expected a TCP listener and a UDP listener")
+
+	var udp, tcp *listenerv3.Listener
+	for _, l := range listeners {
+		if l.GetAddress().GetSocketAddress().GetProtocol() == corev3.SocketAddress_UDP {
+			udp = l
+		} else {
+			tcp = l
+		}
+	}
+
+	require.NotNil(t, udp, "expected a UDP listener")
+	require.NotNil(t, udp.GetUdpListenerConfig(), "UDP listener must set udp_listener_config")
+	require.Equal(t, params.ListenerPort, udp.GetAddress().GetSocketAddress().GetPortValue())
+	require.Len(t, udp.GetListenerFilters(), 1)
+	require.Equal(t, manifest.Name, udp.GetListenerFilters()[0].GetName())
+
+	require.NotNil(t, tcp, "expected a TCP listener")
+	require.Empty(t, tcp.GetListenerFilters(), "TCP listener must not host UDP listener filters")
 }
 
 // requireEqualError compares error strings while normalizing protobuf NBSP output.
