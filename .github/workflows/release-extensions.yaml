@@ -58,13 +58,13 @@ jobs:
             ext_path=$(echo "$manifest" | cut -d'/' -f2)
             
             # Read name and type from manifest
-            ext_name=$(grep "^name:" "$manifest" | sed 's/name: *//' | tr -d '\r')
-            type=$(grep "^type:" "$manifest" | sed 's/type: *//' | tr -d '\r')
+            ext_name=$(yq '.name' "$manifest")
+            type=$(yq '.type' "$manifest")
             
             # Get old and new versions
             # For new extensions, old_version will be empty string
-            old_version=$(git show HEAD~1:"$manifest" 2>/dev/null | grep '^version:' | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"' || echo "")
-            new_version=$(grep '^version:' "$manifest" | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"' || echo "")
+            old_version=$(git show HEAD~1:"$manifest" 2>/dev/null | yq '.version' || echo "")
+            new_version=$(yq '.version' "$manifest")
             
             echo "Extension: $ext_name (type=$type, path=$ext_path)"
             echo "Old version: ${old_version:-<new extension>}"

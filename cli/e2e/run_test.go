@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal"
@@ -33,11 +32,8 @@ func TestDefaultProxy(t *testing.T) {
 	proxyPort, adminPort := ports[0], ports[1]
 	internaltesting.RunEnvoy(t, cliBin, proxyPort, adminPort)
 
-	ctx, cancel := context.WithTimeout(t.Context(), defaultRequestTimeout)
-	t.Cleanup(cancel)
-
-	require.NoError(t, internaltesting.CheckGet(ctx, fmt.Sprintf("http://localhost:%d/status/200", proxyPort), internaltesting.EqualStatus(200)))
-	require.NoError(t, internaltesting.CheckGet(ctx, fmt.Sprintf("http://localhost:%d/server_info", adminPort), internaltesting.EqualStatus(200)))
+	internaltesting.RequireEventuallyGet(t, fmt.Sprintf("http://localhost:%d/status/200", proxyPort), internaltesting.EqualStatus(200))
+	internaltesting.RequireEventuallyGet(t, fmt.Sprintf("http://localhost:%d/server_info", adminPort), internaltesting.EqualStatus(200))
 }
 
 func TestCustomPorts(t *testing.T) {
@@ -45,11 +41,8 @@ func TestCustomPorts(t *testing.T) {
 	proxyPort, adminPort := ports[0], ports[1]
 	internaltesting.RunEnvoy(t, cliBin, proxyPort, adminPort)
 
-	ctx, cancel := context.WithTimeout(t.Context(), defaultRequestTimeout)
-	t.Cleanup(cancel)
-
-	require.NoError(t, internaltesting.CheckGet(ctx, fmt.Sprintf("http://localhost:%d/status/200", proxyPort), internaltesting.EqualStatus(200)))
-	require.NoError(t, internaltesting.CheckGet(ctx, fmt.Sprintf("http://localhost:%d/server_info", adminPort), internaltesting.EqualStatus(200)))
+	internaltesting.RequireEventuallyGet(t, fmt.Sprintf("http://localhost:%d/status/200", proxyPort), internaltesting.EqualStatus(200))
+	internaltesting.RequireEventuallyGet(t, fmt.Sprintf("http://localhost:%d/server_info", adminPort), internaltesting.EqualStatus(200))
 }
 
 func TestLuaRemoteExecution(t *testing.T) {
@@ -62,15 +55,11 @@ func TestLuaRemoteExecution(t *testing.T) {
 	proxyPort := ports[0]
 	internaltesting.RunEnvoy(t, cliBin, proxyPort, ports[1], "--log-level", "lua:info", "--extension", "example-lua")
 
-	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
-	checkHeader := func(r *http.Response) bool {
-		return r.Header.Get("x-lua-response-processed") == "true"
-	}
-
-	ctx, cancel := context.WithTimeout(t.Context(), defaultRequestTimeout)
-	t.Cleanup(cancel)
-
-	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
+	internaltesting.RequireEventuallyGet(t,
+		fmt.Sprintf("http://localhost:%d/status/200", proxyPort),
+		func(r *http.Response) bool {
+			return r.Header.Get("x-lua-response-processed") == "true"
+		})
 }
 
 func TestDevEnvoyVersion(t *testing.T) {
@@ -78,10 +67,7 @@ func TestDevEnvoyVersion(t *testing.T) {
 	proxyPort, adminPort := ports[0], ports[1]
 	internaltesting.RunEnvoy(t, cliBin, proxyPort, adminPort, "--envoy-version", "dev-latest")
 
-	ctx, cancel := context.WithTimeout(t.Context(), defaultRequestTimeout)
-	t.Cleanup(cancel)
-
-	require.NoError(t, internaltesting.CheckGet(ctx, fmt.Sprintf("http://localhost:%d/status/200", proxyPort), internaltesting.EqualStatus(200)))
+	internaltesting.RequireEventuallyGet(t, fmt.Sprintf("http://localhost:%d/status/200", proxyPort), internaltesting.EqualStatus(200))
 }
 
 func TestLuaLocalExtension(t *testing.T) {
@@ -92,15 +78,11 @@ func TestLuaLocalExtension(t *testing.T) {
 		"--local", "../../extensions/example-lua",
 	)
 
-	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
-	checkHeader := func(r *http.Response) bool {
-		return r.Header.Get("x-lua-response-processed") == "true"
-	}
-
-	ctx, cancel := context.WithTimeout(t.Context(), defaultRequestTimeout)
-	t.Cleanup(cancel)
-
-	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
+	internaltesting.RequireEventuallyGet(t,
+		fmt.Sprintf("http://localhost:%d/status/200", proxyPort),
+		func(r *http.Response) bool {
+			return r.Header.Get("x-lua-response-processed") == "true"
+		})
 }
 
 func TestDockerRemoteExtension(t *testing.T) {
@@ -116,17 +98,11 @@ func TestDockerRemoteExtension(t *testing.T) {
 		"--log-level", "dynamic_modules:debug",
 		"--extension", "example-go:0.3.0")
 
-	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
-	checkHeader := func(r *http.Response) bool {
-		return r.Header.Get("x-example-response-header") == "example-value"
-	}
-
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		ctx, cancel := context.WithTimeout(t.Context(), defaultRequestTimeout)
-		defer cancel()
-
-		assert.NoError(c, internaltesting.CheckGet(ctx, url, checkHeader))
-	}, 2*time.Minute, 200*time.Millisecond)
+	internaltesting.RequireEventuallyGet(t,
+		fmt.Sprintf("http://localhost:%d/status/200", proxyPort),
+		func(r *http.Response) bool {
+			return r.Header.Get("x-example-response-header") == "example-value"
+		})
 }
 
 func TestRustRemoteExtension(t *testing.T) {
@@ -143,9 +119,6 @@ func TestRustRemoteExtension(t *testing.T) {
 
 	// Set X-Forwarded-For header to an IP address that should be denied by the ip-restriction extension.
 	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
-	checkDenied := func(r *http.Response) bool {
-		return r.StatusCode == http.StatusForbidden
-	}
 
 	ctx, cancel := context.WithTimeout(t.Context(), defaultRequestTimeout)
 	t.Cleanup(cancel)
@@ -154,7 +127,9 @@ func TestRustRemoteExtension(t *testing.T) {
 	require.NoError(t, err)
 	req.Header.Set("X-Forwarded-For", "192.168.1.50")
 
-	require.NoError(t, internaltesting.CheckRequest(req, checkDenied))
+	internaltesting.RequireEventuallyRequest(t, req, func(r *http.Response) bool {
+		return r.StatusCode == http.StatusForbidden
+	})
 }
 
 func TestRustLocalExtension(t *testing.T) {
@@ -178,16 +153,12 @@ func TestRustLocalExtension(t *testing.T) {
 		"--local", dataDir+"/rust-e2e",
 	)
 
-	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
-	checkHeader := func(r *http.Response) bool {
-		headerValues, ok := r.Header[http.CanonicalHeaderKey("x-rust-e2e")]
-		return ok && headerValues[0] == "example"
-	}
-
-	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
-	t.Cleanup(cancel)
-
-	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
+	internaltesting.RequireEventuallyGet(t,
+		fmt.Sprintf("http://localhost:%d/status/200", proxyPort),
+		func(r *http.Response) bool {
+			headerValues, ok := r.Header[http.CanonicalHeaderKey("x-rust-e2e")]
+			return ok && headerValues[0] == "example"
+		})
 }
 
 func TestExtProcLocalExtension(t *testing.T) {
@@ -196,15 +167,11 @@ func TestExtProcLocalExtension(t *testing.T) {
 	internaltesting.RunEnvoy(t, cliBin, proxyPort, ports[1], "--log-level",
 		"ext_proc:debug", "--local", "../../extensions/example-ext-proc")
 
-	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
-	checkHeader := func(r *http.Response) bool {
-		return r.Header.Get("x-ext-proc") == "processed"
-	}
-
-	ctx, cancel := context.WithTimeout(t.Context(), defaultRequestTimeout)
-	t.Cleanup(cancel)
-
-	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
+	internaltesting.RequireEventuallyGet(t,
+		fmt.Sprintf("http://localhost:%d/status/200", proxyPort),
+		func(r *http.Response) bool {
+			return r.Header.Get("x-ext-proc") == "processed"
+		})
 }
 
 func TestExtProcRemoteExtension(t *testing.T) {
@@ -218,15 +185,11 @@ func TestExtProcRemoteExtension(t *testing.T) {
 	internaltesting.RunEnvoy(t, cliBin, proxyPort, ports[1], "--log-level",
 		"ext_proc:debug", "--extension", "example-ext-proc")
 
-	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
-	checkHeader := func(r *http.Response) bool {
-		return r.Header.Get("x-ext-proc") == "processed"
-	}
-
-	ctx, cancel := context.WithTimeout(t.Context(), defaultRequestTimeout)
-	t.Cleanup(cancel)
-
-	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
+	internaltesting.RequireEventuallyGet(t,
+		fmt.Sprintf("http://localhost:%d/status/200", proxyPort),
+		func(r *http.Response) bool {
+			return r.Header.Get("x-ext-proc") == "processed"
+		})
 }
 
 func TestLocalGoExtension(t *testing.T) {
@@ -276,20 +239,16 @@ func testLocalGoExtension(t *testing.T, removeCSharedMain bool) {
 		"--log-level", "dynamic_modules:debug",
 	)
 
-	// For the response, the execution order of the extensions is in reverse order of the
-	// declaration order, so the header from the second extension should come first.
-	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
-	checkHeader := func(r *http.Response) bool {
-		headerValues, ok := r.Header[http.CanonicalHeaderKey("x-go-e2e")]
-		return ok && len(headerValues) == 2 &&
-			headerValues[0] == "configured-value" &&
-			headerValues[1] == "example"
-	}
-
-	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
-	t.Cleanup(cancel)
-
-	require.NoError(t, internaltesting.CheckGet(ctx, url, checkHeader))
+	internaltesting.RequireEventuallyGet(t,
+		fmt.Sprintf("http://localhost:%d/status/200", proxyPort),
+		func(r *http.Response) bool {
+			// For the response, the execution order of the extensions is in reverse order of the
+			// declaration order, so the header from the second extension should come first.
+			headerValues, ok := r.Header[http.CanonicalHeaderKey("x-go-e2e")]
+			return ok && len(headerValues) == 2 &&
+				headerValues[0] == "configured-value" &&
+				headerValues[1] == "example"
+		})
 }
 
 func addDummyDependencyToExtension(t *testing.T, path string) {

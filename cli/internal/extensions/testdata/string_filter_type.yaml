@@ -1,0 +1,25 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# This manifest uses the old single-string form of filterType (not a list)
+# to test backward-compatible unmarshaling.
+name: test-extension-string-filter
+version: 1.0.0
+categories:
+  - Security
+author: Test Author
+description: A test extension with a scalar filterType
+longDescription: |
+  Test extension for backward-compatible filterType unmarshaling.
+type: wasm
+filterType: network
+tags:
+  - test
+license: Apache-2.0
+examples:
+  - title: Basic usage
+    description: Run the extension
+    code: |
+      boe run --extension test-extension-string-filter

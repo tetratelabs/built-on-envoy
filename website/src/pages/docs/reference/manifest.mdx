@@ -215,13 +215,14 @@ Whether to feature this extension in UI/listings.
 
 ### filterType
 
-Envoy filter type. Defaults to `http` if not specified.
+Envoy filter types. Defaults to `[http]` if not specified.
 
 | | |
 |---|---|
-| **Type** | `string` |
+| **Type** | `[]string` |
 | **Required** | No |
 | **Allowed values** | `http`, `network`, `listener`, `udp_listener` |
+| **Unique items** | Yes |
 
 [↑ Top](#) | [↑ Extension Manifest](#reference) {/* if .SubProperties */}
 
@@ -337,7 +338,6 @@ Native Envoy HTTP filters that BOE must emit in the HCM filter chain together wi
 |---|---|
 | **Type** | `object` |
 | **Required** | No |
-| **Forbidden when** | `filterType` is set |
 | **Forbidden when** | `type` is `wasm` |
 | **Forbidden when** | `type` is `composer` |
 

@@ -24,12 +24,12 @@ endif
 BOE_DATA_HOME ?= $(HOME)/.local/share/boe
 
 # Labels for this plugin image.
-NAME             := $(shell grep "^name:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-VERSION          := $(shell grep "^version:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
-DESCRIPTION      := $(shell grep "^description:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+NAME             := $(shell $(GO_TOOL) yq '.name' manifest.yaml)
+VERSION          := $(shell $(GO_TOOL) yq '.version' manifest.yaml)
+DESCRIPTION      := $(shell $(GO_TOOL) yq '.description' manifest.yaml)
 TIMESTAMP        := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 COMMIT_SHA       := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
-AUTHOR           := $(shell grep "^author:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' | tr -d '"')
+AUTHOR           := $(shell $(GO_TOOL) yq '.author' manifest.yaml)
 COMPOSER_VERSION := $(VERSION)
 LICENSE          := Apache-2.0
 

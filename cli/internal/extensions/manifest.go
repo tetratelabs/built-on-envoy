@@ -32,19 +32,19 @@ type (
 		// When set, the version field can be omitted.
 		Parent string `yaml:"parent,omitempty" json:"parent,omitempty"`
 		// ExtensionSet indicates this manifest defines a set of extensions.
-		ExtensionSet    bool       `yaml:"extensionSet,omitempty" json:"extensionSet,omitempty"`
-		Categories      []string   `yaml:"categories" json:"categories"`
-		Author          string     `yaml:"author" json:"author"`
-		Featured        bool       `yaml:"featured" json:"featured,omitempty"`
-		Description     string     `yaml:"description" json:"description"`
-		LongDescription string     `yaml:"longDescription" json:"longDescription"`
-		Type            Type       `yaml:"type" json:"type"`
-		FilterType      FilterType `yaml:"filterType,omitempty" json:"filterType,omitempty"`
-		Tags            []string   `yaml:"tags" json:"tags"`
-		License         string     `yaml:"license" json:"license"`
-		Examples        []Example  `yaml:"examples" json:"examples"`
-		MinEnvoyVersion string     `yaml:"minEnvoyVersion,omitempty" json:"minEnvoyVersion,omitempty"`
-		MaxEnvoyVersion string     `yaml:"maxEnvoyVersion,omitempty" json:"maxEnvoyVersion,omitempty"`
+		ExtensionSet    bool         `yaml:"extensionSet,omitempty" json:"extensionSet,omitempty"`
+		Categories      []string     `yaml:"categories" json:"categories"`
+		Author          string       `yaml:"author" json:"author"`
+		Featured        bool         `yaml:"featured" json:"featured,omitempty"`
+		Description     string       `yaml:"description" json:"description"`
+		LongDescription string       `yaml:"longDescription" json:"longDescription"`
+		Type            Type         `yaml:"type" json:"type"`
+		FilterTypes     []FilterType `yaml:"filterType,omitempty" json:"filterType,omitempty"`
+		Tags            []string     `yaml:"tags" json:"tags"`
+		License         string       `yaml:"license" json:"license"`
+		Examples        []Example    `yaml:"examples" json:"examples"`
+		MinEnvoyVersion string       `yaml:"minEnvoyVersion,omitempty" json:"minEnvoyVersion,omitempty"`
+		MaxEnvoyVersion string       `yaml:"maxEnvoyVersion,omitempty" json:"maxEnvoyVersion,omitempty"`
 
 		// ComposerVersion specifies the compatible Composer dynamic module version
 		// for Composer go plugins.
@@ -175,10 +175,40 @@ func ImplicitMaxEnvoyVersion(minVersion string) string {
 	return fmt.Sprintf("%s.%d.0", parts[0], minor+1)
 }
 
+// UnmarshalYAML implements yaml.Unmarshaler to handle backward-compatible
+// deserialization of the filterType field. Old manifests may set filterType to a
+// single string (e.g. `filterType: http`) rather than a list. This method
+// transparently promotes the scalar to a one-element sequence before standard
+// struct decoding.
+func (m *Manifest) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(value.Content); i += 2 {
+			if value.Content[i].Value == "filterType" {
+				v := value.Content[i+1]
+				if v.Kind == yaml.ScalarNode {
+					value.Content[i+1] = &yaml.Node{
+						Kind:    yaml.SequenceNode,
+						Content: []*yaml.Node{v},
+					}
+				}
+				break
+			}
+		}
+	}
+	// Use a type alias to avoid infinite recursion when decoding.
+	type manifestAlias Manifest
+	var alias manifestAlias
+	if err := value.Decode(&alias); err != nil {
+		return err
+	}
+	*m = Manifest(alias)
+	return nil
+}
+
 // ApplyDefaults applies default values to the manifest fields.
 func (m *Manifest) ApplyDefaults() {
-	if m.FilterType == "" {
-		m.FilterType = FilterTypeHTTP
+	if len(m.FilterTypes) == 0 {
+		m.FilterTypes = []FilterType{FilterTypeHTTP}
 	}
 	if m.MinEnvoyVersion != "" && m.MaxEnvoyVersion == "" {
 		m.MaxEnvoyVersion = ImplicitMaxEnvoyVersion(m.MinEnvoyVersion)
@@ -425,8 +455,8 @@ func validateNativeHTTPFilters(m *Manifest) error {
 		return nil
 	}
 	if !hasHTTPAnchor(m) {
-		return fmt.Errorf("%w: nativeHttpFilters requires an extension that generates an HTTP filter; %q with filterType %q has no HTTP anchor",
-			ErrInvalidNativeHTTPFilters, m.Type, m.FilterType)
+		return fmt.Errorf("%w: nativeHttpFilters requires an extension that generates an HTTP filter; %q with filterTypes %v has no HTTP anchor",
+			ErrInvalidNativeHTTPFilters, m.Type, m.FilterTypes)
 	}
 	seen := make(map[string]struct{}, len(m.NativeHTTPFilters.Before)+len(m.NativeHTTPFilters.After))
 	for _, list := range []struct {
@@ -469,13 +499,13 @@ func validateNativeHTTPFilters(m *Manifest) error {
 // hasHTTPAnchor reports whether the extension produces an HTTP filter for
 // nativeHttpFilters.before to attach to. Mirrors the generator switch in
 // cli/internal/envoy/extension.go: lua/go/ext_proc always do, rust does only
-// when filterType is http (the default), wasm and composer never do.
+// when filterTypes contains http, wasm and composer never do.
 func hasHTTPAnchor(m *Manifest) bool {
 	switch m.Type {
 	case TypeLua, TypeGo, TypeExtProc:
 		return true
 	case TypeRust:
-		return m.FilterType == "" || m.FilterType == FilterTypeHTTP
+		return len(m.FilterTypes) == 0 || slices.Contains(m.FilterTypes, FilterTypeHTTP)
 	case TypeWasm, TypeComposer:
 		return false
 	default:
