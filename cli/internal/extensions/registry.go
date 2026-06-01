@@ -66,6 +66,10 @@ func SourceRepositoryName(registry string, manifest *Manifest) string {
 // OCIAnnotationsForManifest generates standard OCI image annotations
 // from the given extension manifest.
 func OCIAnnotationsForManifest(manifest *Manifest) map[string]string {
+	filterTypes := make([]string, len(manifest.FilterTypes))
+	for i, ft := range manifest.FilterTypes {
+		filterTypes[i] = string(ft)
+	}
 	return map[string]string{
 		ocispec.AnnotationTitle:       manifest.Name,
 		ocispec.AnnotationDescription: manifest.Description,
@@ -74,13 +78,21 @@ func OCIAnnotationsForManifest(manifest *Manifest) map[string]string {
 		ocispec.AnnotationAuthors:     manifest.Author,
 		ocispec.AnnotationLicenses:    manifest.License,
 		OCIAnnotationExtensionType:    string(manifest.Type),
-		OCIAnnotationFilterType:       string(manifest.FilterType),
+		OCIAnnotationFilterType:       strings.Join(filterTypes, ","),
 		OCIAnnotationCShared:          strconv.FormatBool(manifest.CShared),
 	}
 }
 
 // ManifestFromOCI converts an OCI manifest to an extension manifest.
 func ManifestFromOCI(manifest *ocispec.Manifest) *Manifest {
+	var filterTypes []FilterType
+	if raw := manifest.Annotations[OCIAnnotationFilterType]; raw != "" {
+		parts := strings.Split(raw, ",")
+		filterTypes = make([]FilterType, len(parts))
+		for i, p := range parts {
+			filterTypes[i] = FilterType(strings.TrimSpace(p))
+		}
+	}
 	fromOCI := &Manifest{
 		Name:            manifest.Annotations[ocispec.AnnotationTitle],
 		Description:     manifest.Annotations[ocispec.AnnotationDescription],
@@ -89,7 +101,7 @@ func ManifestFromOCI(manifest *ocispec.Manifest) *Manifest {
 		Author:          manifest.Annotations[ocispec.AnnotationAuthors],
 		License:         manifest.Annotations[ocispec.AnnotationLicenses],
 		Type:            Type(manifest.Annotations[OCIAnnotationExtensionType]),
-		FilterType:      FilterType(manifest.Annotations[OCIAnnotationFilterType]),
+		FilterTypes:     filterTypes,
 		CShared:         manifest.Annotations[OCIAnnotationCShared] == "true",
 	}
 	fromOCI.ApplyDefaults()

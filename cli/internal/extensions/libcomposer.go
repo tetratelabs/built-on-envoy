@@ -123,6 +123,7 @@ func BuildLibComposer(logger *slog.Logger, dirs *xdg.Directories, composerSrcPat
 	cmd := exec.Command("make",
 		"install",
 		"BOE_DATA_HOME="+dirs.DataHome,
+		"NAME=composer",
 		"COMPOSER_LITE=true",
 		"VERSION="+version,
 	)

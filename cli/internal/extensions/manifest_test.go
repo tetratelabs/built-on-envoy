@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
@@ -615,7 +616,7 @@ func TestLoadLocalManifest(t *testing.T) {
 			Description:     "A test extension",
 			LongDescription: "This is a longer description of the test extension.\n",
 			Type:            TypeWasm,
-			FilterType:      FilterTypeHTTP,
+			FilterTypes:     []FilterType{FilterTypeHTTP},
 			Tags:            []string{"test"},
 			License:         "Apache-2.0",
 			Examples: []Example{
@@ -638,6 +639,54 @@ func TestLoadLocalManifest(t *testing.T) {
 		_, err := LoadLocalManifest(filepath.Join("testdata", "invalid_manifest.yaml"))
 		require.ErrorIs(t, err, ErrParseManifestFile)
 	})
+
+	t.Run("scalar filterType is normalized to list", func(t *testing.T) {
+		manifestPath := filepath.Join("testdata", "string_filter_type.yaml")
+		localManifest, err := LoadLocalManifest(manifestPath)
+		require.NoError(t, err)
+		require.Equal(t, []FilterType{FilterTypeNetwork}, localManifest.FilterTypes)
+	})
+}
+
+func TestManifestFilterTypeUnmarshal(t *testing.T) {
+	tests := []struct {
+		name      string
+		yaml      string
+		wantTypes []FilterType
+	}{
+		{
+			name:      "scalar string is promoted to single-element list",
+			yaml:      `filterType: http`,
+			wantTypes: []FilterType{FilterTypeHTTP},
+		},
+		{
+			name:      "scalar network string is promoted to single-element list",
+			yaml:      `filterType: network`,
+			wantTypes: []FilterType{FilterTypeNetwork},
+		},
+		{
+			name:      "single-element list is decoded normally",
+			yaml:      `filterType: [http]`,
+			wantTypes: []FilterType{FilterTypeHTTP},
+		},
+		{
+			name:      "multi-element list is decoded normally",
+			yaml:      `filterType: [http, network]`,
+			wantTypes: []FilterType{FilterTypeHTTP, FilterTypeNetwork},
+		},
+		{
+			name:      "absent filterType yields nil (ApplyDefaults fills it in separately)",
+			yaml:      `type: wasm`,
+			wantTypes: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var m Manifest
+			require.NoError(t, yaml.Unmarshal([]byte(tt.yaml), &m))
+			require.Equal(t, tt.wantTypes, m.FilterTypes)
+		})
+	}
 }
 
 func TestFindLocalParentManifest(t *testing.T) {
@@ -801,11 +850,9 @@ func TestValidateNativeHTTPFilters(t *testing.T) {
 			expectedErr: `validation failed for manifest native_http_filters_duplicate_name.yaml: invalid nativeHttpFilters: nativeHttpFilters contains duplicate name "envoy.filters.http.mcp"`,
 		},
 		{
-			name:    "rust network type rejected",
-			fixture: "native_http_filters_on_rust_network_type.yaml",
-			expectedErr: `validation failed for manifest native_http_filters_on_rust_network_type.yaml: jsonschema validation failed with 'SCHEMA#'
-- at '': 'allOf' failed
-  - at '/nativeHttpFilters': false schema`,
+			name:        "rust network type rejected",
+			fixture:     "native_http_filters_on_rust_network_type.yaml",
+			expectedErr: `validation failed for manifest native_http_filters_on_rust_network_type.yaml: invalid nativeHttpFilters: nativeHttpFilters requires an extension that generates an HTTP filter; "rust" with filterTypes [network] has no HTTP anchor`,
 		},
 		{
 			name:    "wasm type rejected",
@@ -937,7 +984,7 @@ func TestValidateNativeHTTPFiltersSemanticErrors(t *testing.T) {
 					}},
 				},
 			},
-			expectedErr: "invalid nativeHttpFilters: nativeHttpFilters requires an extension that generates an HTTP filter; \"wasm\" with filterType \"\" has no HTTP anchor",
+			expectedErr: "invalid nativeHttpFilters: nativeHttpFilters requires an extension that generates an HTTP filter; \"wasm\" with filterTypes [] has no HTTP anchor",
 		},
 		{
 			name: "after: missing name",
@@ -1026,12 +1073,12 @@ func TestHasHTTPAnchor(t *testing.T) {
 		},
 		{
 			name:     "rust explicit http",
-			manifest: &Manifest{Type: TypeRust, FilterType: FilterTypeHTTP},
+			manifest: &Manifest{Type: TypeRust, FilterTypes: []FilterType{FilterTypeHTTP}},
 			expect:   true,
 		},
 		{
 			name:     "rust network",
-			manifest: &Manifest{Type: TypeRust, FilterType: FilterTypeNetwork},
+			manifest: &Manifest{Type: TypeRust, FilterTypes: []FilterType{FilterTypeNetwork}},
 			expect:   false,
 		},
 		{
