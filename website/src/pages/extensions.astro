@@ -17,6 +17,10 @@ const sortedTypes = [...new Set(extensions.map(ext => ext.type))]
 const sortedCategories = [...new Set(extensions.flatMap(ext => ext.categories))]
 	.sort((a, b) => a.localeCompare(b));
 
+// Collect unique filterTypes from extensions and sort alphabetically
+const sortedFilterTypes = [...new Set(extensions.flatMap(ext => ext.filterType))]
+	.sort((a, b) => a.localeCompare(b));
+
 // Helper function to format type names (snake_case to Title Case)
 function formatTypeName(type: string): string {
 	return type
@@ -69,6 +73,14 @@ function formatTypeName(type: string): string {
 								))}
 							</select>
 						</div>
+						<div class="filter-type-filter">
+							<select id="filter-type-filter" aria-label="Filter by filter type">
+								<option value="">All Filter Types</option>
+								{sortedFilterTypes.map(filterType => (
+									<option value={filterType}>{formatTypeName(filterType)}</option>
+								))}
+							</select>
+						</div>
 					</div>
 				</div>
 			</section>
@@ -87,6 +99,7 @@ function formatTypeName(type: string): string {
 											description={ext.description}
 											href={`/extensions/${ext.name}`}
 											tags={ext.tags}
+											filterTypes={ext.filterType}
 										/>
 									</div>
 								))}
@@ -114,6 +127,7 @@ function formatTypeName(type: string): string {
 			const searchInput = document.getElementById('search-input') as HTMLInputElement;
 			const typeFilter = document.getElementById('type-filter') as HTMLSelectElement;
 			const categoryFilter = document.getElementById('category-filter') as HTMLSelectElement;
+			const filterTypeFilter = document.getElementById('filter-type-filter') as HTMLSelectElement;
 			const extensionsGrid = document.getElementById('extensions-grid');
 			const noResults = document.getElementById('no-results');
 
@@ -121,6 +135,7 @@ function formatTypeName(type: string): string {
 				const searchTerm = searchInput?.value.toLowerCase() || '';
 				const selectedType = typeFilter?.value || '';
 				const selectedCategory = categoryFilter?.value || '';
+				const selectedFilterType = filterTypeFilter?.value || '';
 
 				const cardWrappers = extensionsGrid?.querySelectorAll('[data-categories]');
 				let visibleCount = 0;
@@ -132,6 +147,7 @@ function formatTypeName(type: string): string {
 					const type = (card as HTMLElement)?.dataset.type || '';
 					const tags = (card as HTMLElement)?.dataset.tags?.toLowerCase() || '';
 					const categories = (wrapper as HTMLElement).dataset.categories?.split(',') || [];
+					const filterTypes = (card as HTMLElement)?.dataset.filterTypes?.split(',') || [];
 
 					const matchesSearch = searchTerm === '' ||
 						name.includes(searchTerm) ||
@@ -139,8 +155,9 @@ function formatTypeName(type: string): string {
 						tags.includes(searchTerm);
 					const matchesType = selectedType === '' || type === selectedType;
 					const matchesCategory = selectedCategory === '' || categories.includes(selectedCategory);
+					const matchesFilterType = selectedFilterType === '' || filterTypes.includes(selectedFilterType);
 
-					if (matchesSearch && matchesType && matchesCategory) {
+					if (matchesSearch && matchesType && matchesCategory && matchesFilterType) {
 						(wrapper as HTMLElement).style.display = '';
 						visibleCount++;
 					} else {
@@ -164,6 +181,7 @@ function formatTypeName(type: string): string {
 			searchInput?.addEventListener('input', filterExtensions);
 			typeFilter?.addEventListener('change', filterExtensions);
 			categoryFilter?.addEventListener('change', filterExtensions);
+			filterTypeFilter?.addEventListener('change', filterExtensions);
 		</script>
 	</body>
 </html>
