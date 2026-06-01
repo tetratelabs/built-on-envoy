@@ -23,8 +23,6 @@
 .filters {
 	display: flex;
 	gap: 16px;
-	max-width: 800px;
-	margin: 0 auto;
 }
 
 .search-box {
@@ -54,6 +52,7 @@
 }
 
 .type-filter select,
+.filter-type-filter select,
 .category-filter select {
 	padding: 14px 40px 14px 20px;
 	border: 2px solid var(--border);
@@ -72,6 +71,7 @@
 }
 
 .type-filter select:focus,
+.filter-type-filter select:focus,
 .category-filter select:focus {
 	outline: none;
 	border-color: var(--primary);
@@ -79,6 +79,7 @@
 }
 
 .type-filter select:hover,
+.filter-type-filter select:hover,
 .category-filter select:hover {
 	border-color: var(--primary-light);
 }
@@ -132,6 +133,7 @@
 	}
 
 	.type-filter select,
+	.filter-type-filter select,
 	.category-filter select {
 		width: 100%;
 		min-width: 0;

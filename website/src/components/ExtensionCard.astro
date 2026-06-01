@@ -6,15 +6,16 @@ interface Props {
 	description: string;
 	href: string;
 	tags?: string[];
+	filterTypes?: string[];
 }
 
-const { name, type, categories, description, href, tags = [] } = Astro.props;
+const { name, type, categories, description, href, tags = [], filterTypes = [] } = Astro.props;
 const sortedCategories = [...categories].sort((a, b) => a.localeCompare(b));
 const sortedTags = [...tags].sort((a, b) => a.localeCompare(b));
 ---
 
 <a href={href} class="extension-card-link">
-	<div class="extension-card" data-type={type} data-tags={tags.join(',')}>
+	<div class="extension-card" data-type={type} data-tags={tags.join(',')} data-filter-types={filterTypes.join(',')}>
 		<div class="extension-header">
 			<h3>{name}</h3>
 			<div class="extension-badges">
