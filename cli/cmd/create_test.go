@@ -52,8 +52,10 @@ Flags:
   -h, --help                       Show context-sensitive help.
 
       --type="go"                  Type of the extension (go, rust, ext_proc).
-      --filter-type="http"         Filter type (http, network). Network filters
-                                   are only supported for rust.
+      --filter-type="http"         Filter type (http, network, listener,
+                                   udp_listener). Network, listener, and
+                                   udp_listener filters are only supported for
+                                   rust.
       --path=STRING                Output directory for the extension. Defaults
                                    to the extension name.
       --composer-version=STRING    Composer version for Go extensions. Resolved
@@ -243,9 +245,10 @@ func TestCreateRust_Run(t *testing.T) {
 	name := "my-rust-extension"
 
 	c := &Create{
-		Type: "rust",
-		Name: name,
-		Path: tmpDir,
+		Type:       "rust",
+		FilterType: "http",
+		Name:       name,
+		Path:       tmpDir,
 	}
 
 	err := c.Run(t.Context(), &xdg.Directories{}, internaltesting.NewTLogger(t))
@@ -340,18 +343,108 @@ func TestCreateRust_NetworkFilter_Run(t *testing.T) {
 	assert.NotContains(t, string(libRs), "HttpFilterConfig")
 }
 
-func TestCreateGo_NetworkFilter_Unsupported(t *testing.T) {
-	for _, extensionType := range []string{"go", "ext_proc"} {
-		t.Run(extensionType, func(t *testing.T) {
-			c := &Create{
-				Type:       extensionType,
-				FilterType: "network",
-				Name:       "test-extension",
-			}
+func TestCreateRust_UdpListenerFilter_Run(t *testing.T) {
+	tmpDir := t.TempDir()
+	name := "my-udp-extension"
 
-			err := c.Validate()
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), fmt.Sprintf("network filter scaffolding is not supported for %q extensions", extensionType))
-		})
+	c := &Create{
+		Type:       "rust",
+		FilterType: "udp_listener",
+		Name:       name,
+		Path:       tmpDir,
+	}
+
+	err := c.Run(t.Context(), &xdg.Directories{}, internaltesting.NewTLogger(t))
+	require.NoError(t, err)
+
+	repoPath := filepath.Join(tmpDir, name)
+	require.DirExists(t, repoPath)
+
+	// verify manifest.yaml content
+	// #nosec G304
+	manifest, err := os.ReadFile(filepath.Join(repoPath, "manifest.yaml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(manifest), "name: "+name)
+	assert.Contains(t, string(manifest), "type: rust")
+	assert.Contains(t, string(manifest), "filterType: udp_listener")
+
+	// verify src/lib.rs contains udp listener filter constructs, not HTTP, network, or listener.
+	// #nosec G304
+	libRs, err := os.ReadFile(filepath.Join(repoPath, "src/lib.rs"))
+	require.NoError(t, err)
+	assert.Contains(t, string(libRs), "declare_udp_listener_filter_init_functions!")
+	assert.Contains(t, string(libRs), "UdpListenerFilterConfig")
+	assert.Contains(t, string(libRs), "fn on_data")
+	assert.NotContains(t, string(libRs), "declare_init_functions!")
+	assert.NotContains(t, string(libRs), "declare_network_filter_init_functions!")
+	assert.NotContains(t, string(libRs), "declare_listener_filter_init_functions!")
+	assert.NotContains(t, string(libRs), "HttpFilterConfig")
+	assert.NotContains(t, string(libRs), "NetworkFilterConfig")
+}
+
+func TestCreateRust_ListenerFilter_Run(t *testing.T) {
+	tmpDir := t.TempDir()
+	name := "my-listener-extension"
+
+	c := &Create{
+		Type:       "rust",
+		FilterType: "listener",
+		Name:       name,
+		Path:       tmpDir,
+	}
+
+	err := c.Run(t.Context(), &xdg.Directories{}, internaltesting.NewTLogger(t))
+	require.NoError(t, err)
+
+	repoPath := filepath.Join(tmpDir, name)
+	require.DirExists(t, repoPath)
+
+	// verify manifest.yaml content
+	// #nosec G304
+	manifest, err := os.ReadFile(filepath.Join(repoPath, "manifest.yaml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(manifest), "name: "+name)
+	assert.Contains(t, string(manifest), "type: rust")
+	assert.Contains(t, string(manifest), "filterType: listener")
+
+	// verify src/lib.rs contains listener filter constructs, not HTTP or network.
+	// #nosec G304
+	libRs, err := os.ReadFile(filepath.Join(repoPath, "src/lib.rs"))
+	require.NoError(t, err)
+	assert.Contains(t, string(libRs), "declare_listener_filter_init_functions!")
+	assert.Contains(t, string(libRs), "ListenerFilterConfig")
+	assert.Contains(t, string(libRs), "fn on_accept")
+	assert.NotContains(t, string(libRs), "declare_init_functions!")
+	assert.NotContains(t, string(libRs), "declare_network_filter_init_functions!")
+	assert.NotContains(t, string(libRs), "HttpFilterConfig")
+	assert.NotContains(t, string(libRs), "NetworkFilterConfig")
+}
+
+func TestValidate(t *testing.T) {
+	t.Run("valid", func(t *testing.T) {
+		c := &Create{
+			Type: "go",
+			Name: "test-extension",
+		}
+
+		err := c.Validate()
+		require.NoError(t, err)
+		require.Equal(t, "http", c.FilterType) // default filter type is set
+	})
+
+	for _, extensionType := range []string{"go", "ext_proc"} {
+		for _, filterType := range []string{"network", "listener", "udp_listener"} {
+			t.Run(fmt.Sprintf("invalid_%s_%s", extensionType, filterType), func(t *testing.T) {
+				c := &Create{
+					Type:       extensionType,
+					FilterType: filterType,
+					Name:       "test-extension",
+				}
+
+				err := c.Validate()
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), fmt.Sprintf("only http filter scaffolding is supported for %q extensions", extensionType))
+			})
+		}
 	}
 }
