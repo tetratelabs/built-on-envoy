@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
@@ -638,6 +639,54 @@ func TestLoadLocalManifest(t *testing.T) {
 		_, err := LoadLocalManifest(filepath.Join("testdata", "invalid_manifest.yaml"))
 		require.ErrorIs(t, err, ErrParseManifestFile)
 	})
+
+	t.Run("scalar filterType is normalized to list", func(t *testing.T) {
+		manifestPath := filepath.Join("testdata", "string_filter_type.yaml")
+		localManifest, err := LoadLocalManifest(manifestPath)
+		require.NoError(t, err)
+		require.Equal(t, []FilterType{FilterTypeNetwork}, localManifest.FilterTypes)
+	})
+}
+
+func TestManifestFilterTypeUnmarshal(t *testing.T) {
+	tests := []struct {
+		name      string
+		yaml      string
+		wantTypes []FilterType
+	}{
+		{
+			name:      "scalar string is promoted to single-element list",
+			yaml:      `filterType: http`,
+			wantTypes: []FilterType{FilterTypeHTTP},
+		},
+		{
+			name:      "scalar network string is promoted to single-element list",
+			yaml:      `filterType: network`,
+			wantTypes: []FilterType{FilterTypeNetwork},
+		},
+		{
+			name:      "single-element list is decoded normally",
+			yaml:      `filterType: [http]`,
+			wantTypes: []FilterType{FilterTypeHTTP},
+		},
+		{
+			name:      "multi-element list is decoded normally",
+			yaml:      `filterType: [http, network]`,
+			wantTypes: []FilterType{FilterTypeHTTP, FilterTypeNetwork},
+		},
+		{
+			name:      "absent filterType yields nil (ApplyDefaults fills it in separately)",
+			yaml:      `type: wasm`,
+			wantTypes: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var m Manifest
+			require.NoError(t, yaml.Unmarshal([]byte(tt.yaml), &m))
+			require.Equal(t, tt.wantTypes, m.FilterTypes)
+		})
+	}
 }
 
 func TestFindLocalParentManifest(t *testing.T) {

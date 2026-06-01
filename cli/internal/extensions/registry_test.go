@@ -128,6 +128,25 @@ func TestManifestFromOCI(t *testing.T) {
 		require.True(t, manifest.CShared)
 	})
 
+	t.Run("with single filter type annotation (old CLI backward compat)", func(t *testing.T) {
+		ociManifest := &ocispec.Manifest{
+			Annotations: map[string]string{
+				ocispec.AnnotationTitle:       "test-extension",
+				ocispec.AnnotationDescription: "A test extension",
+				ocispec.AnnotationVersion:     "1.0.0",
+				ocispec.AnnotationAuthors:     "Test Author",
+				ocispec.AnnotationLicenses:    "Apache-2.0",
+				OCIAnnotationExtensionType:    "rust",
+				OCIAnnotationFilterType:       "network",
+			},
+		}
+
+		manifest := ManifestFromOCI(ociManifest)
+
+		require.Len(t, manifest.FilterTypes, 1)
+		require.Equal(t, FilterTypeNetwork, manifest.FilterTypes[0])
+	})
+
 	t.Run("without filter type", func(t *testing.T) {
 		ociManifest := &ocispec.Manifest{
 			Annotations: map[string]string{

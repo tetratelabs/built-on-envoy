@@ -175,6 +175,36 @@ func ImplicitMaxEnvoyVersion(minVersion string) string {
 	return fmt.Sprintf("%s.%d.0", parts[0], minor+1)
 }
 
+// UnmarshalYAML implements yaml.Unmarshaler to handle backward-compatible
+// deserialization of the filterType field. Old manifests may set filterType to a
+// single string (e.g. `filterType: http`) rather than a list. This method
+// transparently promotes the scalar to a one-element sequence before standard
+// struct decoding.
+func (m *Manifest) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(value.Content); i += 2 {
+			if value.Content[i].Value == "filterType" {
+				v := value.Content[i+1]
+				if v.Kind == yaml.ScalarNode {
+					value.Content[i+1] = &yaml.Node{
+						Kind:    yaml.SequenceNode,
+						Content: []*yaml.Node{v},
+					}
+				}
+				break
+			}
+		}
+	}
+	// Use a type alias to avoid infinite recursion when decoding.
+	type manifestAlias Manifest
+	var alias manifestAlias
+	if err := value.Decode(&alias); err != nil {
+		return err
+	}
+	*m = Manifest(alias)
+	return nil
+}
+
 // ApplyDefaults applies default values to the manifest fields.
 func (m *Manifest) ApplyDefaults() {
 	if len(m.FilterTypes) == 0 {
