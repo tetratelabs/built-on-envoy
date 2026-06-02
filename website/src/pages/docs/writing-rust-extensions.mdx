@@ -5,6 +5,7 @@ description: A developer guide for creating Built On Envoy extensions using Rust
 ---
 
 import ToC from '../../components/ToC.astro';
+import Callout from '../../components/Callout.astro';
 
 # Writing Rust Extensions
 
@@ -61,8 +62,10 @@ path = "src/lib.rs"
 crate-type = ["cdylib"]
 ```
 
-> **Note:** The `[lib] name` must use underscores (Rust convention), even if the extension name uses hyphens.
-> For example, an extension named `my-extension` should have `name = "my_extension"`.
+<Callout type="warning">
+The `[lib] name` must use underscores (Rust convention), even if the extension name uses hyphens.
+For example, an extension named `my-extension` should have `name = "my_extension"`.
+</Callout>
 
 ### The Manifest
 
@@ -92,7 +95,9 @@ examples:
       boe run --extension my-extension
 ```
 
-> **Tip:** The `filterType` field defaults to `http`. See [Filter Types](#filter-types) for all supported values and their templates.
+<Callout type="note">
+The `filterType` field defaults to `http`. See [Filter Types](#filter-types) for all supported values and their templates.
+</Callout>
 
 ## Filter Types
 
@@ -101,15 +106,20 @@ for the [Envoy Dynamic Modules](https://www.envoyproxy.io/docs/envoy/latest/intr
 The `filterType` field in your manifest determines which Envoy filter stage your extension targets.
 It defaults to `http` if not specified.
 
-| Filter Type | Envoy Layer | Description |
-|---|---|---|
-| `http` (default) | HTTP (L7) | Inspect and modify HTTP requests and responses |
-| `network` | TCP/TLS (L4) | Process raw byte streams before HTTP decoding; useful for custom protocols or connection-level access policies |
-| `listener` | Listener (pre-routing) | Run logic before a TCP connection is routed to a filter chain; useful for connection acceptance policies and pre-routing inspection |
-| `udp_listener` | UDP Listener | Process UDP datagrams at the listener level |
+| Filter Type | Envoy Layer | Init Macro | Description |
+|---|---|---|---|
+| `http` (default) | HTTP (L7) | `declare_init_functions!` | Inspect and modify HTTP requests and responses |
+| `network` | TCP/TLS (L4) | `declare_network_filter_init_functions!` |Process raw byte streams before HTTP decoding; useful for custom protocols or connection-level access policies |
+| `listener` | Listener (pre-routing) | `declare_listener_filter_init_functions!` | Run logic before a TCP connection is routed to a filter chain; useful for connection acceptance policies and pre-routing inspection |
+| `udp_listener` | UDP Listener | `declare_udp_listener_filter_init_functions!` | Process UDP datagrams at the listener level |
 
-> **Note:** The `nativeHttpFilters` manifest field is only available for the `http` filter type.
-> If you need both HTTP and network filters in a single module, use `declare_all_init_functions!` instead.
+<Callout type="tip">
+If you need both HTTP and network filters in a single module, use `declare_all_init_functions!` instead.
+</Callout>
+
+<Callout type="warning">
+The `nativeHttpFilters` manifest field is only available for the `http` filter type.
+</Callout>
 
 ### HTTP Filter (`filterType: http`)
 
@@ -419,9 +429,11 @@ declare_udp_listener_filter_init_functions!(init, new_udp_listener_filter_config
 
 ## Common Operations
 
-> The following examples apply to the `http` filter type and its `EnvoyHttpFilter` API.
-> Network, listener, and UDP listener filters expose their own APIs through the
-> `EnvoyNetworkFilter`, `EnvoyListenerFilter`, and `EnvoyUdpListenerFilter` traits respectively.
+<Callout type="note">
+The following examples apply to the `http` filter type and its `EnvoyHttpFilter` API.
+Network, listener, and UDP listener filters expose their own APIs through the
+`EnvoyNetworkFilter`, `EnvoyListenerFilter`, and `EnvoyUdpListenerFilter` traits respectively.
+</Callout>
 
 ### Working with Headers
 

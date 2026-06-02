@@ -35,7 +35,7 @@ type: rust
 
 1. Your extension implements the `HttpFilterConfig` and `HttpFilter` traits from the Rust SDK.
 2. The crate is compiled with `cargo build --release` to produce a shared library (`.so` on Linux, `.dylib` on macOS).
-3. The `declare_init_functions!` macro wires up the init and filter-creation entry points that Envoy
+3. The corresponding init macro wires up the init and filter-creation entry points that Envoy
    expects from a dynamic module.
 4. At runtime, Envoy loads the shared library directly with no additional host module.
 
@@ -44,12 +44,12 @@ type: rust
 Rust extensions support four filter types, controlled by the optional `filterType` field in your manifest.
 The default is `http`.
 
-| Filter Type | Envoy Layer | Description |
-|---|---|---|
-| `http` (default) | HTTP (L7) | Inspect and modify HTTP requests and responses |
-| `network` | TCP/TLS (L4) | Process raw byte streams before HTTP decoding; useful for custom protocols or connection-level access policies |
-| `listener` | Listener (pre-routing) | Run logic before a TCP connection is routed to a filter chain; useful for connection acceptance policies and pre-routing inspection |
-| `udp_listener` | UDP Listener | Process UDP datagrams at the listener level |
+| Filter Type | Envoy Layer | Init Macro | Description |
+|---|---|---|---|
+| `http` (default) | HTTP (L7) | `declare_init_functions!` | Inspect and modify HTTP requests and responses |
+| `network` | TCP/TLS (L4) | `declare_network_filter_init_functions!` |Process raw byte streams before HTTP decoding; useful for custom protocols or connection-level access policies |
+| `listener` | Listener (pre-routing) | `declare_listener_filter_init_functions!` | Run logic before a TCP connection is routed to a filter chain; useful for connection acceptance policies and pre-routing inspection |
+| `udp_listener` | UDP Listener | `declare_udp_listener_filter_init_functions!` | Process UDP datagrams at the listener level |
 
 ### Getting Started with Rust Extensions
 

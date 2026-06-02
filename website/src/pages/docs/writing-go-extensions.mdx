@@ -5,6 +5,7 @@ description: A developer guide for creating Built On Envoy extensions using Go
 ---
 
 import ToC from '../../components/ToC.astro';
+import Callout from '../../components/Callout.astro';
 
 # Writing Go Extensions
 
@@ -133,8 +134,10 @@ examples:
       boe run --extension my-extension
 ```
 
-**Important:** The `composerVersion` field must match the version of the Composer dynamic module that will load your plugin.
+<Callout type="warning">
+The `composerVersion` field must match the version of the Composer dynamic module that will load your plugin.
 See the [version compatibility](#version-compatibility) section for more details.
+</Callout>
 
 ## Filter Lifecycle
 
