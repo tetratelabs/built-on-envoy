@@ -27,6 +27,7 @@ export interface Extension {
 	sourcePath: string;
 	sourceUrl: string;
 	configReferencePath?: string;
+	filterType: string[];
 }
 
 /**
@@ -44,4 +45,3 @@ export function loadExtensions(): Extension[] {
 		}))
 		.sort((a, b) => a.name.localeCompare(b.name));
 }
-

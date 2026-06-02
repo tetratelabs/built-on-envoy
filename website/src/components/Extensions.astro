@@ -19,6 +19,7 @@ const featuredExtensions = loadExtensions().filter(ext => ext.featured === true)
 					description={ext.description}
 					href={`/extensions/${ext.name}`}
 					tags={ext.tags}
+					filterTypes={ext.filterType}
 				/>
 			))}
 		</div>

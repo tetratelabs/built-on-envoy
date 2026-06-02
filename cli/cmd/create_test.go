@@ -327,7 +327,7 @@ func TestCreateRust_NetworkFilter_Run(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(manifest), "name: "+name)
 	assert.Contains(t, string(manifest), "type: rust")
-	assert.Contains(t, string(manifest), "filterType: network")
+	assert.Contains(t, string(manifest), "filterType: [network]")
 
 	// verify src/lib.rs contains network filter constructs, not HTTP.
 	// #nosec G304

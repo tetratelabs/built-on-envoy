@@ -37,6 +37,7 @@ type GenConfig struct {
 	// JSON config values contain commas (e.g. {"a":"1","b":"2"}) which would otherwise
 	// be split into separate invalid fragments, causing protobuf unmarshal failures.
 	Configs                 []string     `name:"config" sep:"none" help:"Optional JSON config string for extensions. Applied in order to combined --extension and --local flags."`
+	FilterTypes             []string     `name:"filter-type" sep:"none" help:"Set the filter type for an extension. Applied positionally to the combined --extension and --local flags. Accepted values: http, network, listener, udp_listener."`
 	NativeHTTPFiltersBefore []string     `name:"native-http-filter-before" sep:"none" help:"Optional YAML/JSON native HTTP filter list (or @filepath) per extension position. Overrides manifest nativeHttpFilters.before."`
 	NativeHTTPFiltersAfter  []string     `name:"native-http-filter-after" sep:"none" help:"Optional YAML/JSON native HTTP filter list (or @filepath) per extension position. Overrides manifest nativeHttpFilters.after."`
 	Clusters                ClusterFlags `embed:""`
@@ -145,6 +146,7 @@ func (g *GenConfig) Run(ctx context.Context, dirs *xdg.Directories, logger *slog
 		Dirs:                    dirs,
 		Extensions:              resolvedExtensions,
 		Configs:                 g.Configs,
+		FilterTypes:             g.FilterTypes,
 		NativeHTTPFiltersBefore: g.NativeHTTPFiltersBefore,
 		NativeHTTPFiltersAfter:  g.NativeHTTPFiltersAfter,
 		Clusters:                g.Clusters.Secure,

@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -49,6 +50,9 @@ type ConfigGenerationParams struct {
 	Extensions []*extensions.Manifest
 	// Configs specifies optional JSON config strings for each extension (by index).
 	Configs []string
+	// FilterTypes specifies optional filter type overrides for each extension (by index).
+	// When non-empty for a given extension position, it overrides the manifest's filterTypes.
+	FilterTypes []string
 	// NativeHTTPFiltersBefore specifies optional YAML/JSON native HTTP filter overrides
 	// for each extension (by index). When non-empty for a given extension position, it
 	// replaces the manifest's nativeHttpFilters.before.
@@ -80,8 +84,11 @@ type GeneratedConfigResources struct {
 	HTTPFilters []*hcmv3.HttpFilter
 	// NetworkFilters are the generated network filters to be included in the Envoy listener filter chain.
 	NetworkFilters []*listenerv3.Filter
-	// ListenerFilters are the generated listener filters to be included in the Envoy listener filter chain.
+	// ListenerFilters are the generated (TCP) listener filters to be included in the Envoy listener.
 	ListenerFilters []*listenerv3.ListenerFilter
+	// UDPListenerFilters are the generated UDP listener filters; they must be hosted on a listener
+	// whose socket address protocol is UDP, so they are tracked separately from ListenerFilters.
+	UDPListenerFilters []*listenerv3.ListenerFilter
 	// Clusters are the generated clusters to be included in the Envoy configuration.
 	Clusters []*clusterv3.Cluster
 }
@@ -141,7 +148,7 @@ func FullConfigRenderer(params *ConfigGenerationParams, gen *GeneratedConfigReso
 		hostRewrite = testUpstreamHost
 	}
 
-	cfg, err := buildFullConfig(params.AdminAddress, params.ListenerPort, clusterName, hostRewrite, newCluster, gen.HTTPFilters, gen.NetworkFilters, gen.ListenerFilters, gen.Clusters)
+	cfg, err := buildFullConfig(params.AdminAddress, params.ListenerPort, clusterName, hostRewrite, newCluster, gen.HTTPFilters, gen.NetworkFilters, gen.ListenerFilters, gen.UDPListenerFilters, gen.Clusters)
 	if err != nil {
 		return "", fmt.Errorf("failed to build config: %w", err)
 	}
@@ -168,6 +175,10 @@ func MinimalConfigRenderer(params *ConfigGenerationParams, gen *GeneratedConfigR
 	if err != nil {
 		return "", fmt.Errorf("failed to serialize listener filter configs: %w", err)
 	}
+	udpListenerFilterConfigs, err := protoListToAny(gen.UDPListenerFilters)
+	if err != nil {
+		return "", fmt.Errorf("failed to serialize UDP listener filter configs: %w", err)
+	}
 	clusterConfigs, err := protoListToAny(gen.Clusters)
 	if err != nil {
 		return "", fmt.Errorf("failed to serialize cluster configs: %w", err)
@@ -182,6 +193,9 @@ func MinimalConfigRenderer(params *ConfigGenerationParams, gen *GeneratedConfigR
 	}
 	if len(listenerFilterConfigs) > 0 {
 		payload["listener_filters"] = listenerFilterConfigs
+	}
+	if len(udpListenerFilterConfigs) > 0 {
+		payload["udp_listener_filters"] = udpListenerFilterConfigs
 	}
 	if len(clusterConfigs) > 0 {
 		payload["clusters"] = clusterConfigs
@@ -199,12 +213,35 @@ func generateConfig(params *ConfigGenerationParams) (GeneratedConfigResources, e
 	httpFilters := make([]*hcmv3.HttpFilter, 0, len(params.Extensions))
 	networkFilters := make([]*listenerv3.Filter, 0)
 	listenerFilters := make([]*listenerv3.ListenerFilter, 0)
+	udpListenerFilters := make([]*listenerv3.ListenerFilter, 0)
 	clusters := make([]*clusterv3.Cluster, 0)
 	for i, ext := range params.Extensions {
 		var config string
 		if i < len(params.Configs) {
 			config = params.Configs[i]
 		}
+
+		// If the extension manifest defines more than one filter type, we require the user to explicitly set what
+		// filter to enable for the extension.
+		if len(ext.FilterTypes) > 1 {
+			// Apply --filter-type override: if provided for this position, replace the manifest's
+			// FilterTypes with a single-element slice containing the specified type.
+			if i < len(params.FilterTypes) && params.FilterTypes[i] != "" {
+				if !slices.Contains(ext.FilterTypes, extensions.FilterType(params.FilterTypes[i])) {
+					return GeneratedConfigResources{}, fmt.Errorf("invalid filter type override %q for extension %q: not one of the manifest-defined filter types %v",
+						params.FilterTypes[i], ext.Name, ext.FilterTypes)
+				}
+				// Create a copy of the extension when overwritingthe fields to avoid mutating the original manifest
+				extCopy := *ext
+				extCopy.FilterTypes = []extensions.FilterType{extensions.FilterType(params.FilterTypes[i])}
+				ext = &extCopy
+			} else {
+				return GeneratedConfigResources{},
+					fmt.Errorf("extension %q defines multiple filter types but no filter-type override was provided for its position; filter types: %v",
+						ext.Name, ext.FilterTypes)
+			}
+		}
+
 		resources, err := GenerateFilterConfig(params.Logger, ext, params.Dirs, config)
 		if err != nil {
 			return GeneratedConfigResources{}, fmt.Errorf("failed to generate filter config for extension %q: %w", ext.Name, err)
@@ -244,6 +281,7 @@ func generateConfig(params *ConfigGenerationParams) (GeneratedConfigResources, e
 
 		networkFilters = append(networkFilters, resources.NetworkFilters...)
 		listenerFilters = append(listenerFilters, resources.ListenerFilters...)
+		udpListenerFilters = append(udpListenerFilters, resources.UDPListenerFilters...)
 		clusters = append(clusters, resources.Clusters...)
 	}
 
@@ -272,10 +310,11 @@ func generateConfig(params *ConfigGenerationParams) (GeneratedConfigResources, e
 	}
 
 	return GeneratedConfigResources{
-		HTTPFilters:     httpFilters,
-		NetworkFilters:  networkFilters,
-		ListenerFilters: listenerFilters,
-		Clusters:        clusters,
+		HTTPFilters:        httpFilters,
+		NetworkFilters:     networkFilters,
+		ListenerFilters:    listenerFilters,
+		UDPListenerFilters: udpListenerFilters,
+		Clusters:           clusters,
 	}, nil
 }
 
@@ -428,7 +467,7 @@ func parseCluster(shortSpec string, tls bool) (*clusterv3.Cluster, error) {
 // and allows us to use the proto marshalling functions. Otherwise, we would have to create a wrapper
 // proto on our own, or marshal the config manually.
 // TODO(nacx): Is there a wrapper for `admin` and `static_resources` we could use other than Bootstrap?
-func buildFullConfig(adminAddress string, listenerPort uint32, testUpstreamClusterName, testUpstreamHostRewrite string, newCluster *clusterv3.Cluster, httpFilters []*hcmv3.HttpFilter, networkFilters []*listenerv3.Filter, listenerFilters []*listenerv3.ListenerFilter, clusters []*clusterv3.Cluster) (*bootstrapv3.Bootstrap, error) {
+func buildFullConfig(adminAddress string, listenerPort uint32, testUpstreamClusterName, testUpstreamHostRewrite string, newCluster *clusterv3.Cluster, httpFilters []*hcmv3.HttpFilter, networkFilters []*listenerv3.Filter, listenerFilters []*listenerv3.ListenerFilter, udpListenerFilters []*listenerv3.ListenerFilter, clusters []*clusterv3.Cluster) (*bootstrapv3.Bootstrap, error) {
 	adminHost, adminPortStr, err := net.SplitHostPort(adminAddress)
 	if err != nil {
 		return nil, fmt.Errorf("invalid admin address %q: %w", adminAddress, err)
@@ -475,6 +514,30 @@ func buildFullConfig(adminAddress string, listenerPort uint32, testUpstreamClust
 		ListenerFilters: listenerFilters,
 	}
 
+	listeners := []*listenerv3.Listener{listener}
+
+	// UDP listener filters (e.g. a DNS interception filter) must be hosted on a listener whose
+	// socket address protocol is UDP with a udp_listener_config set. We bind it on the same port
+	// number as the main TCP listener; TCP and UDP listeners on the same port are distinct sockets.
+	if len(udpListenerFilters) > 0 {
+		listeners = append(listeners, &listenerv3.Listener{
+			Name: "udp",
+			Address: &corev3.Address{
+				Address: &corev3.Address_SocketAddress{
+					SocketAddress: &corev3.SocketAddress{
+						Protocol: corev3.SocketAddress_UDP,
+						Address:  "0.0.0.0",
+						PortSpecifier: &corev3.SocketAddress_PortValue{
+							PortValue: listenerPort,
+						},
+					},
+				},
+			},
+			UdpListenerConfig: &listenerv3.UdpListenerConfig{},
+			ListenerFilters:   udpListenerFilters,
+		})
+	}
+
 	admin := &bootstrapv3.Admin{
 		Address: &corev3.Address{
 			Address: &corev3.Address_SocketAddress{
@@ -495,7 +558,7 @@ func buildFullConfig(adminAddress string, listenerPort uint32, testUpstreamClust
 		},
 		Admin: admin,
 		StaticResources: &bootstrapv3.Bootstrap_StaticResources{
-			Listeners: []*listenerv3.Listener{listener},
+			Listeners: listeners,
 			Clusters:  prependCluster(newCluster, clusters),
 		},
 	}, nil
