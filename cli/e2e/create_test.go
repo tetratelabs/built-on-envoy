@@ -136,6 +136,8 @@ func TestCreateGoWithDockerSupport(t *testing.T) {
 }
 
 func TestCreateRustNetworkAndListenerFilters(t *testing.T) {
+	internaltesting.MaybeSkipLongRunningTest(t)
+
 	tmpDir := t.TempDir()
 	ctx := t.Context()
 
