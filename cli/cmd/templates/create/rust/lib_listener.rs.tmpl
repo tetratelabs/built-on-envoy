@@ -86,9 +86,7 @@ impl<ELF: EnvoyListenerFilter> ListenerFilter<ELF> for Filter {
     fn on_close(&mut self, _envoy_filter: &mut ELF) {}
 }
 
-fn init(
-    _server_factory_context_ptr: abi::envoy_dynamic_module_type_server_factory_context_envoy_ptr,
-) -> bool {
+fn init() -> bool {
     true
 }
 

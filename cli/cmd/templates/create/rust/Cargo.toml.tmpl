@@ -7,9 +7,11 @@ repository = "https://github.com/tetratelabs/built-on-envoy"
 
 [dependencies]
 # The SDK version must match the Envoy version due to the strict compatibility requirements.
-envoy-proxy-dynamic-modules-rust-sdk = { git = "https://github.com/envoyproxy/envoy", rev = "f1dd21b16c244bda00edfb5ffce577e12d0d2ec2" }
+envoy-proxy-dynamic-modules-rust-sdk = { git = "https://github.com/envoyproxy/envoy", rev = "a0d2e3fc35eaa23283a7204eecb62ea2fd166a26" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+
+[workspace]
 
 [lib]
 name = "{{ .LibName }}"

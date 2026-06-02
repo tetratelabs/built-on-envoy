@@ -5,8 +5,7 @@
 
 # Multi-stage build for Rust dynamic modules
 
-# Build stage
-FROM rust:1.84-bookworm AS builder
+FROM rust:1.96-bookworm AS builder
 
 # Install build dependencies
 RUN apt-get update && \
