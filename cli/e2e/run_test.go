@@ -151,6 +151,7 @@ func TestRustLocalExtension(t *testing.T) {
 	proxyPort := ports[0]
 	internaltesting.RunEnvoy(t, cliBin, proxyPort, ports[1],
 		"--log-level", "dynamic_modules:debug",
+		"--envoy-version", "dev-latest",
 		"--local", dataDir+"/rust-e2e",
 	)
 
