@@ -366,7 +366,7 @@ func TestCreateRust_UdpListenerFilter_Run(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(manifest), "name: "+name)
 	assert.Contains(t, string(manifest), "type: rust")
-	assert.Contains(t, string(manifest), "filterType: udp_listener")
+	assert.Contains(t, string(manifest), "filterType: [udp_listener]")
 
 	// verify src/lib.rs contains udp listener filter constructs, not HTTP, network, or listener.
 	// #nosec G304
@@ -405,7 +405,7 @@ func TestCreateRust_ListenerFilter_Run(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(manifest), "name: "+name)
 	assert.Contains(t, string(manifest), "type: rust")
-	assert.Contains(t, string(manifest), "filterType: listener")
+	assert.Contains(t, string(manifest), "filterType: [listener]")
 
 	// verify src/lib.rs contains listener filter constructs, not HTTP or network.
 	// #nosec G304
