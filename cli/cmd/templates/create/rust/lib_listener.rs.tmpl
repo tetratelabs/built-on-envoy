@@ -79,6 +79,7 @@ impl<ELF: EnvoyListenerFilter> ListenerFilter<ELF> for Filter {
     fn on_data(
         &mut self,
         _envoy_filter: &mut ELF,
+        _data_length: usize,
     ) -> abi::envoy_dynamic_module_type_on_listener_filter_status {
         abi::envoy_dynamic_module_type_on_listener_filter_status::Continue
     }
