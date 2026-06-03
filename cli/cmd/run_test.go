@@ -290,15 +290,6 @@ func TestRunValidateMutualExclusion(t *testing.T) {
 			},
 			expectedErr: "--envoy-path and --envoy-version are mutually exclusive",
 		},
-		{
-			name: "envoy path and docker",
-			run: Run{
-				LogLevel:  "all:error",
-				EnvoyPath: "/usr/local/bin/envoy",
-				Docker:    true,
-			},
-			expectedErr: "--envoy-path is not supported with --docker",
-		},
 	}
 
 	for _, tt := range tests {
@@ -450,6 +441,12 @@ func TestParseLogLevels(t *testing.T) {
 func TestRunInvalidConfig(t *testing.T) {
 	r := &Run{RunID: "///"}
 	require.Error(t, r.Run(t.Context(), &xdg.Directories{}, internaltesting.NewTLogger(t)))
+}
+
+func TestRunInvalidEnvoyPath(t *testing.T) {
+	r := &Run{EnvoyPath: "/nonexistent/path/to/envoy"}
+	err := r.Run(t.Context(), &xdg.Directories{}, internaltesting.NewTLogger(t))
+	require.ErrorContains(t, err, "Envoy binary not found")
 }
 
 func TestSplitRef(t *testing.T) {

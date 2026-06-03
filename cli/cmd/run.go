@@ -34,7 +34,7 @@ const defaultLogLevel = "error"
 type Run struct {
 	EnvoyVersion     string   `help:"Envoy version to use (e.g., 1.31.0, dev, dev-latest)" env:"ENVOY_VERSION"`
 	EnvoyVersionsURL string   `name:"envoy-versions-url" help:"URL of the Envoy versions JSON. Override to use debug builds (see archive-envoy)." env:"ENVOY_VERSIONS_URL" hidden:""`
-	EnvoyPath        string   `name:"envoy-path" help:"Path to a custom Envoy binary. Skips Envoy download and version selection." env:"ENVOY_PATH" type:"existingfile"`
+	EnvoyPath        string   `name:"envoy-path" help:"Path to a custom Envoy binary. Skips Envoy download and version selection." env:"ENVOY_PATH"`
 	LogLevel         string   `help:"Envoy component log level." default:"all:error" env:"ENVOY_LOG_LEVEL"`
 	RunID            string   `name:"run-id" env:"BOE_RUN_ID" help:"Run identifier for this invocation. Overrides the default timestamp-based ID."`
 	ListenPort       uint32   `help:"Port for Envoy listener to accept incoming traffic." default:"10000"`
@@ -103,9 +103,6 @@ func (r *Run) Validate() error {
 	if r.EnvoyPath != "" && r.EnvoyVersion != "" {
 		return fmt.Errorf("--envoy-path and --envoy-version are mutually exclusive")
 	}
-	if r.EnvoyPath != "" && r.Docker {
-		return fmt.Errorf("--envoy-path is not supported with --docker")
-	}
 	return nil
 }
 
@@ -125,6 +122,14 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 			Pull:            r.Pull,
 		}
 		return runner.Run(ctx)
+	}
+
+	// We need to validate the existence here and not in the initial command as the path could be relative to
+	// the Docker container when running in Docker.
+	if r.EnvoyPath != "" {
+		if _, err := os.Stat(r.EnvoyPath); err != nil {
+			return fmt.Errorf("specified Envoy binary not found at %s: %w", r.EnvoyPath, err)
+		}
 	}
 
 	downloader := &extensions.Downloader{
