@@ -5,11 +5,13 @@ description: A developer guide for creating Built On Envoy extensions using Rust
 ---
 
 import ToC from '../../components/ToC.astro';
+import Callout from '../../components/Callout.astro';
 
 # Writing Rust Extensions
 
 This guide walks you through creating a Rust extension for Built On Envoy.
-Rust extensions are HTTP filters compiled as native dynamic modules that Envoy loads directly, with no intermediate runtime or plugin loader.
+Rust extensions are compiled as native dynamic modules that Envoy loads directly, with no intermediate runtime or plugin loader.
+They support multiple filter types — from HTTP request/response processing (L7) to raw TCP/TLS streams (L4) and UDP — each targeting a different Envoy layer with its own traits and lifecycle.
 
 <ToC maxDepth="4"/>
 
@@ -39,12 +41,114 @@ curl -v http://localhost:10000/status/200
 
 You should see your custom header `x-my-extension: example` in the response.
 
-## Extension Structure
+### The Cargo Configuration
 
-### The Filter Implementation
+The `Cargo.toml` must declare the crate as a `cdylib` so it compiles to a C-compatible shared library:
+
+```toml
+[package]
+name = "my-extension"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+envoy-proxy-dynamic-modules-rust-sdk = { git = "https://github.com/envoyproxy/envoy", rev = "..." }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[lib]
+name = "my_extension"
+path = "src/lib.rs"
+crate-type = ["cdylib"]
+```
+
+<Callout type="warning">
+The `[lib] name` must use underscores (Rust convention), even if the extension name uses hyphens.
+For example, an extension named `my-extension` should have `name = "my_extension"`.
+</Callout>
+
+### The Manifest
+
+The manifest describes your extension:
+
+```yaml
+name: my-extension
+version: 0.1.0
+type: rust
+categories:
+  - Security             # Or: Traffic, Observability, Examples, Misc
+author: Your Name
+description: Short description of what your extension does.
+longDescription: |
+  A longer description with details about features,
+  use cases, and configuration options.
+tags:
+  - rust
+  - dynamic-module
+  - http
+  - filter
+license: Apache-2.0
+examples:
+  - title: Basic usage
+    description: Run the extension
+    code: |
+      boe run --extension my-extension
+```
+
+<Callout type="note">
+The `filterType` field defaults to `http`. See [Filter Types](#filter-types) for all supported values and their templates.
+</Callout>
+
+## Filter Types
 
 A Rust extension uses the [Rust SDK](https://github.com/envoyproxy/envoy/tree/main/source/extensions/dynamic_modules/sdk/rust)
 for the [Envoy Dynamic Modules](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/dynamic_modules).
+The `filterType` field in your manifest determines which Envoy filter stage your extension targets.
+It defaults to `http` if not specified.
+
+| Filter Type | Envoy Layer | Init Macro | Description |
+|---|---|---|---|
+| `http` (default) | HTTP (L7) | `declare_init_functions!` | Inspect and modify HTTP requests and responses |
+| `network` | TCP/TLS (L4) | `declare_network_filter_init_functions!` |Process raw byte streams before HTTP decoding; useful for custom protocols or connection-level access policies |
+| `listener` | Listener (pre-routing) | `declare_listener_filter_init_functions!` | Run logic before a TCP connection is routed to a filter chain; useful for connection acceptance policies and pre-routing inspection |
+| `udp_listener` | UDP Listener | `declare_udp_listener_filter_init_functions!` | Process UDP datagrams at the listener level |
+
+<Callout type="tip">
+If you need both HTTP and network filters in a single module, use `declare_all_init_functions!` instead.
+</Callout>
+
+<Callout type="warning">
+The `nativeHttpFilters` manifest field is only available for the `http` filter type.
+</Callout>
+
+### HTTP Filter (`filterType: http`)
+
+The HTTP filter type is the default and most commonly used. It runs at the L7 stage and can inspect and modify request and response headers, bodies, and trailers for each HTTP stream.
+
+#### Filter Lifecycle
+
+The filter receives callbacks at each stage of request/response processing:
+
+```mermaid
+flowchart LR
+    subgraph "Request Flow"
+        direction LR
+        on_request_headers --> on_request_body --> on_request_trailers
+    end
+```
+
+```mermaid
+flowchart LR
+    subgraph "Response Flow"
+        direction LR
+        on_response_headers --> on_response_body --> on_response_trailers
+    end
+```
+
+After both flows complete, `on_stream_complete` is called before the filter is dropped.
+
+#### Filter Implementation
+
 The following example shows a minimal filter and the main components that are needed:
 
 ```rust
@@ -126,87 +230,13 @@ declare_init_functions!(init, new_http_filter_config_fn);
 **Key components:**
 
 | Component | Purpose |
-|-----------|---------|
+|-----------|--------|
 | `FilterConfig` | Parses configuration, creates filter instances via `HttpFilterConfig` |
 | `Filter` | Processes individual HTTP streams via `HttpFilter` |
 | `new_http_filter_config_fn` | Maps extension names to their config factories |
 | `declare_init_functions!` | Wires up the entry points that Envoy expects |
 
-### The Cargo Configuration
-
-The `Cargo.toml` must declare the crate as a `cdylib` so it compiles to a C-compatible shared library:
-
-```toml
-[package]
-name = "my-extension"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-envoy-proxy-dynamic-modules-rust-sdk = { git = "https://github.com/envoyproxy/envoy", rev = "..." }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-
-[lib]
-name = "my_extension"
-path = "src/lib.rs"
-crate-type = ["cdylib"]
-```
-
-> **Note:** The `[lib] name` must use underscores (Rust convention), even if the extension name uses hyphens.
-> For example, an extension named `my-extension` should have `name = "my_extension"`.
-
-### The Manifest
-
-The manifest describes your extension:
-
-```yaml
-name: my-extension
-version: 0.1.0
-type: rust
-categories:
-  - Security             # Or: Traffic, Observability, Examples, Misc
-author: Your Name
-description: Short description of what your extension does.
-longDescription: |
-  A longer description with details about features,
-  use cases, and configuration options.
-tags:
-  - rust
-  - dynamic-module
-  - http
-  - filter
-license: Apache-2.0
-examples:
-  - title: Basic usage
-    description: Run the extension
-    code: |
-      boe run --extension my-extension
-```
-
-## Filter Lifecycle
-
-The filter receives callbacks at each stage of request/response processing:
-
-```mermaid
-flowchart LR
-    subgraph "Request Flow"
-        direction LR
-        on_request_headers --> on_request_body --> on_request_trailers
-    end
-```
-
-```mermaid
-flowchart LR
-    subgraph "Response Flow"
-        direction LR
-        on_response_headers --> on_response_body --> on_response_trailers
-    end
-```
-
-After both flows complete, `on_stream_complete` is called before the filter is dropped.
-
-### Callback Return Values
+#### Callback Return Values
 
 Each callback returns a status enum that controls processing. The following table shows the most commonly
 used return values. For more details, refer to the
@@ -220,7 +250,190 @@ used return values. For more details, refer to the
 These are namespaced per callback. For example, the request headers callback returns
 `abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::Continue`.
 
+### Network Filter (`filterType: network`)
+
+Network filters run at the TCP/TLS (L4) stage, before HTTP decoding. They process raw byte streams, making them a good fit for custom protocol handling or connection-level access policies.
+
+#### Filter Lifecycle
+
+```mermaid
+flowchart LR
+    on_new_connection --> on_read & on_write & on_event --> on_destroy
+```
+
+#### Filter Implementation
+
+```rust
+use envoy_proxy_dynamic_modules_rust_sdk::*;
+
+#[derive(Debug, Clone)]
+pub struct FilterConfig;
+
+impl<ENF: EnvoyNetworkFilter> NetworkFilterConfig<ENF> for FilterConfig {
+    fn new_network_filter(&self, _envoy: &mut ENF) -> Box<dyn NetworkFilter<ENF>> {
+        Box::new(Filter)
+    }
+}
+
+pub struct Filter;
+
+impl<ENF: EnvoyNetworkFilter> NetworkFilter<ENF> for Filter {
+    fn on_new_connection(
+        &mut self,
+        _envoy_filter: &mut ENF,
+    ) -> abi::envoy_dynamic_module_type_on_network_filter_data_status {
+        abi::envoy_dynamic_module_type_on_network_filter_data_status::Continue
+    }
+
+    fn on_read(
+        &mut self,
+        _envoy_filter: &mut ENF,
+        _data_length: usize,
+        _end_stream: bool,
+    ) -> abi::envoy_dynamic_module_type_on_network_filter_data_status {
+        abi::envoy_dynamic_module_type_on_network_filter_data_status::Continue
+    }
+
+    fn on_write(
+        &mut self,
+        _envoy_filter: &mut ENF,
+        _data_length: usize,
+        _end_stream: bool,
+    ) -> abi::envoy_dynamic_module_type_on_network_filter_data_status {
+        abi::envoy_dynamic_module_type_on_network_filter_data_status::Continue
+    }
+}
+
+fn init() -> bool { true }
+
+fn new_network_filter_config_fn<EC: EnvoyNetworkFilterConfig, ENF: EnvoyNetworkFilter>(
+    _envoy_filter_config: &mut EC,
+    filter_name: &str,
+    _filter_config: &[u8],
+) -> Option<Box<dyn NetworkFilterConfig<ENF>>> {
+    match filter_name {
+        "my-network-extension" => Some(Box::new(FilterConfig)),
+        _ => panic!("Unknown filter name: {filter_name}"),
+    }
+}
+
+declare_network_filter_init_functions!(init, new_network_filter_config_fn);
+```
+
+### Listener Filter (`filterType: listener`)
+
+Listener filters run before a TCP connection is routed to a filter chain. They are useful for connection acceptance policies, pre-routing inspection, and setting connection metadata that downstream filters can read.
+
+#### Filter Lifecycle
+
+```mermaid
+flowchart LR
+    on_accept --> on_data --> on_close
+```
+
+#### Filter Implementation
+
+```rust
+use envoy_proxy_dynamic_modules_rust_sdk::*;
+
+#[derive(Debug, Clone)]
+pub struct FilterConfig;
+
+impl<ELF: EnvoyListenerFilter> ListenerFilterConfig<ELF> for FilterConfig {
+    fn new_listener_filter(&self, _envoy: &mut ELF) -> Box<dyn ListenerFilter<ELF>> {
+        Box::new(Filter)
+    }
+}
+
+pub struct Filter;
+
+impl<ELF: EnvoyListenerFilter> ListenerFilter<ELF> for Filter {
+    fn on_accept(
+        &mut self,
+        _envoy_filter: &mut ELF,
+    ) -> abi::envoy_dynamic_module_type_on_listener_filter_status {
+        abi::envoy_dynamic_module_type_on_listener_filter_status::Continue
+    }
+}
+
+fn init() -> bool { true }
+
+fn new_listener_filter_config_fn<EC: EnvoyListenerFilterConfig, ELF: EnvoyListenerFilter>(
+    _envoy_filter_config: &mut EC,
+    filter_name: &str,
+    _filter_config: &[u8],
+) -> Option<Box<dyn ListenerFilterConfig<ELF>>> {
+    match filter_name {
+        "my-listener-extension" => Some(Box::new(FilterConfig)),
+        _ => panic!("Unknown filter name: {filter_name}"),
+    }
+}
+
+declare_listener_filter_init_functions!(init, new_listener_filter_config_fn);
+```
+
+### UDP Listener Filter (`filterType: udp_listener`)
+
+UDP listener filters process UDP datagrams at the listener level. They expose a single `on_data` callback called for each received datagram.
+
+#### Filter Lifecycle
+
+```mermaid
+flowchart LR
+   on_data
+```
+
+#### Filetr Implementation
+
+```rust
+use envoy_proxy_dynamic_modules_rust_sdk::*;
+
+#[derive(Debug, Clone)]
+pub struct FilterConfig;
+
+impl<ELF: EnvoyUdpListenerFilter> UdpListenerFilterConfig<ELF> for FilterConfig {
+    fn new_udp_listener_filter(&self, _envoy: &mut ELF) -> Box<dyn UdpListenerFilter<ELF>> {
+        Box::new(Filter)
+    }
+}
+
+pub struct Filter;
+
+impl<ELF: EnvoyUdpListenerFilter> UdpListenerFilter<ELF> for Filter {
+    fn on_data(
+        &mut self,
+        _envoy_filter: &mut ELF,
+    ) -> abi::envoy_dynamic_module_type_on_udp_listener_filter_status {
+        abi::envoy_dynamic_module_type_on_udp_listener_filter_status::Continue
+    }
+}
+
+fn init() -> bool { true }
+
+fn new_udp_listener_filter_config_fn<
+    EC: EnvoyUdpListenerFilterConfig,
+    ELF: EnvoyUdpListenerFilter,
+>(
+    _envoy_filter_config: &mut EC,
+    filter_name: &str,
+    _filter_config: &[u8],
+) -> Option<Box<dyn UdpListenerFilterConfig<ELF>>> {
+    match filter_name {
+        "my-udp-extension" => Some(Box::new(FilterConfig)),
+        _ => panic!("Unknown filter name: {filter_name}"),
+    }
+}
+
+declare_udp_listener_filter_init_functions!(init, new_udp_listener_filter_config_fn);
+```
+
 ## Common Operations
+
+<Callout type="note">
+The following examples apply to the `http` filter type and its `EnvoyHttpFilter` API.
+Network, listener, and UDP listener filters expose their own APIs through the
+`EnvoyNetworkFilter`, `EnvoyListenerFilter`, and `EnvoyUdpListenerFilter` traits respectively.
+</Callout>
 
 ### Working with Headers
 
