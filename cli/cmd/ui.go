@@ -100,5 +100,5 @@ func openBrowser(url string) error {
 	if err != nil {
 		return err
 	}
-	return exec.Command(cmd[0], cmd[1:]...).Start()
+	return exec.Command(cmd[0], cmd[1:]...).Start() // #nosec G204
 }

@@ -13,9 +13,7 @@ SCHEMAS_DIR  := schemas
 GO_TEST_ARGS ?=
 
 .PHONY: build
-build: src/node_modules config-schemas  ## Build the UI assets.
-	@echo "Compiling UI code..."
-	@cd src && npm run build
+build: compiled/bundle.js  ## Build the UI assets.
 
 .PHONY: config-schemas
 config-schemas: $(SCHEMA_FILES)
@@ -25,17 +23,21 @@ config-schemas: $(SCHEMA_FILES)
 		cp "$$f" "$(SCHEMAS_DIR)/$$dir.json"; \
 	done
 
+compiled/bundle.js: src/node_modules config-schemas
+	@echo "Compiling UI code..."
+	@cd src && npm run build
+
 src/node_modules: src/package.json src/package-lock.json
 	@cd src && npm ci
 
 .PHONY: test
-test: src/node_modules  ## Run the UI tests.
+test: compiled/bundle.js  ## Run the UI tests.
 	@echo "Running UI tests..."
 	@cd src && npm test
 	@go test $(GO_TEST_ARGS) ./...
 
 .PHONY: test-coverage
-test-coverage: src/node_modules  ## Run the UI tests with coverage check.
+test-coverage: compiled/bundle.js  ## Run the UI tests with coverage check.
 	@echo "Running UI tests with coverage..."
 	@cd src && npm run test:coverage
 	@go test -covermode=atomic \
@@ -46,7 +48,7 @@ test-coverage: src/node_modules  ## Run the UI tests with coverage check.
 	@$(GO_TOOL) go-test-coverage --config=.testcoverage.yml
 
 .PHONY: lint
-lint: src/node_modules  ## Run linters on the UI code.
+lint: compiled/bundle.js  ## Run linters on the UI code.
 	@echo "Linting UI code..."
 	@cd src && npm run lint
 	@$(GO_TOOL) golangci-lint run ./...
