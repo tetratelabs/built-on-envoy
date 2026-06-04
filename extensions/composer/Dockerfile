@@ -5,49 +5,20 @@
 
 ARG GO_VERSION
 
-# Pin the builder to the CI runner platform so cross-OS compilation
-# (e.g. darwin from a Linux runner) works without OS-level emulation.
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION} AS builder
-
-ARG TARGETOS
-ARG TARGETARCH
-ARG ZIG_VERSION=0.16.0
+FROM golang:${GO_VERSION} AS builder
 
 WORKDIR /workspace
 COPY . .
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    ca-certificates wget git ssh netcat-openbsd xz-utils
-
-RUN wget -qO zig.tar.xz "https://ziglang.org/download/${ZIG_VERSION}/zig-$(uname -m)-linux-${ZIG_VERSION}.tar.xz" && \
-    tar xf zig.tar.xz && mv zig-*/zig /usr/local/bin/ && mv zig-*/lib /usr/local/lib/zig && \
-    rm -rf zig.tar.xz zig-*
-
-# zig cc cannot resolve macOS SDK flags without a full SDK install.
-COPY <<'ZIGCC' /usr/local/bin/zigcc
-#!/bin/sh
-skip=false; f=
-for a in "$@"; do
-  if $skip; then skip=false; continue; fi
-  case "$a" in
-    -Wl,-flat_namespace|-Wl,-bind_at_load|-Wl,--unresolved-symbols*|-lresolv) ;;
-    -framework|-arch) skip=true ;;
-    *) f="$f $a" ;;
-  esac
-done
-exec zig cc $f
-ZIGCC
-RUN chmod +x /usr/local/bin/zigcc
+# Install necessary tools for cgo
+RUN apt-get update
+RUN apt-get install -y --no-install-recommends \
+    ca-certificates wget git ssh netcat-openbsd gcc build-essential binutils binutils-gold
 
 RUN go mod download all
 ARG BUILD_TAG=""
-
-RUN ZIG_TARGET=$(echo $TARGETARCH | sed 's/arm64/aarch64/;s/amd64/x86_64/') && \
-    case "$TARGETOS" in darwin) ZIG_TARGET="$ZIG_TARGET-macos" ;; *) ZIG_TARGET="$ZIG_TARGET-linux-gnu" ;; esac && \
-    CC="zigcc -target $ZIG_TARGET" \
-    CGO_ENABLED=1 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -buildmode=c-shared ${BUILD_TAG} -o libcomposer.so ./main
+# Build go shared library
+RUN CGO_ENABLED=1 go build -buildmode=c-shared ${BUILD_TAG} -o libcomposer.so ./main
 
 FROM scratch AS final
 
