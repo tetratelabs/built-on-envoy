@@ -343,8 +343,6 @@ func TestNativeHTTPFilterPositionExtensions(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("x-upstream-tenant-id", r.Header.Get("x-tenant-id"))
 				w.Header().Set("x-upstream-tenant-tier", r.Header.Get("x-tenant-tier"))
