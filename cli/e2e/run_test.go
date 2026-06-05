@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal"
+	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 
@@ -203,6 +204,13 @@ func TestLocalGoExtensionLegacyPluginPath(t *testing.T) {
 func testLocalGoExtension(t *testing.T, removeCSharedMain bool) {
 	t.Helper()
 
+	// Load composer version to make it explicit in the create command and avoid pulling it from the
+	// public extension catalog, as versions may differ with the local one.
+	manifests, err := extensions.LoadManifests(internaltesting.ExtensionsFS(t), ".", false)
+	require.NoError(t, err)
+	composer, ok := manifests[extensions.ComposerArtifact]
+	require.True(t, ok)
+
 	// Local builds for Go will pull libcomposer from the remote registry. However, when we're doing changes to versions, etc, we don't want it to
 	// pull an obsolete version, so we'll just push the current composer source to the local registry and use that for the test.
 	t.Setenv("BOE_REGISTRY", registryAddr)
@@ -216,7 +224,7 @@ func testLocalGoExtension(t *testing.T, removeCSharedMain bool) {
 	dataDir := t.TempDir()
 
 	// Create a brand new extension
-	process := internaltesting.RunCLI(t, cliBin, "create", "go-e2e", "--path", dataDir)
+	process := internaltesting.RunCLI(t, cliBin, "create", "go-e2e", "--path", dataDir, "--composer-version", composer.Version)
 	status, err := process.Wait()
 	require.NoError(t, err)
 	require.Equal(t, 0, status.ExitCode())
