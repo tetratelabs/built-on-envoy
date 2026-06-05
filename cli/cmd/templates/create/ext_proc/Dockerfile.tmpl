@@ -16,7 +16,7 @@ COPY . .
 RUN go mod download all
 
 # Build the ext_proc server binary
-RUN CGO_ENABLED=0 go build -a -ldflags="-s -w" -o ./out/ext_proc-server .
+RUN CGO_ENABLED=0 go build -trimpath -a -ldflags="-s -w" -o ./out/ext_proc-server .
 
 FROM scratch AS final
 
