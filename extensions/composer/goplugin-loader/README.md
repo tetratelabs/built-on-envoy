@@ -35,7 +35,7 @@ Plugins must:
 ## Building a Plugin
 
 ```bash
-go build -buildmode=plugin -o myplugin.so ./myplugin
+go build -trimpath -buildmode=plugin -o myplugin.so ./myplugin
 ```
 
 ## Configuration

@@ -23,7 +23,7 @@ RUN apt-get install -y --no-install-recommends \
 RUN go mod download all
 
 # Build go shared library
-RUN CGO_ENABLED=1 go build -buildmode=c-shared -o lib${NAME}.so ./main
+RUN CGO_ENABLED=1 go build -trimpath -buildmode=c-shared -o lib${NAME}.so ./main
 
 FROM scratch AS final
 
