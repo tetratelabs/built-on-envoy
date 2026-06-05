@@ -8,8 +8,11 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"net/http/httptest"
 	"os"
 	"testing"
+
+	"github.com/mccutchen/go-httpbin/v2/httpbin"
 
 	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
@@ -44,8 +47,13 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
+	testUpstream := httptest.NewServer(httpbin.New())
+	// This env var is used in the tests RunEnvot to automatically configure the test upstream cluster.
+	_ = os.Setenv("TEST_BOE_UPSTREAM_CLUSTER_INSECURE", testUpstream.Listener.Addr().String())
+
 	code := m.Run()
 
+	testUpstream.Close()
 	_ = registryContainer.Terminate(ctx)
 	cleanup()
 
