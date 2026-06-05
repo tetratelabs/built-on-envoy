@@ -84,7 +84,7 @@ loader module) that will load the plugin.
 ### How it works
 
 1. Your extension exports a `WellKnownHttpFilterConfigFactories()` function as its entry point.
-2. The extension is compiled with `go build -buildmode=plugin` to produce a `.so` file.
+2. The extension is compiled with `go build -trimpath -buildmode=plugin` to produce a `.so` file.
 3. At runtime, the Composer's plugin loader opens the `.so` file and validates that it was built
    with the same Go version and matching dependency versions before registering its filters.
 
