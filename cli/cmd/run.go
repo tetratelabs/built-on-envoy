@@ -318,7 +318,10 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 					}
 				}
 				downloaded = append(downloaded, artifact.Manifest)
+			default:
+				downloaded = append(downloaded, artifact.Manifest)
 			}
+
 		default:
 			return nil, fmt.Errorf("unknown artifact type %q for extension %s", artifact.ArtifactType, name)
 		}
