@@ -30,7 +30,7 @@ type Executor struct {
 	mu      sync.Mutex
 	running *exec.Cmd
 	cancel  context.CancelFunc
-	params  RunParams
+	params  *RunParams
 	exe     string // overrides selfExe(); used in tests
 }
 
@@ -57,7 +57,7 @@ func freePorts(n int) ([]int, error) {
 	return ports, nil
 }
 
-func buildArgs(action string, baseArgs []string, exts []ExtensionConfig) []string {
+func buildArgs(action string, baseArgs []string, exts []*ExtensionConfig) []string {
 	args := []string{action}
 	args = append(args, baseArgs...)
 	if runtime.GOOS == "darwin" && runtime.GOARCH == "amd64" {
@@ -67,7 +67,11 @@ func buildArgs(action string, baseArgs []string, exts []ExtensionConfig) []strin
 		args = append(args, "--listen-port", strconv.Itoa(ports[0]), "--admin-port", strconv.Itoa(ports[1]))
 	}
 	for _, ext := range exts {
-		args = append(args, "--extension", ext.Name)
+		if ext.LocalPath != "" {
+			args = append(args, "--local", ext.LocalPath)
+		} else {
+			args = append(args, "--extension", ext.Name)
+		}
 	}
 	for _, ext := range exts {
 		args = append(args, "--config", ext.Config)
@@ -153,7 +157,7 @@ func (e *Executor) selfExe() string {
 }
 
 // RunStreaming executes boe run and streams output via SSE.
-func (e *Executor) RunStreaming(ctx context.Context, exts []ExtensionConfig, w http.ResponseWriter, flusher http.Flusher) {
+func (e *Executor) RunStreaming(ctx context.Context, exts []*ExtensionConfig, w http.ResponseWriter, flusher http.Flusher) {
 	e.streamCommand(ctx, buildArgs("run", e.params.Args(), exts), w, flusher)
 }
 

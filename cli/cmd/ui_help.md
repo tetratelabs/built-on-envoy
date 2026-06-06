@@ -21,3 +21,9 @@ Start the UI on a custom port customizing the Envoy log levels:
     ```shell
     boe ui --port 9090 --log-level dynamic_modules:debug
     ```
+
+Start the UI enabling also some local extensions:
+
+    ```shell
+    boe ui --local /path/to/my/extension1 /path/to/my/extension2 
+    ```

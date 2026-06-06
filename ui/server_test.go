@@ -13,10 +13,12 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 // mockExecutor implements executorRunner for tests.
@@ -25,7 +27,7 @@ type mockExecutor struct {
 	stopErr   error
 }
 
-func (m *mockExecutor) RunStreaming(_ context.Context, _ []ExtensionConfig, _ http.ResponseWriter, _ http.Flusher) {
+func (m *mockExecutor) RunStreaming(_ context.Context, _ []*ExtensionConfig, _ http.ResponseWriter, _ http.Flusher) {
 	m.runCalled = true
 }
 
@@ -37,7 +39,7 @@ func (m *mockExecutor) Stop() error {
 func newTestServer(exec executorRunner) *Server {
 	s := &Server{
 		mux:      http.NewServeMux(),
-		logger:   nil,
+		logger:   discardLogger(),
 		executor: exec,
 	}
 	s.routes()
@@ -46,6 +48,8 @@ func newTestServer(exec executorRunner) *Server {
 
 func TestHandleGetExtensions(t *testing.T) {
 	s := newTestServer(&mockExecutor{})
+	require.NoError(t, s.loadLocalExtensions([]string{"testdata/test-lua"}))
+
 	req := httptest.NewRequest(http.MethodGet, "/api/extensions", nil)
 	w := httptest.NewRecorder()
 
@@ -138,23 +142,60 @@ func TestHandleStop_OK(t *testing.T) {
 }
 
 func TestNewServer(t *testing.T) {
-	s := NewServer(slog.Default(), RunParams{})
-	require.NotNil(t, s)
-	require.NotNil(t, s.mux)
-	require.NotNil(t, s.executor)
+	t.Run("ok", func(t *testing.T) {
+		s, err := NewServer(slog.Default(), &RunParams{})
+		require.NoError(t, err)
+		require.NotNil(t, s)
+		require.NotNil(t, s.mux)
+		require.NotNil(t, s.executor)
+	})
+
+	t.Run("invalid local extension", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		_, err := NewServer(slog.Default(), &RunParams{LocalExtensions: []string{tmpDir}})
+		require.ErrorContains(t, err, "failed to read local extension manifest")
+	})
+}
+
+func TestLoadLocalxtensions(t *testing.T) {
+	s, err := NewServer(slog.Default(), &RunParams{})
+	require.NoError(t, err)
+
+	err = s.loadLocalExtensions([]string{"testdata/test-lua"})
+	require.NoError(t, err)
+
+	ext, ok := s.localExts["test-lua"]
+	require.True(t, ok)
+	require.Equal(t, "testdata/test-lua", ext.Path)
+
+	// Verify that the manifest was loaded and the "Local" category was added.
+	var original map[string]any
+	luaManifest, err := os.ReadFile("testdata/test-lua/manifest.yaml")
+	require.NoError(t, err)
+	require.NoError(t, yaml.Unmarshal(luaManifest, &original))
+
+	original["categories"] = append(original["categories"].([]any), "Local")
+
+	require.Equal(t, original, ext.Manifest)
 }
 
 func TestHandleGetSchema_Found(t *testing.T) {
 	s := newTestServer(&mockExecutor{})
-	req := httptest.NewRequest(http.MethodGet, "/api/extensions/cedar/schema", nil)
-	w := httptest.NewRecorder()
+	require.NoError(t, s.loadLocalExtensions([]string{"testdata/test-lua"}))
 
-	s.ServeHTTP(w, req)
+	for _, name := range []string{"cedar", "test-lua"} {
+		t.Run(name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/extensions/%s/schema", name), nil)
+			w := httptest.NewRecorder()
 
-	require.Equal(t, http.StatusOK, w.Code)
-	require.Equal(t, "application/json", w.Header().Get("Content-Type"))
-	var v interface{}
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&v))
+			s.ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			require.Equal(t, "application/json", w.Header().Get("Content-Type"))
+			var v interface{}
+			require.NoError(t, json.NewDecoder(w.Body).Decode(&v))
+		})
+	}
 }
 
 // nonFlushingWriter implements http.ResponseWriter but not http.Flusher.

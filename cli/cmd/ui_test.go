@@ -52,6 +52,8 @@ Flags:
                                  dev-latest) ($ENVOY_VERSION)
       --envoy-path=STRING        Path to a custom Envoy binary. Skips Envoy
                                  download and version selection ($ENVOY_PATH).
+      --local=LOCAL              Path to a directory containing a local
+                                 Extension to enable.
       --dev                      Whether to allow downloading dev versions of
                                  extensions (with -dev suffix). By default,
                                  only stable versions are allowed.
@@ -91,6 +93,15 @@ func TestUIRun_Success(t *testing.T) {
 	cancel()
 
 	require.NoError(t, <-errCh)
+}
+
+func TestUIRun_InvalidLocalExtension(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	u := &UI{Local: []string{tmpDir}}
+	err := u.Run(t.Context(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	require.ErrorContains(t, err, "failed to read local extension manifest")
 }
 
 func TestUIRun_BrowserOpenFails(t *testing.T) {

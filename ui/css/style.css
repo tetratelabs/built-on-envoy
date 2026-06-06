@@ -338,6 +338,7 @@ body {
 .badge-transform { background: #d946ef; }
 .badge-misc { background: #8b5cf6; }
 .badge-examples { background: #cc69db; }
+.badge-local { background: #000000; }
 
 
 /* ---- Configuration Forms ---- */

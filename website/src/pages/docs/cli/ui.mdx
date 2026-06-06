@@ -32,6 +32,12 @@ Start the UI on a custom port customizing the Envoy log levels:
     boe ui --port 9090 --log-level dynamic_modules:debug
     ```
 
+Start the UI enabling also some local extensions:
+
+    ```shell
+    boe ui --local /path/to/my/extension1 /path/to/my/extension2 
+    ```
+
 
 ## Usage details
 
@@ -50,5 +56,6 @@ boe ui --help
 | `--log-level` | Envoy component log level. | `string` | `all:error` | `ENVOY_LOG_LEVEL` | No |
 | `--envoy-version` | Envoy version to use (e.g., 1.31.0, dev, dev-latest) | `string` | - | `ENVOY_VERSION` | No |
 | `--envoy-path` | Path to a custom Envoy binary. Skips Envoy download and version selection. | `string` | - | `ENVOY_PATH` | No |
+| `--local` | Path to a directory containing a local Extension to enable. | `[]string` | - | - | No |
 | `--dev` | Whether to allow downloading dev versions of extensions (with -dev suffix). By default, only stable versions are allowed. | `bool` | `false` | - | No |
 

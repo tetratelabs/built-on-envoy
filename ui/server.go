@@ -10,9 +10,13 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"path/filepath"
+
+	"gopkg.in/yaml.v3"
 
 	builtonenvoy "github.com/tetratelabs/built-on-envoy"
 )
@@ -25,15 +29,16 @@ var configSchemasFS embed.FS
 
 // executorRunner is the interface for running boe commands and streaming output.
 type executorRunner interface {
-	RunStreaming(ctx context.Context, exts []ExtensionConfig, w http.ResponseWriter, flusher http.Flusher)
+	RunStreaming(ctx context.Context, exts []*ExtensionConfig, w http.ResponseWriter, flusher http.Flusher)
 	Stop() error
 }
 
 // Server is the Extension Manager HTTP server.
 type Server struct {
-	mux      *http.ServeMux
-	logger   *slog.Logger
-	executor executorRunner
+	mux       *http.ServeMux
+	logger    *slog.Logger
+	executor  executorRunner
+	localExts map[string]*LocalExtension
 }
 
 // RunParams are the parameters for running extensions.
@@ -43,10 +48,20 @@ type RunParams struct {
 	EnvoyVersionsURL string
 	EnvoyPath        string
 	Dev              bool
+	LocalExtensions  []string
+}
+
+// LocalExtension represents a local extension with its path and manifest.
+type LocalExtension struct {
+	Path     string
+	Manifest map[string]any
 }
 
 // Args returns the command-line arguments corresponding to the RunParams.
-func (r RunParams) Args() []string {
+func (r *RunParams) Args() []string {
+	if r == nil {
+		return nil
+	}
 	var args []string
 	if r.LogLevel != "" {
 		args = append(args, "--log-level", r.LogLevel)
@@ -67,14 +82,45 @@ func (r RunParams) Args() []string {
 }
 
 // NewServer creates a new Extension Manager server.
-func NewServer(logger *slog.Logger, runParams RunParams) *Server {
+func NewServer(logger *slog.Logger, runParams *RunParams) (*Server, error) {
 	s := &Server{
 		mux:      http.NewServeMux(),
 		logger:   logger,
 		executor: &Executor{logger: logger, params: runParams},
 	}
+	if err := s.loadLocalExtensions(runParams.LocalExtensions); err != nil {
+		return nil, err
+	}
 	s.routes()
-	return s
+	return s, nil
+}
+
+func (s *Server) loadLocalExtensions(localExts []string) error {
+	s.localExts = make(map[string]*LocalExtension)
+	for _, local := range localExts {
+		manifest, err := os.ReadFile(filepath.Join(filepath.Clean(local), "manifest.yaml"))
+		if err != nil {
+			return fmt.Errorf("failed to read local extension manifest at %s: %w", local, err)
+		}
+
+		var manifestData map[string]any
+		if err := yaml.Unmarshal(manifest, &manifestData); err != nil {
+			return fmt.Errorf("failed to unmarshal local extension manifest at %s: %w", local, err)
+		}
+
+		name := manifestData["name"].(string)
+		categories, ok := manifestData["categories"].([]any)
+		if ok {
+			manifestData["categories"] = append(categories, "Local")
+		}
+		s.logger.Info("loaded local extension", "name", name, "path", local, "categories", manifestData["categories"])
+
+		s.localExts[name] = &LocalExtension{
+			Path:     local,
+			Manifest: manifestData,
+		}
+	}
+	return nil
 }
 
 // ServeHTTP implements http.Handler.
@@ -93,9 +139,25 @@ func (s *Server) routes() {
 }
 
 func (s *Server) handleGetExtensions(w http.ResponseWriter, _ *http.Request) {
+	var extensions []any
+	if err := json.Unmarshal(builtonenvoy.ExtensionCatalog, &extensions); err != nil {
+		s.logger.Error("failed to unmarshal extension catalog", "error", err)
+		http.Error(w, "Failed to load extension catalog", http.StatusInternalServerError)
+		return
+	}
+
+	var localExtensions []any
+	for _, local := range s.localExts {
+		localExtensions = append(localExtensions, local.Manifest)
+	}
+
+	extensions = append(localExtensions, extensions...)
+
 	w.Header().Set("Content-Type", "application/json")
-	if _, err := w.Write(builtonenvoy.ExtensionCatalog); err != nil {
-		s.logger.Error("failed to write extension catalog", "error", err)
+	if err := json.NewEncoder(w).Encode(extensions); err != nil {
+		s.logger.Error("failed to write extensions response", "error", err)
+		http.Error(w, "Failed to write extensions response", http.StatusInternalServerError)
+		return
 	}
 }
 
@@ -106,7 +168,14 @@ func (s *Server) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, err := configSchemasFS.ReadFile(filepath.Join("schemas", name+".json"))
+	var data []byte
+	var err error
+	if localExt, ok := s.localExts[name]; ok {
+		data, err = os.ReadFile(filepath.Join(localExt.Path, "config.schema.json"))
+	} else {
+		data, err = configSchemasFS.ReadFile(filepath.Join("schemas", name+".json"))
+	}
+
 	if err != nil {
 		http.Error(w, "No config schema for this extension", http.StatusNotFound)
 		return
@@ -118,13 +187,14 @@ func (s *Server) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 
 // RunRequest is the request body for the run and gen-config endpoints.
 type RunRequest struct {
-	Extensions []ExtensionConfig `json:"extensions"`
+	Extensions []*ExtensionConfig `json:"extensions"`
 }
 
 // ExtensionConfig represents an extension with its optional configuration.
 type ExtensionConfig struct {
-	Name   string `json:"name"`
-	Config string `json:"config"`
+	Name      string `json:"name"`
+	Config    string `json:"config"`
+	LocalPath string `json:"-"`
 }
 
 func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
@@ -136,6 +206,12 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 	if len(req.Extensions) == 0 {
 		http.Error(w, "At least one extension is required", http.StatusBadRequest)
 		return
+	}
+
+	for _, ext := range req.Extensions {
+		if localExt, ok := s.localExts[ext.Name]; ok {
+			ext.LocalPath = localExt.Path
+		}
 	}
 
 	w.Header().Set("Content-Type", "text/event-stream")
