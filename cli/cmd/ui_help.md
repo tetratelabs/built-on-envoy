@@ -25,5 +25,5 @@ Start the UI on a custom port customizing the Envoy log levels:
 Start the UI enabling also some local extensions:
 
     ```shell
-    boe ui --local /path/to/my/extension1 /path/to/my/extension2 
+    boe ui --local /path/to/my/extension1 --local /path/to/my/extension2 
     ```
