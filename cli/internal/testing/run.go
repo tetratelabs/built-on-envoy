@@ -31,13 +31,24 @@ func runEnvoyTimeout() time.Duration {
 	return cmp.Or(timeout, defaultRunEnvoyTimeout)
 }
 
+// testUpstreamArgs returns CLI arguments for the test upstream cluster if set via environment variables.
+func testUpstreamArgs() []string {
+	if testUpstream := os.Getenv("TEST_BOE_UPSTREAM_CLUSTER"); testUpstream != "" {
+		return []string{"--cluster", testUpstream, "--test-upstream-cluster", testUpstream}
+	}
+	if testUpstream := os.Getenv("TEST_BOE_UPSTREAM_CLUSTER_INSECURE"); testUpstream != "" {
+		return []string{"--cluster-insecure", testUpstream, "--test-upstream-cluster", testUpstream}
+	}
+	return nil
+}
+
 // RunEnvoy executes the CLI run command on the given listener and admin ports.
 func RunEnvoy(t *testing.T, cliBin string, listenPort int, adminPort int, args ...string) {
 	args = append([]string{
 		"run",
 		"--listen-port", strconv.Itoa(listenPort),
 		"--admin-port", strconv.Itoa(adminPort),
-	}, args...)
+	}, append(testUpstreamArgs(), args...)...)
 
 	process := RunCLI(t, cliBin, args...)
 
