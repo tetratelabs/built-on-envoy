@@ -1,0 +1,51 @@
+name: {{ .Name }}
+version: 0.1.0
+categories:
+  - Misc
+author: Unknown
+description: A custom Rust listener (L4) extension.
+longDescription: |
+  A custom Rust listener filter built with Envoy's dynamic module framework.
+
+  Listener filters run before a Connection object is created, allowing early
+  inspection and modification of accepted connections.
+
+  ## Features
+
+  * **Connection inspection**: Inspects connections on accept before routing
+  * **Configurable**: Configure the log tag via JSON config
+
+  ## Configuration
+
+  Configure the extension with a JSON object:
+  - `log_tag`: The tag to log on accepted connections (default: "example")
+
+  ## Building
+
+  This is a Rust dynamic module that must be compiled to a shared library.
+
+  ```bash
+  cargo build --release
+  ```
+
+  The compiled library will be at `target/release/lib{{ .LibName }}.{so,dylib}`
+tags:
+  - rust
+  - dynamic-module
+  - listener
+  - filter
+license: Apache-2.0
+type: rust
+filterType: [listener]
+examples:
+  - title: Basic Usage
+    description: Run the extension with default configuration
+    code: |
+      boe run --extension {{ .Name }}
+  - title: Custom Log Tag
+    description: Configure a custom log tag
+    code: |
+      boe run --extension {{ .Name }} --config '
+        {
+          "log_tag": "my-custom-tag"
+        }'

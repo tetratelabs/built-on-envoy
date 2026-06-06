@@ -135,103 +135,54 @@ func TestCreateGoWithDockerSupport(t *testing.T) {
 	})
 }
 
-func TestCreateRustWithDockerSupport(t *testing.T) {
+func TestCreateRustNetworkAndListenerFilters(t *testing.T) {
+	internaltesting.MaybeSkipLongRunningTest(t)
+
 	tmpDir := t.TempDir()
 	ctx := t.Context()
 
 	t.Setenv("BOE_REGISTRY_INSECURE", "true")
 	t.Setenv("BOE_REGISTRY", registryAddr)
 
-	// Create a new extension
-	process := internaltesting.RunCLI(t, cliBin, "create", "test-docker", "--path", tmpDir,
-		"--type", "rust")
-	status, err := process.Wait()
-	require.NoError(t, err)
-	require.Equal(t, 0, status.ExitCode())
+	for _, filterType := range []extensions.FilterType{
+		extensions.FilterTypeNetwork,
+		extensions.FilterTypeListener,
+		extensions.FilterTypeUDPListener,
+	} {
+		t.Run(string(filterType), func(t *testing.T) {
+			name := fmt.Sprintf("test-docker-%s", filterType)
+			// Create a new rust extension
+			process := internaltesting.RunCLI(t, cliBin, "create", name,
+				"--path", tmpDir, "--type", "rust", "--filter-type", string(filterType))
+			status, err := process.Wait()
+			require.NoError(t, err)
+			require.Equal(t, 0, status.ExitCode())
 
-	version := "0.1.0"
-	extensionDir := filepath.Join(tmpDir, "test-docker")
-	// Create a dummy config.schema.json to test it gets included in the download for Go extensions.
-	require.NoError(t, os.WriteFile(filepath.Join(extensionDir, "config.schema.json"), []byte(`{}`), 0o600))
+			extensionDir := filepath.Join(tmpDir, name)
+			version := "0.1.0"
 
-	t.Run("makefile_image_target", func(t *testing.T) {
-		// #nosec G204
-		makeCmd := exec.CommandContext(ctx, "make", "build_image")
-		makeCmd.Dir = extensionDir
-		output, err := makeCmd.CombinedOutput()
-		t.Logf("make build_image output: %s", string(output))
-		require.NoError(t, err, "Makefile build_image target should be valid")
+			manifest := &extensions.Manifest{
+				Name:        name,
+				Version:     version,
+				Type:        extensions.TypeRust,
+				FilterTypes: []extensions.FilterType{filterType},
+			}
 
-		// Pull the image manifest and check contents
-		manifest := &extensions.Manifest{Name: "test-docker", Version: version, Type: extensions.TypeRust}
-		pushOCIImageForDownload(t, extensionDir, "./Dockerfile", manifest)
-		requireDownloadHasFiles(t, manifest, "manifest.yaml", "config.schema.json")
-	})
+			// Building the image compiles the scaffolded Rust filter
+			// project end-to-end, catching template regressions that unit tests
+			// (which only check file contents) can't catch.
+			// #nosec G204
+			makeCmd := exec.CommandContext(ctx, "make", "build_image")
+			makeCmd.Dir = extensionDir
+			output, err := makeCmd.CombinedOutput()
+			t.Logf("make build_image output: %s", string(output))
+			require.NoError(t, err, "Makefile build_image target should be valid")
 
-	t.Run("makefile_code_target", func(t *testing.T) {
-		// #nosec G204
-		makeCmd := exec.CommandContext(ctx, "make", "push_code")
-		makeCmd.Dir = extensionDir
-		output, err := makeCmd.CombinedOutput()
-		t.Logf("make push_code output: %s", string(output))
-		require.NoError(t, err, "Makefile push_code target should be valid")
-
-		// Pull the image manifest and check annotations
-		fetchManifest(t, registryAddr, "extension-src-test-docker", version)
-	})
-}
-
-func TestCreateRustNetworkWithDockerSupport(t *testing.T) {
-	tmpDir := t.TempDir()
-	ctx := t.Context()
-
-	t.Setenv("BOE_REGISTRY_INSECURE", "true")
-	t.Setenv("BOE_REGISTRY", registryAddr)
-
-	// Create a new rust network filter extension
-	process := internaltesting.RunCLI(t, cliBin, "create", "test-docker-network",
-		"--path", tmpDir, "--type", "rust", "--filter-type", "network")
-	status, err := process.Wait()
-	require.NoError(t, err)
-	require.Equal(t, 0, status.ExitCode())
-
-	extensionDir := filepath.Join(tmpDir, "test-docker-network")
-	version := "0.1.0"
-
-	manifest := &extensions.Manifest{
-		Name:        "test-docker-network",
-		Version:     version,
-		Type:        extensions.TypeRust,
-		FilterTypes: []extensions.FilterType{extensions.FilterTypeNetwork},
+			// Push local image to registry and check its annotations
+			pushOCIImageForDownload(t, extensionDir, "./Dockerfile", manifest)
+			requireDownloadHasFiles(t, manifest, "manifest.yaml")
+		})
 	}
-
-	t.Run("makefile_image_target", func(t *testing.T) {
-		// Building the image compiles the scaffolded Rust network filter
-		// project end-to-end, catching template regressions that unit tests
-		// (which only check file contents) can't catch.
-		// #nosec G204
-		makeCmd := exec.CommandContext(ctx, "make", "build_image")
-		makeCmd.Dir = extensionDir
-		output, err := makeCmd.CombinedOutput()
-		t.Logf("make build_image output: %s", string(output))
-		require.NoError(t, err, "Makefile build_image target should be valid")
-
-		// Push local image to registry and check its annotations
-		pushOCIImageForDownload(t, extensionDir, "./Dockerfile", manifest)
-		requireDownloadHasFiles(t, manifest, "manifest.yaml")
-	})
-
-	t.Run("makefile_code_target", func(t *testing.T) {
-		// #nosec G204
-		makeCmd := exec.CommandContext(ctx, "make", "push_code")
-		makeCmd.Dir = extensionDir
-		output, err := makeCmd.CombinedOutput()
-		t.Logf("make push_code output: %s", string(output))
-		require.NoError(t, err, "Makefile push_code target should be valid")
-
-		// Pull the image manifest and check annotations
-		fetchManifest(t, registryAddr, "extension-src-test-docker-network", version)
-	})
 }
 
 // pushOCIImageForDownload pushes the extension image to the test registry in OCI format,
