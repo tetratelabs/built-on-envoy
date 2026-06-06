@@ -364,6 +364,32 @@ func TestGenConfigWriteConfig(t *testing.T) {
 		require.FileExists(t, cmd.Output+"/libcomposer.so")
 		require.FileExists(t, cmd.Output+"/test-go.so")
 	})
+
+	t.Run("goplugin-loader bundle copies libcomposer and preserves url", func(t *testing.T) {
+		var (
+			cmd    = &GenConfig{stdout: &buf, Output: t.TempDir()}
+			logger = internaltesting.NewTLogger(t)
+			dirs   = &xdg.Directories{DataHome: t.TempDir()}
+
+			gpl    = &extensions.Manifest{Name: extensions.GoPluginLoaderName, Type: extensions.TypeGo, CShared: true, Bundle: extensions.ComposerBundle, Version: "1.0.0"}
+			gplLib = extensions.LocalCacheExtension(dirs, gpl) // resolves to dym/composer/1.0.0/libcomposer.so
+		)
+		require.NoError(t, os.MkdirAll(filepath.Dir(gplLib), 0o750))
+		require.NoError(t, os.WriteFile(gplLib, []byte("fake libcomposer"), 0o600))
+
+		// The user-supplied inner plugin url must be left untouched (not rewritten to file://).
+		inputConfig := `filter_config: {"name":"goplugin-loader","url":"oci://ex/p:v1"}`
+		_, err := cmd.writeConfig(inputConfig, []*extensions.Manifest{gpl}, dirs, logger)
+		require.NoError(t, err)
+
+		require.FileExists(t, cmd.Output+"/libcomposer.so")
+		// No per-extension goplugin-loader.so should be produced for a bundle-hosted extension.
+		require.NoFileExists(t, cmd.Output+"/goplugin-loader.so")
+
+		written, err := os.ReadFile(cmd.Output + "/envoy.yaml")
+		require.NoError(t, err)
+		require.Contains(t, string(written), "oci://ex/p:v1", "user url must be preserved, not rewritten to file://")
+	})
 }
 
 func TestPrintExportSummary(t *testing.T) {

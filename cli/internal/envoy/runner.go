@@ -252,9 +252,12 @@ func setupDynamicModuleSearchPath(params *ConfigGenerationParams) (string, func(
 	// If there are composer extensions, link libcomposer.so as well
 	if composerVersion != "" {
 		composerPath := extensions.LocalCacheComposerLib(params.Dirs, composerVersion)
-		if _, err := os.Stat(composerPath); err == nil {
-			linkPath := filepath.Join(tempDir, filepath.Base(composerPath))
-
+		linkPath := filepath.Join(tempDir, filepath.Base(composerPath))
+		// Skip if libcomposer.so was already linked above by a bundle-hosted extension
+		// (e.g. goplugin-loader), to avoid a "file exists" error.
+		if _, err := os.Stat(linkPath); err == nil {
+			params.Logger.Debug("libcomposer already linked, skipping", "linkPath", linkPath)
+		} else if _, err := os.Stat(composerPath); err == nil {
 			params.Logger.Debug("linking libcomposer for composer extensions", "path", composerPath, "linkPath", linkPath)
 
 			if err := os.Symlink(composerPath, linkPath); err != nil {

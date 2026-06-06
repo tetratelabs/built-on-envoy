@@ -237,6 +237,20 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 	downloaded := make([]*extensions.Manifest, 0, len(refs))
 	for _, ext := range refs {
 		name, tag := splitRef(ext)
+
+		// The reserved name "goplugin-loader" is not a downloadable extension: it drives
+		// the composer's goplugin-loader filter directly from the user-supplied --config.
+		// Resolve the composer version, ensure libcomposer is available, and synthesize a
+		// manifest so the rest of the pipeline treats it like a dynamic-module extension.
+		if name == extensions.GoPluginLoaderName {
+			manifest, err := resolveGoPluginLoader(ctx, downloader, tag)
+			if err != nil {
+				return nil, err
+			}
+			downloaded = append(downloaded, manifest)
+			continue
+		}
+
 		_, _ = fmt.Fprintf(os.Stderr, "→ %sFetching %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)
 		artifact, err := downloader.DownloadExtension(ctx, name, tag)
 		if err != nil {
@@ -328,6 +342,41 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 	}
 
 	return downloaded, nil
+}
+
+// resolveGoPluginLoader resolves the composer-lite version for the raw goplugin-loader
+// extension, ensures libcomposer.so is present in the local cache, and returns a synthetic
+// manifest describing it. The tag (if not "latest") is interpreted as the composer version.
+func resolveGoPluginLoader(ctx context.Context, downloader *extensions.Downloader, tag string) (*extensions.Manifest, error) {
+	version := tag
+	if version == "" || version == "latest" {
+		resolved, err := extensions.ResolveLatestComposerVersion(ctx, downloader.Logger)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve composer version for %s: %w", extensions.GoPluginLoaderName, err)
+		}
+		version = resolved
+	}
+
+	_, _ = fmt.Fprintf(os.Stderr, "→ %sPreparing %s (composer %s)...%s\n",
+		internal.ANSIBold, extensions.GoPluginLoaderName, version, internal.ANSIReset)
+
+	if err := extensions.CheckOrDownloadLibComposer(ctx, downloader, version, extensions.ComposerArtifactLite); err != nil {
+		return nil, fmt.Errorf("failed to download libcomposer %s for %s: %w", version, extensions.GoPluginLoaderName, err)
+	}
+
+	manifest := &extensions.Manifest{
+		Name:            extensions.GoPluginLoaderName,
+		Type:            extensions.TypeGo,
+		CShared:         true,
+		Bundle:          extensions.ComposerBundle,
+		Version:         version,
+		ComposerVersion: version,
+		// Marked remote so extensionPositions.sort can match it by reference, like
+		// other downloaded extensions (it is fetched from the registry as composer-lite).
+		Remote: true,
+	}
+	manifest.ApplyDefaults()
+	return manifest, nil
 }
 
 // parseLogLevels parses a log level string in the format "component:level,component2:level".
@@ -478,23 +527,35 @@ func validateEnvoyCompat(envoyVersion string, extensions []*extensions.Manifest)
 	return errors.Join(errs...)
 }
 
-// warnMultipleGoExtensions prints a warning to stderr if multiple c-shared Go extensions
-// are detected, since each is a separate shared library with its own Go runtime.
+// warnMultipleGoExtensions prints a warning to stderr if multiple distinct c-shared Go
+// libraries are detected, since each is a separate shared library with its own Go runtime.
+// Extensions hosted by the same bundle (e.g. several goplugin-loader configs sharing
+// libcomposer.so) collapse to a single entry, as they share one Go runtime: they are
+// deduplicated by the shared library identity (bundle-or-name plus version).
 func warnMultipleGoExtensions(manifests []*extensions.Manifest) {
-	var csharedGoNames []string
+	// Deduplicate by shared-library identity (bundle-or-name plus version) so that
+	// extensions sharing one runtime collapse to a single entry.
+	seen := make(map[string]bool)
 	for _, ext := range manifests {
 		if ext.Type == extensions.TypeGo && ext.CShared {
-			csharedGoNames = append(csharedGoNames, ext.Name)
+			name := ext.Name
+			if ext.Bundle != "" {
+				name = ext.Bundle
+			}
+			seen[name+":"+ext.Version] = true
 		}
 	}
-	if len(csharedGoNames) >= 2 {
-		fmt.Fprintf(os.Stderr, "\n\033[1;33m⚠ Warning: Multiple Go extensions detected (%s).\033[0m\n"+
-			"  Each Go extension is an independent shared library with its own Go runtime.\n"+
-			"  In production, only one Go runtime can be loaded per Envoy process.\n"+
-			"  Consider compiling all Go extensions into the same binary, or use\n"+
-			"  the goplugin loader to load them through a single composer runtime.\n\n",
-			strings.Join(csharedGoNames, ", "))
+	if len(seen) < 2 {
+		return
 	}
+	libs := slices.Collect(maps.Keys(seen))
+	slices.Sort(libs)
+	fmt.Fprintf(os.Stderr, "\n\033[1;33m⚠ Warning: Multiple Go extensions detected (%s).\033[0m\n"+
+		"  Each Go extension is an independent shared library with its own Go runtime.\n"+
+		"  In production, only one Go runtime can be loaded per Envoy process.\n"+
+		"  Consider compiling all Go extensions into the same binary, or use\n"+
+		"  the goplugin loader to load them through a single composer runtime.\n\n",
+		strings.Join(libs, ", "))
 }
 
 // validateComposerCompat validates that all extensions use the same composer version.

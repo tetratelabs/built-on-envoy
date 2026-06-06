@@ -170,9 +170,20 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 
 	// Use the library name (with underscores) as the dynamic module config name.
 	// This is the identifier Envoy uses to reference the loaded module.
+	//
+	// Bundle-hosted extensions (e.g. the goplugin-loader) are instead loaded
+	// through a shared bundle module (e.g. libcomposer.so) named after the bundle.
+	moduleName := manifest.Name
+	if manifest.Bundle != "" {
+		moduleName = manifest.Bundle
+	}
+	// The composer bundle must be loaded globally: it embeds a single Go runtime that
+	// has to be shared across all of its hosted filters. Other modules load per-filter.
+	loadGlobally := moduleName == extensions.ComposerBundle
+
 	moduleConfig := &dymv3.DynamicModuleConfig{
-		Name:             manifest.Name,
-		LoadGlobally:     false,
+		Name:             moduleName,
+		LoadGlobally:     loadGlobally,
 		MetricsNamespace: "builtonenvoy",
 	}
 
@@ -310,11 +321,11 @@ func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manif
 
 	protoConfig := &dymhttpv3.DynamicModuleFilter{
 		DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-			Name:             "composer",
+			Name:             extensions.ComposerBundle,
 			LoadGlobally:     true,
 			MetricsNamespace: "builtonenvoy",
 		},
-		FilterName:   "goplugin-loader",
+		FilterName:   extensions.GoPluginLoaderName,
 		FilterConfig: anyConfig,
 	}
 	composerAny, err := anypb.New(protoConfig)

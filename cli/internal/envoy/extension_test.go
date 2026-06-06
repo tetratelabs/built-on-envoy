@@ -635,6 +635,120 @@ func TestComposerFilterGenerator(t *testing.T) {
 	checkProtos(t, wantOCI.HTTPFilters, got.HTTPFilters)
 }
 
+// TestGoPluginLoaderBundle verifies that a bundle-hosted Go c-shared extension
+// (the raw goplugin-loader) is generated via DynamicModuleFilterGenerator with
+// the bundle name as the dynamic-module name (loaded globally), the manifest
+// name as the filter name, and the user config passed through verbatim.
+func TestGoPluginLoaderBundle(t *testing.T) {
+	logger := internaltesting.NewTLogger(t)
+	dirs := &xdg.Directories{DataHome: t.TempDir()}
+	manifest := &extensions.Manifest{
+		Name:            extensions.GoPluginLoaderName,
+		Type:            extensions.TypeGo,
+		CShared:         true,
+		Bundle:          extensions.ComposerBundle,
+		Version:         "v1.0.0",
+		ComposerVersion: "v1.0.0",
+	}
+	manifest.ApplyDefaults()
+
+	// Case 1: Success without config
+	got, err := GenerateFilterConfig(logger, manifest, dirs, "")
+	require.NoError(t, err)
+
+	want := []*hcmv3.HttpFilter{
+		{
+			Name: manifest.Name,
+			ConfigType: &hcmv3.HttpFilter_TypedConfig{
+				TypedConfig: func() *anypb.Any {
+					cfg, anypbErr := anypb.New(&dymhttpv3.DynamicModuleFilter{
+						DynamicModuleConfig: &dymv3.DynamicModuleConfig{
+							Name:             extensions.ComposerBundle,
+							LoadGlobally:     true,
+							MetricsNamespace: "builtonenvoy",
+						},
+						FilterName: extensions.GoPluginLoaderName,
+					})
+					require.NoError(t, anypbErr)
+					return cfg
+				}(),
+			},
+		},
+	}
+	checkProtos(t, want, got.HTTPFilters)
+
+	// Case 2: Success with verbatim user config (no strict_check injection, no re-encoding).
+	configJSON := `{"name":"my-plugin","url":"oci://example.com/my-plugin:v1","config":{"foo":"bar"}}`
+	got, err = GenerateFilterConfig(logger, manifest, dirs, configJSON)
+	require.NoError(t, err)
+
+	wantWithConfig := []*hcmv3.HttpFilter{
+		{
+			Name: manifest.Name,
+			ConfigType: &hcmv3.HttpFilter_TypedConfig{
+				TypedConfig: func() *anypb.Any {
+					cfg, anypbErr := anypb.New(&dymhttpv3.DynamicModuleFilter{
+						DynamicModuleConfig: &dymv3.DynamicModuleConfig{
+							Name:             extensions.ComposerBundle,
+							LoadGlobally:     true,
+							MetricsNamespace: "builtonenvoy",
+						},
+						FilterName: extensions.GoPluginLoaderName,
+						FilterConfig: func() *anypb.Any {
+							inner, innerErr := anypb.New(wrapperspb.String(configJSON))
+							require.NoError(t, innerErr)
+							return inner
+						}(),
+					})
+					require.NoError(t, anypbErr)
+					return cfg
+				}(),
+			},
+		},
+	}
+	checkProtos(t, wantWithConfig, got.HTTPFilters)
+}
+
+// TestNonComposerBundle verifies that a bundle-hosted extension whose bundle is
+// NOT composer uses the bundle name as the dynamic-module name but is NOT loaded
+// globally (only the composer bundle, with its single Go runtime, must be). The
+// filter name remains the manifest's own name.
+func TestNonComposerBundle(t *testing.T) {
+	logger := internaltesting.NewTLogger(t)
+	dirs := &xdg.Directories{DataHome: t.TempDir()}
+	manifest := &extensions.Manifest{
+		Name:        "rate-limit",
+		Type:        extensions.TypeRust,
+		Bundle:      "rustextensions",
+		FilterTypes: []extensions.FilterType{extensions.FilterTypeHTTP},
+		Version:     "v1.0.0",
+	}
+
+	got, err := GenerateFilterConfig(logger, manifest, dirs, "")
+	require.NoError(t, err)
+
+	want := []*hcmv3.HttpFilter{
+		{
+			Name: manifest.Name,
+			ConfigType: &hcmv3.HttpFilter_TypedConfig{
+				TypedConfig: func() *anypb.Any {
+					cfg, anypbErr := anypb.New(&dymhttpv3.DynamicModuleFilter{
+						DynamicModuleConfig: &dymv3.DynamicModuleConfig{
+							Name:             "rustextensions",
+							LoadGlobally:     false,
+							MetricsNamespace: "builtonenvoy",
+						},
+						FilterName: manifest.Name,
+					})
+					require.NoError(t, anypbErr)
+					return cfg
+				}(),
+			},
+		},
+	}
+	checkProtos(t, want, got.HTTPFilters)
+}
+
 func TestExtProcFilterGenerator(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 	dirs := &xdg.Directories{DataHome: t.TempDir()}

@@ -82,6 +82,28 @@ func TestLocalCacheExtensionDirs(t *testing.T) {
 
 	require.Equal(t, "/home/user/.local/share/extensions/test/1.0.1/plugin.so",
 		LocalCacheExtension(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeLua}))
+
+	// Bundle-hosted extension (e.g. goplugin-loader): resolves to the shared bundle
+	// library by bundle name, keyed by the manifest version, regardless of the
+	// extension's own name/type.
+	goPluginLoader := &Manifest{
+		Name: GoPluginLoaderName, Type: TypeGo, CShared: true,
+		Bundle: ComposerBundle, Version: "1.0.1",
+	}
+	require.Equal(t, "/home/user/.local/share/extensions/dym/composer/1.0.1",
+		LocalCacheExtensionDir(dirs, goPluginLoader))
+	require.Equal(t, "/home/user/.local/share/extensions/dym/composer/1.0.1/libcomposer.so",
+		LocalCacheExtension(dirs, goPluginLoader))
+
+	// A non-composer bundle resolves to lib<bundle>.so under the bundle's dir.
+	rustBundleMember := &Manifest{
+		Name: "rate-limit", Type: TypeRust,
+		Bundle: "rustextensions", Version: "3.1.0",
+	}
+	require.Equal(t, "/home/user/.local/share/extensions/dym/rustextensions/3.1.0",
+		LocalCacheExtensionDir(dirs, rustBundleMember))
+	require.Equal(t, "/home/user/.local/share/extensions/dym/rustextensions/3.1.0/librustextensions.so",
+		LocalCacheExtension(dirs, rustBundleMember))
 }
 
 func TestLocalCacheComposerDirs(t *testing.T) {
