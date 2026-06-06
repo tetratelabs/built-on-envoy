@@ -96,6 +96,7 @@ func createGoExtension(logger *slog.Logger, dirs *xdg.Directories, path, name, c
 		"plugin.go":          "templates/create/go/plugin.go.tmpl",
 		"plugin_test.go":     "templates/create/go/plugin_test.go.tmpl",
 		"manifest.yaml":      "templates/create/go/manifest.yaml.tmpl",
+		"config.schema.json": "templates/create/go/config.schema.json.tmpl",
 		"Makefile":           "templates/create/go/Makefile.tmpl",
 		"go.mod":             "templates/create/go/go.mod.tmpl",
 		"Dockerfile":         "templates/create/go/Dockerfile.tmpl",
@@ -210,12 +211,14 @@ func createRustExtension(logger *slog.Logger, path, name, filterType string) err
 
 	libTemplate := fmt.Sprintf("templates/create/rust/lib_%s.rs.tmpl", filterType)
 	manifestTemplate := fmt.Sprintf("templates/create/rust/manifest_%s.yaml.tmpl", filterType)
+	configSchemaTemplate := fmt.Sprintf("templates/create/rust/config.schema.%s.json.tmpl", filterType)
 
 	// Map of output filename to template filename
 	files := map[string]string{
 		"src/lib.rs":         libTemplate,
 		"Cargo.toml":         "templates/create/rust/Cargo.toml.tmpl",
 		"manifest.yaml":      manifestTemplate,
+		"config.schema.json": configSchemaTemplate,
 		".gitignore":         "templates/create/rust/gitignore.tmpl",
 		".dockerignore":      "templates/create/rust/dockerignore.tmpl",
 		".cargo/config.toml": "templates/create/rust/cargo-config.toml.tmpl",

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "{{ .Name }}/config.schema.json",
+  "title": "{{ .Name }} Configuration",
+  "description": "Configuration for the {{ .Name }} extension.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "log_tag": {
+      "type": "string",
+      "description": "Custom value for the log tag to use. Defaults to \"example\" if not set."
+    }
+  }
+}
