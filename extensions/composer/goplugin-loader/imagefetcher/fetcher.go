@@ -37,6 +37,11 @@ type Option struct {
 // maxPluginSize is the upper bound for a plugin's size (512 MB).
 const maxPluginSize int64 = 512 * 1024 * 1024
 
+// errPluginBinaryNotFound is returned when a tar stream contains no .so file.
+// It is a sentinel so callers can distinguish "this layer has no plugin binary"
+// (keep looking in other layers) from a genuine extraction failure.
+var errPluginBinaryNotFound = errors.New(".so file not found in the archive")
+
 // FetchPlugin fetches a Go plugin binary from an OCI registry and returns the
 // local file path. The ref should be a plain OCI reference (e.g.
 // "registry.example.com/plugins/myplugin:v1") without an "oci://" scheme prefix.
@@ -127,8 +132,12 @@ func fetchPluginBinary(img v1.Image, destPath string) error {
 	return extractImageLayer(img, destPath, types.OCILayer)
 }
 
-// extractImageLayer extracts the plugin binary from the last layer of an image,
-// validating that the layer has the expected media type.
+// extractImageLayer extracts the plugin binary from an image. The .so is not
+// necessarily in the last layer: images built with multiple COPY instructions
+// produce one layer per instruction, and the plugin binary often lives in an
+// earlier layer than the packaged manifests. Layers are searched newest-first
+// so a later layer can override an earlier one, mirroring how an image's
+// filesystem is assembled.
 func extractImageLayer(img v1.Image, destPath string, expectedMediaType types.MediaType) error {
 	layers, err := img.Layers()
 	if err != nil {
@@ -138,15 +147,30 @@ func extractImageLayer(img v1.Image, destPath string, expectedMediaType types.Me
 		return errors.New("number of layers must be greater than zero")
 	}
 
-	layer := layers[len(layers)-1]
-	mt, err := layer.MediaType()
-	if err != nil {
-		return fmt.Errorf("failed to get media type: %w", err)
-	}
-	if mt != expectedMediaType {
-		return fmt.Errorf("invalid media type %s (expect %s)", mt, expectedMediaType)
-	}
+	for i := len(layers) - 1; i >= 0; i-- {
+		layer := layers[i]
+		mt, err := layer.MediaType()
+		if err != nil {
+			return fmt.Errorf("failed to get media type: %w", err)
+		}
+		if mt != expectedMediaType {
+			continue
+		}
 
+		if err := extractLayerBinary(layer, destPath); err != nil {
+			if errors.Is(err, errPluginBinaryNotFound) {
+				continue
+			}
+			return err
+		}
+		return nil
+	}
+	return errPluginBinaryNotFound
+}
+
+// extractLayerBinary opens a single layer's compressed tar.gz stream and
+// extracts the plugin binary from it.
+func extractLayerBinary(layer v1.Layer, destPath string) error {
 	r, err := layer.Compressed()
 	if err != nil {
 		return fmt.Errorf("failed to get layer content: %w", err)
@@ -217,5 +241,5 @@ func extractPluginBinary(r io.Reader, destPath string) error {
 		}
 		return nil
 	}
-	return fmt.Errorf(".so file not found in the archive")
+	return errPluginBinaryNotFound
 }
