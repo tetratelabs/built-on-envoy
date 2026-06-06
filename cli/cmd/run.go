@@ -255,9 +255,10 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 			downloaded = append(downloaded, artifact.Manifest)
 
 		case extensions.ArtifactSource:
+			switch artifact.Manifest.Type {
 			// If the downloaded artifact is the composer bundle, we need to find the path to the extension
 			// inside the composer source tree.
-			if artifact.Manifest.Type == extensions.TypeComposer {
+			case extensions.TypeComposer:
 				var manifest, composerManifest *extensions.Manifest
 				extensionSrc := extensions.LocalCacheComposerExtensionSourceDir(downloader.Dirs, artifact.Manifest, name)
 				if extensionSrc == "" {
@@ -296,8 +297,9 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 				}
 
 				downloaded = append(downloaded, manifest)
-			} else {
-				if artifact.Manifest.Type == extensions.TypeRust && build {
+
+			case extensions.TypeRust:
+				if build {
 					fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)
 					downloader.Logger.Info("building downloaded Rust extension", "name", artifact.Manifest.Name, "version", artifact.Manifest.Version)
 
@@ -306,7 +308,20 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 					}
 				}
 				downloaded = append(downloaded, artifact.Manifest)
+
+			case extensions.TypeExtProc:
+				if build {
+					fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)
+					downloader.Logger.Info("building downloaded ExtProc extension", "name", artifact.Manifest.Name, "version", artifact.Manifest.Version)
+					if err = extensions.CheckOrBuildExtProcBinary(downloader.Logger, downloader.Dirs, artifact.Manifest, artifact.Path); err != nil {
+						return nil, fmt.Errorf("failed to build ExtProc extension %s from source artifact: %w", name, err)
+					}
+				}
+				downloaded = append(downloaded, artifact.Manifest)
+			default:
+				downloaded = append(downloaded, artifact.Manifest)
 			}
+
 		default:
 			return nil, fmt.Errorf("unknown artifact type %q for extension %s", artifact.ArtifactType, name)
 		}

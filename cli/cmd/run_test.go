@@ -983,6 +983,21 @@ func TestDownloadExtensions(t *testing.T) {
 		require.Contains(t, err.Error(), "no Cargo.toml found")
 	})
 
+	t.Run("source ExtProc extension with no go.mod", func(t *testing.T) {
+		mock := &mockOCIClient{
+			annotations: map[string]string{
+				ocispec.AnnotationTitle:               "my-extproc-src",
+				extensions.OCIAnnotationExtensionType: string(extensions.TypeExtProc),
+				extensions.OCIAnnotationArtifact:      extensions.ArtifactSource,
+			},
+		}
+		d := newTestDownloader(t, t.TempDir(), mock)
+
+		_, err := downloadExtensions(t.Context(), d, []string{"my-extproc-src:1.0.0"}, true)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "no go.mod found")
+	})
+
 	t.Run("source non-composer non-dynamic-module extension", func(t *testing.T) {
 		mock := &mockOCIClient{
 			annotations: map[string]string{
