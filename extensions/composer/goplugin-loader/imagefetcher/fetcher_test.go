@@ -134,8 +134,8 @@ func TestExtractImageLayer(t *testing.T) {
 				}
 
 				dest := filepath.Join(t.TempDir(), "plugin.so")
-				if err := extractImageLayer(img, dest, tt.mediaType); err != nil {
-					t.Fatalf("extractImageLayer failed: %v", err)
+				if extractImageLayerErr := extractImageLayer(img, dest, tt.mediaType); extractImageLayerErr != nil {
+					t.Fatalf("extractImageLayer failed: %v", extractImageLayerErr)
 				}
 				b, err := os.ReadFile(dest) //nolint:gosec // Test code reads from temp dir.
 				if err != nil {
@@ -203,8 +203,8 @@ func TestExtractImageLayer(t *testing.T) {
 				}
 
 				dest := filepath.Join(t.TempDir(), "plugin.so")
-				if err := extractImageLayer(img, dest, tt.mediaType); err != nil {
-					t.Fatalf("extractImageLayer failed: %v", err)
+				if extractImageLayerErr := extractImageLayer(img, dest, tt.mediaType); extractImageLayerErr != nil {
+					t.Fatalf("extractImageLayer failed: %v", extractImageLayerErr)
 				}
 				b, err := os.ReadFile(dest) //nolint:gosec // Test code reads from temp dir.
 				if err != nil {
