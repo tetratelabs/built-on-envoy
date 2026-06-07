@@ -99,7 +99,126 @@ func TestExtractImageLayer(t *testing.T) {
 				}
 			})
 
-			t.Run("invalid media type", func(t *testing.T) {
+			t.Run("plugin binary in earlier layer", func(t *testing.T) {
+				// Replicates an image built with multiple COPY instructions
+				// (Dockerfile.plugin): the plugin .so lands in an early layer,
+				// followed by manifest/schema layers that contain no .so. The
+				// last layer is therefore NOT the plugin layer.
+				exp := "this is plugin binary"
+				pluginLayer, err := newMockLayer(tt.mediaType, map[string][]byte{
+					"plugin.so": []byte(exp),
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				manifestLayer, err := newMockLayer(tt.mediaType, map[string][]byte{
+					"manifest.yaml": []byte("name: example-go"),
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				schemaLayer, err := newMockLayer(tt.mediaType, map[string][]byte{
+					"config.schema.json": []byte("{}"),
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				// Append in build order: plugin first, then the manifests.
+				img := empty.Image
+				for _, l := range []v1.Layer{pluginLayer, manifestLayer, schemaLayer} {
+					img, err = mutate.Append(img, mutate.Addendum{Layer: l})
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+
+				dest := filepath.Join(t.TempDir(), "plugin.so")
+				if extractImageLayerErr := extractImageLayer(img, dest, tt.mediaType); extractImageLayerErr != nil {
+					t.Fatalf("extractImageLayer failed: %v", extractImageLayerErr)
+				}
+				b, err := os.ReadFile(dest) //nolint:gosec // Test code reads from temp dir.
+				if err != nil {
+					t.Fatalf("failed to read written plugin: %v", err)
+				}
+				if string(b) != exp {
+					t.Fatalf("got %s, but want %s", string(b), exp)
+				}
+			})
+
+			t.Run("no plugin binary in any layer", func(t *testing.T) {
+				manifestLayer, err := newMockLayer(tt.mediaType, map[string][]byte{
+					"manifest.yaml": []byte("name: example-go"),
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				schemaLayer, err := newMockLayer(tt.mediaType, map[string][]byte{
+					"config.schema.json": []byte("{}"),
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				img := empty.Image
+				for _, l := range []v1.Layer{manifestLayer, schemaLayer} {
+					img, err = mutate.Append(img, mutate.Addendum{Layer: l})
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+
+				dest := filepath.Join(t.TempDir(), "plugin.so")
+				err = extractImageLayer(img, dest, tt.mediaType)
+				if err == nil || !strings.Contains(err.Error(), "not found") {
+					t.Fatalf("extractImageLayer should fail with not found, got: %v", err)
+				}
+			})
+
+			t.Run("skips layer with unexpected media type", func(t *testing.T) {
+				// A layer whose media type does not match (e.g. a config layer)
+				// must be skipped, not treated as fatal, so the plugin in a
+				// matching layer is still found. Build order: plugin first, then
+				// a mismatched layer last (searched first).
+				exp := "this is plugin binary"
+				pluginLayer, err := newMockLayer(tt.mediaType, map[string][]byte{
+					"plugin.so": []byte(exp),
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				mismatchedLayer, err := newMockLayer(types.DockerPluginConfig, map[string][]byte{
+					"config.json": []byte("{}"),
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				img := empty.Image
+				for _, l := range []v1.Layer{pluginLayer, mismatchedLayer} {
+					img, err = mutate.Append(img, mutate.Addendum{Layer: l})
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+
+				dest := filepath.Join(t.TempDir(), "plugin.so")
+				if extractImageLayerErr := extractImageLayer(img, dest, tt.mediaType); extractImageLayerErr != nil {
+					t.Fatalf("extractImageLayer failed: %v", extractImageLayerErr)
+				}
+				b, err := os.ReadFile(dest) //nolint:gosec // Test code reads from temp dir.
+				if err != nil {
+					t.Fatalf("failed to read written plugin: %v", err)
+				}
+				if string(b) != exp {
+					t.Fatalf("got %s, but want %s", string(b), exp)
+				}
+			})
+
+			t.Run("only unexpected media type layers", func(t *testing.T) {
+				// When no layer has the expected media type, the search finds no
+				// plugin binary and reports not found (rather than aborting on
+				// the first mismatch).
 				l, err := newMockLayer(types.DockerPluginConfig, nil)
 				if err != nil {
 					t.Fatal(err)
@@ -110,8 +229,8 @@ func TestExtractImageLayer(t *testing.T) {
 				}
 				dest := filepath.Join(t.TempDir(), "plugin.so")
 				err = extractImageLayer(img, dest, tt.mediaType)
-				if err == nil || !strings.Contains(err.Error(), "invalid media type") {
-					t.Fatal("extractImageLayer should fail due to invalid media type")
+				if err == nil || !strings.Contains(err.Error(), "not found") {
+					t.Fatalf("extractImageLayer should fail with not found, got: %v", err)
 				}
 			})
 		})
