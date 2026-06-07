@@ -196,12 +196,16 @@
         </span>
 
         <div class="ext-row-info">
-            <a
-                class="ext-row-name"
-                href="https://builtonenvoy.io/extensions/{encodeURIComponent(ext.name)}"
-                target="_blank"
-                rel="noopener noreferrer"
-            >{ext.name}</a>
+            {#if !ext.local}
+                <a
+                    class="ext-row-name"
+                    href="https://builtonenvoy.io/extensions/{encodeURIComponent(ext.name)}"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >{ext.name}</a>
+            {:else}
+                <span>{ext.name}</span>
+            {/if}
             <div class="ext-row-desc">{ext.description}</div>
         </div>
 

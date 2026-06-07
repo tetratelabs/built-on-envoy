@@ -113,6 +113,8 @@ func (s *Server) loadLocalExtensions(localExts []string) error {
 		if ok {
 			manifestData["categories"] = append(categories, "Local")
 		}
+		manifestData["local"] = true
+
 		s.logger.Info("loaded local extension", "name", name, "path", local, "categories", manifestData["categories"])
 
 		s.localExts[name] = &LocalExtension{

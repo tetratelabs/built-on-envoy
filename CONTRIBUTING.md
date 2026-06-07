@@ -9,7 +9,7 @@ First of all, there are only three minimal prerequisites to contribute to the pr
 - The latest Go toolchain
 - `make`
 - `docker`
-- Node.js 18+ and npm (only for the website)
+- Node.js 18+ and npm
 
 which we assume you already have installed on your machine.
 

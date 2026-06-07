@@ -167,6 +167,7 @@ func TestLoadLocalxtensions(t *testing.T) {
 	ext, ok := s.localExts["test-lua"]
 	require.True(t, ok)
 	require.Equal(t, "testdata/test-lua", ext.Path)
+	require.True(t, ext.Manifest["local"].(bool))
 
 	// Verify that the manifest was loaded and the "Local" category was added.
 	var original map[string]any
@@ -175,6 +176,7 @@ func TestLoadLocalxtensions(t *testing.T) {
 	require.NoError(t, yaml.Unmarshal(luaManifest, &original))
 
 	original["categories"] = append(original["categories"].([]any), "Local")
+	original["local"] = true
 
 	require.Equal(t, original, ext.Manifest)
 }
