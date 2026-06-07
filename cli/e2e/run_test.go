@@ -358,32 +358,29 @@ func TestGoPluginLoaderRemoteExtension(t *testing.T) {
 	dataHome := t.TempDir()
 	t.Setenv("BOE_DATA_HOME", dataHome)
 
-	// Step 1: build the example Go plugin image and push it to the local registry. OCI_REGISTRY
-	// overrides the HUB the Makefile derives, and a single platform avoids cross-arch emulation.
-	// DEV_TAG= disables the Makefile's extra ":dev" tag: it is derived via a colon-substitution on
-	// the image ref that produces a bogus tag when the registry address contains a port (e.g.
-	// localhost:32779); we only need the versioned tag for this test.
-	// #nosec G204 -- test-controlled args (local registry address, host arch).
-	pushPlugin := exec.CommandContext(t.Context(), "make", "-f", "Makefile.plugin", "push_image",
+	// The build_image targets below run on the active buildx builder. Select the default (docker
+	// driver) builder: it builds via the Docker daemon, reusing the daemon's local base-image cache
+	// and proxy/registry configuration, which keeps a single-platform local build (type=docker)
+	// self-contained. We only need a local image to push, not a multi-platform registry export.
+	runCmd(t, "", "docker", "buildx", "use", "default")
+
+	// Step 1: build the example Go plugin image (single-platform, --output type=docker) and push it
+	// to the local registry. We use build_image rather than push_image: the latter does a
+	// multi-platform registry export with index-level OCI annotations, which buildkit rejects for a
+	// single-platform export ("index annotations not supported for single platform export").
+	// build_image tags the image <HUB>/extension-<name>:<version>-<os>-<arch>, with HUB derived from
+	// OCI_REGISTRY; we then push that tag (the daemon treats localhost/127.0.0.1 as insecure).
+	pluginRef := fmt.Sprintf("%s/built-on-envoy/extension-example-go:%s-linux-%s", registryAddr, version, runtime.GOARCH)
+	runCmd(t, composerDir, "make", "-f", "Makefile.plugin", "build_image",
 		"EXTENSION_PATH=example",
 		"OCI_REGISTRY="+registryAddr,
-		"PLATFORMS=linux/"+runtime.GOARCH,
-		"DEV_TAG=",
 	)
-	pushPlugin.Dir = composerDir
-	out, err := pushPlugin.CombinedOutput()
-	t.Logf("push example plugin image:\n%s", out)
-	require.NoError(t, err)
-	pluginURL := fmt.Sprintf("oci://%s/built-on-envoy/extension-example-go:%s", registryAddr, version)
+	runCmd(t, "", "docker", "push", pluginRef)
+	pluginURL := "oci://" + pluginRef
 
 	// Step 2: build the composer-lite image and extract libcomposer.so into the local cache
 	// at <dataHome>/extensions/dym/composer/<version>/libcomposer.so.
-	buildComposer := exec.CommandContext(t.Context(), "make", "build_image", "COMPOSER_LITE=true")
-	buildComposer.Dir = composerDir
-	out, err = buildComposer.CombinedOutput()
-	t.Logf("build composer-lite image:\n%s", out)
-	require.NoError(t, err)
-
+	runCmd(t, composerDir, "make", "build_image", "COMPOSER_LITE=true")
 	composerImage := fmt.Sprintf("%s/composer-lite:%s-linux-%s", registryAddr, version, runtime.GOARCH)
 	composerCacheDir := filepath.Join(dataHome, "extensions", "dym", "composer", version)
 	extractFileFromImage(t, composerImage, "/libcomposer.so", filepath.Join(composerCacheDir, "libcomposer.so"))
@@ -427,6 +424,20 @@ func extractFileFromImage(t *testing.T, image, srcPath, dst string) {
 	out, err := exec.CommandContext(t.Context(), "docker", "cp", containerID+":"+srcPath, dst).CombinedOutput()
 	require.NoError(t, err, "docker cp %s: %s", srcPath, out)
 	require.FileExists(t, dst)
+}
+
+// runCmd runs name with args (in dir, if non-empty), logging the combined output and failing the
+// test on a non-zero exit.
+func runCmd(t *testing.T, dir, name string, args ...string) {
+	t.Helper()
+	// #nosec G204 -- test-controlled command and args.
+	cmd := exec.CommandContext(t.Context(), name, args...)
+	if dir != "" {
+		cmd.Dir = dir
+	}
+	out, err := cmd.CombinedOutput()
+	t.Logf("%s %s:\n%s", name, strings.Join(args, " "), out)
+	require.NoError(t, err)
 }
 
 // TestNativeHTTPFilterPositionExtensions verifies that nativeHttpFilters.before
