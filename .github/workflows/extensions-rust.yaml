@@ -34,7 +34,7 @@ jobs:
       - run: make build-rust EXTENSION_PATH=${{ matrix.extension.path }}
       - run: make test-rust-coverage EXTENSION_PATH=${{ matrix.extension.path }}
       
-      - uses: codecov/codecov-action@v6
+      - uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           disable_search: true
