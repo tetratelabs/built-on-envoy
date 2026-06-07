@@ -323,6 +323,7 @@ func dummy() string {
 	require.NoError(t, err, string(output))
 }
 
+// corazaBuildTags mirrors BUILD_TAGS in extensions/composer/Makefile.common; the composer and its
 // TestGoPluginLoaderRemoteExtension exercises the raw goplugin-loader extension end to end:
 //  1. build the example Go plugin image and push it to the local test registry;
 //  2. build the composer-lite image and extract libcomposer.so into the local cache;
@@ -352,17 +353,16 @@ func TestGoPluginLoaderRemoteExtension(t *testing.T) {
 	t.Setenv("BOE_REGISTRY", registryAddr)
 	t.Setenv("BOE_REGISTRY_INSECURE", "true")
 
-	// Dedicated data home so we can place libcomposer.so at the cache location the
-	// goplugin-loader extension expects, and so the plugin pull cache is isolated.
+	// Dedicated data home so we can place libcomposer.so at the cache location the goplugin-loader
+	// extension expects, and so the plugin pull cache is isolated.
 	dataHome := t.TempDir()
 	t.Setenv("BOE_DATA_HOME", dataHome)
 
-	// Step 1: build the example Go plugin image and push it to the local registry.
-	// Override OCI_REGISTRY (Makefile.plugin derives HUB from it) and build a single
-	// platform to avoid cross-arch emulation.
-	// DEV_TAG= disables the Makefile's extra ":dev" tag: it is derived via a colon-substitution
-	// on the image ref that produces a bogus tag when the registry address contains a port
-	// (e.g. localhost:32779). We only need the versioned tag for this test.
+	// Step 1: build the example Go plugin image and push it to the local registry. OCI_REGISTRY
+	// overrides the HUB the Makefile derives, and a single platform avoids cross-arch emulation.
+	// DEV_TAG= disables the Makefile's extra ":dev" tag: it is derived via a colon-substitution on
+	// the image ref that produces a bogus tag when the registry address contains a port (e.g.
+	// localhost:32779); we only need the versioned tag for this test.
 	// #nosec G204 -- test-controlled args (local registry address, host arch).
 	pushPlugin := exec.CommandContext(t.Context(), "make", "-f", "Makefile.plugin", "push_image",
 		"EXTENSION_PATH=example",
@@ -412,8 +412,10 @@ func extractFileFromImage(t *testing.T, image, srcPath, dst string) {
 	t.Helper()
 	require.NoError(t, os.MkdirAll(filepath.Dir(dst), 0o750))
 
+	// The composer image is FROM scratch with no default command, so "docker create" needs an
+	// explicit (dummy) command. It is never executed; we only use the container's filesystem.
 	// #nosec G204 -- test-controlled image reference.
-	created, err := exec.CommandContext(t.Context(), "docker", "create", image).Output()
+	created, err := exec.CommandContext(t.Context(), "docker", "create", image, "extract").Output()
 	require.NoError(t, err, "docker create %s", image)
 	containerID := strings.TrimSpace(string(created))
 	t.Cleanup(func() {
