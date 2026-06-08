@@ -9,7 +9,9 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"os"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,13 +25,29 @@ var rnd = rand.New(rand.NewSource(time.Now().UnixNano())) //nolint: gosec
 func CreateBuildxBuilder(ctx context.Context) (string, func(), error) {
 	// Create a new builder instance that uses the custom buildkit configuration and host network.
 	builderName := fmt.Sprintf("test-builder-%d", rnd.Int())
-	// #nosec G204
-	createBuilderCmd := exec.CommandContext(ctx, "docker", "buildx", "create",
+	args := []string{
+		"buildx", "create",
 		"--name", builderName,
 		"--use",
 		"--driver", "docker-container",
 		"--driver-opt", "network=host",
-	)
+	}
+	// Forward proxy settings into the buildkit container. The buildx CLI does not propagate these
+	// automatically to docker-container builders, so in proxied environments buildkit would dial
+	// public registries (e.g. docker.io) directly and time out when pulling base images. Each
+	// "env.KEY=value" token is wrapped in quotes so buildx's CSV driver-opt parser keeps
+	// comma-separated values (such as NO_PROXY) intact.
+	for _, key := range []string{"HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"} {
+		v := os.Getenv(key)
+		if v == "" {
+			v = os.Getenv(strings.ToLower(key))
+		}
+		if v != "" {
+			args = append(args, "--driver-opt", fmt.Sprintf(`"env.%s=%s"`, key, v))
+		}
+	}
+	// #nosec G204
+	createBuilderCmd := exec.CommandContext(ctx, "docker", args...)
 	if err := createBuilderCmd.Run(); err != nil {
 		return "", nil, fmt.Errorf("failed to create buildx builder: %w", err)
 	}

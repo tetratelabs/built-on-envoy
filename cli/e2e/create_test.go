@@ -13,8 +13,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -77,7 +75,15 @@ func TestCreateGoWithDockerSupport(t *testing.T) {
 			require.NoError(t, err, "Makefile build_image target should be valid")
 
 			manifest := &extensions.Manifest{Name: "test-docker", Version: version, Type: extensions.TypeGo, CShared: true}
-			pushOCIImageForDownload(t, extensionDir, "./Dockerfile", manifest)
+			// Build and push the single-platform image via the Makefile's push_image target, which
+			// emits the manifest-level OCI annotations required by boe download.
+			// #nosec G204
+			pushCmd := exec.CommandContext(ctx, "make", "push_image", "PLATFORMS=linux/"+runtime.GOARCH)
+			pushCmd.Dir = extensionDir
+			pushOutput, err := pushCmd.CombinedOutput()
+			t.Logf("make push_image output: %s", string(pushOutput))
+			require.NoError(t, err, "Makefile push_image target should be valid")
+
 			requireDownloadHasFiles(t, manifest, "manifest.yaml", "config.schema.json")
 		})
 	})
@@ -117,7 +123,15 @@ func TestCreateGoWithDockerSupport(t *testing.T) {
 			require.NoError(t, err, "Makefile build_image_plugin target should be valid")
 
 			manifest := &extensions.Manifest{Name: "test-docker", Version: version, Type: extensions.TypeGo, CShared: false}
-			pushOCIImageForDownload(t, extensionDir, "./Dockerfile.plugin", manifest)
+			// Build and push the single-platform plugin image via the Makefile's push_image_plugin
+			// target, which emits the manifest-level OCI annotations required by boe download.
+			// #nosec G204
+			pushCmd := exec.CommandContext(ctx, "make", "push_image_plugin", "PLATFORMS=linux/"+runtime.GOARCH)
+			pushCmd.Dir = extensionDir
+			pushOutput, err := pushCmd.CombinedOutput()
+			t.Logf("make push_image_plugin output: %s", string(pushOutput))
+			require.NoError(t, err, "Makefile push_image_plugin target should be valid")
+
 			requireDownloadHasFiles(t, manifest, "manifest.yaml", "config.schema.json")
 		})
 	})
@@ -178,61 +192,18 @@ func TestCreateRustNetworkAndListenerFilters(t *testing.T) {
 			t.Logf("make build_image output: %s", string(output))
 			require.NoError(t, err, "Makefile build_image target should be valid")
 
-			// Push local image to registry and check its annotations
-			pushOCIImageForDownload(t, extensionDir, "./Dockerfile", manifest)
+			// Build and push the single-platform image to the registry via the Makefile's push_image
+			// target, then check its annotations are usable by boe download.
+			// #nosec G204
+			pushCmd := exec.CommandContext(ctx, "make", "push_image", "PLATFORMS=linux/"+runtime.GOARCH)
+			pushCmd.Dir = extensionDir
+			pushOutput, err := pushCmd.CombinedOutput()
+			t.Logf("make push_image output: %s", string(pushOutput))
+			require.NoError(t, err, "Makefile push_image target should be valid")
+
 			requireDownloadHasFiles(t, manifest, "manifest.yaml")
 		})
 	}
-}
-
-// pushOCIImageForDownload pushes the extension image to the test registry in OCI format,
-// preserving the manifest annotations required by boe download.
-// It does not use the `make push_image` target because it is meant for multi-platform builds
-// and here we want to build for a single platform. We call directly buildx build with the
-// minimum set of annotations and config.
-func pushOCIImageForDownload(t *testing.T, extensionDir, dockerfile string, manifest *extensions.Manifest) {
-	t.Helper()
-	ctx := t.Context()
-
-	// Ensure boe-builder exists; the Makefile's create_builder target is idempotent.
-	// #nosec G204
-	createBuilderCmd := exec.CommandContext(ctx, "make", "create_builder")
-	createBuilderCmd.Dir = extensionDir
-	out, err := createBuilderCmd.CombinedOutput()
-	t.Logf("make create_builder output: %s", string(out))
-	require.NoError(t, err, "Should be able to ensure boe-builder exists")
-
-	args := []string{
-		"buildx", "build",
-		"--builder", "boe-builder",
-		"--platform", fmt.Sprintf("linux/%s", runtime.GOARCH),
-		"--output", "type=registry,oci-mediatypes=true,registry.insecure=true",
-		"--provenance=false",
-		"--tag", fmt.Sprintf("%s/extension-%s:%s", registryAddr, manifest.Name, manifest.Version),
-		"-f", dockerfile,
-		"--annotation", fmt.Sprintf("manifest:org.opencontainers.image.title=%s", manifest.Name),
-		"--annotation", fmt.Sprintf("manifest:org.opencontainers.image.version=%s", manifest.Version),
-		"--annotation", fmt.Sprintf("manifest:%s=%s", extensions.OCIAnnotationExtensionType, string(manifest.Type)),
-		"--annotation", fmt.Sprintf("manifest:%s=%s", extensions.OCIAnnotationCShared, strconv.FormatBool(manifest.CShared)),
-	}
-	if manifest.Type == extensions.TypeGo {
-		args = append(args, "--build-arg", fmt.Sprintf("NAME=%s", manifest.Name))
-	}
-	if len(manifest.FilterTypes) > 0 {
-		filterTypes := make([]string, len(manifest.FilterTypes))
-		for i, ft := range manifest.FilterTypes {
-			filterTypes[i] = string(ft)
-		}
-		args = append(args, "--annotation", fmt.Sprintf("manifest:%s=%s", extensions.OCIAnnotationFilterType, strings.Join(filterTypes, ",")))
-	}
-	args = append(args, ".")
-
-	// #nosec G204
-	pushCmd := exec.CommandContext(ctx, "docker", args...)
-	pushCmd.Dir = extensionDir
-	output, err := pushCmd.CombinedOutput()
-	t.Logf("pushOCIImageForDownload output: %s", string(output))
-	require.NoError(t, err, "Should be able to push OCI image to local registry")
 }
 
 func fetchManifest(t *testing.T, registry, repository, reference string) {

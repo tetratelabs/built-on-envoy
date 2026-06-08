@@ -47,7 +47,8 @@ SOURCE := https://$(subst ghcr.io,github.com,$(HUB))
 # last development version.
 # We still keep the versioned development tag because the `boe run` command relies on those when
 # using the `--dev` flag.
-DEV_LATEST := $(firstword $(subst :, ,$(IMAGE))):dev
+# Strip the trailing ':<version>' tag from IMAGE (not every colon, so registry host:port is kept).
+DEV_LATEST := $(patsubst %:$(VERSION)$(IMAGE_NONCE),%,$(IMAGE)):dev
 DEV_TAG    := $(if $(filter %-dev,$(VERSION)),--tag $(DEV_LATEST))
 
 # Base OCI image annotations (shared by all image types)
