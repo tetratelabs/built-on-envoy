@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/composer/token-exchange/config.schema.json",
+  "title": "Token Exchange Configuration",
+  "description": "Configuration for the OAuth2 Token Exchange (RFC 8693) extension.",
+  "type": "object",
+  "required": ["cluster", "token_exchange_url", "client_id", "client_secret"],
+  "additionalProperties": false,
+  "dependentRequired": {
+    "actor_token": ["actor_token_type"]
+  },
+  "properties": {
+    "cluster": {
+      "type": "string",
+      "description": "Envoy cluster name configured to reach the token exchange (STS) endpoint."
+    },
+    "token_exchange_url": {
+      "type": "string",
+      "description": "Token exchange endpoint URL. Must contain a host and path (e.g. \"https://idp.example.com/token\")."
+    },
+    "client_id": {
+      "type": "string",
+      "description": "Client ID for HTTP Basic authentication with the STS endpoint."
+    },
+    "client_secret": {
+      "type": "string",
+      "description": "Client secret for HTTP Basic authentication with the STS endpoint."
+    },
+    "subject_token_type": {
+      "type": "string",
+      "description": "Token type URI for the input subject token. Defaults to \"urn:ietf:params:oauth:token-type:access_token\"."
+    },
+    "resource": {
+      "type": "string",
+      "description": "Target resource URI. Must be an absolute URI without a fragment component.",
+      "format": "uri"
+    },
+    "audience": {
+      "type": "string",
+      "description": "Logical name of the target service."
+    },
+    "scope": {
+      "type": "string",
+      "description": "Space-delimited list of requested scopes."
+    },
+    "requested_token_type": {
+      "type": "string",
+      "description": "Desired output token type URI."
+    },
+    "actor_token": {
+      "type": "string",
+      "description": "Actor token for delegation scenarios. Requires actor_token_type."
+    },
+    "actor_token_type": {
+      "type": "string",
+      "description": "Token type URI for the actor token. Required when actor_token is set."
+    },
+    "timeout_ms": {
+      "type": "integer",
+      "description": "HTTP callout timeout in milliseconds. Defaults to 5000.",
+      "minimum": 0
+    }
+  }
+}

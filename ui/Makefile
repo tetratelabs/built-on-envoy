@@ -61,7 +61,7 @@ format:  ## Format code.
 	@$(GO_TOOL) license-eye -c $(ROOT)/.licenserc.yaml header fix
 
 .PHONY: check
-check: format  ## Run all necessary steps to prepare for a commit and check for any differences in the codebase
+check: build format  ## Run all necessary steps to prepare for a commit and check for any differences in the codebase
 	@if [ ! -z "`git status -s`" ]; then \
 		echo "The following differences will fail CI until committed:"; \
 		git status; \

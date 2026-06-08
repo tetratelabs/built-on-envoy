@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/composer/chat-completions-decoder/config.schema.json",
+  "title": "Chat Completions Decoder Configuration",
+  "description": "Configuration for the Chat Completions Decoder extension. Decodes OpenAI Chat Completion requests and responses, exposing structured metadata for downstream filters.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "metadata_namespace": {
+      "type": "string",
+      "description": "Filter metadata namespace for decoded fields. Defaults to \"io.builtonenvoy.openai\" if not set."
+    }
+  }
+}

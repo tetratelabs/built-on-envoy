@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/composer/opa/config.schema.json",
+  "title": "OPA Authorization Configuration",
+  "description": "Configuration for the OPA authorization extension. Evaluates Open Policy Agent policies inline to authorize HTTP requests.",
+  "type": "object",
+  "required": ["policies"],
+  "additionalProperties": false,
+  "properties": {
+    "policies": {
+      "type": "array",
+      "description": "OPA policies to load and evaluate. At least one policy is required.",
+      "items": {
+        "$ref": "#/$defs/DataSource"
+      },
+      "minItems": 1
+    },
+    "decision_path": {
+      "type": "string",
+      "description": "OPA rule path to query for the authorization decision. Defaults to \"envoy.authz.allow\"."
+    },
+    "fail_open": {
+      "type": "boolean",
+      "description": "If true, allow requests when policy evaluation fails. Defaults to false."
+    },
+    "dry_run": {
+      "type": "boolean",
+      "description": "If true, log authorization decisions without enforcing them. Defaults to false."
+    },
+    "with_body": {
+      "type": "boolean",
+      "description": "If true, buffer the request body and include it as parsed JSON in the OPA input. Defaults to false."
+    },
+    "metadata_namespaces": {
+      "type": "array",
+      "description": "List of dynamic metadata namespaces to include in the OPA input document under the \"dynamic_metadata\" key.",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "$defs": {
+    "DataSource": {
+      "type": "object",
+      "description": "A data source provided either inline or as a file path. Exactly one must be set.",
+      "additionalProperties": false,
+      "properties": {
+        "inline": {
+          "type": "string",
+          "description": "Data provided directly as a string."
+        },
+        "file": {
+          "type": "string",
+          "description": "Path to a file containing the data."
+        }
+      },
+      "oneOf": [
+        { "required": ["inline"] },
+        { "required": ["file"] }
+      ]
+    }
+  }
+}
