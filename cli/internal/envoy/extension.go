@@ -173,10 +173,7 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 	//
 	// Bundle-hosted extensions (e.g. the goplugin-loader) are instead loaded
 	// through a shared bundle module (e.g. libcomposer.so) named after the bundle.
-	moduleName := manifest.Name
-	if manifest.Bundle != "" {
-		moduleName = manifest.Bundle
-	}
+	moduleName := extensions.ModuleName(manifest)
 	// The composer bundle must be loaded globally: it embeds a single Go runtime that
 	// has to be shared across all of its hosted filters. Other modules load per-filter.
 	loadGlobally := moduleName == extensions.ComposerBundle
