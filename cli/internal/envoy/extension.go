@@ -262,21 +262,12 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, dirs *xdg.Directories, config string) (*ExtensionResources, error) {
 	c.Logger.Info("generating composer filter config for extension", "name", manifest.Name, "config", config)
 
-	cachedComposerPath := extensions.LocalCacheComposerLib(dirs, manifest.ComposerVersion)
-	if _, err := os.Stat(cachedComposerPath); os.IsNotExist(err) {
-		// TODO(wbpcode): Download the composer binary from the URL specified in the manifest.
-		return nil, fmt.Errorf("composer binary not found at %s", cachedComposerPath)
-	}
-
 	var pluginURL string
 	if manifest.Remote && manifest.SourceRegistry != "" {
 		// For remote extensions, use oci:// URL so config is portable.
 		pluginURL = "oci://" + extensions.RepositoryName(manifest.SourceRegistry, manifest.Name) + ":" + manifest.SourceTag
 	} else {
 		cachedPluginPath := extensions.LocalCacheExtension(dirs, manifest)
-		if _, err := os.Stat(cachedPluginPath); os.IsNotExist(err) {
-			return nil, fmt.Errorf("go plugin binary not found at %s", cachedPluginPath)
-		}
 		pluginURL = "file://" + cachedPluginPath
 	}
 
