@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/composer/file-server/config.schema.json",
+  "title": "File Server Configuration",
+  "description": "Configuration for the File Server extension. Serves static files from the local filesystem through Envoy.",
+  "type": "object",
+  "required": ["path_mappings"],
+  "additionalProperties": false,
+  "properties": {
+    "path_mappings": {
+      "type": "array",
+      "description": "Mappings from URL path prefixes to filesystem path prefixes. At least one mapping is required. Duplicate request path prefixes are not allowed.",
+      "items": {
+        "type": "object",
+        "required": ["request_path_prefix", "file_path_prefix"],
+        "additionalProperties": false,
+        "properties": {
+          "request_path_prefix": {
+            "type": "string",
+            "description": "URL path prefix to match (e.g. \"/static/\").",
+            "minLength": 1
+          },
+          "file_path_prefix": {
+            "type": "string",
+            "description": "Filesystem path prefix to map to (e.g. \"/var/www/\").",
+            "minLength": 1
+          }
+        }
+      },
+      "minItems": 1
+    },
+    "content_types": {
+      "type": "object",
+      "description": "Custom file extension to content-type mappings. Keys are file suffixes without dots (e.g. \"html\", \"css\").",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "default_content_type": {
+      "type": "string",
+      "description": "Default content-type when the file extension is not found in content_types."
+    },
+    "directory_index_files": {
+      "type": "array",
+      "description": "Files to serve for directory requests (e.g. [\"index.html\"]). File names must not contain slashes.",
+      "items": {
+        "type": "string",
+        "pattern": "^[^/]*$"
+      }
+    }
+  }
+}

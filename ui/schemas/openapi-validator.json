@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/composer/openapi-validator/config.schema.json",
+  "title": "OpenAPI Validator Configuration",
+  "description": "Configuration for the OpenAPI Validator extension. Validates HTTP requests against an OpenAPI specification.",
+  "type": "object",
+  "required": ["spec"],
+  "additionalProperties": false,
+  "properties": {
+    "spec": {
+      "$ref": "#/$defs/DataSource",
+      "description": "OpenAPI specification in YAML or JSON format."
+    },
+    "max_body_bytes": {
+      "type": "integer",
+      "description": "Maximum request body size in bytes for validation. 0 means no limit. Defaults to 0.",
+      "minimum": 0
+    },
+    "allow_unmatched_paths": {
+      "type": "boolean",
+      "description": "If true, allow requests to paths not defined in the spec. Defaults to false."
+    },
+    "dry_run": {
+      "type": "boolean",
+      "description": "If true, log validation failures without rejecting requests. Defaults to false."
+    },
+    "deny_response": {
+      "$ref": "#/$defs/LocalResponse",
+      "description": "Custom response returned when validation fails."
+    }
+  },
+  "$defs": {
+    "DataSource": {
+      "type": "object",
+      "description": "A data source provided either inline or as a file path. Exactly one must be set.",
+      "additionalProperties": false,
+      "properties": {
+        "inline": {
+          "type": "string",
+          "description": "Data provided directly as a string."
+        },
+        "file": {
+          "type": "string",
+          "description": "Path to a file containing the data."
+        }
+      },
+      "oneOf": [
+        { "required": ["inline"] },
+        { "required": ["file"] }
+      ]
+    },
+    "LocalResponse": {
+      "type": "object",
+      "description": "Custom local HTTP response to send to the client.",
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "type": "integer",
+          "description": "HTTP status code.",
+          "minimum": 100,
+          "maximum": 599
+        },
+        "body": {
+          "type": "string",
+          "description": "Response body."
+        },
+        "headers": {
+          "type": "object",
+          "description": "Additional response headers.",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
