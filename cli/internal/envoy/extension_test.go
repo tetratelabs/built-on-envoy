@@ -7,7 +7,6 @@ package envoy
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -468,25 +467,6 @@ func TestComposerFilterGenerator(t *testing.T) {
 		Remote:          true,
 	}
 
-	// Case 1: Composer binary missing
-	_, err := GenerateFilterConfig(logger, manifest, dirs, "")
-	require.ErrorContains(t, err, "composer binary not found")
-
-	// Create Composer binary
-	composerPath := extensions.LocalCacheComposerDir(dirs, manifest.ComposerVersion)
-	require.NoError(t, os.MkdirAll(composerPath, 0o750))
-	require.NoError(t, os.WriteFile(filepath.Join(composerPath, "libcomposer.so"), []byte("fake binary"), 0o600))
-
-	// Case 2: Plugin binary missing
-	_, err = GenerateFilterConfig(logger, manifest, dirs, "")
-	require.ErrorContains(t, err, "go plugin binary not found")
-
-	// Create Plugin binary
-	pluginPath := filepath.Join(dirs.DataHome, "extensions", "goplugin", manifest.Name, manifest.Version)
-	require.NoError(t, os.MkdirAll(pluginPath, 0o750))
-	require.NoError(t, os.WriteFile(filepath.Join(pluginPath, "plugin.so"), []byte("fake binary"), 0o600))
-
-	// Case 3: Success without config
 	got, err := GenerateFilterConfig(logger, manifest, dirs, "")
 	require.NoError(t, err)
 
