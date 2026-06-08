@@ -357,9 +357,10 @@ func TestPassthroughEnvVars(t *testing.T) {
 }
 
 func TestImageVersion(t *testing.T) {
-	require.Equal(t, "0.6.6", imageVersion(internal.Version{ClosestTag: "v0.6.6", Sha: "123"}))
-	require.Equal(t, "latest", imageVersion(internal.CurrentVersion()))
-	require.Equal(t, "latest", imageVersion(internal.Version{ClosestTag: "v0.6.6", CommitsAhead: 2, Sha: "123"}))
-	require.Equal(t, "latest", imageVersion(internal.Version{Sha: "123"}))
-	require.Equal(t, "latest", imageVersion(internal.Version{ClosestTag: "v0.6.6", CommitsAhead: 0}))
+	require.Equal(t, "0.6.6", imageVersion(internal.Version{ClosestTag: "v0.6.6", Sha: "123"}, ""))
+	require.Equal(t, "latest", imageVersion(internal.CurrentVersion(), ""))
+	require.Equal(t, "latest", imageVersion(internal.Version{ClosestTag: "v0.6.6", CommitsAhead: 2, Sha: "123"}, ""))
+	require.Equal(t, "latest", imageVersion(internal.Version{Sha: "123"}, ""))
+	require.Equal(t, "latest", imageVersion(internal.Version{ClosestTag: "v0.6.6", CommitsAhead: 0}, ""))
+	require.Equal(t, "custom-version", imageVersion(internal.CurrentVersion(), "custom-version"))
 }

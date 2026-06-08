@@ -391,12 +391,13 @@ type RunnerDocker struct {
 	Arch            string
 	LocalExtensions []string
 	Pull            string
+	ImageVersion    string
 }
 
 // Run starts Envoy in a Docker container.
 func (r *RunnerDocker) Run(ctx context.Context) error {
 	var (
-		version = imageVersion(internal.CurrentVersion())
+		version = imageVersion(internal.CurrentVersion(), r.ImageVersion)
 		image   = fmt.Sprintf("%s/%s:%s", r.Registry, dockerImage, version)
 	)
 
@@ -458,7 +459,10 @@ func (r *RunnerDocker) dockerRunArgs(image string, localExtArgs []string) []stri
 
 // imageVersion returns the image version to use for the Docker runner. For dev versions, it returns "latest"
 // to pull the most recent image. For release versions, it returns the specific version tag to pull the corresponding image.
-func imageVersion(version internal.Version) string {
+func imageVersion(version internal.Version, requestedVersion string) string {
+	if requestedVersion != "" {
+		return requestedVersion
+	}
 	if version.CommitsAhead != 0 || version.ClosestTag == "" || version.Sha == "" {
 		return "latest"
 	}
@@ -525,6 +529,12 @@ func (r *RunnerDocker) processCommandArgs(args []string) []string {
 		// Skip the --docker and --pull flags as they are only relevant to the host CLI
 		// and should not be passed to the container.
 		// Need to do prefix match not equality because flags could be in the form of --docker=true or --pull=always.
+
+		// Handle --docker-image-version value
+		if arg == "--docker-image-version" && i+1 < len(args) {
+			i++ // skip next arg (the value for --docker-image-version)
+			continue
+		}
 		if strings.HasPrefix(arg, "--docker") {
 			continue
 		}

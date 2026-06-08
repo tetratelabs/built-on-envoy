@@ -116,6 +116,7 @@ boe run --help
 | `--test-upstream-cluster` | Name of an existing configured cluster to use as the test upstream. The cluster must be configured via --cluster, --cluster-insecure, or --cluster-json. Mutually exclusive with --test-upstream-host. | `string` | - | - | No |
 | `--docker` | Run Envoy as a Docker container instead of using func-e. | `bool` | `false` | `BOE_RUN_DOCKER` | No |
 | `--pull` | Pull policy for the BOE Docker image (missing, always, never). Only applicable when running with --docker. | `string` | `missing` | - | No |
+| `--docker-image-version` | Override the BOE Docker image tag to use when running with --docker. By default, the image version matches the BOE version. | `string` | - | - | No |
 | `--registry` | OCI registry URL for the extensions. | `string` | `ghcr.io/tetratelabs/built-on-envoy` | `BOE_REGISTRY` | No |
 | `--insecure` | Allow connecting to an insecure (HTTP) registry. | `bool` | `false` | `BOE_REGISTRY_INSECURE` | No |
 | `--username` | Username for the OCI registry. | `string` | - | `BOE_REGISTRY_USERNAME` | No |

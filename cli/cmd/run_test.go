@@ -108,6 +108,10 @@ Flags:
       --pull="missing"             Pull policy for the BOE Docker image
                                    (missing, always, never). Only applicable
                                    when running with --docker.
+      --docker-image-version=STRING
+                                   Override the BOE Docker image tag to use
+                                   when running with --docker. By default,
+                                   the image version matches the BOE version.
       --registry="%s"
                                    OCI registry URL for the extensions
                                    ($BOE_REGISTRY).
@@ -289,6 +293,14 @@ func TestRunValidateMutualExclusion(t *testing.T) {
 				EnvoyVersion: "1.38.0",
 			},
 			expectedErr: "--envoy-path and --envoy-version are mutually exclusive",
+		},
+		{
+			name: "docker image version without docker",
+			run: Run{
+				LogLevel:           "all:error",
+				DockerImageVersion: "custom-version",
+			},
+			expectedErr: "--docker-image-version can only be used with --docker",
 		},
 	}
 

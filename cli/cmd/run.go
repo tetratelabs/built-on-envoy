@@ -54,6 +54,7 @@ type Run struct {
 	TestUpstreamCluster     string       `name:"test-upstream-cluster" help:"Name of an existing configured cluster to use as the test upstream. The cluster must be configured via --cluster, --cluster-insecure, or --cluster-json. Mutually exclusive with --test-upstream-host."`
 	Docker                  bool         `help:"Run Envoy as a Docker container instead of using func-e." default:"false" env:"BOE_RUN_DOCKER"`
 	Pull                    string       `name:"pull" help:"Pull policy for the BOE Docker image (missing, always, never). Only applicable when running with --docker." enum:"missing,always,never" default:"missing"`
+	DockerImageVersion      string       `name:"docker-image-version" help:"Override the BOE Docker image tag to use when running with --docker. By default, the image version matches the BOE version."`
 	OCI                     OCIFlags     `embed:""`
 
 	extensionPositions extensionPositions `kong:"-"` // Internal field: tracks the original position of extensions specified via both --extension and --local flags
@@ -103,6 +104,9 @@ func (r *Run) Validate() error {
 	if r.EnvoyPath != "" && r.EnvoyVersion != "" {
 		return fmt.Errorf("--envoy-path and --envoy-version are mutually exclusive")
 	}
+	if r.DockerImageVersion != "" && !r.Docker {
+		return fmt.Errorf("--docker-image-version can only be used with --docker")
+	}
 	return nil
 }
 
@@ -120,6 +124,7 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 			Arch:            runtime.GOARCH,
 			LocalExtensions: r.Local,
 			Pull:            r.Pull,
+			ImageVersion:    r.DockerImageVersion,
 		}
 		return runner.Run(ctx)
 	}
