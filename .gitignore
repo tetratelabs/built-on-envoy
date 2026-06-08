@@ -42,3 +42,4 @@ Thumbs.db
 **/*.dylib
 **/.rustc_info.json
 **/lcov.info
+

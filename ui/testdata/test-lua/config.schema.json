@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "test/config.schema.json",
+  "title": "Test Config",
+  "description": "Test Config.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "test": {
+      "type": "string",
+      "description": "Test property."
+    }
+  }
+}

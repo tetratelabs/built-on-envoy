@@ -89,7 +89,7 @@ test-e2e: gen-code  ## Run the end-to-end tests
 
 # This runs the unit tests for the codebase with coverage check.
 .PHONY: test-coverage
-test-coverage: gen-code  ## Run the unit tests for the codebase with coverage check.
+test-coverage:  ## Run the unit tests for the codebase with coverage check.
 	@mkdir -p $(OUTPUT_DIR)
 	@$(MAKE) test GO_TEST_ARGS="-coverprofile=$(OUTPUT_DIR)/go-test-coverage.out \
 		-covermode=atomic \
@@ -107,6 +107,7 @@ gen: gen-code gen-docs  ## Generate all the code and documentation
 gen-code:  ## Generate code
 	@echo "Generating code..."
 	@go generate ./...
+	$(MAKE) -C ../ui build
 
 .PHONY: gen-docs
 gen-docs:  ## Generate documentation

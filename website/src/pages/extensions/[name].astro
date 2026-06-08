@@ -46,69 +46,6 @@ function formatTypeName(type: string): string {
 		.join(' ');
 }
 
-const fileServerConfigMarkdown = `# File Server Configuration
-
-Configuration for the File Server extension. Serves static files from the local filesystem through Envoy.
-
-## content_types
-
-Custom file extension to content-type mappings. Keys are file suffixes without dots (e.g. "html", "css").
-
-| | |
-|---|---|
-| **Type** | \`object\` |
-| **Required** | No |
-
-## default_content_type
-
-Default content-type when the file extension is not found in content_types.
-
-| | |
-|---|---|
-| **Type** | \`string\` |
-| **Required** | No |
-
-## directory_index_files
-
-Files to serve for directory requests (e.g. ["index.html"]). File names must not contain slashes.
-
-| | |
-|---|---|
-| **Type** | \`[]string\` |
-| **Required** | No |
-| **Item pattern** | \`^[^/]*$\` |
-
-## path_mappings
-
-Mappings from URL path prefixes to filesystem path prefixes. At least one mapping is required. Duplicate request path prefixes are not allowed.
-
-| | |
-|---|---|
-| **Type** | \`[]object\` |
-| **Required** | Yes |
-| **Min items** | 1 |
-
-### path_mappings.file_path_prefix
-
-Filesystem path prefix to map to (e.g. "/var/www/").
-
-| | |
-|---|---|
-| **Type** | \`string\` |
-| **Required** | Yes |
-| **Min length** | 1 |
-
-### path_mappings.request_path_prefix
-
-URL path prefix to match (e.g. "/static/").
-
-| | |
-|---|---|
-| **Type** | \`string\` |
-| **Required** | Yes |
-| **Min length** | 1 |
-`;
-
 ---
 
 <!DOCTYPE html>
@@ -227,12 +164,13 @@ URL path prefix to match (e.g. "/static/").
 									))}
 								</div>
 							</div>
-							{extension.configReferencePath && (
-								<div class="sidebar-section">
-									<h3>Resources</h3>
-									<a href={extension.configReferencePath} class="sidebar-ref-link">Configuration Reference →</a>
-								</div>
-							)}
+							<div class="sidebar-section">
+								<h3>Resources</h3>
+								{extension.configReferencePath && (
+									<a href={extension.configReferencePath} class="sidebar-ref-link">Configuration Reference →</a><br/>
+								)}
+								<a href={extension.sourceUrl} target="_blank" class="sidebar-ref-link">Source Code →</a>
+							</div>
 						</aside>
 					</div>
 				</div>

@@ -1,0 +1,61 @@
+---
+layout: ../../../layouts/DocsLayout.astro
+title: ui
+description: Start the web UI
+---
+
+import Callout from '../../../components/Callout.astro';
+
+# boe ui
+
+This command provides a web console to browse, configure, and run
+Built On Envoy extensions. It opens automatically in your default browser.
+
+## Features
+
+* Browse the full extension catalog with search and filters
+* Configure extensions using auto-generated forms based on JSON Schema
+* Reorder extensions in the HTTP filter chain
+* Run Envoy with selected extensions using `boe run`
+
+## Examples
+
+Start the UI on the default port (18000):
+
+    ```shell
+    boe ui
+    ```
+
+Start the UI on a custom port customizing the Envoy log levels:
+
+    ```shell
+    boe ui --port 9090 --log-level dynamic_modules:debug
+    ```
+
+Start the UI enabling also some local extensions:
+
+    ```shell
+    boe ui --local /path/to/my/extension1 --local /path/to/my/extension2 
+    ```
+
+
+## Usage details
+
+```shell
+boe ui [flags]
+boe ui --help
+```
+
+
+
+## Flags
+
+| Name | Description | Type | Default | Env Var | Required |
+|------|-------------|------|---------|-----|----------|
+| `--port` | HTTP server port. | `int` | `18000` | - | No |
+| `--log-level` | Envoy component log level. | `string` | `all:error` | `ENVOY_LOG_LEVEL` | No |
+| `--envoy-version` | Envoy version to use (e.g., 1.31.0, dev, dev-latest) | `string` | - | `ENVOY_VERSION` | No |
+| `--envoy-path` | Path to a custom Envoy binary. Skips Envoy download and version selection. | `string` | - | `ENVOY_PATH` | No |
+| `--local` | Path to a directory containing a local Extension to enable. | `[]string` | - | - | No |
+| `--dev` | Whether to allow downloading dev versions of extensions (with -dev suffix). By default, only stable versions are allowed. | `bool` | `false` | - | No |
+

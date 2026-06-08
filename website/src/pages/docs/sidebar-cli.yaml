@@ -16,6 +16,8 @@ sections:
         href: /docs/cli/list
       - title: run
         href: /docs/cli/run
+      - title: ui
+        href: /docs/cli/ui
       - title: version
         href: /docs/cli/version
 

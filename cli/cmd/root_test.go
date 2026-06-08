@@ -151,6 +151,9 @@ Commands:
   clean [flags]
     Clean cache directories
 
+  ui [flags]
+    Start the web UI
+
   version [flags]
     Print version information
 

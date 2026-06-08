@@ -103,7 +103,7 @@ func (g *GenConfig) Run(ctx context.Context, dirs *xdg.Directories, logger *slog
 
 	// If we're only generating config to print to the stdout, we can skip building the extensions
 	// but if we're exporting it, we need ot build to make sure the extension files exist.
-	downloaded, err := downloadExtensions(ctx, downloader, g.Extensions, exportConfig)
+	downloaded, err := downloadExtensions(ctx, downloader, g.Extensions, true)
 	if err != nil {
 		return err
 	}
@@ -113,7 +113,7 @@ func (g *GenConfig) Run(ctx context.Context, dirs *xdg.Directories, logger *slog
 		m.SourceRegistry = downloader.Registry
 		m.SourceTag = m.Version
 	}
-	local, err := loadLocalManifests(ctx, logger, downloader, g.Local, exportConfig)
+	local, err := loadLocalManifests(ctx, logger, downloader, g.Local, true)
 	if err != nil {
 		return err
 	}
