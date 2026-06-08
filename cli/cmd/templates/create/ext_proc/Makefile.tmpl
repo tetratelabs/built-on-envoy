@@ -109,6 +109,12 @@ build_image:  ## Build the OCI image for the extproc server
 # For default push operation, we will also prefer to build a multi-platform image to support
 # both amd64 and arm64 architectures, and push it to the registry.
 PLATFORMS ?= linux/arm64,linux/amd64
+# index,manifest: annotations are only valid for multi-platform (OCI index) exports.
+ifneq (,$(findstring $(comma),$(PLATFORMS)))
+  PUSH_ANNOTATIONS := $(MULTI_OCI_ANNOTATIONS)
+else
+  PUSH_ANNOTATIONS := $(BASE_OCI_ANNOTATIONS) $(BINARY_ARTIFACT)
+endif
 .PHONY: push_image
 push_image: create_builder  ## Build and push OCI image for the extproc server
 	@echo "Building and pushing image..."
@@ -116,7 +122,7 @@ push_image: create_builder  ## Build and push OCI image for the extproc server
 		--builder $(BUILDER_NAME) \
 		--output type=registry,oci-mediatypes=true$(registry_output) \
 		--provenance=false \
-		$(MULTI_OCI_ANNOTATIONS) \
+		$(PUSH_ANNOTATIONS) \
 		--tag $(IMAGE) \
 		-f ./Dockerfile .
 

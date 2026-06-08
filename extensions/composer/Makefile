@@ -125,7 +125,8 @@ CSHARED_ARTIFACT := --annotation "io.tetratelabs.built-on-envoy.extension.cshare
 # Multi-platform OCI annotations (with index,manifest prefix, for binary artifacts)
 MULTI_OCI_ANNOTATIONS := \
 	$(subst --annotation ",--annotation "index$(comma)manifest:,$(BASE_OCI_ANNOTATIONS)) \
-	$(subst --annotation ",--annotation "index$(comma)manifest:,$(BINARY_ARTIFACT))
+	$(subst --annotation ",--annotation "index$(comma)manifest:,$(BINARY_ARTIFACT)) \
+	$(subst --annotation ",--annotation "index$(comma)manifest:,$(CSHARED_ARTIFACT))
 
 BUILDER_NAME := boe-builder
 .PHONY: create_builder
@@ -168,6 +169,12 @@ build_image:
 # For default push operation, we will also prefer to build a multi-platform image to support
 # both amd64 and arm64 architectures, and push it to the registry.
 PLATFORMS ?= linux/arm64,linux/amd64
+# index,manifest: annotations are only valid for multi-platform (OCI index) exports.
+ifneq (,$(findstring $(comma),$(PLATFORMS)))
+  PUSH_ANNOTATIONS := $(MULTI_OCI_ANNOTATIONS)
+else
+  PUSH_ANNOTATIONS := $(BASE_OCI_ANNOTATIONS) $(BINARY_ARTIFACT) $(CSHARED_ARTIFACT)
+endif
 .PHONY: push_image
 push_image: create_builder  ## Build and push docker image for the plugin for cross-platform support
 	@echo "Building and pushing image..."
@@ -175,8 +182,7 @@ push_image: create_builder  ## Build and push docker image for the plugin for cr
 		--builder $(BUILDER_NAME) \
 		--output type=registry,oci-mediatypes=true$(registry_output) \
 		--provenance=false \
-		$(MULTI_OCI_ANNOTATIONS) \
-		$(subst --annotation ",--annotation "index$(comma)manifest:,$(CSHARED_ARTIFACT)) \
+		$(PUSH_ANNOTATIONS) \
 		--build-arg BUILD_TAG="$(COMPOSER_BUILD_TAG)" \
 		--build-arg GO_VERSION="$(GO_VERSION)" \
 		--tag $(IMAGE) $(DEV_TAG) \
@@ -216,7 +222,7 @@ install_plugins: ## Install all plugins locally
 	@for dir in $(PLUGIN_CLEAN_DIRS); do \
 		$(MAKE) -f Makefile.plugin install EXTENSION_PATH=$$dir; \
 	done
-	
+
 # Envoy runs in a Linux container, so the integration library must be Linux.
 .PHONY: test-integration
 test-integration: force_target_os := $(OS)
