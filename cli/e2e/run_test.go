@@ -13,7 +13,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -326,7 +325,8 @@ func dummy() string {
 // corazaBuildTags mirrors BUILD_TAGS in extensions/composer/Makefile.common; the composer and its
 // TestGoPluginLoaderRemoteExtension exercises the raw goplugin-loader extension end to end:
 //  1. build the example Go plugin image and push it to the local test registry;
-//  2. build the composer-lite image and extract libcomposer.so into the local cache;
+//  2. build the composer-lite image and push it to the local test registry, so boe downloads
+//     libcomposer.so from there into the local cache;
 //  3. run `boe run --extension goplugin-loader --config '{"name":...,"url":"oci://..."}'`
 //     and assert the dynamically loaded plugin processes responses.
 //
@@ -358,32 +358,25 @@ func TestGoPluginLoaderRemoteExtension(t *testing.T) {
 	dataHome := t.TempDir()
 	t.Setenv("BOE_DATA_HOME", dataHome)
 
-	// The build_image targets below run on the active buildx builder. Select the default (docker
-	// driver) builder: it builds via the Docker daemon, reusing the daemon's local base-image cache
-	// and proxy/registry configuration, which keeps a single-platform local build (type=docker)
-	// self-contained. We only need a local image to push, not a multi-platform registry export.
-	runCmd(t, "", "docker", "buildx", "use", "default")
-
-	// Step 1: build the example Go plugin image (single-platform, --output type=docker) and push it
-	// to the local registry. We use build_image rather than push_image: the latter does a
-	// multi-platform registry export with index-level OCI annotations, which buildkit rejects for a
-	// single-platform export ("index annotations not supported for single platform export").
-	// build_image tags the image <HUB>/extension-<name>:<version>-<os>-<arch>, with HUB derived from
-	// OCI_REGISTRY; we then push that tag (the daemon treats localhost/127.0.0.1 as insecure).
-	pluginRef := fmt.Sprintf("%s/built-on-envoy/extension-example-go:%s-linux-%s", registryAddr, version, runtime.GOARCH)
-	runCmd(t, composerDir, "make", "-f", "Makefile.plugin", "build_image",
+	// Step 1: build the example Go plugin image for the local platform and push it to the local
+	// registry via the Makefile's push_image target. PLATFORMS=linux/<arch> selects a single-platform
+	// export, for which push_image emits manifest-level OCI annotations (no index annotations, which
+	// buildkit rejects for single-platform). The target pushes directly (--output type=registry), so
+	// no separate docker push is needed. It tags the image <HUB>/extension-<name>:<version>, with HUB
+	// derived from OCI_REGISTRY; BOE_REGISTRY_INSECURE (set above) makes the export insecure.
+	pluginRef := fmt.Sprintf("%s/built-on-envoy/extension-example-go:%s", registryAddr, version)
+	runCmd(t, composerDir, "make", "-f", "Makefile.plugin", "push_image",
+		"PLATFORMS=linux/"+runtime.GOARCH,
 		"EXTENSION_PATH=example",
 		"OCI_REGISTRY="+registryAddr,
 	)
-	runCmd(t, "", "docker", "push", pluginRef)
 	pluginURL := "oci://" + pluginRef
 
-	// Step 2: build the composer-lite image and extract libcomposer.so into the local cache
-	// at <dataHome>/extensions/dym/composer/<version>/libcomposer.so.
-	runCmd(t, composerDir, "make", "build_image", "COMPOSER_LITE=true")
-	composerImage := fmt.Sprintf("%s/composer-lite:%s-linux-%s", registryAddr, version, runtime.GOARCH)
-	composerCacheDir := filepath.Join(dataHome, "extensions", "dym", "composer", version)
-	extractFileFromImage(t, composerImage, "/libcomposer.so", filepath.Join(composerCacheDir, "libcomposer.so"))
+	// Step 2: build the composer-lite image and push it to the local registry (as
+	// <registry>/composer-lite:<version>). When the goplugin-loader runs in Step 3, boe downloads
+	// libcomposer.so from there into <dataHome>/extensions/dym/composer/<version>/libcomposer.so.
+	// This exercises the real composer download path instead of extracting the file manually.
+	runCmd(t, composerDir, "make", "push_image", "COMPOSER_LITE=true", "PLATFORMS=linux/"+runtime.GOARCH)
 
 	// Step 3: run the goplugin-loader extension, pointing it at the pushed plugin image via
 	// the user-supplied URL.
@@ -402,28 +395,6 @@ func TestGoPluginLoaderRemoteExtension(t *testing.T) {
 		func(r *http.Response) bool {
 			return r.Header.Get("x-example-response-header") == "example-value"
 		})
-}
-
-// extractFileFromImage copies a single file out of a locally-built (loaded) Docker image into dst.
-func extractFileFromImage(t *testing.T, image, srcPath, dst string) {
-	t.Helper()
-	require.NoError(t, os.MkdirAll(filepath.Dir(dst), 0o750))
-
-	// The composer image is FROM scratch with no default command, so "docker create" needs an
-	// explicit (dummy) command. It is never executed; we only use the container's filesystem.
-	// #nosec G204 -- test-controlled image reference.
-	created, err := exec.CommandContext(t.Context(), "docker", "create", image, "extract").Output()
-	require.NoError(t, err, "docker create %s", image)
-	containerID := strings.TrimSpace(string(created))
-	t.Cleanup(func() {
-		// #nosec G204 -- container ID produced by docker create above.
-		_ = exec.Command("docker", "rm", "-f", containerID).Run()
-	})
-
-	// #nosec G204 -- test-controlled container ID and paths.
-	out, err := exec.CommandContext(t.Context(), "docker", "cp", containerID+":"+srcPath, dst).CombinedOutput()
-	require.NoError(t, err, "docker cp %s: %s", srcPath, out)
-	require.FileExists(t, dst)
 }
 
 // runCmd runs name with args (in dir, if non-empty), logging the combined output and failing the

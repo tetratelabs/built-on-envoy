@@ -54,7 +54,8 @@ COMPOSER_BUILD_TAG := $(if $(BUILD_TAGS),-tags $(BUILD_TAGS))
 # last development version.
 # We still keep the versioned development tag because the `boe run` command relies on those when
 # using the `--dev` flag.
-DEV_LATEST := $(firstword $(subst :, ,$(IMAGE))):dev
+# Strip the trailing ':<version>' tag from IMAGE (not every colon, so registry host:port is kept).
+DEV_LATEST := $(patsubst %:$(VERSION)$(IMAGE_NONCE),%,$(IMAGE)):dev
 DEV_TAG    := $(if $(filter %-dev,$(VERSION)),--tag $(DEV_LATEST))
 
 OS := linux
