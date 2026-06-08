@@ -13,6 +13,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -318,6 +321,123 @@ func dummy() string {
 	goModTidyCmd.Dir = path
 	output, err := goModTidyCmd.CombinedOutput()
 	require.NoError(t, err, string(output))
+}
+
+// corazaBuildTags mirrors BUILD_TAGS in extensions/composer/Makefile.common; the composer and its
+// TestGoPluginLoaderRemoteExtension exercises the raw goplugin-loader extension end to end:
+//  1. build the example Go plugin image and push it to the local test registry;
+//  2. build the composer-lite image and extract libcomposer.so into the local cache;
+//  3. run `boe run --extension goplugin-loader --config '{"name":...,"url":"oci://..."}'`
+//     and assert the dynamically loaded plugin processes responses.
+//
+// Both the plugin and libcomposer.so are built from the composer Dockerfiles, which pin the
+// same GO_VERSION from go.mod. This matters because plugin.Open requires the plugin and host
+// to share an identical Go toolchain and dependency set; strict_check=false only relaxes the
+// soft build-info checks, not the linker's hard ABI requirement.
+func TestGoPluginLoaderRemoteExtension(t *testing.T) {
+	// Building two images, pushing, and starting Envoy can take a while.
+	t.Setenv("TEST_BOE_RUN_ENVOY_TIMEOUT", "5m")
+
+	const composerDir = "../../extensions/composer"
+
+	// The composer (and thus the example plugin) version comes from the composer manifest.
+	manifests, err := extensions.LoadManifests(internaltesting.ExtensionsFS(t), ".", false)
+	require.NoError(t, err)
+	composer, ok := manifests[extensions.ComposerArtifact]
+	require.True(t, ok)
+	version := composer.Version
+
+	// Point both the build tooling and the goplugin-loader image fetcher at the local
+	// insecure registry. These env vars are inherited by the spawned boe process, so the
+	// fetcher pulls the plugin over plain HTTP (BOE_REGISTRY_INSECURE).
+	t.Setenv("BOE_REGISTRY", registryAddr)
+	t.Setenv("BOE_REGISTRY_INSECURE", "true")
+
+	// Dedicated data home so we can place libcomposer.so at the cache location the goplugin-loader
+	// extension expects, and so the plugin pull cache is isolated.
+	dataHome := t.TempDir()
+	t.Setenv("BOE_DATA_HOME", dataHome)
+
+	// The build_image targets below run on the active buildx builder. Select the default (docker
+	// driver) builder: it builds via the Docker daemon, reusing the daemon's local base-image cache
+	// and proxy/registry configuration, which keeps a single-platform local build (type=docker)
+	// self-contained. We only need a local image to push, not a multi-platform registry export.
+	runCmd(t, "", "docker", "buildx", "use", "default")
+
+	// Step 1: build the example Go plugin image (single-platform, --output type=docker) and push it
+	// to the local registry. We use build_image rather than push_image: the latter does a
+	// multi-platform registry export with index-level OCI annotations, which buildkit rejects for a
+	// single-platform export ("index annotations not supported for single platform export").
+	// build_image tags the image <HUB>/extension-<name>:<version>-<os>-<arch>, with HUB derived from
+	// OCI_REGISTRY; we then push that tag (the daemon treats localhost/127.0.0.1 as insecure).
+	pluginRef := fmt.Sprintf("%s/built-on-envoy/extension-example-go:%s-linux-%s", registryAddr, version, runtime.GOARCH)
+	runCmd(t, composerDir, "make", "-f", "Makefile.plugin", "build_image",
+		"EXTENSION_PATH=example",
+		"OCI_REGISTRY="+registryAddr,
+	)
+	runCmd(t, "", "docker", "push", pluginRef)
+	pluginURL := "oci://" + pluginRef
+
+	// Step 2: build the composer-lite image and extract libcomposer.so into the local cache
+	// at <dataHome>/extensions/dym/composer/<version>/libcomposer.so.
+	runCmd(t, composerDir, "make", "build_image", "COMPOSER_LITE=true")
+	composerImage := fmt.Sprintf("%s/composer-lite:%s-linux-%s", registryAddr, version, runtime.GOARCH)
+	composerCacheDir := filepath.Join(dataHome, "extensions", "dym", "composer", version)
+	extractFileFromImage(t, composerImage, "/libcomposer.so", filepath.Join(composerCacheDir, "libcomposer.so"))
+
+	// Step 3: run the goplugin-loader extension, pointing it at the pushed plugin image via
+	// the user-supplied URL.
+	ports := internaltesting.FreePorts(t, 2)
+	proxyPort := ports[0]
+	config := fmt.Sprintf(`{"name":"example-go","url":%q,"strict_check":false}`, pluginURL)
+	internaltesting.RunEnvoy(t, cliBin, proxyPort, ports[1],
+		"--envoy-version", "dev-latest",
+		"--log-level", "dynamic_modules:debug",
+		"--extension", extensions.GoPluginLoaderName+":"+version,
+		"--config", config,
+	)
+
+	internaltesting.RequireEventuallyGet(t,
+		fmt.Sprintf("http://localhost:%d/status/200", proxyPort),
+		func(r *http.Response) bool {
+			return r.Header.Get("x-example-response-header") == "example-value"
+		})
+}
+
+// extractFileFromImage copies a single file out of a locally-built (loaded) Docker image into dst.
+func extractFileFromImage(t *testing.T, image, srcPath, dst string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(filepath.Dir(dst), 0o750))
+
+	// The composer image is FROM scratch with no default command, so "docker create" needs an
+	// explicit (dummy) command. It is never executed; we only use the container's filesystem.
+	// #nosec G204 -- test-controlled image reference.
+	created, err := exec.CommandContext(t.Context(), "docker", "create", image, "extract").Output()
+	require.NoError(t, err, "docker create %s", image)
+	containerID := strings.TrimSpace(string(created))
+	t.Cleanup(func() {
+		// #nosec G204 -- container ID produced by docker create above.
+		_ = exec.Command("docker", "rm", "-f", containerID).Run()
+	})
+
+	// #nosec G204 -- test-controlled container ID and paths.
+	out, err := exec.CommandContext(t.Context(), "docker", "cp", containerID+":"+srcPath, dst).CombinedOutput()
+	require.NoError(t, err, "docker cp %s: %s", srcPath, out)
+	require.FileExists(t, dst)
+}
+
+// runCmd runs name with args (in dir, if non-empty), logging the combined output and failing the
+// test on a non-zero exit.
+func runCmd(t *testing.T, dir, name string, args ...string) {
+	t.Helper()
+	// #nosec G204 -- test-controlled command and args.
+	cmd := exec.CommandContext(t.Context(), name, args...)
+	if dir != "" {
+		cmd.Dir = dir
+	}
+	out, err := cmd.CombinedOutput()
+	t.Logf("%s %s:\n%s", name, strings.Join(args, " "), out)
+	require.NoError(t, err)
 }
 
 // TestNativeHTTPFilterPositionExtensions verifies that nativeHttpFilters.before

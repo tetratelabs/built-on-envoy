@@ -1037,6 +1037,42 @@ func TestDownloadExtensions(t *testing.T) {
 		_, err := downloadExtensions(t.Context(), d, []string{"ext-ok:1.0.0", "ext-fail:1.0.0"}, false)
 		require.ErrorIs(t, err, errFail)
 	})
+
+	t.Run("goplugin-loader reserved name synthesizes a bundle manifest", func(t *testing.T) {
+		dataHome := t.TempDir()
+		// Pre-seed libcomposer.so so CheckOrDownloadLibComposer hits the cache and avoids network.
+		composerDir := extensions.LocalCacheComposerDir(&xdg.Directories{DataHome: dataHome}, "1.0.0")
+		require.NoError(t, os.MkdirAll(composerDir, 0o750))
+		require.NoError(t, os.WriteFile(filepath.Join(composerDir, "libcomposer.so"), []byte("fake"), 0o600))
+
+		d := &extensions.Downloader{Logger: internaltesting.NewTLogger(t), Dirs: &xdg.Directories{DataHome: dataHome}}
+
+		manifests, err := downloadExtensions(t.Context(), d, []string{extensions.GoPluginLoaderName + ":1.0.0"}, false)
+		require.NoError(t, err)
+		require.Len(t, manifests, 1)
+
+		m := manifests[0]
+		require.Equal(t, extensions.GoPluginLoaderName, m.Name)
+		require.Equal(t, extensions.TypeGo, m.Type)
+		require.True(t, m.CShared, "goplugin-loader must be treated as a c-shared dynamic module")
+		require.Equal(t, extensions.ComposerBundle, m.Bundle)
+		require.Equal(t, "1.0.0", m.Version)
+		require.Equal(t, "1.0.0", m.ComposerVersion)
+		require.True(t, m.Remote)
+		// ApplyDefaults should have set the default HTTP filter type.
+		require.Equal(t, []extensions.FilterType{extensions.FilterTypeHTTP}, m.FilterTypes)
+	})
+
+	t.Run("goplugin-loader missing composer cache fails without network", func(t *testing.T) {
+		// No libcomposer.so seeded and a concrete tag: CheckOrDownloadLibComposer must try to
+		// download via the (mock) client. A pull error surfaces as a wrapped error.
+		mock := &mockOCIClient{pullErr: errors.New("no network")}
+		d := newTestDownloader(t, t.TempDir(), mock)
+
+		_, err := downloadExtensions(t.Context(), d, []string{extensions.GoPluginLoaderName + ":9.9.9"}, false)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), extensions.GoPluginLoaderName)
+	})
 }
 
 func TestResolveParent(t *testing.T) {
@@ -1222,9 +1258,10 @@ all Go extensions must use the same composer version`,
 
 func TestWarnMultipleGoExtensions(t *testing.T) {
 	tests := []struct {
-		name        string
-		extensions  []*extensions.Manifest
-		wantWarning bool
+		name         string
+		extensions   []*extensions.Manifest
+		wantWarning  bool
+		wantContains string // names expected in the warning; defaults to "ext-1, ext-2"
 	}{
 		{
 			name: "single c-shared Go extension - no warning",
@@ -1242,10 +1279,11 @@ func TestWarnMultipleGoExtensions(t *testing.T) {
 		{
 			name: "multiple c-shared Go extensions - warning",
 			extensions: []*extensions.Manifest{
-				{Name: "ext-1", Type: extensions.TypeGo, CShared: true},
-				{Name: "ext-2", Type: extensions.TypeGo, CShared: true},
+				{Name: "ext-1", Type: extensions.TypeGo, CShared: true, Version: "1.0.0"},
+				{Name: "ext-2", Type: extensions.TypeGo, CShared: true, Version: "2.0.0"},
 			},
-			wantWarning: true,
+			wantWarning:  true,
+			wantContains: "ext-1:1.0.0, ext-2:2.0.0",
 		},
 		{
 			name: "one c-shared one plugin Go extension - no warning",
@@ -1260,6 +1298,22 @@ func TestWarnMultipleGoExtensions(t *testing.T) {
 				{Name: "ext-1", Type: extensions.TypeGo, CShared: true},
 				{Name: "ext-2", Type: extensions.TypeRust},
 			},
+		},
+		{
+			name: "multiple goplugin-loaders share one bundle runtime - no warning",
+			extensions: []*extensions.Manifest{
+				{Name: extensions.GoPluginLoaderName, Type: extensions.TypeGo, CShared: true, Bundle: extensions.ComposerBundle, Version: "1.0.0"},
+				{Name: extensions.GoPluginLoaderName, Type: extensions.TypeGo, CShared: true, Bundle: extensions.ComposerBundle, Version: "1.0.0"},
+			},
+		},
+		{
+			name: "goplugin-loader plus a distinct c-shared Go - warning",
+			extensions: []*extensions.Manifest{
+				{Name: extensions.GoPluginLoaderName, Type: extensions.TypeGo, CShared: true, Bundle: extensions.ComposerBundle, Version: "1.0.0"},
+				{Name: "ext-2", Type: extensions.TypeGo, CShared: true, Version: "2.0.0"},
+			},
+			wantWarning:  true,
+			wantContains: "composer:1.0.0, ext-2:2.0.0",
 		},
 	}
 
@@ -1281,7 +1335,7 @@ func TestWarnMultipleGoExtensions(t *testing.T) {
 
 			if tt.wantWarning {
 				require.Contains(t, output, "Multiple Go extensions detected")
-				require.Contains(t, output, "ext-1, ext-2")
+				require.Contains(t, output, tt.wantContains)
 				require.Contains(t, output, "goplugin loader")
 			} else {
 				require.Empty(t, output)

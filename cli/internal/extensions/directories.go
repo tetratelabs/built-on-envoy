@@ -18,6 +18,16 @@ func LocalCacheManifest(dirs *xdg.Directories, manifest *Manifest) string {
 	return filepath.Join(LocalCacheExtensionDir(dirs, manifest), "manifest.yaml")
 }
 
+// ModuleName returns the dynamic-module name for the manifest. Bundle-hosted
+// extensions (e.g. goplugin-loader) are served by a shared bundle library named
+// after the bundle (e.g. libcomposer.so); otherwise the extension's own name.
+func ModuleName(manifest *Manifest) string {
+	if manifest.Bundle != "" {
+		return manifest.Bundle
+	}
+	return manifest.Name
+}
+
 // LocalCacheExtensionDir returns the local cache directory for the given extension manifest.
 // Different extension types are organized in different directory structures:
 //   - go: extensions/goplugin/<name>/<version> for plugins,
@@ -26,20 +36,22 @@ func LocalCacheManifest(dirs *xdg.Directories, manifest *Manifest) string {
 //   - ext_proc: extensions/extproc/<name>/<version>
 //   - others: extensions/<name>/<version>
 func LocalCacheExtensionDir(dirs *xdg.Directories, manifest *Manifest) string {
+	moduleName := ModuleName(manifest)
+
 	switch manifest.Type {
 	case TypeGo:
 		if manifest.CShared {
-			return filepath.Join(dirs.DataHome, "extensions", "dym", manifest.Name, manifest.Version)
+			return filepath.Join(dirs.DataHome, "extensions", "dym", moduleName, manifest.Version)
 		}
-		return filepath.Join(dirs.DataHome, "extensions", "goplugin", manifest.Name, manifest.Version)
+		return filepath.Join(dirs.DataHome, "extensions", "goplugin", moduleName, manifest.Version)
 	case TypeRust:
-		return filepath.Join(dirs.DataHome, "extensions", "dym", manifest.Name, manifest.Version)
+		return filepath.Join(dirs.DataHome, "extensions", "dym", moduleName, manifest.Version)
 	case TypeExtProc:
-		return filepath.Join(dirs.DataHome, "extensions", "extproc", manifest.Name, manifest.Version)
+		return filepath.Join(dirs.DataHome, "extensions", "extproc", moduleName, manifest.Version)
 	case TypeComposer:
 		return LocalCacheComposerDir(dirs, manifest.Version)
 	default:
-		return filepath.Join(dirs.DataHome, "extensions", manifest.Name, manifest.Version)
+		return filepath.Join(dirs.DataHome, "extensions", moduleName, manifest.Version)
 	}
 }
 
@@ -55,12 +67,12 @@ func LocalCacheExtension(dirs *xdg.Directories, manifest *Manifest) string {
 	switch manifest.Type {
 	case TypeGo:
 		if manifest.CShared {
-			return filepath.Join(dir, fmt.Sprintf("lib%s.so", manifest.Name))
+			return filepath.Join(dir, fmt.Sprintf("lib%s.so", ModuleName(manifest)))
 		}
 		return filepath.Join(dir, "plugin.so")
 	case TypeRust:
 		// Use the original manifest name for the library
-		return filepath.Join(dir, fmt.Sprintf("lib%s.so", manifest.Name))
+		return filepath.Join(dir, fmt.Sprintf("lib%s.so", ModuleName(manifest)))
 	case TypeExtProc:
 		// ext_proc extensions are not Go plugins, so we return the path to the ext_proc server binary instead
 		return filepath.Join(dir, "ext_proc-server")

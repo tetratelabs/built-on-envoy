@@ -192,19 +192,26 @@ func (g *GenConfig) writeConfig(
 			// Lua extensions are rendered inline, so there is nothing to copy
 			continue
 		case extensions.TypeGo:
-			// If it is a Go extension we need to copy the composer library too
-			composerFile := extensions.LocalCacheComposerLib(dirs, m.ComposerVersion)
-			dst := filepath.Join(g.Output, filepath.Base(composerFile))
-			if err := copyFile(composerFile, dst, logger); err != nil {
-				return nil, err
+			if m.CShared {
+				// C-shared Go extensions need to be copied with their original name (e.g. lib<name>.so)
+				// since the config references that name directly.
+				dstExtensionFile = filepath.Join(g.Output, filepath.Base(srcExtensionFile))
+			} else {
+				// For Go plugins, we need to copy the composer shared bundle library (libcomposer.so)
+				// first.
+				composerFile := extensions.LocalCacheComposerLib(dirs, m.ComposerVersion)
+				dst := filepath.Join(g.Output, filepath.Base(composerFile))
+				if err := copyFile(composerFile, dst, logger); err != nil {
+					return nil, err
+				}
+				files = append(files, dst)
+				// We also copy the Go plugin file to the export directory and update the configuration to point to it.
+				// This way we can generate an exported Envoy configuration that works out-of-the-box with func-e and
+				// Docker, without requiring users to manually copy the extension files.
+				dstExtensionFile = filepath.Join(g.Output, m.Name+".so")
+				re := regexp.MustCompile(`"url"\s*:\s*"[^"]*` + regexp.QuoteMeta(m.Name) + `[^"]*"`)
+				config = re.ReplaceAllString(config, `"url":"file://`+m.Name+`.so"`)
 			}
-			files = append(files, dst)
-			// We also copy the Go plugin file to the export directory and update the configuration to point to it.
-			// This way we can generate an exported Envoy configuration that works out-of-the-box with func-e and
-			// Docker, without requiring users to manually copy the extension files.
-			dstExtensionFile = filepath.Join(g.Output, m.Name+".so")
-			re := regexp.MustCompile(`"url"\s*:\s*"[^"]*` + regexp.QuoteMeta(m.Name) + `[^"]*"`)
-			config = re.ReplaceAllString(config, `"url":"file://`+m.Name+`.so"`)
 		default:
 			dstExtensionFile = filepath.Join(g.Output, filepath.Base(srcExtensionFile))
 		}
