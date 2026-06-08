@@ -96,6 +96,7 @@ func TestCreateGo_Run(t *testing.T) {
 			"plugin.go",
 			"plugin_test.go",
 			"manifest.yaml",
+			"config.schema.json",
 			"Makefile",
 			"go.mod",
 			"Dockerfile",
@@ -116,6 +117,12 @@ func TestCreateGo_Run(t *testing.T) {
 		require.NoError(t, err)
 		assert.Contains(t, string(manifest), "name: "+name)
 		assert.Contains(t, string(manifest), "type: go")
+
+		// verify config.schema.json content
+		// #nosec G304
+		configSchema, err := os.ReadFile(filepath.Join(repoPath, "config.schema.json"))
+		require.NoError(t, err)
+		assert.Contains(t, string(configSchema), `"header_value": {`)
 
 		// verify plugin.go content
 		// #nosec G304
@@ -261,6 +268,7 @@ func TestCreateRust_Run(t *testing.T) {
 		"src/lib.rs",
 		"Cargo.toml",
 		"manifest.yaml",
+		"config.schema.json",
 		".gitignore",
 		".dockerignore",
 		".cargo/config.toml",
@@ -278,6 +286,12 @@ func TestCreateRust_Run(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(manifest), "name: "+name)
 	assert.Contains(t, string(manifest), "type: rust")
+
+	// verify config.schema.json content
+	// #nosec G304
+	configSchema, err := os.ReadFile(filepath.Join(repoPath, "config.schema.json"))
+	require.NoError(t, err)
+	assert.Contains(t, string(configSchema), `"header_value": {`)
 
 	// verify Cargo.toml content
 	// #nosec G304
@@ -332,6 +346,12 @@ func TestCreateRust_NetworkFilter_Run(t *testing.T) {
 	assert.Contains(t, string(manifest), "type: rust")
 	assert.Contains(t, string(manifest), "filterType: [network]")
 
+	// verify config.schema.json content
+	// #nosec G304
+	configSchema, err := os.ReadFile(filepath.Join(repoPath, "config.schema.json"))
+	require.NoError(t, err)
+	assert.Contains(t, string(configSchema), `"log_tag": {`)
+
 	// verify src/lib.rs contains network filter constructs, not HTTP.
 	// #nosec G304
 	libRs, err := os.ReadFile(filepath.Join(repoPath, "src/lib.rs"))
@@ -343,7 +363,7 @@ func TestCreateRust_NetworkFilter_Run(t *testing.T) {
 	assert.NotContains(t, string(libRs), "HttpFilterConfig")
 }
 
-func TestCreateRust_UdpListenerFilter_Run(t *testing.T) {
+func TestCreateRust_UDPListenerFilter_Run(t *testing.T) {
 	tmpDir := t.TempDir()
 	name := "my-udp-extension"
 
@@ -367,6 +387,12 @@ func TestCreateRust_UdpListenerFilter_Run(t *testing.T) {
 	assert.Contains(t, string(manifest), "name: "+name)
 	assert.Contains(t, string(manifest), "type: rust")
 	assert.Contains(t, string(manifest), "filterType: [udp_listener]")
+
+	// verify config.schema.json content
+	// #nosec G304
+	configSchema, err := os.ReadFile(filepath.Join(repoPath, "config.schema.json"))
+	require.NoError(t, err)
+	assert.Contains(t, string(configSchema), `"log_tag": {`)
 
 	// verify src/lib.rs contains udp listener filter constructs, not HTTP, network, or listener.
 	// #nosec G304
@@ -406,6 +432,12 @@ func TestCreateRust_ListenerFilter_Run(t *testing.T) {
 	assert.Contains(t, string(manifest), "name: "+name)
 	assert.Contains(t, string(manifest), "type: rust")
 	assert.Contains(t, string(manifest), "filterType: [listener]")
+
+	// verify config.schema.json content
+	// #nosec G304
+	configSchema, err := os.ReadFile(filepath.Join(repoPath, "config.schema.json"))
+	require.NoError(t, err)
+	assert.Contains(t, string(configSchema), `"log_tag": {`)
 
 	// verify src/lib.rs contains listener filter constructs, not HTTP or network.
 	// #nosec G304
