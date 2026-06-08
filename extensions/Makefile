@@ -153,6 +153,12 @@ push_lua: create_builder
 		--file Dockerfile.code ./$(EXTENSION_PATH)
 
 PLATFORMS ?= linux/arm64,linux/amd64
+# index,manifest: annotations are only valid for multi-platform (OCI index) exports.
+ifneq (,$(findstring $(comma),$(PLATFORMS)))
+  PUSH_ANNOTATIONS := $(MULTI_OCI_ANNOTATIONS)
+else
+  PUSH_ANNOTATIONS := $(BASE_OCI_ANNOTATIONS) $(BINARY_ARTIFACT)
+endif
 .PHONY: push_rust
 push_rust: create_builder
 	@echo "Building and pushing Rust extension image for multiple architectures: $(IMAGE)"
@@ -161,7 +167,7 @@ push_rust: create_builder
 		--platform=$(PLATFORMS) \
 		--output type=registry,oci-mediatypes=true$(registry_output) \
 		--provenance=false \
-		$(MULTI_OCI_ANNOTATIONS) \
+		$(PUSH_ANNOTATIONS) \
 		--tag $(IMAGE) $(DEV_TAG) \
 		--file Dockerfile.rust ./$(EXTENSION_PATH)
 
@@ -174,7 +180,7 @@ push_extproc: create_builder
 		--output type=registry,oci-mediatypes=true$(registry_output) \
 		--provenance=false \
 		--build-arg GO_VERSION="$(GO_VERSION)" \
-		$(MULTI_OCI_ANNOTATIONS) \
+		$(PUSH_ANNOTATIONS) \
 		--tag $(IMAGE) $(DEV_TAG) \
 		--file Dockerfile.extproc ./$(EXTENSION_PATH)
 
