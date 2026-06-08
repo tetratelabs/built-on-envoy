@@ -161,7 +161,7 @@ else
 endif
 .PHONY: push_rust
 push_rust: create_builder
-	@echo "Building and pushing Rust extension image for multiple architectures: $(IMAGE)"
+	@echo "Building and pushing Rust extension image for platforms ($(PLATFORMS)): $(IMAGE)"
 	@docker buildx build \
 		--builder $(BUILDER_NAME) \
 		--platform=$(PLATFORMS) \
