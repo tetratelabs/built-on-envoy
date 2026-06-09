@@ -95,6 +95,7 @@ install: build  ## Build and copy the Dynamic Module to the default BOE extensio
 	@echo "Installing $(NAME)..."
 	mkdir -p $(BOE_DATA_HOME)/extensions/dym/$(NAME)/$(VERSION); \
 	cp lib$(NAME).so $(BOE_DATA_HOME)/extensions/dym/$(NAME)/$(VERSION)/lib$(NAME).so;
+	cp manifest.yaml $(BOE_DATA_HOME)/extensions/dym/$(NAME)/$(VERSION)/manifest.yaml;
 	@echo "Installed to $(BOE_DATA_HOME)/extensions/dym/$(NAME)"
 
 .PHONY: install-plugin
@@ -102,6 +103,7 @@ install-plugin: build-plugin  ## Build and copy the Go plugin to the default BOE
 	@echo "Installing $(NAME) as Go plugin..."
 	mkdir -p $(BOE_DATA_HOME)/extensions/goplugin/$(NAME)/$(VERSION); \
 	cp plugin.so $(BOE_DATA_HOME)/extensions/goplugin/$(NAME)/$(VERSION)/plugin.so;
+	cp manifest.yaml $(BOE_DATA_HOME)/extensions/goplugin/$(NAME)/$(VERSION)/manifest.yaml;
 	@echo "Installed to $(BOE_DATA_HOME)/extensions/goplugin/$(NAME)"
 
 .PHONY: clean
