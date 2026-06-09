@@ -249,20 +249,20 @@ func setupDynamicModuleSearchPath(params *ConfigGenerationParams) (string, func(
 		}
 	}
 
-	// If there are composer extensions, link libcomposer.so as well
+	// If there are composer extensions, link libcomposer-lite.so as well
 	if composerVersion != "" {
-		composerPath := extensions.LocalCacheComposerLib(params.Dirs, composerVersion)
+		composerPath := extensions.LocalCacheComposerLiteLib(params.Dirs, composerVersion)
 		linkPath := filepath.Join(tempDir, filepath.Base(composerPath))
-		// Skip if libcomposer.so was already linked above by a bundle-hosted extension
+		// Skip if libcomposer-lite.so was already linked above by a bundle-hosted extension
 		// (e.g. goplugin-loader), to avoid a "file exists" error.
 		if _, err := os.Stat(linkPath); err == nil {
-			params.Logger.Debug("libcomposer already linked, skipping", "linkPath", linkPath)
+			params.Logger.Debug("libcomposer-lite already linked, skipping", "linkPath", linkPath)
 		} else if _, err := os.Stat(composerPath); err == nil {
-			params.Logger.Debug("linking libcomposer for composer extensions", "path", composerPath, "linkPath", linkPath)
+			params.Logger.Debug("linking libcomposer-lite for composer extensions", "path", composerPath, "linkPath", linkPath)
 
 			if err := os.Symlink(composerPath, linkPath); err != nil {
 				cleanup()
-				return "", nil, fmt.Errorf("failed to create symlink for libcomposer: %w", err)
+				return "", nil, fmt.Errorf("failed to create symlink for libcomposer-lite: %w", err)
 			}
 		}
 	}

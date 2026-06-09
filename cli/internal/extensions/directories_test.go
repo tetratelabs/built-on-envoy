@@ -88,11 +88,11 @@ func TestLocalCacheExtensionDirs(t *testing.T) {
 	// extension's own name/type.
 	goPluginLoader := &Manifest{
 		Name: GoPluginLoaderName, Type: TypeGo, CShared: true,
-		Bundle: ComposerBundle, Version: "1.0.1",
+		Bundle: ComposerLiteBundle, Version: "1.0.1",
 	}
-	require.Equal(t, "/home/user/.local/share/extensions/dym/composer/1.0.1",
+	require.Equal(t, "/home/user/.local/share/extensions/dym/composer-lite/1.0.1",
 		LocalCacheExtensionDir(dirs, goPluginLoader))
-	require.Equal(t, "/home/user/.local/share/extensions/dym/composer/1.0.1/libcomposer.so",
+	require.Equal(t, "/home/user/.local/share/extensions/dym/composer-lite/1.0.1/libcomposer-lite.so",
 		LocalCacheExtension(dirs, goPluginLoader))
 
 	// A non-composer bundle resolves to lib<bundle>.so under the bundle's dir.
@@ -113,6 +113,11 @@ func TestLocalCacheComposerDirs(t *testing.T) {
 		LocalCacheComposerDir(dirs, "2.0.0"))
 	require.Equal(t, "/home/user/.local/share/extensions/dym/composer/2.0.0/libcomposer.so",
 		LocalCacheComposerLib(dirs, "2.0.0"))
+
+	require.Equal(t, "/home/user/.local/share/extensions/dym/composer-lite/2.0.0",
+		LocalCacheComposerLiteDir(dirs, "2.0.0"))
+	require.Equal(t, "/home/user/.local/share/extensions/dym/composer-lite/2.0.0/libcomposer-lite.so",
+		LocalCacheComposerLiteLib(dirs, "2.0.0"))
 }
 
 // validManifestYAML returns a valid manifest YAML string for the given extension name and type.

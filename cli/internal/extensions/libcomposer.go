@@ -25,11 +25,11 @@ const (
 	ComposerArtifactSource = "composer-src"
 )
 
-// CheckOrDownloadLibComposer checks if the libcomposer.so exists in the local cache directory.
-// If not, it tries to download the pre-built libcomposer from OCI registry.
+// CheckOrDownloadLibComposer checks if the libcomposer-lite.so exists in the local cache directory.
+// If not, it tries to download the pre-built libcomposer-lite from OCI registry.
 func CheckOrDownloadLibComposer(ctx context.Context, downloader *Downloader, version string, artifact string) error {
-	if _, err := os.Stat(LocalCacheComposerLib(downloader.Dirs, version)); err == nil {
-		downloader.Logger.Debug("libcomposer already exists in local cache. skipping download", "version", version)
+	if _, err := os.Stat(LocalCacheComposerLiteLib(downloader.Dirs, version)); err == nil {
+		downloader.Logger.Debug("libcomposer-lite already exists in local cache. skipping download", "version", version)
 		return nil
 	}
 	return DownloadLibComposerAndBuildIfNeeded(ctx, downloader, version, artifact)
@@ -114,16 +114,16 @@ func buildExtensionPlugin(logger *slog.Logger, dirs *xdg.Directories, manifest *
 	return nil
 }
 
-// BuildLibComposer builds the libcomposer.so from source. The composer source code is expected
-// to be at composerSrcPath. The built libcomposer.so will be saved in the local cache directory for
-// composer to load.
+// BuildLibComposer builds the libcomposer-lite.so from source. The composer source code is expected
+// to be at composerSrcPath. The built libcomposer-lite.so will be saved in the local cache directory
+// for the goplugin-loader host to load. COMPOSER_LITE=true makes the Makefile resolve the artifact
+// name to composer-lite (libcomposer-lite.so), so it never collides with the full composer.
 func BuildLibComposer(logger *slog.Logger, dirs *xdg.Directories, composerSrcPath string, version string, buildPlugins bool) error {
-	// Build the libcomposer from source.
+	// Build the libcomposer-lite from source.
 	// #nosec G204
 	cmd := exec.Command("make",
 		"install",
 		"BOE_DATA_HOME="+dirs.DataHome,
-		"NAME=composer",
 		"COMPOSER_LITE=true",
 		"VERSION="+version,
 	)

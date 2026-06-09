@@ -197,9 +197,9 @@ func (g *GenConfig) writeConfig(
 				// since the config references that name directly.
 				dstExtensionFile = filepath.Join(g.Output, filepath.Base(srcExtensionFile))
 			} else {
-				// For Go plugins, we need to copy the composer shared bundle library (libcomposer.so)
-				// first.
-				composerFile := extensions.LocalCacheComposerLib(dirs, m.ComposerVersion)
+				// For Go plugins, we need to copy the composer-lite shared bundle library
+				// (libcomposer-lite.so) first.
+				composerFile := extensions.LocalCacheComposerLiteLib(dirs, m.ComposerVersion)
 				dst := filepath.Join(g.Output, filepath.Base(composerFile))
 				if err := copyFile(composerFile, dst, logger); err != nil {
 					return nil, err

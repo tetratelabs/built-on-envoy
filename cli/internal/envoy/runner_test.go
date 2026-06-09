@@ -83,20 +83,20 @@ func TestRunnerFuncE_RunID(t *testing.T) {
 func TestSetupDynamicModuleSearchPath(t *testing.T) {
 	const composerVersion = "1.0.0"
 
-	// newDirs returns XDG dirs backed by a temp dir with a fake libcomposer.so in place.
+	// newDirs returns XDG dirs backed by a temp dir with a fake libcomposer-lite.so in place.
 	newDirs := func(t *testing.T) *xdg.Directories {
 		t.Helper()
 		dirs := &xdg.Directories{DataHome: t.TempDir(), RuntimeDir: t.TempDir()}
-		composerDir := extensions.LocalCacheComposerDir(dirs, composerVersion)
+		composerDir := extensions.LocalCacheComposerLiteDir(dirs, composerVersion)
 		require.NoError(t, os.MkdirAll(composerDir, 0o750))
-		require.NoError(t, os.WriteFile(filepath.Join(composerDir, "libcomposer.so"), []byte("fake"), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(composerDir, "libcomposer-lite.so"), []byte("fake"), 0o600))
 		return dirs
 	}
 
 	goPluginLoader := func() *extensions.Manifest {
 		return &extensions.Manifest{
 			Name: extensions.GoPluginLoaderName, Type: extensions.TypeGo, CShared: true,
-			Bundle: extensions.ComposerBundle, Version: composerVersion, ComposerVersion: composerVersion,
+			Bundle: extensions.ComposerLiteBundle, Version: composerVersion, ComposerVersion: composerVersion,
 		}
 	}
 	legacyGoPlugin := &extensions.Manifest{
@@ -107,8 +107,8 @@ func TestSetupDynamicModuleSearchPath(t *testing.T) {
 		name string
 		exts []*extensions.Manifest
 	}{
-		{name: "goplugin-loader alone links libcomposer", exts: []*extensions.Manifest{goPluginLoader()}},
-		// Regression: a bundle-hosted extension links libcomposer.so in the loop while a
+		{name: "goplugin-loader alone links libcomposer-lite", exts: []*extensions.Manifest{goPluginLoader()}},
+		// Regression: a bundle-hosted extension links libcomposer-lite.so in the loop while a
 		// legacy composer Go plugin also requests it via the end-block. Must not double-link.
 		{name: "goplugin-loader plus legacy composer plugin", exts: []*extensions.Manifest{goPluginLoader(), legacyGoPlugin}},
 		{name: "two goplugin-loaders", exts: []*extensions.Manifest{goPluginLoader(), goPluginLoader()}},
@@ -123,10 +123,10 @@ func TestSetupDynamicModuleSearchPath(t *testing.T) {
 			require.NoError(t, err)
 			defer cleanup()
 
-			// libcomposer.so must be present in the search path exactly once.
-			link := filepath.Join(searchPath, "libcomposer.so")
+			// libcomposer-lite.so must be present in the search path exactly once.
+			link := filepath.Join(searchPath, "libcomposer-lite.so")
 			fi, err := os.Lstat(link)
-			require.NoError(t, err, "libcomposer.so should be linked into the search path")
+			require.NoError(t, err, "libcomposer-lite.so should be linked into the search path")
 			require.NotZero(t, fi.Mode()&os.ModeSymlink, "should be a symlink")
 		})
 	}

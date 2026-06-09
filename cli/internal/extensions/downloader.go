@@ -65,6 +65,11 @@ func (d *Downloader) DownloadComposer(ctx context.Context, version string, artif
 		// use the composer version resolved from the manifest, as the input parameter one could be
 		// "latest" which needs to be resolved to a concrete version.
 		composerVersion := manifest.Annotations[OCIAnnotationComposerVersion]
+		// The composer-lite binary is cached in its own namespace so it never overwrites the
+		// full composer artifact (both ship a c-shared library built from the same source).
+		if artifact == ComposerArtifactLite {
+			return LocalCacheComposerLiteDir(d.Dirs, composerVersion)
+		}
 		return LocalCacheComposerDir(d.Dirs, composerVersion)
 	})
 }

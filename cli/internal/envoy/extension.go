@@ -176,7 +176,7 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 	moduleName := extensions.ModuleName(manifest)
 	// The composer bundle must be loaded globally: it embeds a single Go runtime that
 	// has to be shared across all of its hosted filters. Other modules load per-filter.
-	loadGlobally := moduleName == extensions.ComposerBundle
+	loadGlobally := moduleName == extensions.ComposerBundle || moduleName == extensions.ComposerLiteBundle
 
 	moduleConfig := &dymv3.DynamicModuleConfig{
 		Name:             moduleName,
@@ -309,7 +309,7 @@ func (c ComposerFilterGenerator) GenerateFilterConfig(manifest *extensions.Manif
 
 	protoConfig := &dymhttpv3.DynamicModuleFilter{
 		DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-			Name:             extensions.ComposerBundle,
+			Name:             extensions.ComposerLiteBundle,
 			LoadGlobally:     true,
 			MetricsNamespace: "builtonenvoy",
 		},

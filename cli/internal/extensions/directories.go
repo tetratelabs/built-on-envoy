@@ -20,7 +20,8 @@ func LocalCacheManifest(dirs *xdg.Directories, manifest *Manifest) string {
 
 // ModuleName returns the dynamic-module name for the manifest. Bundle-hosted
 // extensions (e.g. goplugin-loader) are served by a shared bundle library named
-// after the bundle (e.g. libcomposer.so); otherwise the extension's own name.
+// after the bundle (e.g. the "composer-lite" bundle is libcomposer-lite.so);
+// otherwise the extension's own name.
 func ModuleName(manifest *Manifest) string {
 	if manifest.Bundle != "" {
 		return manifest.Bundle
@@ -125,4 +126,16 @@ func LocalCacheComposerDir(dirs *xdg.Directories, version string) string {
 // LocalCacheComposerLib returns the local cache path for the composer lib.
 func LocalCacheComposerLib(dirs *xdg.Directories, version string) string {
 	return filepath.Join(LocalCacheComposerDir(dirs, version), "libcomposer.so")
+}
+
+// LocalCacheComposerLiteDir returns the local cache directory for the composer-lite
+// (goplugin-loader host). It is kept separate from the full composer directory so the
+// two artifacts never overwrite each other in the local cache.
+func LocalCacheComposerLiteDir(dirs *xdg.Directories, version string) string {
+	return filepath.Join(dirs.DataHome, "extensions", "dym", "composer-lite", version)
+}
+
+// LocalCacheComposerLiteLib returns the local cache path for the composer-lite lib.
+func LocalCacheComposerLiteLib(dirs *xdg.Directories, version string) string {
+	return filepath.Join(LocalCacheComposerLiteDir(dirs, version), "libcomposer-lite.so")
 }

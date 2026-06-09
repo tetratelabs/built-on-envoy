@@ -229,6 +229,8 @@ func TestDownloadComposer(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, ArtifactBinary, artifact.ArtifactType)
 		require.False(t, artifact.ComposerBundle)
+		// The lite binary must be cached in its own namespace, not the full composer dir.
+		require.Equal(t, LocalCacheComposerLiteDir(dirs, "0.5.0"), artifact.Path)
 	})
 
 	t.Run("source composer", func(t *testing.T) {
@@ -325,8 +327,8 @@ func TestDownloadSourceFallbackDisabled(t *testing.T) {
 func TestCheckOrDownloadLibComposerCacheHit(t *testing.T) {
 	version := "0.5.0"
 	dirs := &xdg.Directories{DataHome: t.TempDir()}
-	require.NoError(t, os.MkdirAll(LocalCacheComposerDir(dirs, version), 0o750))
-	require.NoError(t, os.WriteFile(LocalCacheComposerLib(dirs, version), []byte("cached"), 0o600))
+	require.NoError(t, os.MkdirAll(LocalCacheComposerLiteDir(dirs, version), 0o750))
+	require.NoError(t, os.WriteFile(LocalCacheComposerLiteLib(dirs, version), []byte("cached"), 0o600))
 
 	d := &Downloader{
 		Logger:   internaltesting.NewTLogger(t),

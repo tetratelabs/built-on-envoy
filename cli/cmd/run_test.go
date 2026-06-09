@@ -845,10 +845,10 @@ func TestDownloadExtensions(t *testing.T) {
 		dataHome := t.TempDir()
 		composerVersion := "0.1.0"
 
-		// Pre-create the libcomposer.so so CheckOrDownloadLibComposer succeeds without network.
-		composerDir := extensions.LocalCacheComposerDir(&xdg.Directories{DataHome: dataHome}, composerVersion)
+		// Pre-create the libcomposer-lite.so so CheckOrDownloadLibComposer succeeds without network.
+		composerDir := extensions.LocalCacheComposerLiteDir(&xdg.Directories{DataHome: dataHome}, composerVersion)
 		require.NoError(t, os.MkdirAll(composerDir, 0o750))
-		require.NoError(t, os.WriteFile(filepath.Join(composerDir, "libcomposer.so"), []byte("fake"), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(composerDir, "libcomposer-lite.so"), []byte("fake"), 0o600))
 
 		mock := &mockOCIClient{
 			annotations: map[string]string{
@@ -1052,10 +1052,10 @@ func TestDownloadExtensions(t *testing.T) {
 
 	t.Run("goplugin-loader reserved name synthesizes a bundle manifest", func(t *testing.T) {
 		dataHome := t.TempDir()
-		// Pre-seed libcomposer.so so CheckOrDownloadLibComposer hits the cache and avoids network.
-		composerDir := extensions.LocalCacheComposerDir(&xdg.Directories{DataHome: dataHome}, "1.0.0")
+		// Pre-seed libcomposer-lite.so so CheckOrDownloadLibComposer hits the cache and avoids network.
+		composerDir := extensions.LocalCacheComposerLiteDir(&xdg.Directories{DataHome: dataHome}, "1.0.0")
 		require.NoError(t, os.MkdirAll(composerDir, 0o750))
-		require.NoError(t, os.WriteFile(filepath.Join(composerDir, "libcomposer.so"), []byte("fake"), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(composerDir, "libcomposer-lite.so"), []byte("fake"), 0o600))
 
 		d := &extensions.Downloader{Logger: internaltesting.NewTLogger(t), Dirs: &xdg.Directories{DataHome: dataHome}}
 
@@ -1067,7 +1067,7 @@ func TestDownloadExtensions(t *testing.T) {
 		require.Equal(t, extensions.GoPluginLoaderName, m.Name)
 		require.Equal(t, extensions.TypeGo, m.Type)
 		require.True(t, m.CShared, "goplugin-loader must be treated as a c-shared dynamic module")
-		require.Equal(t, extensions.ComposerBundle, m.Bundle)
+		require.Equal(t, extensions.ComposerLiteBundle, m.Bundle)
 		require.Equal(t, "1.0.0", m.Version)
 		require.Equal(t, "1.0.0", m.ComposerVersion)
 		require.True(t, m.Remote)
@@ -1076,7 +1076,7 @@ func TestDownloadExtensions(t *testing.T) {
 	})
 
 	t.Run("goplugin-loader missing composer cache fails without network", func(t *testing.T) {
-		// No libcomposer.so seeded and a concrete tag: CheckOrDownloadLibComposer must try to
+		// No libcomposer-lite.so seeded and a concrete tag: CheckOrDownloadLibComposer must try to
 		// download via the (mock) client. A pull error surfaces as a wrapped error.
 		mock := &mockOCIClient{pullErr: errors.New("no network")}
 		d := newTestDownloader(t, t.TempDir(), mock)
@@ -1314,18 +1314,18 @@ func TestWarnMultipleGoExtensions(t *testing.T) {
 		{
 			name: "multiple goplugin-loaders share one bundle runtime - no warning",
 			extensions: []*extensions.Manifest{
-				{Name: extensions.GoPluginLoaderName, Type: extensions.TypeGo, CShared: true, Bundle: extensions.ComposerBundle, Version: "1.0.0"},
-				{Name: extensions.GoPluginLoaderName, Type: extensions.TypeGo, CShared: true, Bundle: extensions.ComposerBundle, Version: "1.0.0"},
+				{Name: extensions.GoPluginLoaderName, Type: extensions.TypeGo, CShared: true, Bundle: extensions.ComposerLiteBundle, Version: "1.0.0"},
+				{Name: extensions.GoPluginLoaderName, Type: extensions.TypeGo, CShared: true, Bundle: extensions.ComposerLiteBundle, Version: "1.0.0"},
 			},
 		},
 		{
 			name: "goplugin-loader plus a distinct c-shared Go - warning",
 			extensions: []*extensions.Manifest{
-				{Name: extensions.GoPluginLoaderName, Type: extensions.TypeGo, CShared: true, Bundle: extensions.ComposerBundle, Version: "1.0.0"},
+				{Name: extensions.GoPluginLoaderName, Type: extensions.TypeGo, CShared: true, Bundle: extensions.ComposerLiteBundle, Version: "1.0.0"},
 				{Name: "ext-2", Type: extensions.TypeGo, CShared: true, Version: "2.0.0"},
 			},
 			wantWarning:  true,
-			wantContains: "composer:1.0.0, ext-2:2.0.0",
+			wantContains: "composer-lite:1.0.0, ext-2:2.0.0",
 		},
 	}
 

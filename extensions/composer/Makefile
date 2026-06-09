@@ -41,10 +41,13 @@ comma := ,
 
 # Shared variables used by both this Makefile and the main Makefile.
 include Makefile.common
-# Option to build lite version of the loader.
+# Option to build lite version of the loader. The lite variant is an independent
+# c-shared library (libcomposer-lite.so) with its own image/cache namespace so it
+# never collides with the full composer artifact.
 ifeq ($(strip $(COMPOSER_LITE)),true)
 	DESCRIPTION := Go plugin loader.
-	IMAGE := $(HUB)/$(NAME)-lite:$(VERSION)$(IMAGE_NONCE)
+	NAME  := $(NAME)-lite
+	IMAGE := $(HUB)/$(NAME):$(VERSION)$(IMAGE_NONCE)
 	BUILD_TAGS := $(if $(BUILD_TAGS),$(BUILD_TAGS)$(comma))lite
 endif
 COMPOSER_BUILD_TAG := $(if $(BUILD_TAGS),-tags $(BUILD_TAGS))
@@ -139,7 +142,7 @@ create_builder:
 
 # Cross-build through Docker only when a target overrides force_target_os.
 build_cmd_native = CGO_ENABLED=1 go build -trimpath -buildmode=c-shared $(COMPOSER_BUILD_TAG) -o lib$(NAME).so ./main
-build_cmd_cross  = docker buildx build --platform=$(force_target_os)/$(ARCH) --output type=local,dest=. --build-arg BUILD_TAG="$(COMPOSER_BUILD_TAG)" -f ./Dockerfile .
+build_cmd_cross  = docker buildx build --platform=$(force_target_os)/$(ARCH) --output type=local,dest=. --build-arg BUILD_TAG="$(COMPOSER_BUILD_TAG)" --build-arg LIB_NAME="$(NAME)" -f ./Dockerfile .
 
 .PHONY: build
 build:
@@ -163,6 +166,7 @@ build_image:
 		$(CSHARED_ARTIFACT) \
 		$(BINARY_ARTIFACT) \
 		--build-arg BUILD_TAG="$(COMPOSER_BUILD_TAG)" \
+		--build-arg LIB_NAME="$(NAME)" \
 		--build-arg GO_VERSION="$(GO_VERSION)" \
 		-t $(IMAGE)-$(OS)-$(ARCH) \
 		-f ./Dockerfile .
@@ -185,6 +189,7 @@ push_image: create_builder  ## Build and push docker image for the plugin for cr
 		--provenance=false \
 		$(PUSH_ANNOTATIONS) \
 		--build-arg BUILD_TAG="$(COMPOSER_BUILD_TAG)" \
+		--build-arg LIB_NAME="$(NAME)" \
 		--build-arg GO_VERSION="$(GO_VERSION)" \
 		--tag $(IMAGE) $(DEV_TAG) \
 		-f ./Dockerfile .

@@ -303,8 +303,8 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 				if build {
 					fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)
 					downloader.Logger.Info("building downloaded Go extension", "name", manifest.Name, "version", artifact.Manifest.Version)
-					// Build libcomposer from the downloaded source if it does not exist in the local cache.
-					if _, err = os.Stat(extensions.LocalCacheComposerLib(downloader.Dirs, artifact.Manifest.Version)); err != nil {
+					// Build libcomposer-lite from the downloaded source if it does not exist in the local cache.
+					if _, err = os.Stat(extensions.LocalCacheComposerLiteLib(downloader.Dirs, artifact.Manifest.Version)); err != nil {
 						if err = extensions.BuildLibComposer(downloader.Logger, downloader.Dirs, artifact.Path, artifact.Manifest.Version, false); err != nil {
 							return nil, fmt.Errorf("failed to build libcomposer %s for extension %s: %w",
 								artifact.Manifest.Version, name, err)
@@ -373,7 +373,7 @@ func resolveGoPluginLoader(ctx context.Context, downloader *extensions.Downloade
 		Name:            extensions.GoPluginLoaderName,
 		Type:            extensions.TypeGo,
 		CShared:         true,
-		Bundle:          extensions.ComposerBundle,
+		Bundle:          extensions.ComposerLiteBundle,
 		Version:         version,
 		ComposerVersion: version,
 		// Marked remote so extensionPositions.sort can match it by reference, like

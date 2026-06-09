@@ -326,11 +326,11 @@ func dummy() string {
 // TestGoPluginLoaderRemoteExtension exercises the raw goplugin-loader extension end to end:
 //  1. build the example Go plugin image and push it to the local test registry;
 //  2. build the composer-lite image and push it to the local test registry, so boe downloads
-//     libcomposer.so from there into the local cache;
+//     libcomposer-lite.so from there into the local cache;
 //  3. run `boe run --extension goplugin-loader --config '{"name":...,"url":"oci://..."}'`
 //     and assert the dynamically loaded plugin processes responses.
 //
-// Both the plugin and libcomposer.so are built from the composer Dockerfiles, which pin the
+// Both the plugin and libcomposer-lite.so are built from the composer Dockerfiles, which pin the
 // same GO_VERSION from go.mod. This matters because plugin.Open requires the plugin and host
 // to share an identical Go toolchain and dependency set; strict_check=false only relaxes the
 // soft build-info checks, not the linker's hard ABI requirement.
@@ -353,7 +353,7 @@ func TestGoPluginLoaderRemoteExtension(t *testing.T) {
 	t.Setenv("BOE_REGISTRY", registryAddr)
 	t.Setenv("BOE_REGISTRY_INSECURE", "true")
 
-	// Dedicated data home so we can place libcomposer.so at the cache location the goplugin-loader
+	// Dedicated data home so we can place libcomposer-lite.so at the cache location the goplugin-loader
 	// extension expects, and so the plugin pull cache is isolated.
 	dataHome := t.TempDir()
 	t.Setenv("BOE_DATA_HOME", dataHome)
@@ -374,8 +374,8 @@ func TestGoPluginLoaderRemoteExtension(t *testing.T) {
 
 	// Step 2: build the composer-lite image and push it to the local registry (as
 	// <registry>/composer-lite:<version>). When the goplugin-loader runs in Step 3, boe downloads
-	// libcomposer.so from there into <dataHome>/extensions/dym/composer/<version>/libcomposer.so.
-	// This exercises the real composer download path instead of extracting the file manually.
+	// libcomposer-lite.so from there into <dataHome>/extensions/dym/composer-lite/<version>/libcomposer-lite.so.
+	// This exercises the real composer-lite download path instead of extracting the file manually.
 	runCmd(t, composerDir, "make", "push_image", "COMPOSER_LITE=true", "PLATFORMS=linux/"+runtime.GOARCH)
 
 	// Step 3: run the goplugin-loader extension, pointing it at the pushed plugin image via

@@ -39,15 +39,28 @@ func TestDownloadExtension(t *testing.T) {
 func TestDownloadComposer(t *testing.T) {
 	internaltesting.SkipIfTestRegistryNotConfigured(t)
 
-	for _, variant := range []string{extensions.ComposerArtifact, extensions.ComposerArtifactLite} {
-		t.Run(variant, func(t *testing.T) {
-			path := t.TempDir()
-			dirs := &xdg.Directories{DataHome: path}
-			manifest := &extensions.Manifest{Name: variant, Version: "0.6.0", Type: extensions.TypeComposer}
+	// The lite variant is cached in its own namespace (dym/composer-lite/<v>/libcomposer-lite.so)
+	// so it never collides with the full composer (dym/composer/<v>/libcomposer.so).
+	for _, tc := range []struct {
+		variant string
+		libPath func(*xdg.Directories, string) string
+	}{
+		{extensions.ComposerArtifact, extensions.LocalCacheComposerLib},
+		{extensions.ComposerArtifactLite, extensions.LocalCacheComposerLiteLib},
+	} {
+		t.Run(tc.variant, func(t *testing.T) {
+			downloadPath := t.TempDir()
+			process := internaltesting.RunCLI(t, cliBin,
+				"download",
+				fmt.Sprintf("%s:%s", tc.variant, "0.6.0"),
+				"--platform", fmt.Sprintf("linux/%s", runtime.GOARCH),
+				"--path", downloadPath)
+			status, err := process.Wait()
+			require.NoError(t, err)
+			require.Equal(t, 0, status.ExitCode())
 
-			requireDownloadHasFiles(t, manifest,
-				filepath.Base(extensions.LocalCacheComposerLib(dirs, "0.6.0")),
-			)
+			dirs := &xdg.Directories{DataHome: downloadPath}
+			require.FileExists(t, tc.libPath(dirs, "0.6.0"))
 		})
 	}
 }

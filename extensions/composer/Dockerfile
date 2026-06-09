@@ -17,8 +17,10 @@ RUN apt-get install -y --no-install-recommends \
 
 RUN go mod download all
 ARG BUILD_TAG=""
+# Library base name (e.g. "composer" or "composer-lite"); the output is lib<LIB_NAME>.so.
+ARG LIB_NAME="composer"
 # Build go shared library
-RUN CGO_ENABLED=1 go build -trimpath -buildmode=c-shared ${BUILD_TAG} -o libcomposer.so ./main
+RUN CGO_ENABLED=1 go build -trimpath -buildmode=c-shared ${BUILD_TAG} -o lib${LIB_NAME}.so ./main
 
 FROM scratch AS final
 

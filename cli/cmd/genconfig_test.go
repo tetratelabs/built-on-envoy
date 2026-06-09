@@ -346,7 +346,7 @@ func TestGenConfigWriteConfig(t *testing.T) {
 			mockLuaExtension          = &extensions.Manifest{Name: "test-lua", Type: extensions.TypeLua}
 			mockRustExtensionFile     = extensions.LocalCacheExtension(dirs, mockRustExtension)
 			mockGoExtensionFile       = extensions.LocalCacheExtension(dirs, mockGoExtension)
-			mockComposerExtensionFile = extensions.LocalCacheComposerLib(dirs, "1.0.0")
+			mockComposerExtensionFile = extensions.LocalCacheComposerLiteLib(dirs, "1.0.0")
 		)
 
 		// Create the mock extensions at the source
@@ -361,28 +361,28 @@ func TestGenConfigWriteConfig(t *testing.T) {
 		require.NoError(t, err)
 		require.FileExists(t, cmd.Output+"/envoy.yaml")
 		require.FileExists(t, cmd.Output+"/libtest-rust.so")
-		require.FileExists(t, cmd.Output+"/libcomposer.so")
+		require.FileExists(t, cmd.Output+"/libcomposer-lite.so")
 		require.FileExists(t, cmd.Output+"/test-go.so")
 	})
 
-	t.Run("goplugin-loader bundle copies libcomposer and preserves url", func(t *testing.T) {
+	t.Run("goplugin-loader bundle copies libcomposer-lite and preserves url", func(t *testing.T) {
 		var (
 			cmd    = &GenConfig{stdout: &buf, Output: t.TempDir()}
 			logger = internaltesting.NewTLogger(t)
 			dirs   = &xdg.Directories{DataHome: t.TempDir()}
 
-			gpl    = &extensions.Manifest{Name: extensions.GoPluginLoaderName, Type: extensions.TypeGo, CShared: true, Bundle: extensions.ComposerBundle, Version: "1.0.0"}
-			gplLib = extensions.LocalCacheExtension(dirs, gpl) // resolves to dym/composer/1.0.0/libcomposer.so
+			gpl    = &extensions.Manifest{Name: extensions.GoPluginLoaderName, Type: extensions.TypeGo, CShared: true, Bundle: extensions.ComposerLiteBundle, Version: "1.0.0"}
+			gplLib = extensions.LocalCacheExtension(dirs, gpl) // resolves to dym/composer-lite/1.0.0/libcomposer-lite.so
 		)
 		require.NoError(t, os.MkdirAll(filepath.Dir(gplLib), 0o750))
-		require.NoError(t, os.WriteFile(gplLib, []byte("fake libcomposer"), 0o600))
+		require.NoError(t, os.WriteFile(gplLib, []byte("fake libcomposer-lite"), 0o600))
 
 		// The user-supplied inner plugin url must be left untouched (not rewritten to file://).
 		inputConfig := `filter_config: {"name":"goplugin-loader","url":"oci://ex/p:v1"}`
 		_, err := cmd.writeConfig(inputConfig, []*extensions.Manifest{gpl}, dirs, logger)
 		require.NoError(t, err)
 
-		require.FileExists(t, cmd.Output+"/libcomposer.so")
+		require.FileExists(t, cmd.Output+"/libcomposer-lite.so")
 		// No per-extension goplugin-loader.so should be produced for a bundle-hosted extension.
 		require.NoFileExists(t, cmd.Output+"/goplugin-loader.so")
 

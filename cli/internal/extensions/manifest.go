@@ -68,9 +68,9 @@ type (
 		// (via the main/ directory) rather than as a Go plugin (via standalone/).
 		// Set by BuildExtensionFromPath when the extension has a main/ directory.
 		CShared bool `yaml:"-" json:"-"`
-		// Bundle names a shared "bundle" dynamic module (today only "composer")
+		// Bundle names a shared "bundle" dynamic module (today only "composer-lite")
 		// that hosts this extension's filter. When set, the filter is loaded
-		// through the bundle's c-shared library (libcomposer.so) instead of the
+		// through the bundle's c-shared library (libcomposer-lite.so) instead of the
 		// extension's own .so, the Envoy DynamicModuleConfig name is the bundle
 		// name (loaded globally), and the Envoy filter name is this manifest's
 		// name. Set in code for synthesized manifests; never parsed from YAML.
@@ -241,9 +241,15 @@ const (
 	// --extension to drive the composer's goplugin-loader filter directly. It
 	// is also the Envoy filter name registered by the composer.
 	GoPluginLoaderName = "goplugin-loader"
-	// ComposerBundle is the dynamic-module name of the composer host that loads
-	// bundle-hosted extensions (see Manifest.Bundle).
+	// ComposerBundle is the dynamic-module name of the full composer host
+	// (libcomposer.so).
 	ComposerBundle = "composer"
+	// ComposerLiteBundle is the dynamic-module name of the composer-lite host
+	// (libcomposer-lite.so), the goplugin-loader-only build that loads
+	// bundle-hosted Go plugin extensions (see Manifest.Bundle). It is kept
+	// distinct from ComposerBundle so the lite library never collides with the
+	// full composer artifact in the local cache or the dynamic-module search path.
+	ComposerLiteBundle = "composer-lite"
 
 	// FilterTypeHTTP represents an HTTP filter extension (default).
 	FilterTypeHTTP FilterType = "http"

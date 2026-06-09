@@ -53,8 +53,8 @@ func TestBuildLibComposer(t *testing.T) {
 	err = BuildLibComposer(logger, fakeDirs, composerPath, composerVersion, true)
 	require.NoError(t, err)
 
-	// Ensure the libcomposer.so is created.
-	_, err = os.Stat(LocalCacheComposerLib(fakeDirs, composerVersion))
+	// Ensure the libcomposer-lite.so is created.
+	_, err = os.Stat(LocalCacheComposerLiteLib(fakeDirs, composerVersion))
 	require.NoError(t, err)
 
 	// Ensure plugins are built

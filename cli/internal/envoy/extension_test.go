@@ -478,7 +478,7 @@ func TestComposerFilterGenerator(t *testing.T) {
 					TypedConfig: func() *anypb.Any {
 						dymConfig := &dymhttpv3.DynamicModuleFilter{
 							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-								Name:             "composer",
+								Name:             "composer-lite",
 								LoadGlobally:     true,
 								MetricsNamespace: "builtonenvoy",
 							},
@@ -527,7 +527,7 @@ func TestComposerFilterGenerator(t *testing.T) {
 
 						dymConfig := &dymhttpv3.DynamicModuleFilter{
 							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-								Name:             "composer",
+								Name:             "composer-lite",
 								LoadGlobally:     true,
 								MetricsNamespace: "builtonenvoy",
 							},
@@ -582,7 +582,7 @@ func TestComposerFilterGenerator(t *testing.T) {
 					TypedConfig: func() *anypb.Any {
 						dymConfig := &dymhttpv3.DynamicModuleFilter{
 							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-								Name:             "composer",
+								Name:             "composer-lite",
 								LoadGlobally:     true,
 								MetricsNamespace: "builtonenvoy",
 							},
@@ -626,7 +626,7 @@ func TestGoPluginLoaderBundle(t *testing.T) {
 		Name:            extensions.GoPluginLoaderName,
 		Type:            extensions.TypeGo,
 		CShared:         true,
-		Bundle:          extensions.ComposerBundle,
+		Bundle:          extensions.ComposerLiteBundle,
 		Version:         "v1.0.0",
 		ComposerVersion: "v1.0.0",
 	}
@@ -643,7 +643,7 @@ func TestGoPluginLoaderBundle(t *testing.T) {
 				TypedConfig: func() *anypb.Any {
 					cfg, anypbErr := anypb.New(&dymhttpv3.DynamicModuleFilter{
 						DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-							Name:             extensions.ComposerBundle,
+							Name:             extensions.ComposerLiteBundle,
 							LoadGlobally:     true,
 							MetricsNamespace: "builtonenvoy",
 						},
@@ -669,7 +669,7 @@ func TestGoPluginLoaderBundle(t *testing.T) {
 				TypedConfig: func() *anypb.Any {
 					cfg, anypbErr := anypb.New(&dymhttpv3.DynamicModuleFilter{
 						DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-							Name:             extensions.ComposerBundle,
+							Name:             extensions.ComposerLiteBundle,
 							LoadGlobally:     true,
 							MetricsNamespace: "builtonenvoy",
 						},
