@@ -986,7 +986,7 @@ func TestDownloadExtensions(t *testing.T) {
 		require.Contains(t, err.Error(), "source directory for extension my-go-src does not exist")
 	})
 
-	t.Run("source Rust extension with no Cargo.toml", func(t *testing.T) {
+	t.Run("source Rust extension but missing source dir", func(t *testing.T) {
 		mock := &mockOCIClient{
 			annotations: map[string]string{
 				ocispec.AnnotationTitle:               "my-rust-src",
@@ -1001,7 +1001,28 @@ func TestDownloadExtensions(t *testing.T) {
 		require.Contains(t, err.Error(), "source directory for extension my-rust-src does not exist")
 	})
 
+	t.Run("source Rust extension with no Cargo.toml", func(t *testing.T) {
+		dataHome := t.TempDir()
+		mock := &mockOCIClient{
+			annotations: map[string]string{
+				ocispec.AnnotationTitle:               "my-rust-src",
+				extensions.OCIAnnotationExtensionType: string(extensions.TypeRust),
+				extensions.OCIAnnotationArtifact:      extensions.ArtifactSource,
+			},
+		}
+		d := newTestDownloader(t, dataHome, mock)
+
+		// Pre-create the source artifact directory so os.Stat passes and the build tool is invoked.
+		srcDir := extensions.LocalCacheExtensionSourceArtifactDir(d.Dirs, &extensions.Manifest{Name: "my-rust-src", Version: "1.0.0"})
+		require.NoError(t, os.MkdirAll(srcDir, 0o750))
+
+		_, err := downloadExtensions(t.Context(), d, []string{"my-rust-src:1.0.0"}, true)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "failed to build Rust dynamic module")
+	})
+
 	t.Run("source ExtProc extension with no go.mod", func(t *testing.T) {
+		dataHome := t.TempDir()
 		mock := &mockOCIClient{
 			annotations: map[string]string{
 				ocispec.AnnotationTitle:               "my-extproc-src",
@@ -1009,11 +1030,15 @@ func TestDownloadExtensions(t *testing.T) {
 				extensions.OCIAnnotationArtifact:      extensions.ArtifactSource,
 			},
 		}
-		d := newTestDownloader(t, t.TempDir(), mock)
+		d := newTestDownloader(t, dataHome, mock)
+
+		// Pre-create the source artifact directory so os.Stat passes and the build tool is invoked.
+		srcDir := extensions.LocalCacheExtensionSourceArtifactDir(d.Dirs, &extensions.Manifest{Name: "my-extproc-src", Version: "1.0.0"})
+		require.NoError(t, os.MkdirAll(srcDir, 0o750))
 
 		_, err := downloadExtensions(t.Context(), d, []string{"my-extproc-src:1.0.0"}, true)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "source directory for extension my-extproc-src does not exist")
+		require.Contains(t, err.Error(), "failed to build ext_proc server")
 	})
 
 	t.Run("source non-composer non-dynamic-module extension", func(t *testing.T) {
