@@ -102,7 +102,7 @@ func (g *GenConfig) Run(ctx context.Context, dirs *xdg.Directories, logger *slog
 	}
 
 	// If we're only generating config to print to the stdout, we can skip building the extensions
-	// but if we're exporting it, we need ot build to make sure the extension files exist.
+	// but if we're exporting it, we need to build to make sure the extension files exist.
 	downloaded, err := downloadExtensions(ctx, downloader, g.Extensions, true)
 	if err != nil {
 		return err

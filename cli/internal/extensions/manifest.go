@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -20,6 +21,7 @@ import (
 	"golang.org/x/mod/semver"
 	"gopkg.in/yaml.v3"
 
+	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 	rootext "github.com/tetratelabs/built-on-envoy/extensions"
 )
 
@@ -68,13 +70,6 @@ type (
 		// (via the main/ directory) rather than as a Go plugin (via standalone/).
 		// Set by BuildExtensionFromPath when the extension has a main/ directory.
 		CShared bool `yaml:"-" json:"-"`
-		// Bundle names a shared "bundle" dynamic module (today only "composer")
-		// that hosts this extension's filter. When set, the filter is loaded
-		// through the bundle's c-shared library (libcomposer.so) instead of the
-		// extension's own .so, the Envoy DynamicModuleConfig name is the bundle
-		// name (loaded globally), and the Envoy filter name is this manifest's
-		// name. Set in code for synthesized manifests; never parsed from YAML.
-		Bundle string `yaml:"-" json:"-"`
 	}
 
 	// Example represents an example usage of an extension.
@@ -355,8 +350,10 @@ func loadManifest(fsys fs.FS, path string, validate bool) (*Manifest, error) {
 }
 
 // resolveVersions resolves the version and composer version for a manifest if it has a parent.
+// Any manifest with a parent inherits from it (a composer Go plugin, or a child of a general
+// bundle of any type). The parent is the composer or bundle root.
 func resolveVersions(m *Manifest, all map[string]*Manifest) error {
-	if m.Type == TypeGo && m.Parent != "" {
+	if m.Parent != "" {
 		parent, ok := all[m.Parent]
 		if !ok {
 			return fmt.Errorf("%w: %s", ErrParentManifestNotFound, m.Parent)
@@ -415,12 +412,12 @@ func LoadLocalManifest(path string) (*Manifest, error) {
 
 // FindLocalParentManifest walks up the directory tree from the manifest's path
 // looking for a parent manifest. Returns (nil, nil) if not found.
-func FindLocalParentManifest(m *Manifest) (*Manifest, error) {
+func FindLocalParentManifest(m *Manifest) (*Manifest, string, error) {
 	dir := filepath.Dir(m.Path)
 	for {
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return nil, nil
+			return nil, "", nil
 		}
 		dir = parent
 
@@ -434,7 +431,7 @@ func FindLocalParentManifest(m *Manifest) (*Manifest, error) {
 			continue
 		}
 		if cm.Name == m.Parent {
-			return cm, nil
+			return cm, dir, nil
 		}
 	}
 }
@@ -572,4 +569,66 @@ func ResolveMinimumCompatibleEnvoyVersion(manifests []*Manifest) (string, error)
 		return lowestMax, nil
 	}
 	return "", nil
+}
+
+// ResolveExtensionManifest returns the manifest for the extension named extensionName within a
+// downloaded artifact. When the artifact itself is the requested extension it is returned as-is;
+// otherwise the artifact is treated as a bundle and its source tree is searched for the named
+// child, inheriting versions from a sibling composer parent manifest when present.
+func ResolveExtensionManifest(dirs *xdg.Directories, artifactManifest *Manifest, artifactType, extensionName string,
+	logger *slog.Logger,
+) (*Manifest, error) {
+	// Pre-compiled composer plugin packages ship the parent composer manifest as
+	// manifest-composer.yaml alongside the extension; inherit versions from it when present.
+	var composerManifest *Manifest
+	composerParent := filepath.Join(LocalCacheExtensionDir(dirs, artifactManifest), "manifest-composer.yaml")
+	if _, err := os.Stat(composerParent); err == nil {
+		p, err := LoadLocalManifest(composerParent)
+		if err != nil {
+			return nil,
+				fmt.Errorf("failed to load parent manifest from downloaded extension at %q: %w", composerParent, err)
+		}
+		composerManifest = p
+	}
+
+	if artifactManifest.Name == extensionName || extensionName == "" {
+		if composerManifest != nil {
+			ResolveVersionsWithParent(artifactManifest, composerManifest)
+		}
+		return artifactManifest, nil
+	}
+
+	manifestPath, err := LocalCacheExtensionManifest(dirs, artifactManifest, artifactType, extensionName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get local cache manifest path for extension %q: %w", extensionName, err)
+	}
+
+	logger.Info("loading manifest from downloaded extension", "path", manifestPath)
+	m, err := LoadLocalManifest(manifestPath)
+	if err != nil {
+		return nil,
+			fmt.Errorf("failed to load manifest from downloaded extension at %q: %w", manifestPath, err)
+	}
+
+	mergeManifestFromRoot(m, artifactManifest)
+	return m, nil
+}
+
+// mergeManifestFromOCI preserves fields from the OCI-annotation-derived
+// manifest when the embedded YAML manifest has them empty. Composer plugins
+// have incomplete manifests because version and composerVersion are inherited
+// from the parent at build time.
+func mergeManifestFromRoot(embedded, fromOCI *Manifest) {
+	if embedded.Version == "" {
+		embedded.Version = fromOCI.Version
+	}
+	if embedded.ComposerVersion == "" {
+		embedded.ComposerVersion = fromOCI.ComposerVersion
+	}
+	if embedded.MinEnvoyVersion == "" {
+		embedded.MinEnvoyVersion = fromOCI.MinEnvoyVersion
+	}
+	if embedded.MaxEnvoyVersion == "" {
+		embedded.MaxEnvoyVersion = fromOCI.MaxEnvoyVersion
+	}
 }

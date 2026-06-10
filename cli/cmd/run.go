@@ -15,7 +15,6 @@ import (
 	"maps"
 	"net"
 	"os"
-	"path/filepath"
 	"runtime"
 	"slices"
 	"strconv"
@@ -264,83 +263,27 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 
 		switch artifact.ArtifactType {
 		case extensions.ArtifactBinary:
-			if artifact.Manifest.Type == extensions.TypeGo {
+			if artifact.Manifest.Type == extensions.TypeGo && !artifact.Manifest.CShared {
 				// Ensure the composer is downloaded before running any extensions that may depend on it.
-				if err = extensions.CheckOrDownloadLibComposer(ctx, downloader, artifact.Manifest.ComposerVersion, extensions.ComposerArtifactLite); err != nil {
+				if err = extensions.CheckOrDownloadLibComposer(ctx, downloader, artifact.Manifest.ComposerVersion,
+					extensions.ComposerArtifactLite); err != nil {
 					return nil, fmt.Errorf("failed to download libcomposer %s for extension %s: %w",
 						artifact.Manifest.ComposerVersion, name, err)
 				}
+				composerManifest, _ := extensions.GetComposerManifest(downloader.Dirs, artifact.Manifest.ComposerVersion)
+				if composerManifest != nil {
+					extensions.ResolveVersionsWithParent(artifact.ExtensionManifest, composerManifest)
+				}
 			}
-			downloaded = append(downloaded, artifact.Manifest)
-
+			artifact.ExtensionManifest.CShared = artifact.Manifest.CShared
+			downloaded = append(downloaded, artifact.ExtensionManifest)
 		case extensions.ArtifactSource:
-			switch artifact.Manifest.Type {
-			// If the downloaded artifact is the composer bundle, we need to find the path to the extension
-			// inside the composer source tree.
-			case extensions.TypeComposer:
-				var manifest, composerManifest *extensions.Manifest
-				extensionSrc := extensions.LocalCacheComposerExtensionSourceDir(downloader.Dirs, artifact.Manifest, name)
-				if extensionSrc == "" {
-					return nil, fmt.Errorf("invalid source artifact for Go extension %s: missing expected source directory: %s", name, artifact.Path)
-				}
-				downloader.Logger.Info("loading downloaded extension manifest", "path", extensionSrc)
-
-				manifest, err = extensions.LoadLocalManifest(filepath.Join(extensionSrc, "manifest.yaml"))
-				if err != nil {
-					return nil, fmt.Errorf("failed to load manifest for composer extension %s from source artifact %q: %w",
-						name, extensionSrc, err)
-				}
-				composerManifestPath := filepath.Join(extensions.LocalCacheComposerSourceArtifactDir(downloader.Dirs, artifact.Manifest), "manifest.yaml")
-				composerManifest, err = extensions.LoadLocalManifest(composerManifestPath)
-				if err != nil {
-					return nil, fmt.Errorf("failed to load composer parent manifest for composer extension %s from source artifact %q: %w",
-						name, extensionSrc, err)
-				}
-
-				extensions.ResolveVersionsWithParent(manifest, composerManifest)
-				manifest.Remote = true // Mark the manifest as remote since it is from a downloaded artifact
-
-				if build {
-					fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)
-					downloader.Logger.Info("building downloaded Go extension", "name", manifest.Name, "version", artifact.Manifest.Version)
-					// Build libcomposer from the downloaded source if it does not exist in the local cache.
-					if _, err = os.Stat(extensions.LocalCacheComposerLib(downloader.Dirs, artifact.Manifest.Version)); err != nil {
-						if err = extensions.BuildLibComposer(downloader.Logger, downloader.Dirs, artifact.Path, artifact.Manifest.Version, false); err != nil {
-							return nil, fmt.Errorf("failed to build libcomposer %s for extension %s: %w",
-								artifact.Manifest.Version, name, err)
-						}
-					}
-					if _, err = extensions.BuildExtensionFromPath(downloader.Logger, downloader.Dirs, manifest, extensionSrc); err != nil {
-						return nil, fmt.Errorf("failed to build Go extension %s from source artifact: %w", name, err)
-					}
-				}
-
-				downloaded = append(downloaded, manifest)
-
-			case extensions.TypeRust:
-				if build {
-					fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)
-					downloader.Logger.Info("building downloaded Rust extension", "name", artifact.Manifest.Name, "version", artifact.Manifest.Version)
-
-					if err = extensions.CheckOrBuildDynamicModule(downloader.Logger, downloader.Dirs, artifact.Manifest, artifact.Path); err != nil {
-						return nil, fmt.Errorf("failed to build Rust extension %s from source artifact: %w", name, err)
-					}
-				}
-				downloaded = append(downloaded, artifact.Manifest)
-
-			case extensions.TypeExtProc:
-				if build {
-					fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)
-					downloader.Logger.Info("building downloaded ExtProc extension", "name", artifact.Manifest.Name, "version", artifact.Manifest.Version)
-					if err = extensions.CheckOrBuildExtProcBinary(downloader.Logger, downloader.Dirs, artifact.Manifest, artifact.Path); err != nil {
-						return nil, fmt.Errorf("failed to build ExtProc extension %s from source artifact: %w", name, err)
-					}
-				}
-				downloaded = append(downloaded, artifact.Manifest)
-			default:
-				downloaded = append(downloaded, artifact.Manifest)
+			handleSourceError := handleExtensionSource(ctx, downloader, artifact.Manifest, artifact.ExtensionManifest,
+				artifact.Path, downloader.Logger, build)
+			if handleSourceError != nil {
+				return nil, handleSourceError
 			}
-
+			downloaded = append(downloaded, artifact.ExtensionManifest)
 		default:
 			return nil, fmt.Errorf("unknown artifact type %q for extension %s", artifact.ArtifactType, name)
 		}
@@ -373,7 +316,7 @@ func resolveGoPluginLoader(ctx context.Context, downloader *extensions.Downloade
 		Name:            extensions.GoPluginLoaderName,
 		Type:            extensions.TypeGo,
 		CShared:         true,
-		Bundle:          extensions.ComposerBundle,
+		Parent:          extensions.ComposerBundle,
 		Version:         version,
 		ComposerVersion: version,
 		// Marked remote so extensionPositions.sort can match it by reference, like
@@ -426,7 +369,9 @@ func parseLogLevels(logLevel string) (string, string, error) {
 var errFailedToLoadLocalManifest = errors.New("failed to load local manifest")
 
 // loadLocalManifests loads extension manifests from the specified local paths.
-func loadLocalManifests(ctx context.Context, logger *slog.Logger, downloader *extensions.Downloader, paths []string, build bool) ([]*extensions.Manifest, error) {
+func loadLocalManifests(ctx context.Context, logger *slog.Logger, downloader *extensions.Downloader,
+	paths []string, build bool,
+) ([]*extensions.Manifest, error) {
 	manifests := make([]*extensions.Manifest, 0, len(paths))
 
 	for _, path := range paths {
@@ -437,55 +382,47 @@ func loadLocalManifests(ctx context.Context, logger *slog.Logger, downloader *ex
 			return nil, fmt.Errorf("%w from %s: %w", errFailedToLoadLocalManifest, path, err)
 		}
 
+		// This local extension may be a sub-extension of an extension bundle (e.g., a filter in the composer
+		// source tree, a filter in Rust extension bundle and so on).
+		// If so, we need to find the root manifest because we treat an extension bundle as a unit for version and
+		// compilation management.
+		var rootManifest *extensions.Manifest
+		var rootPath string
 		if manifest.Parent != "" {
-			parent, err := resolveParent(ctx, downloader, manifest)
+			rootManifest, rootPath, err = resolveParentNoFallback(manifest)
 			if err != nil {
 				return nil, fmt.Errorf("%w from %s: %w", errFailedToLoadLocalManifest, path, err)
 			}
-			extensions.ResolveVersionsWithParent(manifest, parent)
+			extensions.ResolveVersionsWithParent(manifest, rootManifest)
 		}
-
-		if build {
-			switch manifest.Type {
-			case extensions.TypeGo:
-				fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, manifest.Name, internal.ANSIReset)
-				downloader.Logger.Info("building local Go extension", "name", manifest.Name, "version", manifest.Version)
-				cshared, err := extensions.BuildExtensionFromPath(downloader.Logger, downloader.Dirs, manifest, path)
-				if err != nil {
-					return nil, err
-				}
-				if !cshared {
-					// Old-style plugin needs libcomposer to load it.
-					if err := extensions.DownloadLibComposerAndBuildIfNeeded(ctx, downloader, manifest.ComposerVersion, extensions.ComposerArtifactSource); err != nil {
-						return nil, err
-					}
-				}
-				manifest.CShared = cshared
-			case extensions.TypeRust:
-				fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, manifest.Name, internal.ANSIReset)
-				downloader.Logger.Info("building local Rust extension", "name", manifest.Name, "version", manifest.Version)
-				// Build dynamic module (currently supports Rust)
-				if err := extensions.BuildDynamicModule(downloader.Logger, downloader.Dirs, manifest, path); err != nil {
-					return nil, err
-				}
-			case extensions.TypeExtProc:
-				fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, manifest.Name, internal.ANSIReset)
-				downloader.Logger.Info("building local ext_proc extension", "name", manifest.Name, "version", manifest.Version)
-				if err := extensions.BuildExtProcBinary(downloader.Logger, downloader.Dirs, manifest, path); err != nil {
-					return nil, err
-				}
-			}
+		if rootManifest == nil {
+			rootManifest = manifest
+			rootPath = path
 		}
-
+		err = handleExtensionSource(ctx, downloader, rootManifest, manifest, rootPath, logger, build)
+		if err != nil {
+			return nil, err
+		}
 		manifests = append(manifests, manifest)
 	}
 
 	return manifests, nil
 }
 
+func resolveParentNoFallback(m *extensions.Manifest) (*extensions.Manifest, string, error) {
+	parent, dir, err := extensions.FindLocalParentManifest(m)
+	if err != nil {
+		return nil, "", err
+	}
+	if parent != nil {
+		return parent, dir, nil
+	}
+	return nil, "", fmt.Errorf("parent manifest %q not found locally for extension %s", m.Parent, m.Name)
+}
+
 // resolveParent finds the parent manifest locally, falling back to the registry.
 func resolveParent(ctx context.Context, downloader *extensions.Downloader, m *extensions.Manifest) (*extensions.Manifest, error) {
-	parent, err := extensions.FindLocalParentManifest(m)
+	parent, _, err := extensions.FindLocalParentManifest(m)
 	if err != nil {
 		return nil, err
 	}
@@ -543,11 +480,10 @@ func warnMultipleGoExtensions(manifests []*extensions.Manifest) {
 	seen := make(map[string]bool)
 	for _, ext := range manifests {
 		if ext.Type == extensions.TypeGo && ext.CShared {
-			name := ext.Name
-			if ext.Bundle != "" {
-				name = ext.Bundle
-			}
-			seen[name+":"+ext.Version] = true
+			// ModuleName collapses bundle-hosted extensions (parent set, e.g.
+			// goplugin-loader) onto the shared bundle library name, so several
+			// extensions sharing one composer runtime count as a single library.
+			seen[extensions.ModuleName(ext)+":"+ext.Version] = true
 		}
 	}
 	if len(seen) < 2 {
@@ -585,5 +521,65 @@ func validateComposerCompat(manifests []*extensions.Manifest) error {
 			"all Go extensions must use the same composer version", b.String())
 	}
 
+	return nil
+}
+
+// handleExtensionSource builds the bundle root from source (composer, Go, Rust or ext_proc) and
+// resolves the extension's runtime metadata (CShared, inherited versions) from the build result.
+// When build is false the build step is skipped entirely — used by config generation and tests
+// that only need manifest resolution, not compiled artifacts.
+func handleExtensionSource(ctx context.Context, downloader *extensions.Downloader, rootManifest *extensions.Manifest,
+	extensionManifest *extensions.Manifest, rootPath string, logger *slog.Logger, build bool,
+) error {
+	if !build {
+		return nil
+	}
+	// The source artifact must be present on disk before we can build it. A missing directory
+	// means the download produced no source tree, so fail fast with a clear message rather than
+	// letting the underlying build tool fail obscurely (e.g. chdir into a non-existent path).
+	if info, err := os.Stat(rootPath); err != nil || !info.IsDir() {
+		return fmt.Errorf("source directory for extension %s does not exist: %s", rootManifest.Name, rootPath)
+	}
+	switch rootManifest.Type {
+	case extensions.TypeComposer:
+		fmt.Printf("→ %sBuilding composer for %s...%s\n", internal.ANSIBold, rootManifest.Name, internal.ANSIReset)
+		logger.Info("building composer from local source", "name", rootManifest.Name, "version", rootManifest.Version)
+		if err := extensions.BuildComposer(logger, downloader.Dirs, rootPath, rootManifest.Version); err != nil {
+			return fmt.Errorf("failed to build libcomposer for local extension %s: %w", rootManifest.Name, err)
+		}
+		extensionManifest.CShared = true
+	case extensions.TypeGo:
+		fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, rootManifest.Name, internal.ANSIReset)
+		logger.Info("building local Go extension", "name", rootManifest.Name, "version", rootManifest.Version)
+		cshared, err := extensions.BuildExtensionFromPath(logger, downloader.Dirs, rootManifest, rootPath)
+		if err != nil {
+			return fmt.Errorf("failed to build local Go extension %s: %w", rootManifest.Name, err)
+		}
+		if !cshared {
+			if err = extensions.CheckOrDownloadLibComposer(ctx, downloader, rootManifest.ComposerVersion,
+				extensions.ComposerArtifactLite); err != nil {
+				return fmt.Errorf("failed to download libcomposer %s for extension %s: %w",
+					rootManifest.ComposerVersion, rootManifest.Name, err)
+			}
+			composerManifest, _ := extensions.GetComposerManifest(downloader.Dirs, rootManifest.ComposerVersion)
+			if composerManifest != nil {
+				extensions.ResolveVersionsWithParent(extensionManifest, composerManifest)
+			}
+		}
+		extensionManifest.CShared = cshared
+	case extensions.TypeRust:
+		fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, rootManifest.Name, internal.ANSIReset)
+		downloader.Logger.Info("building local Rust extension", "name", rootManifest.Name, "version", rootManifest.Version)
+		// Build dynamic module (currently supports Rust)
+		if err := extensions.BuildDynamicModule(downloader.Logger, downloader.Dirs, rootManifest, rootPath); err != nil {
+			return err
+		}
+	case extensions.TypeExtProc:
+		fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, rootManifest.Name, internal.ANSIReset)
+		downloader.Logger.Info("building local ext_proc extension", "name", rootManifest.Name, "version", rootManifest.Version)
+		if err := extensions.BuildExtProcBinary(downloader.Logger, downloader.Dirs, rootManifest, rootPath); err != nil {
+			return err
+		}
+	}
 	return nil
 }

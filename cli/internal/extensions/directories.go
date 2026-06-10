@@ -18,12 +18,43 @@ func LocalCacheManifest(dirs *xdg.Directories, manifest *Manifest) string {
 	return filepath.Join(LocalCacheExtensionDir(dirs, manifest), "manifest.yaml")
 }
 
+// LocalCacheExtensionManifest returns the path to the manifest.yaml of the extension named
+// extensionName within a downloaded artifact. For a standalone artifact (extensionName matches the
+// artifact, or is empty) it is the manifest at the artifact root; otherwise the artifact is treated
+// as a bundle and its source tree is walked to find the named child's manifest.
+func LocalCacheExtensionManifest(dirs *xdg.Directories, artifactManifest *Manifest, artifactType,
+	extensionName string,
+) (string, error) {
+	var base string
+	if artifactType == ArtifactSource {
+		base = LocalCacheExtensionSourceArtifactDir(dirs, artifactManifest)
+	} else {
+		base = LocalCacheExtensionDir(dirs, artifactManifest)
+	}
+
+	if artifactManifest.Name == extensionName || extensionName == "" {
+		// Standalone extension, manifest is at the root of the extension directory.
+		return filepath.Join(base, "manifest.yaml"), nil
+	}
+	// Find the extension manifest by walking the extension directory.
+	path, err := FindExtensionPath(base, extensionName)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(path, "manifest.yaml"), nil
+}
+
 // ModuleName returns the dynamic-module name for the manifest. Bundle-hosted
 // extensions (e.g. goplugin-loader) are served by a shared bundle library named
 // after the bundle (e.g. libcomposer.so); otherwise the extension's own name.
 func ModuleName(manifest *Manifest) string {
-	if manifest.Bundle != "" {
-		return manifest.Bundle
+	// A Go plugin (not c-shared) is loaded by composer and has no bundle library of its own.
+	if manifest.Type == TypeGo && !manifest.CShared {
+		return manifest.Name
+	}
+
+	if manifest.Parent != "" {
+		return manifest.Parent
 	}
 	return manifest.Name
 }
@@ -83,38 +114,20 @@ func LocalCacheExtension(dirs *xdg.Directories, manifest *Manifest) string {
 	}
 }
 
-// LocalCacheComposerSourceArtifactDir returns the local cache directory for the composer
-// source artifact based on the manifest.
-func LocalCacheComposerSourceArtifactDir(dirs *xdg.Directories, manifest *Manifest) string {
-	return filepath.Join(dirs.DataHome, "extensions", "src", manifest.Name, manifest.Version)
+// LocalCacheExtensionSourceArtifactDir returns the local cache directory for a downloaded source
+// artifact (extensions/src/<name>/<version>), keyed by its manifest. Used for any source artifact
+// that is built on the client — the composer and general bundles alike.
+func LocalCacheExtensionSourceArtifactDir(dirs *xdg.Directories, manifest *Manifest) string {
+	moduleName := ModuleName(manifest)
+	return filepath.Join(dirs.DataHome, "extensions", "src", moduleName, manifest.Version)
 }
 
-// LocalCacheComposerExtensionSourceDir returns the local cache directory for the composer extension source code
-// based on the extension name. It looks for the manifest.yaml file in the composer source artifact directory
-// to find the matching extension name and returns its path.
-func LocalCacheComposerExtensionSourceDir(dirs *xdg.Directories, manifest *Manifest, name string) string {
-	base := LocalCacheComposerSourceArtifactDir(dirs, manifest)
-	var extensionPath string
-
-	_ = filepath.WalkDir(base, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.Name() == "manifest.yaml" {
-			m, err := LoadLocalManifest(path)
-			if err != nil {
-				return err
-			}
-
-			if m.Name == name {
-				extensionPath = filepath.Dir(path)
-				return filepath.SkipDir
-			}
-		}
-		return nil
-	})
-
-	return extensionPath
+// LocalCacheExtensionSourceDir returns the source directory of the child extension named `name`
+// within a downloaded source artifact, by walking the extracted tree for the manifest.yaml whose
+// name matches. Used for composer plugins and general bundle children alike.
+func LocalCacheExtensionSourceDir(dirs *xdg.Directories, manifest *Manifest, name string) string {
+	path, _ := FindExtensionPath(LocalCacheExtensionSourceArtifactDir(dirs, manifest), name)
+	return path
 }
 
 // LocalCacheComposerDir returns the local cache directory for the composer.
@@ -125,4 +138,41 @@ func LocalCacheComposerDir(dirs *xdg.Directories, version string) string {
 // LocalCacheComposerLib returns the local cache path for the composer lib.
 func LocalCacheComposerLib(dirs *xdg.Directories, version string) string {
 	return filepath.Join(LocalCacheComposerDir(dirs, version), "libcomposer.so")
+}
+
+// LocalCacheComposerSourceDir returns the local cache directory of the composer source artifact
+// for the given version (extensions/src/composer/<version>).
+func LocalCacheComposerSourceDir(dirs *xdg.Directories, version string) string {
+	return filepath.Join(dirs.DataHome, "extensions", "src", "composer", version)
+}
+
+// FindExtensionPath walks the directory tree rooted at base and returns the directory containing
+// the manifest.yaml whose name matches extensionName. It returns an error if the tree cannot be
+// walked or no matching extension is found.
+func FindExtensionPath(base string, extensionName string) (string, error) {
+	var extensionPath string
+
+	if err := filepath.WalkDir(base, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.Name() == "manifest.yaml" {
+			m, err := LoadLocalManifest(path)
+			if err != nil {
+				return err
+			}
+			if m.Name == extensionName {
+				extensionPath = filepath.Dir(path)
+				return filepath.SkipDir
+			}
+		}
+		return nil
+	}); err != nil {
+		return "", err
+	}
+
+	if extensionPath == "" {
+		return "", fmt.Errorf("extension %q not found in %s", extensionName, base)
+	}
+	return extensionPath, nil
 }

@@ -618,7 +618,9 @@ examples: []
 		d := newTestDownloader(t, t.TempDir(), mock)
 		_, err := loadLocalManifests(t.Context(), logger, d, []string{tmpDir}, false)
 		require.ErrorIs(t, err, errFailedToLoadLocalManifest)
-		require.ErrorContains(t, err, "downloading parent composer")
+		// loadLocalManifests resolves parents locally only (no registry fallback), so a
+		// missing local parent fails fast rather than attempting a download.
+		require.ErrorContains(t, err, `parent manifest "composer" not found locally`)
 	})
 }
 
@@ -868,15 +870,19 @@ func TestDownloadExtensions(t *testing.T) {
 	})
 
 	t.Run("multiple extensions", func(t *testing.T) {
+		// A single shared mock returns the same artifact for every ref, and
+		// ResolveExtensionManifest now keys off the ref name matching the artifact title,
+		// so both refs use the titled name (only the count is asserted here).
 		mock := &mockOCIClient{
 			annotations: map[string]string{
+				ocispec.AnnotationTitle:               "ext-a",
 				extensions.OCIAnnotationExtensionType: string(extensions.TypeLua),
 				extensions.OCIAnnotationArtifact:      extensions.ArtifactBinary,
 			},
 		}
 		d := newTestDownloader(t, t.TempDir(), mock)
 
-		manifests, err := downloadExtensions(t.Context(), d, []string{"ext-a:1.0.0", "ext-b:2.0.0"}, false)
+		manifests, err := downloadExtensions(t.Context(), d, []string{"ext-a:1.0.0", "ext-a:2.0.0"}, false)
 		require.NoError(t, err)
 		require.Len(t, manifests, 2)
 	})
@@ -929,12 +935,12 @@ func TestDownloadExtensions(t *testing.T) {
 	})
 
 	t.Run("source Go extension", func(t *testing.T) {
-		composerVersion := "0.1.0"
+		composerVersion := "1.0.0"
 		composer := &extensions.Manifest{Name: "composer", Version: composerVersion, Type: extensions.TypeComposer}
 		dirs := &xdg.Directories{DataHome: t.TempDir()}
 
 		// Precreate the manifests to simulate a successful download
-		composerDir := extensions.LocalCacheComposerSourceArtifactDir(dirs, composer)
+		composerDir := extensions.LocalCacheExtensionSourceArtifactDir(dirs, composer)
 		childDir := filepath.Join(composerDir, "composer-child")
 		require.NoError(t, os.MkdirAll(childDir, 0o750))
 
@@ -975,9 +981,9 @@ func TestDownloadExtensions(t *testing.T) {
 		}
 		d := newTestDownloader(t, t.TempDir(), mock)
 
-		_, err := downloadExtensions(t.Context(), d, []string{"my-go-src:1.0.0"}, false)
+		_, err := downloadExtensions(t.Context(), d, []string{"my-go-src:1.0.0"}, true)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "missing expected source directory")
+		require.Contains(t, err.Error(), "source directory for extension my-go-src does not exist")
 	})
 
 	t.Run("source Rust extension with no Cargo.toml", func(t *testing.T) {
@@ -992,7 +998,7 @@ func TestDownloadExtensions(t *testing.T) {
 
 		_, err := downloadExtensions(t.Context(), d, []string{"my-rust-src:1.0.0"}, true)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "no Cargo.toml found")
+		require.Contains(t, err.Error(), "source directory for extension my-rust-src does not exist")
 	})
 
 	t.Run("source ExtProc extension with no go.mod", func(t *testing.T) {
@@ -1007,7 +1013,7 @@ func TestDownloadExtensions(t *testing.T) {
 
 		_, err := downloadExtensions(t.Context(), d, []string{"my-extproc-src:1.0.0"}, true)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "no go.mod found")
+		require.Contains(t, err.Error(), "source directory for extension my-extproc-src does not exist")
 	})
 
 	t.Run("source non-composer non-dynamic-module extension", func(t *testing.T) {
@@ -1040,6 +1046,9 @@ func TestDownloadExtensions(t *testing.T) {
 			}
 			return &mockOCIClient{
 				annotations: map[string]string{
+					// Title must match the ref name so the first extension resolves cleanly
+					// and processing reaches (and fails on) the second extension.
+					ocispec.AnnotationTitle:               "ext-ok",
 					extensions.OCIAnnotationExtensionType: string(extensions.TypeLua),
 					extensions.OCIAnnotationArtifact:      extensions.ArtifactBinary,
 				},
@@ -1067,7 +1076,7 @@ func TestDownloadExtensions(t *testing.T) {
 		require.Equal(t, extensions.GoPluginLoaderName, m.Name)
 		require.Equal(t, extensions.TypeGo, m.Type)
 		require.True(t, m.CShared, "goplugin-loader must be treated as a c-shared dynamic module")
-		require.Equal(t, extensions.ComposerBundle, m.Bundle)
+		require.Equal(t, extensions.ComposerBundle, m.Parent)
 		require.Equal(t, "1.0.0", m.Version)
 		require.Equal(t, "1.0.0", m.ComposerVersion)
 		require.True(t, m.Remote)
@@ -1188,6 +1197,10 @@ examples: []
 
 		mock := &mockOCIClient{
 			annotations: map[string]string{
+				// Title must match the parent name so ResolveExtensionManifest treats the
+				// downloaded artifact as the parent itself rather than searching it for a
+				// differently-named child extension.
+				ocispec.AnnotationTitle:               "custom-parent",
 				extensions.OCIAnnotationExtensionType: string(extensions.TypeComposer),
 			},
 			tags: []string{"1.2.3"},
@@ -1312,16 +1325,18 @@ func TestWarnMultipleGoExtensions(t *testing.T) {
 			},
 		},
 		{
-			name: "multiple goplugin-loaders share one bundle runtime - no warning",
+			name: "multiple bundle members share one runtime - no warning",
+			// Distinct bundle members (different names) that share the composer runtime via
+			// Parent must collapse to a single library and not warn.
 			extensions: []*extensions.Manifest{
-				{Name: extensions.GoPluginLoaderName, Type: extensions.TypeGo, CShared: true, Bundle: extensions.ComposerBundle, Version: "1.0.0"},
-				{Name: extensions.GoPluginLoaderName, Type: extensions.TypeGo, CShared: true, Bundle: extensions.ComposerBundle, Version: "1.0.0"},
+				{Name: "ext-1", Type: extensions.TypeGo, CShared: true, Parent: extensions.ComposerBundle, Version: "1.0.0"},
+				{Name: "ext-2", Type: extensions.TypeGo, CShared: true, Parent: extensions.ComposerBundle, Version: "1.0.0"},
 			},
 		},
 		{
 			name: "goplugin-loader plus a distinct c-shared Go - warning",
 			extensions: []*extensions.Manifest{
-				{Name: extensions.GoPluginLoaderName, Type: extensions.TypeGo, CShared: true, Bundle: extensions.ComposerBundle, Version: "1.0.0"},
+				{Name: extensions.GoPluginLoaderName, Type: extensions.TypeGo, CShared: true, Parent: extensions.ComposerBundle, Version: "1.0.0"},
 				{Name: "ext-2", Type: extensions.TypeGo, CShared: true, Version: "2.0.0"},
 			},
 			wantWarning:  true,

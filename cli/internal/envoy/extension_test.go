@@ -626,7 +626,7 @@ func TestGoPluginLoaderBundle(t *testing.T) {
 		Name:            extensions.GoPluginLoaderName,
 		Type:            extensions.TypeGo,
 		CShared:         true,
-		Bundle:          extensions.ComposerBundle,
+		Parent:          extensions.ComposerBundle,
 		Version:         "v1.0.0",
 		ComposerVersion: "v1.0.0",
 	}
@@ -699,7 +699,7 @@ func TestNonComposerBundle(t *testing.T) {
 	manifest := &extensions.Manifest{
 		Name:        "rate-limit",
 		Type:        extensions.TypeRust,
-		Bundle:      "rustextensions",
+		Parent:      "rustextensions",
 		FilterTypes: []extensions.FilterType{extensions.FilterTypeHTTP},
 		Version:     "v1.0.0",
 	}

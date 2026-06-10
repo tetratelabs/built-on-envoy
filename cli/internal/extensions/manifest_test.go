@@ -394,6 +394,11 @@ func TestValidateParentManifest(t *testing.T) {
 		wantErr bool
 	}{
 		{"parent_valid.yaml", false},
+		// NOTE(general-bundle): resolveVersions now lets non-Go children inherit from a bundle
+		// parent (see TestResolveVersionsForBundleChildren), but manifest.schema.json still
+		// requires a child's `type` to be `go`, so a Rust child currently fails schema
+		// validation. Flip to `false` once the schema allows non-Go bundle children.
+		{"parent_rust_valid.yaml", true},
 		{"parent_invalid_type.yaml", true},
 		{"parent_missing.yaml", true},
 		{"parent_with_version.yaml", true},
@@ -407,6 +412,29 @@ func TestValidateParentManifest(t *testing.T) {
 			require.Equal(t, tt.wantErr, err != nil, err)
 		})
 	}
+}
+
+// TestResolveVersionsForBundleChildren asserts that a non-Go child (here Rust) inherits version
+// and Envoy constraints from its bundle parent. Before resolveVersions was generalized it only
+// ran for Go children, so a Rust bundle child would keep an empty version. The bundle root is
+// language-typed (type: rust) and marked extensionSet; no dedicated bundle type is needed.
+func TestResolveVersionsForBundleChildren(t *testing.T) {
+	root := []byte("name: b\nversion: 3.2.1\nminEnvoyVersion: 1.38.0\ntype: rust\nextensionSet: true\n")
+	childA := []byte("name: child-a\nparent: b\ntype: rust\n")
+	childB := []byte("name: child-b\nparent: b\ntype: rust\n")
+
+	fsys := fstest.MapFS{
+		"manifest.yaml":         {Data: root},
+		"child-a/manifest.yaml": {Data: childA},
+		"child-b/manifest.yaml": {Data: childB},
+	}
+
+	all, err := LoadManifests(fsys, ".", false)
+	require.NoError(t, err)
+
+	require.Equal(t, "3.2.1", all["child-a"].Version)
+	require.Equal(t, "1.38.0", all["child-a"].MinEnvoyVersion)
+	require.Equal(t, "3.2.1", all["child-b"].Version)
 }
 
 func TestHighestMinEnvoyVersion(t *testing.T) {
@@ -719,7 +747,7 @@ examples: []
 		m, err := LoadLocalManifest(filepath.Join(childDir, "manifest.yaml"))
 		require.NoError(t, err)
 
-		parent, err := FindLocalParentManifest(m)
+		parent, _, err := FindLocalParentManifest(m)
 		require.NoError(t, err)
 		require.NotNil(t, parent)
 		require.Equal(t, "test-parent", parent.Name)
@@ -749,7 +777,7 @@ examples: []
 		m, err := LoadLocalManifest(filepath.Join(tmpDir, "manifest.yaml"))
 		require.NoError(t, err)
 
-		parent, err := FindLocalParentManifest(m)
+		parent, _, err := FindLocalParentManifest(m)
 		require.NoError(t, err)
 		require.Nil(t, parent)
 	})
