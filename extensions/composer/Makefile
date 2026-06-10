@@ -151,6 +151,7 @@ install: build
 	mkdir -p $(BOE_DATA_HOME)/extensions/dym/$(NAME)/$(VERSION); \
 	mv lib$(NAME).so $(BOE_DATA_HOME)/extensions/dym/$(NAME)/$(VERSION)/lib$(NAME).so;
 	cp manifest.yaml $(BOE_DATA_HOME)/extensions/dym/$(NAME)/$(VERSION)/manifest.yaml;
+	if [ -f config.schema.json ]; then cp config.schema.json $(BOE_DATA_HOME)/extensions/dym/$(NAME)/$(VERSION)/config.schema.json; fi;
 	@echo "Installed to $(BOE_DATA_HOME)/extensions/dym/$(NAME)"
 
 # For single local platform build, we will add the OS and ARCH to the image tag to avoid confusion.

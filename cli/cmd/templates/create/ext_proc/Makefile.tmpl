@@ -87,6 +87,7 @@ install: build  ## Install the built extproc extension to the local BOE data dir
 	mkdir -p $(BOE_DATA_HOME)/extensions/extproc/$(NAME)/$(VERSION); \
 	cp ./out/ext_proc-server $(BOE_DATA_HOME)/extensions/extproc/$(NAME)/$(VERSION)/ext_proc-server;
 	cp manifest.yaml $(BOE_DATA_HOME)/extensions/extproc/$(NAME)/$(VERSION)/manifest.yaml;
+	cp config.schema.json $(BOE_DATA_HOME)/extensions/extproc/$(NAME)/$(VERSION)/config.schema.json;
 	@echo "Installed to $(BOE_DATA_HOME)/extensions/extproc/$(NAME)"
 
 .PHONY: clean

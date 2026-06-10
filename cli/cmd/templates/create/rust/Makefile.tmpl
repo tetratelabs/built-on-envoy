@@ -98,6 +98,7 @@ install: build  ## Build and install the Dynamic Module to the default BOE exten
 	mkdir -p $(BOE_DATA_HOME)/extensions/dym/$(NAME)/$(VERSION); \
 	cp target/release/lib$(LIB_NAME).so $(BOE_DATA_HOME)/extensions/dym/$(NAME)/$(VERSION)/lib$(NAME).so; \
 	cp manifest.yaml $(BOE_DATA_HOME)/extensions/dym/$(NAME)/$(VERSION)/manifest.yaml;
+	cp config.schema.json $(BOE_DATA_HOME)/extensions/dym/$(NAME)/$(VERSION)/config.schema.json;
 	@echo "Installed to $(BOE_DATA_HOME)/extensions/dym/$(NAME)"
 
 .PHONY: test

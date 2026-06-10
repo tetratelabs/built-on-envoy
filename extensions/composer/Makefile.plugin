@@ -110,6 +110,7 @@ install: build
 	mkdir -p $(BOE_DATA_HOME)/extensions/goplugin/$(NAME)/$(VERSION); \
 	mv $(NAME).so $(BOE_DATA_HOME)/extensions/goplugin/$(NAME)/$(VERSION)/plugin.so;
 	cp ./$(EXTENSION_PATH)/manifest.yaml $(BOE_DATA_HOME)/extensions/goplugin/$(NAME)/$(VERSION)/manifest.yaml;
+	cp ./$(EXTENSION_PATH)/config.schema.json $(BOE_DATA_HOME)/extensions/goplugin/$(NAME)/$(VERSION)/config.schema.json;
 	@echo "Installed to $(BOE_DATA_HOME)/extensions/goplugin/$(NAME)/$(VERSION)"
 
 # For single local platform build, we will add the OS and ARCH to the image tag to avoid confusion.
