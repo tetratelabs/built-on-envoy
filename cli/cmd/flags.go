@@ -42,7 +42,7 @@ func (e extensionPositions) sort(manifests []*extensions.Manifest) ([]*extension
 
 	for r, positions := range e.remote {
 		pos := slices.IndexFunc(manifests, func(m *extensions.Manifest) bool {
-			return m.Remote && (m.Name+":"+m.Version == r || m.Name == r)
+			return m.Remote && (m.RemoteRef == r)
 		})
 		if pos == -1 {
 			return nil, fmt.Errorf("failed to find manifest for remote extension with reference %s", r)

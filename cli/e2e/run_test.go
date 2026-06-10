@@ -397,6 +397,52 @@ func TestGoPluginLoaderRemoteExtension(t *testing.T) {
 		})
 }
 
+// TestComposerBundleExtension exercises the bundle-prefixed extension syntax end to end:
+//  1. build the full composer image (non-lite, single platform) and push it to the local test registry;
+//  2. run `boe run --extension composer/example-go` which downloads the full composer binary
+//     artifact and resolves the example-go child extension manifest from within the bundle.
+func TestComposerBundleExtension(t *testing.T) {
+	t.Setenv("TEST_BOE_RUN_ENVOY_TIMEOUT", "5m")
+
+	const composerDir = "../../extensions/composer"
+
+	manifests, err := extensions.LoadManifests(internaltesting.ExtensionsFS(t), ".", false)
+	require.NoError(t, err)
+	composer, ok := manifests[extensions.ComposerArtifact]
+	require.True(t, ok)
+	version := composer.Version
+
+	t.Setenv("BOE_REGISTRY", registryAddr)
+	t.Setenv("BOE_REGISTRY_INSECURE", "true")
+	t.Setenv("BOE_DATA_HOME", t.TempDir())
+
+	// Build and push the full composer image (single platform) to the local registry.
+	runCmd(t, composerDir, "make", "push_image",
+		"PLATFORMS=linux/"+runtime.GOARCH,
+		"OCI_REGISTRY="+registryAddr,
+	)
+
+	// Run boe with the bundle-prefixed extension reference: composer/example-go.
+	// This downloads the full composer artifact keyed by the "composer" bundle name,
+	// then resolves the "example-go" child extension manifest within it.
+	ports := internaltesting.FreePorts(t, 2)
+	proxyPort := ports[0]
+	args := []string{
+		"--log-level", "dynamic_modules:debug",
+		"--extension", "composer/example-go:" + version,
+	}
+	if strings.HasSuffix(version, "-dev") {
+		args = append(args, "--dev")
+	}
+	internaltesting.RunEnvoy(t, cliBin, proxyPort, ports[1], args...)
+
+	internaltesting.RequireEventuallyGet(t,
+		fmt.Sprintf("http://localhost:%d/status/200", proxyPort),
+		func(r *http.Response) bool {
+			return r.Header.Get("x-example-response-header") == "example-value"
+		})
+}
+
 // runCmd runs name with args (in dir, if non-empty), logging the combined output and failing the
 // test on a non-zero exit.
 func runCmd(t *testing.T, dir, name string, args ...string) {

@@ -194,7 +194,7 @@ func TestDownloadExtension(t *testing.T) {
 				},
 			}
 
-			artifact, err := d.DownloadExtension(t.Context(), "myext", tt.version)
+			artifact, err := d.DownloadExtension(t.Context(), "myext", "myext", tt.version)
 			require.ErrorIs(t, err, tt.wantErr)
 			if tt.wantErr == nil {
 				require.Equal(t, tt.wantName, artifact.Manifest.Name)
@@ -291,7 +291,7 @@ func TestDownloadSourceFallback(t *testing.T) {
 		},
 	}
 
-	artifact, err := d.DownloadExtension(t.Context(), "myext", "1.0.0")
+	artifact, err := d.DownloadExtension(t.Context(), "myext", "myext", "1.0.0")
 	require.NoError(t, err)
 	require.Equal(t, 2, calls)
 	require.Equal(t, ArtifactSource, artifact.ArtifactType)
@@ -318,7 +318,7 @@ func TestDownloadSourceFallbackDisabled(t *testing.T) {
 		},
 	}
 
-	_, err := d.DownloadExtension(t.Context(), "myext", "1.0.0")
+	_, err := d.DownloadExtension(t.Context(), "myext", "myext", "1.0.0")
 	require.ErrorIs(t, err, oci.ErrPlatformNotFound)
 }
 
@@ -380,7 +380,7 @@ func TestDownloadComposerExtensionLoadsParentManifest(t *testing.T) {
 	// the information of the manifest should be loaded without loading any further
 	// information from any parent
 	t.Run("no parent manifest", func(t *testing.T) {
-		ext, err := d.DownloadExtension(t.Context(), "parent-valid", "1.0.0")
+		ext, err := d.DownloadExtension(t.Context(), "parent-valid", "parent-valid", "1.0.0")
 		require.NoError(t, err)
 		require.Equal(t, "Test Author", ext.Manifest.Author)
 		require.Empty(t, ext.Manifest.MinEnvoyVersion)
@@ -396,11 +396,161 @@ func TestDownloadComposerExtensionLoadsParentManifest(t *testing.T) {
 		parentManifestPath := filepath.Join(cacheDir, "manifest-composer.yaml")
 		require.NoError(t, os.WriteFile(parentManifestPath, parentManifest, 0o600))
 
-		ext, err := d.DownloadExtension(t.Context(), "parent-valid", "1.0.0")
+		ext, err := d.DownloadExtension(t.Context(), "parent-valid", "parent-valid", "1.0.0")
 		require.NoError(t, err)
 		require.Equal(t, "Test Author", ext.Manifest.Author)
 		require.Equal(t, "1.38.0", ext.Manifest.MinEnvoyVersion)
 		require.Equal(t, "1.39.0", ext.Manifest.MaxEnvoyVersion) // This is computed when loading based on the min version
+	})
+}
+
+func TestDownloadBundleExtension(t *testing.T) {
+	bundleRootManifest := []byte(`name: my-bundle
+version: 1.0.0
+composerVersion: 1.0.0
+categories:
+  - Network
+author: Test Author
+description: A Go extension bundle
+longDescription: |
+  A bundle that hosts multiple child extensions.
+type: go
+tags:
+  - test
+license: Apache-2.0
+examples:
+  - title: Basic usage
+    description: Run the bundle
+    code: |
+      boe run --extension my-bundle
+`)
+
+	bundleOCIAnnotations := map[string]string{
+		ocispec.AnnotationTitle:    "my-bundle",
+		ocispec.AnnotationVersion:  "1.0.0",
+		OCIAnnotationExtensionType: string(TypeGo),
+		OCIAnnotationArtifact:      ArtifactBinary,
+	}
+
+	t.Run("child inherits version and composerVersion from bundle", func(t *testing.T) {
+		dirs := &xdg.Directories{DataHome: t.TempDir()}
+		bundleManifest := &Manifest{Name: "my-bundle", Version: "1.0.0", Type: TypeGo}
+		cacheDir := LocalCacheExtensionDir(dirs, bundleManifest)
+		require.NoError(t, os.MkdirAll(filepath.Join(cacheDir, "my-child"), 0o750))
+
+		require.NoError(t, os.WriteFile(filepath.Join(cacheDir, "manifest.yaml"), bundleRootManifest, 0o600))
+
+		// Child manifest: parent is set, so version/composerVersion must be absent per schema.
+		// They will be inherited from the root bundle manifest at resolve time.
+		require.NoError(t, os.WriteFile(filepath.Join(cacheDir, "my-child", "manifest.yaml"), []byte(`name: my-child
+parent: my-bundle
+categories:
+  - Security
+author: Test Author
+description: A child extension that inherits parent version
+longDescription: |
+  This is a child extension.
+type: go
+tags:
+  - test
+license: Apache-2.0
+examples: []
+`), 0o600))
+
+		d := &Downloader{
+			Logger:   internaltesting.NewTLogger(t),
+			Registry: "ghcr.io/test",
+			Dirs:     dirs,
+			newClient: func(_ *slog.Logger, _, _, _ string, _ bool) (oci.RepositoryClient, error) {
+				return &mockRepositoryClient{manifestAnnotations: bundleOCIAnnotations}, nil
+			},
+		}
+
+		artifact, err := d.DownloadExtension(t.Context(), "my-bundle", "my-child", "1.0.0")
+		require.NoError(t, err)
+		require.Equal(t, "my-child", artifact.ExtensionManifest.Name)
+		require.Equal(t, "my-bundle", artifact.ExtensionManifest.Parent)
+		require.True(t, artifact.ExtensionManifest.Remote)
+		// Inherited from the root bundle manifest.
+		require.Equal(t, "1.0.0", artifact.ExtensionManifest.Version)
+		require.Equal(t, "1.0.0", artifact.ExtensionManifest.ComposerVersion)
+	})
+
+	t.Run("child with no parent field fails", func(t *testing.T) {
+		dirs := &xdg.Directories{DataHome: t.TempDir()}
+		bundleManifest := &Manifest{Name: "my-bundle", Version: "1.0.0", Type: TypeGo}
+		cacheDir := LocalCacheExtensionDir(dirs, bundleManifest)
+		require.NoError(t, os.MkdirAll(filepath.Join(cacheDir, "orphan"), 0o750))
+
+		require.NoError(t, os.WriteFile(filepath.Join(cacheDir, "manifest.yaml"), bundleRootManifest, 0o600))
+
+		// Standalone child (no parent): has its own version/composerVersion.
+		require.NoError(t, os.WriteFile(filepath.Join(cacheDir, "orphan", "manifest.yaml"), []byte(`name: orphan
+version: 1.0.0
+composerVersion: 1.0.0
+categories:
+  - Network
+author: Test Author
+description: A standalone extension incorrectly placed in a bundle
+longDescription: |
+  This extension has no parent field set.
+type: go
+tags:
+  - test
+license: Apache-2.0
+examples: []
+`), 0o600))
+
+		d := &Downloader{
+			Logger:   internaltesting.NewTLogger(t),
+			Registry: "ghcr.io/test",
+			Dirs:     dirs,
+			newClient: func(_ *slog.Logger, _, _, _ string, _ bool) (oci.RepositoryClient, error) {
+				return &mockRepositoryClient{manifestAnnotations: bundleOCIAnnotations}, nil
+			},
+		}
+
+		_, err := d.DownloadExtension(t.Context(), "my-bundle", "orphan", "1.0.0")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), `extension "orphan" in bundle "my-bundle" has no parent set`)
+	})
+
+	t.Run("child declaring wrong parent fails", func(t *testing.T) {
+		dirs := &xdg.Directories{DataHome: t.TempDir()}
+		bundleManifest := &Manifest{Name: "my-bundle", Version: "1.0.0", Type: TypeGo}
+		cacheDir := LocalCacheExtensionDir(dirs, bundleManifest)
+		require.NoError(t, os.MkdirAll(filepath.Join(cacheDir, "misplaced"), 0o750))
+
+		require.NoError(t, os.WriteFile(filepath.Join(cacheDir, "manifest.yaml"), bundleRootManifest, 0o600))
+
+		// Child declares a parent that doesn't match the bundle it was downloaded from.
+		require.NoError(t, os.WriteFile(filepath.Join(cacheDir, "misplaced", "manifest.yaml"), []byte(`name: misplaced
+parent: other-bundle
+categories:
+  - Network
+author: Test Author
+description: A child that belongs to a different bundle
+longDescription: |
+  This extension declares the wrong parent.
+type: go
+tags:
+  - test
+license: Apache-2.0
+examples: []
+`), 0o600))
+
+		d := &Downloader{
+			Logger:   internaltesting.NewTLogger(t),
+			Registry: "ghcr.io/test",
+			Dirs:     dirs,
+			newClient: func(_ *slog.Logger, _, _, _ string, _ bool) (oci.RepositoryClient, error) {
+				return &mockRepositoryClient{manifestAnnotations: bundleOCIAnnotations}, nil
+			},
+		}
+
+		_, err := d.DownloadExtension(t.Context(), "my-bundle", "misplaced", "1.0.0")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), `extension "misplaced" declares parent "other-bundle" but was requested from bundle "my-bundle"`)
 	})
 }
 

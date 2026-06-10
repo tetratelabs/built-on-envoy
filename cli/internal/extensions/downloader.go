@@ -72,9 +72,14 @@ func (d *Downloader) DownloadComposer(ctx context.Context, version string, artif
 }
 
 // DownloadExtension downloads the extension from the specified repository and tag into the downloadDir.
-func (d *Downloader) DownloadExtension(ctx context.Context, name, version string) (DownloadedExtension, error) {
-	d.Logger.Info("downloading extension", "repository", d.Registry, "name", name, "version", version)
-	repository := RepositoryName(d.Registry, name)
+// The bundle parameter is used to construct the OCI repository name for downloading the artifact.
+// The name parameter is used to resolve the specific extension manifest within the downloaded artifact.
+// For standalone extensions, bundle and name are the same. For bundled extensions (e.g. "composer/example-go"),
+// the bundle is the parent artifact and the name is the child whose manifest must have a Parent field
+// matching the bundle name.
+func (d *Downloader) DownloadExtension(ctx context.Context, bundle, name, version string) (DownloadedExtension, error) {
+	d.Logger.Info("downloading extension", "repository", d.Registry, "bundle", bundle, "extension", name, "version", version)
+	repository := RepositoryName(d.Registry, bundle)
 
 	artifact, err := d.download(ctx, repository, version, func(manifest *ocispec.Manifest) string {
 		extensionManifest := ManifestFromOCI(manifest)
@@ -96,6 +101,21 @@ func (d *Downloader) DownloadExtension(ctx context.Context, name, version string
 	if err != nil {
 		return DownloadedExtension{}, fmt.Errorf("failed to resolve extension manifest for %q: %w", name, err)
 	}
+
+	// For bundled extensions (bundle != name), validate that the resolved extension
+	// declares the bundle as its parent.
+	if bundle != name {
+		if extensionManifest.Parent == "" {
+			return DownloadedExtension{},
+				fmt.Errorf("extension %q in bundle %q has no parent set in its manifest", name, bundle)
+		}
+		if extensionManifest.Parent != bundle {
+			return DownloadedExtension{},
+				fmt.Errorf("extension %q declares parent %q but was requested from bundle %q",
+					name, extensionManifest.Parent, bundle)
+		}
+	}
+
 	extensionManifest.Remote = true
 	artifact.ExtensionManifest = extensionManifest
 	return artifact, nil

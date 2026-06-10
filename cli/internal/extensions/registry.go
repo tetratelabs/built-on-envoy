@@ -41,6 +41,10 @@ const (
 // RepositoryName constructs the repository name for an extension based
 // on the registry and name.
 func RepositoryName(registry string, name string) string {
+	if name == ComposerBundle || name == ComposerLiteBundle {
+		// TODO(wbpcode): consider to unify the naming of composer bundles and other extensions,
+		return registry + "/" + name
+	}
 	return registry + "/extension-" + name
 }
 

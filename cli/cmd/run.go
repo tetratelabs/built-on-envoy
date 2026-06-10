@@ -240,7 +240,7 @@ func adminAddressForLocal(port uint32) string {
 func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, refs []string, build bool) ([]*extensions.Manifest, error) {
 	downloaded := make([]*extensions.Manifest, 0, len(refs))
 	for _, ext := range refs {
-		name, tag := splitRef(ext)
+		bundle, name, tag := splitRef(ext)
 
 		// The reserved name "goplugin-loader" is not a downloadable extension: it drives
 		// the composer's goplugin-loader filter directly from the user-supplied --config.
@@ -256,10 +256,12 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 		}
 
 		_, _ = fmt.Fprintf(os.Stderr, "→ %sFetching %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)
-		artifact, err := downloader.DownloadExtension(ctx, name, tag)
+		artifact, err := downloader.DownloadExtension(ctx, bundle, name, tag)
 		if err != nil {
 			return nil, err
 		}
+		artifact.ExtensionManifest.Remote = true
+		artifact.ExtensionManifest.RemoteRef = ext
 
 		switch artifact.ArtifactType {
 		case extensions.ArtifactBinary:
@@ -436,7 +438,7 @@ func resolveParent(ctx context.Context, downloader *extensions.Downloader, m *ex
 		dl, err = downloader.DownloadComposer(ctx, version, extensions.ComposerArtifactLite)
 	} else {
 		version := cmp.Or(m.Version, "latest")
-		dl, err = downloader.DownloadExtension(ctx, m.Parent, version)
+		dl, err = downloader.DownloadExtension(ctx, m.Parent, m.Parent, version)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("downloading parent %s: %w", m.Parent, err)
@@ -444,12 +446,26 @@ func resolveParent(ctx context.Context, downloader *extensions.Downloader, m *ex
 	return dl.Manifest, nil
 }
 
-// extractTag extracts the tag from a full OCI reference.
-func splitRef(ref string) (repo string, tag string) {
+// splitRef splits an extension reference into bundle, extension name, and tag.
+// The format is [bundle/]extension[:tag]. If no bundle prefix is given, the extension
+// name is used as the bundle name (standalone extension). If no tag is given, "latest" is used.
+//
+// Examples:
+//
+//	"composer/example-go:v1.0.0" → ("composer", "example-go", "v1.0.0")
+//	"cors:1.0.0"                 → ("cors", "cors", "1.0.0")
+//	"cors"                       → ("cors", "cors", "latest")
+func splitRef(ref string) (bundle string, extension string, tag string) {
+	tag = "latest"
+	name := ref
 	if colonIdx := strings.LastIndex(ref, ":"); colonIdx != -1 {
-		return ref[:colonIdx], ref[colonIdx+1:]
+		name = ref[:colonIdx]
+		tag = ref[colonIdx+1:]
 	}
-	return ref, "latest"
+	if slashIdx := strings.Index(name, "/"); slashIdx != -1 {
+		return name[:slashIdx], name[slashIdx+1:], tag
+	}
+	return name, name, tag
 }
 
 // errInvalidManifest is returned when some extension is not compatible with the requested Envoy version.

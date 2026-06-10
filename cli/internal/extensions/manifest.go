@@ -60,6 +60,9 @@ type (
 		// Remote indicates whether this manifest is from a remote extension.
 		// This is set by the extension Downloader when fetching remote manifests.
 		Remote bool `yaml:"-" json:"-"`
+		// RemoteRef is the initial reference (e.g. "name:version") the extension
+		// was fetched with.
+		RemoteRef string `yaml:"-" json:"-"`
 		// SourceRegistry is the OCI registry the extension was fetched from.
 		// Set by the Downloader for remote extensions.
 		SourceRegistry string `yaml:"-" json:"-"`
@@ -239,6 +242,9 @@ const (
 	// ComposerBundle is the dynamic-module name of the composer host that loads
 	// bundle-hosted extensions (see Manifest.Bundle).
 	ComposerBundle = "composer"
+	// ComposerLiteBundle is the lite version of the composer bundle that only includes the goplugin-loader
+	// and no other extensions.
+	ComposerLiteBundle = "composer-lite"
 
 	// FilterTypeHTTP represents an HTTP filter extension (default).
 	FilterTypeHTTP FilterType = "http"
