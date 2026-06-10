@@ -48,10 +48,12 @@ func (d *Downloader) SetClientFactory(f func(logger *slog.Logger, repository, us
 
 // DownloadedExtension represents a downloaded extension with its manifest and local path.
 type DownloadedExtension struct {
-	Manifest       *Manifest // The extension manifest with all metadata.
+	Manifest       *Manifest // The extension manifest of the downloaded artifact.
 	Path           string    // The local path where the extension artifact is downloaded.
 	ArtifactType   string    // The artifact type of the extension (binary or source).
 	ComposerBundle bool      // Whether the downloaded extension is a composer bundle (which may contain multiple extensions).
+	// The specific extension's Manifest. One downloaded artifact may contain multiple extensions.
+	ExtensionManifest *Manifest
 }
 
 // DownloadComposer downloads the composer from the specified repository and version into the downloadDir.
@@ -59,8 +61,8 @@ func (d *Downloader) DownloadComposer(ctx context.Context, version string, artif
 	d.Logger.Info("downloading composer", "repository", d.Registry, "artifact", artifact, "version", version)
 	return d.download(ctx, d.Registry+"/"+artifact, version, func(manifest *ocispec.Manifest) string {
 		extensionManifest := ManifestFromOCI(manifest)
-		if isComposerSourceArtifact(manifest) {
-			return LocalCacheComposerSourceArtifactDir(d.Dirs, extensionManifest)
+		if isSourceArtifact(manifest) {
+			return LocalCacheExtensionSourceArtifactDir(d.Dirs, extensionManifest)
 		}
 		// use the composer version resolved from the manifest, as the input parameter one could be
 		// "latest" which needs to be resolved to a concrete version.
@@ -76,8 +78,8 @@ func (d *Downloader) DownloadExtension(ctx context.Context, name, version string
 
 	artifact, err := d.download(ctx, repository, version, func(manifest *ocispec.Manifest) string {
 		extensionManifest := ManifestFromOCI(manifest)
-		if isComposerSourceArtifact(manifest) {
-			return LocalCacheComposerSourceArtifactDir(d.Dirs, extensionManifest)
+		if isSourceArtifact(manifest) {
+			return LocalCacheExtensionSourceArtifactDir(d.Dirs, extensionManifest)
 		}
 		return LocalCacheExtensionDir(d.Dirs, extensionManifest)
 	})
@@ -85,41 +87,17 @@ func (d *Downloader) DownloadExtension(ctx context.Context, name, version string
 		return DownloadedExtension{}, err
 	}
 
-	// If the Download dir contains the manifest (lua extensions, ext_proc, or downloaded source), load it to get
-	// the full manifest with all extension data.
-	// Composer extensions are different as the manifest is the uber-manifest and we don't want to read that.
-	if !artifact.ComposerBundle {
-		manifestPath := LocalCacheManifest(d.Dirs, artifact.Manifest)
-		if _, err = os.Stat(manifestPath); err == nil {
-			d.Logger.Info("loading manifest from downloaded extension", "path", manifestPath)
-			fromOCI := artifact.Manifest
-			m, err := LoadLocalManifest(manifestPath)
-			if err != nil {
-				return DownloadedExtension{},
-					fmt.Errorf("failed to load manifest from downloaded extension at %q: %w", manifestPath, err)
-			}
-
-			// Composer plugin extension packages contain the extension manifest and the parent composer manifest as well.
-			// If it exists, load it and resolve the versions
-			composerParent := filepath.Join(LocalCacheExtensionDir(d.Dirs, artifact.Manifest), "manifest-composer.yaml")
-			if _, err = os.Stat(composerParent); err == nil {
-				p, err := LoadLocalManifest(composerParent)
-				if err != nil {
-					return DownloadedExtension{},
-						fmt.Errorf("failed to load parent manifest from downloaded extension at %q: %w", composerParent, err)
-				}
-				ResolveVersionsWithParent(m, p)
-			}
-
-			mergeManifestFromOCI(m, fromOCI)
-			artifact.Manifest = m
-		}
-	}
-
 	// Mark the manifest as remote so that config generation knows the extension is
 	// a remote one and can take it into account.
 	artifact.Manifest.Remote = true
 
+	extensionManifest, err := ResolveExtensionManifest(d.Dirs, artifact.Manifest, artifact.ArtifactType,
+		name, d.Logger)
+	if err != nil {
+		return DownloadedExtension{}, fmt.Errorf("failed to resolve extension manifest for %q: %w", name, err)
+	}
+	extensionManifest.Remote = true
+	artifact.ExtensionManifest = extensionManifest
 	return artifact, nil
 }
 
@@ -194,12 +172,44 @@ func (d *Downloader) download(
 		return DownloadedExtension{}, fmt.Errorf("failed to pull artifact for %s:%s: %w", repository, version, err)
 	}
 
+	var rootManifest *Manifest
+	rootManifestPath := filepath.Join(downloadDir, "manifest.yaml")
+	if _, err := os.Stat(rootManifestPath); err == nil {
+		d.Logger.Debug("downloaded artifact contains manifest.yaml at root, validating it", "path", rootManifestPath)
+		rootManifest, err = LoadLocalManifest(rootManifestPath)
+		if err != nil {
+			return DownloadedExtension{}, fmt.Errorf("failed to validate manifest.yaml in downloaded artifact: %w", err)
+		}
+	}
+
+	if rootManifest == nil {
+		d.Logger.Warn("downloaded artifact does not contain a manifest.yaml at root, some metadata may be missing",
+			"path", rootManifestPath)
+		rootManifest = ManifestFromOCI(manifest)
+	} else {
+		// manifest.yaml won't carry the compile-time fields like CShared but it's important so we could
+		// distinguish the Golang extensions and goplugin extensions.
+		ociManifest := ManifestFromOCI(manifest)
+		rootManifest.CShared = ociManifest.CShared
+		if rootManifest.Version == "" {
+			rootManifest.Version = ociManifest.Version
+		}
+		if rootManifest.ComposerVersion == "" {
+			rootManifest.ComposerVersion = ociManifest.ComposerVersion
+		}
+	}
+
 	return DownloadedExtension{
-		Manifest:       ManifestFromOCI(manifest),
+		Manifest:       rootManifest,
 		Path:           downloadDir,
 		ArtifactType:   manifest.Annotations[OCIAnnotationArtifact],
 		ComposerBundle: isComposerSourceArtifact(manifest),
 	}, nil
+}
+
+// isSourceArtifact checks if the downloaded artifact is a source artifact.
+func isSourceArtifact(manifest *ocispec.Manifest) bool {
+	return manifest.Annotations[OCIAnnotationArtifact] == ArtifactSource
 }
 
 // isComposerSourceArtifact checks if the downloaded artifact is a composer source artifact.
@@ -272,17 +282,4 @@ func resolveLatestComposerVersion(ctx context.Context, logger *slog.Logger,
 	}
 	logger.Info("resolved composer version from registry", "version", version)
 	return version, nil
-}
-
-// mergeManifestFromOCI preserves fields from the OCI-annotation-derived
-// manifest when the embedded YAML manifest has them empty. Composer plugins
-// have incomplete manifests because version and composerVersion are inherited
-// from the parent at build time.
-func mergeManifestFromOCI(embedded, fromOCI *Manifest) {
-	if embedded.Version == "" {
-		embedded.Version = fromOCI.Version
-	}
-	if embedded.ComposerVersion == "" {
-		embedded.ComposerVersion = fromOCI.ComposerVersion
-	}
 }

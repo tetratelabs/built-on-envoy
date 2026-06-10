@@ -194,7 +194,7 @@ func TestDownloadExtension(t *testing.T) {
 				},
 			}
 
-			artifact, err := d.DownloadExtension(t.Context(), "extension-myext", tt.version)
+			artifact, err := d.DownloadExtension(t.Context(), "myext", tt.version)
 			require.ErrorIs(t, err, tt.wantErr)
 			if tt.wantErr == nil {
 				require.Equal(t, tt.wantName, artifact.Manifest.Name)
@@ -387,7 +387,8 @@ func TestDownloadComposerExtensionLoadsParentManifest(t *testing.T) {
 		require.Empty(t, ext.Manifest.MaxEnvoyVersion)
 	})
 
-	// The information from the parent manifest should be loaded
+	// The information from the parent manifest should be loaded: ResolveExtensionManifest reads the
+	// sibling manifest-composer.yaml and inherits the parent's Envoy constraints into the extension.
 	t.Run("with parent manifest", func(t *testing.T) {
 		// Create the parent manifest in the download location
 		parentManifest, err := os.ReadFile("testdata/composer_test.yaml")
@@ -471,7 +472,7 @@ func TestResolveLatestComposerVersion(t *testing.T) {
 	}
 }
 
-func TestMergeManifestFromOCI(t *testing.T) {
+func TestMergeManifestFromRoot(t *testing.T) {
 	tests := []struct {
 		name     string
 		embedded *Manifest
@@ -506,7 +507,7 @@ func TestMergeManifestFromOCI(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mergeManifestFromOCI(tt.embedded, tt.fromOCI)
+			mergeManifestFromRoot(tt.embedded, tt.fromOCI)
 			require.Equal(t, tt.expected, tt.embedded)
 		})
 	}

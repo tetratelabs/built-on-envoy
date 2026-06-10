@@ -96,7 +96,7 @@ func TestSetupDynamicModuleSearchPath(t *testing.T) {
 	goPluginLoader := func() *extensions.Manifest {
 		return &extensions.Manifest{
 			Name: extensions.GoPluginLoaderName, Type: extensions.TypeGo, CShared: true,
-			Bundle: extensions.ComposerBundle, Version: composerVersion, ComposerVersion: composerVersion,
+			Parent: extensions.ComposerBundle, Version: composerVersion, ComposerVersion: composerVersion,
 		}
 	}
 	legacyGoPlugin := &extensions.Manifest{

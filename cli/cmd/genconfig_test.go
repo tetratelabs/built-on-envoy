@@ -371,7 +371,7 @@ func TestGenConfigWriteConfig(t *testing.T) {
 			logger = internaltesting.NewTLogger(t)
 			dirs   = &xdg.Directories{DataHome: t.TempDir()}
 
-			gpl    = &extensions.Manifest{Name: extensions.GoPluginLoaderName, Type: extensions.TypeGo, CShared: true, Bundle: extensions.ComposerBundle, Version: "1.0.0"}
+			gpl    = &extensions.Manifest{Name: extensions.GoPluginLoaderName, Type: extensions.TypeGo, CShared: true, Parent: extensions.ComposerBundle, Version: "1.0.0"}
 			gplLib = extensions.LocalCacheExtension(dirs, gpl) // resolves to dym/composer/1.0.0/libcomposer.so
 		)
 		require.NoError(t, os.MkdirAll(filepath.Dir(gplLib), 0o750))

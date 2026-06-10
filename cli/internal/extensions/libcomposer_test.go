@@ -64,6 +64,30 @@ func TestBuildLibComposer(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestBuildComposer_InvalidPath(t *testing.T) {
+	logger := internaltesting.NewTLogger(t)
+	fakeDirs := &xdg.Directories{DataHome: t.TempDir()}
+	err := BuildComposer(logger, fakeDirs, "/nonexistent/path", "0.1.0")
+	require.ErrorContains(t, err, "failed to build composer from source")
+}
+
+func TestBuildComposer(t *testing.T) {
+	logger := internaltesting.NewTLogger(t)
+	fakeDirs := &xdg.Directories{DataHome: t.TempDir()}
+	composerPath := "../../../extensions/composer"
+
+	composerManifest, err := LoadLocalManifest(filepath.Join(composerPath, "manifest.yaml"))
+	require.NoError(t, err)
+	composerVersion := composerManifest.Version
+
+	err = BuildComposer(logger, fakeDirs, composerPath, composerVersion)
+	require.NoError(t, err)
+
+	// Ensure the libcomposer.so is created via make install.
+	_, err = os.Stat(LocalCacheComposerLib(fakeDirs, composerVersion))
+	require.NoError(t, err)
+}
+
 func TestBuildExtensionFromPath_CShared(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 	fakeDirs := &xdg.Directories{DataHome: t.TempDir()}

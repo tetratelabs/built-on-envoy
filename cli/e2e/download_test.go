@@ -68,8 +68,8 @@ func TestDownloadComposerSource(t *testing.T) {
 
 	dirs := &xdg.Directories{DataHome: path}
 	manifest := &extensions.Manifest{Name: "composer", Version: "0.3.0"}
-	require.DirExists(t, extensions.LocalCacheComposerSourceArtifactDir(dirs, manifest))
-	require.DirExists(t, extensions.LocalCacheComposerExtensionSourceDir(dirs, manifest, "example-go"))
+	require.DirExists(t, extensions.LocalCacheExtensionSourceArtifactDir(dirs, manifest))
+	require.DirExists(t, extensions.LocalCacheExtensionSourceDir(dirs, manifest, "example-go"))
 }
 
 func requireDownloadHasFiles(t *testing.T, manifest *extensions.Manifest, files ...string) {

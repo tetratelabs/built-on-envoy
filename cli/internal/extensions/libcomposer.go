@@ -157,3 +157,44 @@ func BuildLibComposer(logger *slog.Logger, dirs *xdg.Directories, composerSrcPat
 
 	return nil
 }
+
+// BuildComposer builds and installs libcomposer from the composer source tree at composerSrcPath
+// into the local cache, tagging it with the given version.
+func BuildComposer(logger *slog.Logger, dirs *xdg.Directories, composerSrcPath string, version string) error {
+	// Build the libcomposer from source.
+	// #nosec G204
+	cmd := exec.Command("make",
+		"install",
+		"BOE_DATA_HOME="+dirs.DataHome,
+		"NAME=composer",
+		"VERSION="+version,
+	)
+	cmd.Dir = composerSrcPath
+
+	logger.Debug("building composer from source", "version", version, "cmd", cmd.String())
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to build composer from source at %s: %w\nOutput: %s",
+			composerSrcPath, err, string(output))
+	}
+
+	return nil
+}
+
+// GetComposerManifest loads the composer manifest for the given version from the local cache,
+// preferring the source-artifact manifest and falling back to the installed dynamic-module
+// directory. It returns an error if no manifest is found for that version.
+func GetComposerManifest(dirs *xdg.Directories, version string) (*Manifest, error) {
+	sourceDir := LocalCacheComposerSourceDir(dirs, version)
+	manifestPath := filepath.Join(sourceDir, "manifest.yaml")
+	if _, err := os.Stat(manifestPath); err == nil {
+		return LoadLocalManifest(manifestPath)
+	}
+	extensionDir := LocalCacheComposerDir(dirs, version)
+	manifestPath = filepath.Join(extensionDir, "manifest.yaml")
+	if _, err := os.Stat(manifestPath); err == nil {
+		return LoadLocalManifest(manifestPath)
+	}
+	return nil, fmt.Errorf("manifest.yaml not found for composer version %s", version)
+}
