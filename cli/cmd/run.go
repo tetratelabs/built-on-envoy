@@ -556,9 +556,16 @@ func handleExtensionSource(ctx context.Context, downloader *extensions.Downloade
 			return fmt.Errorf("failed to build local Go extension %s: %w", rootManifest.Name, err)
 		}
 		if !cshared {
-			if err = extensions.CheckOrDownloadLibComposer(ctx, downloader, rootManifest.ComposerVersion,
-				extensions.ComposerArtifactLite); err != nil {
-				return fmt.Errorf("failed to download libcomposer %s for extension %s: %w",
+			// A locally-built old-style Go plugin is loaded via plugin.Open and must link against a
+			// libcomposer built from the same source with the same toolchain/deps; a prebuilt lite
+			// binary would be ABI-incompatible. Build from source unconditionally rather than via
+			// CheckOrDownloadLibComposer: that cache is keyed only by version and shares the
+			// dym/composer/<version>/libcomposer.so slot with the downloaded lite binary, so a cached
+			// binary (from goplugin-loader or a downloaded plugin) would otherwise be reused here and
+			// reintroduce the ABI mismatch.
+			if err = extensions.DownloadLibComposerAndBuildIfNeeded(ctx, downloader, rootManifest.ComposerVersion,
+				extensions.ComposerArtifactSource); err != nil {
+				return fmt.Errorf("failed to build libcomposer %s for extension %s: %w",
 					rootManifest.ComposerVersion, rootManifest.Name, err)
 			}
 			composerManifest, _ := extensions.GetComposerManifest(downloader.Dirs, rootManifest.ComposerVersion)
