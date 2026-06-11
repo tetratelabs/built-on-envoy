@@ -7,6 +7,7 @@ package extensions
 
 import (
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -89,12 +90,46 @@ func BuildDynamicModule(logger *slog.Logger, dirs *xdg.Directories, manifest *Ma
 
 	logger.Debug("dynamic module library copied to cache", "path", destLib)
 
+	// Copy the main manifest and any sub-extension manifests to the cache directory.
+	if err := copyExtensionManifests(path, cacheDir); err != nil {
+		return fmt.Errorf("failed to copy extension manifests: %w", err)
+	}
+
 	return nil
 }
 
 // RustLibNameFromName converts the extension name to a valid Rust library name by replacing hyphens with underscores.
 func RustLibNameFromName(name string) string {
 	return strings.ReplaceAll(name, "-", "_")
+}
+
+// copyExtensionManifests copies the main manifest.yaml and any sub-extension
+// manifest.yaml files from srcDir into dstDir. The main manifest is placed at
+// dstDir/manifest.yaml; sub-extension manifests are placed under
+// dstDir/manifests/ preserving their relative directory structure.
+func copyExtensionManifests(srcDir, dstDir string) error {
+	return filepath.WalkDir(srcDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || d.Name() != "manifest.yaml" {
+			return nil
+		}
+		rel, err := filepath.Rel(srcDir, path)
+		if err != nil {
+			return err
+		}
+		var dst string
+		if rel == "manifest.yaml" {
+			dst = filepath.Join(dstDir, "manifest.yaml")
+		} else {
+			dst = filepath.Join(dstDir, "manifests", rel)
+		}
+		if err := os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {
+			return err
+		}
+		return copyFile(path, dst)
+	})
 }
 
 // copyFile copies a file from src to dst

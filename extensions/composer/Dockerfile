@@ -20,7 +20,12 @@ ARG BUILD_TAG=""
 # Build go shared library
 RUN CGO_ENABLED=1 go build -trimpath -buildmode=c-shared ${BUILD_TAG} -o libcomposer.so ./main
 
+# Collect all sub-extension manifest.yaml files preserving their directory structure.
+RUN mkdir -p /manifests; find . -mindepth 2 -name 'manifest.yaml' \
+    -exec sh -c 'install -D "$1" /manifests/"$1"' _ {} \;
+
 FROM scratch AS final
 
 COPY --from=builder /workspace/libcomposer* /
 COPY --from=builder /workspace/manifest.yaml /
+COPY --from=builder /manifests/ /manifests/
