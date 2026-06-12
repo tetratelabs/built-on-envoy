@@ -138,21 +138,21 @@ Commands:
 
   run [flags]
     Run Envoy with extensions
-
-  logs [flags]
-    Print the CLI logs
-
-  gen-config [flags]
+	
+	gen-config [flags]
     Generate Envoy configuration with extensions
-
-  create <name> [flags]
+	
+	create <name> [flags]
     Create a new extension template
-
-  download <extension> [flags]
+	
+	download <extension> [flags]
     Download extensions from the registry
-
-  clean [flags]
+	
+	clean [flags]
     Clean cache directories
+	
+	logs [flags]
+	Print the CLI logs
 
   ui [flags]
     Start the web UI
