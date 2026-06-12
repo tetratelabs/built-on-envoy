@@ -7,6 +7,7 @@ package extensions
 
 import (
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -89,12 +90,58 @@ func BuildDynamicModule(logger *slog.Logger, dirs *xdg.Directories, manifest *Ma
 
 	logger.Debug("dynamic module library copied to cache", "path", destLib)
 
+	// Copy the main manifest and any sub-extension manifests to the cache directory.
+	if err := copyExtensionManifests(path, cacheDir); err != nil {
+		return fmt.Errorf("failed to copy extension manifests: %w", err)
+	}
+
 	return nil
 }
 
 // RustLibNameFromName converts the extension name to a valid Rust library name by replacing hyphens with underscores.
 func RustLibNameFromName(name string) string {
 	return strings.ReplaceAll(name, "-", "_")
+}
+
+// extensionMetadataFiles are the per-extension metadata files copied into the
+// cache alongside the built library: the manifest and its config schema. The
+// config schema is optional and only copied when present.
+var extensionMetadataFiles = map[string]struct{}{
+	"manifest.yaml":      {},
+	"config.schema.json": {},
+}
+
+// copyExtensionManifests copies the main extension metadata (manifest.yaml and
+// config.schema.json) and any sub-extension metadata files from srcDir into
+// dstDir. Main metadata files are placed at dstDir/<name>; sub-extension
+// metadata files are placed under dstDir/metadatas/ preserving their relative
+// directory structure.
+func copyExtensionManifests(srcDir, dstDir string) error {
+	return filepath.WalkDir(srcDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if _, ok := extensionMetadataFiles[d.Name()]; !ok {
+			return nil
+		}
+		rel, err := filepath.Rel(srcDir, path)
+		if err != nil {
+			return err
+		}
+		var dst string
+		if filepath.Dir(rel) == "." {
+			dst = filepath.Join(dstDir, rel)
+		} else {
+			dst = filepath.Join(dstDir, "metadatas", rel)
+		}
+		if err := os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {
+			return err
+		}
+		return copyFile(path, dst)
+	})
 }
 
 // copyFile copies a file from src to dst

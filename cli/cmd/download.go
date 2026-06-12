@@ -65,7 +65,7 @@ func (d *Download) AfterApply(dirs *xdg.Directories, logger *slog.Logger) error 
 func (d *Download) Run(ctx context.Context, logger *slog.Logger) error {
 	logger.Debug("handling download command", "cmd", internal.RedactSensitive(d))
 
-	name, tag := splitRef(d.Extension)
+	bundle, name, tag := splitRef(d.Extension)
 	_, _ = fmt.Fprintf(os.Stderr, "→ %sDownloading %s for %s/%s...%s\n",
 		internal.ANSIBold, d.Extension, d.downloader.OS, d.downloader.Arch, internal.ANSIReset)
 
@@ -77,7 +77,7 @@ func (d *Download) Run(ctx context.Context, logger *slog.Logger) error {
 	case extensions.ComposerArtifact, extensions.ComposerArtifactLite, extensions.ComposerArtifactSource:
 		downloaded, err = d.downloader.DownloadComposer(ctx, tag, name)
 	default:
-		downloaded, err = d.downloader.DownloadExtension(ctx, name, tag)
+		downloaded, err = d.downloader.DownloadExtension(ctx, bundle, name, tag)
 	}
 	if err != nil {
 		return fmt.Errorf("failed to download extension: %w", err)

@@ -463,41 +463,54 @@ func TestRunInvalidEnvoyPath(t *testing.T) {
 
 func TestSplitRef(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		wantRepo string
-		wantTag  string
+		name          string
+		input         string
+		wantBundle    string
+		wantExtension string
+		wantTag       string
 	}{
 		{
-			name:     "simple name without tag",
-			input:    "cors",
-			wantRepo: "cors",
-			wantTag:  "latest",
+			name:          "simple name without tag",
+			input:         "cors",
+			wantBundle:    "cors",
+			wantExtension: "cors",
+			wantTag:       "latest",
 		},
 		{
-			name:     "simple name with tag",
-			input:    "cors:1.0.0",
-			wantRepo: "cors",
-			wantTag:  "1.0.0",
+			name:          "simple name with tag",
+			input:         "cors:1.0.0",
+			wantBundle:    "cors",
+			wantExtension: "cors",
+			wantTag:       "1.0.0",
 		},
 		{
-			name:     "empty string",
-			input:    "",
-			wantRepo: "",
-			wantTag:  "latest",
+			name:          "empty string",
+			input:         "",
+			wantBundle:    "",
+			wantExtension: "",
+			wantTag:       "latest",
 		},
 		{
-			name:     "name with multiple colons takes last",
-			input:    "foo:bar:baz",
-			wantRepo: "foo:bar",
-			wantTag:  "baz",
+			name:          "bundle prefixed name with tag",
+			input:         "composer/example-go:v1.0.0",
+			wantBundle:    "composer",
+			wantExtension: "example-go",
+			wantTag:       "v1.0.0",
+		},
+		{
+			name:          "bundle prefixed name without tag",
+			input:         "composer/example-go",
+			wantBundle:    "composer",
+			wantExtension: "example-go",
+			wantTag:       "latest",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo, tag := splitRef(tt.input)
-			require.Equal(t, tt.wantRepo, repo)
+			bundle, extension, tag := splitRef(tt.input)
+			require.Equal(t, tt.wantBundle, bundle)
+			require.Equal(t, tt.wantExtension, extension)
 			require.Equal(t, tt.wantTag, tag)
 		})
 	}

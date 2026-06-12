@@ -26,13 +26,17 @@ RUN ORIGINAL_NAME=$(grep "^name:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' 
     RUST_LIB_NAME=$(echo "$ORIGINAL_NAME" | tr '-' '_'); \
     cp ./target/release/lib${RUST_LIB_NAME}.so /output/lib${ORIGINAL_NAME}.so
 
+# Collect all sub-extension manifest.yaml and config.schema.json files preserving their directory structure.
+RUN mkdir -p /metadatas; find . -mindepth 2 \( -name 'manifest.yaml' -o -name 'config.schema.json' \) \
+    -exec sh -c 'install -D "$1" /metadatas/"$1"' _ {} \;
+
 # Final stage - minimal image with just the compiled library
 FROM scratch AS final
 
 # Copy the compiled library from builder
 COPY --from=builder /output/*.so /
 COPY --from=builder /workspace/manifest.yaml /
+COPY --from=builder /metadatas/ /metadatas/
 # Use a wildcard to copy config.schema.json if it exists, since COPY will fail if the file does not exist and we want to
 # allow for optional presence of this file.
 COPY --from=builder /workspace/config.schema.json* /
-

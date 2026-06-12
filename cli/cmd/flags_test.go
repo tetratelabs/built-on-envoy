@@ -31,20 +31,20 @@ func TestExtensionPositionsSort(t *testing.T) {
 			name: "single remote extension",
 			args: []string{"boe", "gen-config", "--extension", "ext1"},
 			manifests: []*extensions.Manifest{
-				{Name: "ext1", Remote: true},
+				{Name: "ext1", Remote: true, RemoteRef: "ext1"},
 			},
 			want: []*extensions.Manifest{
-				{Name: "ext1", Remote: true},
+				{Name: "ext1", Remote: true, RemoteRef: "ext1"},
 			},
 		},
 		{
 			name: "single remote extension with version",
 			args: []string{"boe", "gen-config", "--extension", "ext1:0.1.0"},
 			manifests: []*extensions.Manifest{
-				{Name: "ext1", Version: "0.1.0", Remote: true},
+				{Name: "ext1", Version: "0.1.0", Remote: true, RemoteRef: "ext1:0.1.0"},
 			},
 			want: []*extensions.Manifest{
-				{Name: "ext1", Version: "0.1.0", Remote: true},
+				{Name: "ext1", Version: "0.1.0", Remote: true, RemoteRef: "ext1:0.1.0"},
 			},
 		},
 		{
@@ -61,23 +61,23 @@ func TestExtensionPositionsSort(t *testing.T) {
 			name: "local before remote",
 			args: []string{"boe", "gen-config", "--local", localDir1, "--extension", "ext1"},
 			manifests: []*extensions.Manifest{
-				{Name: "ext1", Remote: true},
+				{Name: "ext1", Remote: true, RemoteRef: "ext1"},
 				{Name: "local1", Path: localDir1 + "/manifest.yaml"},
 			},
 			want: []*extensions.Manifest{
 				{Name: "local1", Path: localDir1 + "/manifest.yaml"},
-				{Name: "ext1", Remote: true},
+				{Name: "ext1", Remote: true, RemoteRef: "ext1"},
 			},
 		},
 		{
 			name: "remote before local",
 			args: []string{"boe", "gen-config", "--extension", "ext1", "--local", localDir1},
 			manifests: []*extensions.Manifest{
-				{Name: "ext1", Remote: true},
+				{Name: "ext1", Remote: true, RemoteRef: "ext1"},
 				{Name: "local1", Path: localDir1 + "/manifest.yaml"},
 			},
 			want: []*extensions.Manifest{
-				{Name: "ext1", Remote: true},
+				{Name: "ext1", Remote: true, RemoteRef: "ext1"},
 				{Name: "local1", Path: localDir1 + "/manifest.yaml"},
 			},
 		},
@@ -93,19 +93,19 @@ func TestExtensionPositionsSort(t *testing.T) {
 				"--local", localDir1,
 			},
 			manifests: []*extensions.Manifest{
-				{Name: "ext1", Version: "1.0.0", Remote: true},
-				{Name: "ext2", Remote: true},
-				{Name: "ext1", Version: "1.0.0", Remote: true},
+				{Name: "ext1", Version: "1.0.0", Remote: true, RemoteRef: "ext1"},
+				{Name: "ext2", Remote: true, RemoteRef: "ext2"},
+				{Name: "ext1", Version: "1.0.0", Remote: true, RemoteRef: "ext1:1.0.0"},
 				{Name: "local1", Path: localDir1 + "/manifest.yaml"},
 				{Name: "local2", Path: localDir2 + "/manifest.yaml"},
 				{Name: "local1", Path: localDir1 + "/manifest.yaml"},
 			},
 			want: []*extensions.Manifest{
-				{Name: "ext1", Version: "1.0.0", Remote: true},
+				{Name: "ext1", Version: "1.0.0", Remote: true, RemoteRef: "ext1"},
 				{Name: "local1", Path: localDir1 + "/manifest.yaml"},
-				{Name: "ext2", Remote: true},
+				{Name: "ext2", Remote: true, RemoteRef: "ext2"},
 				{Name: "local2", Path: localDir2 + "/manifest.yaml"},
-				{Name: "ext1", Version: "1.0.0", Remote: true},
+				{Name: "ext1", Version: "1.0.0", Remote: true, RemoteRef: "ext1:1.0.0"},
 				{Name: "local1", Path: localDir1 + "/manifest.yaml"},
 			},
 		},

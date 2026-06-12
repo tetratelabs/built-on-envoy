@@ -12,10 +12,44 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRegistryName(t *testing.T) {
-	require.Equal(t,
-		"ghcr.io/tetratelabs/built-on-envoy/extension-sample",
-		RepositoryName(DefaultOCIRegistry, "sample"))
+func TestRepositoryName(t *testing.T) {
+	tests := []struct {
+		name     string
+		registry string
+		extName  string
+		want     string
+	}{
+		{
+			name:     "regular extension",
+			registry: DefaultOCIRegistry,
+			extName:  "sample",
+			want:     "ghcr.io/tetratelabs/built-on-envoy/extension-sample",
+		},
+		{
+			name:     "composer bundle",
+			registry: DefaultOCIRegistry,
+			extName:  ComposerBundle,
+			want:     "ghcr.io/tetratelabs/built-on-envoy/composer",
+		},
+		{
+			name:     "composer lite bundle",
+			registry: DefaultOCIRegistry,
+			extName:  ComposerLiteBundle,
+			want:     "ghcr.io/tetratelabs/built-on-envoy/composer-lite",
+		},
+		{
+			name:     "custom registry",
+			registry: "my-registry.io/org",
+			extName:  "cors",
+			want:     "my-registry.io/org/extension-cors",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, RepositoryName(tt.registry, tt.extName))
+		})
+	}
 }
 
 func TestNameFromRepository(t *testing.T) {

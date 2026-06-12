@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -147,6 +148,17 @@ func TestRustLocalExtension(t *testing.T) {
 	status, err := process.Wait()
 	require.NoError(t, err)
 	require.Equal(t, 0, status.ExitCode())
+
+	// Overwrite the dependency in Cargo.toml to the stable version of Envoy 1.38 to
+	// avoid potential compatibility issues make the CI flaky.
+	// TODO(wbpcode): remove this if we get the dependency more stable.
+	cargoTomlPath := dataDir + "/rust-e2e/Cargo.toml"
+	// #nosec G304
+	cargoToml, err := os.ReadFile(cargoTomlPath)
+	require.NoError(t, err)
+	cargoToml = regexp.MustCompile(`rev = "[0-9a-f]+"`).
+		ReplaceAll(cargoToml, []byte(`rev = "f1dd21b16c244bda00edfb5ffce577e12d0d2ec2"`))
+	require.NoError(t, os.WriteFile(cargoTomlPath, cargoToml, 0o600))
 
 	// Run the newly created extension
 	ports := internaltesting.FreePorts(t, 2)
@@ -389,6 +401,52 @@ func TestGoPluginLoaderRemoteExtension(t *testing.T) {
 		"--extension", extensions.GoPluginLoaderName+":"+version,
 		"--config", config,
 	)
+
+	internaltesting.RequireEventuallyGet(t,
+		fmt.Sprintf("http://localhost:%d/status/200", proxyPort),
+		func(r *http.Response) bool {
+			return r.Header.Get("x-example-response-header") == "example-value"
+		})
+}
+
+// TestComposerBundleExtension exercises the bundle-prefixed extension syntax end to end:
+//  1. build the full composer image (non-lite, single platform) and push it to the local test registry;
+//  2. run `boe run --extension composer/example-go` which downloads the full composer binary
+//     artifact and resolves the example-go child extension manifest from within the bundle.
+func TestComposerBundleExtension(t *testing.T) {
+	t.Setenv("TEST_BOE_RUN_ENVOY_TIMEOUT", "5m")
+
+	const composerDir = "../../extensions/composer"
+
+	manifests, err := extensions.LoadManifests(internaltesting.ExtensionsFS(t), ".", false)
+	require.NoError(t, err)
+	composer, ok := manifests[extensions.ComposerArtifact]
+	require.True(t, ok)
+	version := composer.Version
+
+	t.Setenv("BOE_REGISTRY", registryAddr)
+	t.Setenv("BOE_REGISTRY_INSECURE", "true")
+	t.Setenv("BOE_DATA_HOME", t.TempDir())
+
+	// Build and push the full composer image (single platform) to the local registry.
+	runCmd(t, composerDir, "make", "push_image",
+		"PLATFORMS=linux/"+runtime.GOARCH,
+		"OCI_REGISTRY="+registryAddr,
+	)
+
+	// Run boe with the bundle-prefixed extension reference: composer/example-go.
+	// This downloads the full composer artifact keyed by the "composer" bundle name,
+	// then resolves the "example-go" child extension manifest within it.
+	ports := internaltesting.FreePorts(t, 2)
+	proxyPort := ports[0]
+	args := []string{
+		"--log-level", "dynamic_modules:debug",
+		"--extension", "composer/example-go:" + version,
+	}
+	if strings.HasSuffix(version, "-dev") {
+		args = append(args, "--dev")
+	}
+	internaltesting.RunEnvoy(t, cliBin, proxyPort, ports[1], args...)
 
 	internaltesting.RequireEventuallyGet(t,
 		fmt.Sprintf("http://localhost:%d/status/200", proxyPort),
