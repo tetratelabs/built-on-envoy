@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -147,6 +148,16 @@ func TestRustLocalExtension(t *testing.T) {
 	status, err := process.Wait()
 	require.NoError(t, err)
 	require.Equal(t, 0, status.ExitCode())
+
+	// Overwrite the dependency in Cargo.toml to the stable version of Envoy 1.38 to
+	// avoid potential compatibility issues make the CI flaky.
+	// TODO(wbpcode): remove this if we get the dependency more stable.
+	cargoTomlPath := dataDir + "/rust-e2e/Cargo.toml"
+	cargoToml, err := os.ReadFile(cargoTomlPath)
+	require.NoError(t, err)
+	cargoToml = regexp.MustCompile(`rev = "[0-9a-f]+"`).
+		ReplaceAll(cargoToml, []byte(`rev = "f1dd21b16c244bda00edfb5ffce577e12d0d2ec2"`))
+	require.NoError(t, os.WriteFile(cargoTomlPath, cargoToml, 0o600))
 
 	// Run the newly created extension
 	ports := internaltesting.FreePorts(t, 2)
