@@ -557,9 +557,9 @@ func handleExtensionSource(ctx context.Context, downloader *extensions.Downloade
 	}
 	switch rootManifest.Type {
 	case extensions.TypeComposer:
-		fmt.Printf("→ %sBuilding composer for %s...%s\n", internal.ANSIBold, rootManifest.Name, internal.ANSIReset)
+		fmt.Printf("→ %sBuilding composer for %s...%s\n", internal.ANSIBold, extensionManifest.Name, internal.ANSIReset)
 		logger.Info("building composer from local source", "name", rootManifest.Name, "version", rootManifest.Version)
-		if err := extensions.BuildComposer(logger, downloader.Dirs, rootPath, rootManifest.Version); err != nil {
+		if err := extensions.BuildLibComposer(logger, downloader.Dirs, rootPath, rootManifest.Version, false); err != nil {
 			return fmt.Errorf("failed to build libcomposer for local extension %s: %w", rootManifest.Name, err)
 		}
 		extensionManifest.CShared = true

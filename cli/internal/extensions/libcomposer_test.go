@@ -6,6 +6,7 @@
 package extensions
 
 import (
+	"debug/buildinfo"
 	"fmt"
 	"log/slog"
 	"os"
@@ -37,11 +38,11 @@ func TestDownloadLibComposerAndBuildIfNeeded_DownloadError(t *testing.T) {
 func TestBuildLibComposer_InvalidPath(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 	fakeDirs := &xdg.Directories{DataHome: t.TempDir()}
-	err := BuildLibComposer(logger, fakeDirs, "/nonexistent/path", "0.1.0", false)
+	err := BuildLibComposer(logger, fakeDirs, "/nonexistent/path", "0.1.0", true)
 	require.ErrorContains(t, err, "failed to build libcomposer from source")
 }
 
-func TestBuildLibComposer(t *testing.T) {
+func TestBuildLibComposerLite(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 	fakeDirs := &xdg.Directories{DataHome: t.TempDir()}
 	composerPath := "../../../extensions/composer"
@@ -54,24 +55,25 @@ func TestBuildLibComposer(t *testing.T) {
 	require.NoError(t, err)
 
 	// Ensure the libcomposer.so is created.
-	_, err = os.Stat(LocalCacheComposerLib(fakeDirs, composerVersion))
+	out := LocalCacheComposerLib(fakeDirs, composerVersion)
+	_, err = os.Stat(out)
 	require.NoError(t, err)
 
-	// Ensure plugins are built
-	manifests, loadErr := LoadManifests(internaltesting.ExtensionsFS(t), ".", false)
-	require.NoError(t, loadErr)
-	_, err = os.Stat(LocalCacheExtension(fakeDirs, manifests["example-go"]))
+	bi, err := buildinfo.ReadFile(out)
 	require.NoError(t, err)
+
+	var buildTags string
+	for _, s := range bi.Settings {
+		if s.Key == "-tags" {
+			buildTags = s.Value
+			break
+		}
+	}
+	require.NotEmpty(t, buildTags)
+	require.Contains(t, buildTags, "lite")
 }
 
-func TestBuildComposer_InvalidPath(t *testing.T) {
-	logger := internaltesting.NewTLogger(t)
-	fakeDirs := &xdg.Directories{DataHome: t.TempDir()}
-	err := BuildComposer(logger, fakeDirs, "/nonexistent/path", "0.1.0")
-	require.ErrorContains(t, err, "failed to build composer from source")
-}
-
-func TestBuildComposer(t *testing.T) {
+func TestBuildLibComposer(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 	fakeDirs := &xdg.Directories{DataHome: t.TempDir()}
 	composerPath := "../../../extensions/composer"
@@ -80,12 +82,26 @@ func TestBuildComposer(t *testing.T) {
 	require.NoError(t, err)
 	composerVersion := composerManifest.Version
 
-	err = BuildComposer(logger, fakeDirs, composerPath, composerVersion)
+	err = BuildLibComposer(logger, fakeDirs, composerPath, composerVersion, false)
 	require.NoError(t, err)
 
-	// Ensure the libcomposer.so is created via make install.
-	_, err = os.Stat(LocalCacheComposerLib(fakeDirs, composerVersion))
+	// Ensure the libcomposer.so is created
+	out := LocalCacheComposerLib(fakeDirs, composerVersion)
+	_, err = os.Stat(out)
 	require.NoError(t, err)
+
+	bi, err := buildinfo.ReadFile(out)
+	require.NoError(t, err)
+
+	var buildTags string
+	for _, s := range bi.Settings {
+		if s.Key == "-tags" {
+			buildTags = s.Value
+			break
+		}
+	}
+	require.NotEmpty(t, buildTags)
+	require.NotContains(t, buildTags, "lite")
 }
 
 func TestBuildExtensionFromPath_CShared(t *testing.T) {
