@@ -32,6 +32,6 @@ import Callout from '../../../components/Callout.astro';
 | Name | Description | Type | Default | Env Var | Required |
 |------|-------------|------|---------|-----|----------|
 {{- range .Flags}}
-| `--{{.Name}}`{{if .Short}} (`-{{.Short}}`){{end}} | {{.Help}} | `{{.Type}}` | {{if .Default}}`{{.Default}}`{{else}}-{{end}} | {{if .EnvVars}}`{{join .EnvVars ", "}}`{{else}}-{{end}} | {{if .Required}}Yes{{else}}No{{end}} |
+| {{if .Short}} `-{{.Short}}`, {{end}}`--{{.Name}}` | {{.Help}} | `{{.Type}}` | {{if .Default}}`{{.Default}}`{{else}}-{{end}} | {{if .EnvVars}}`{{join .EnvVars ", "}}`{{else}}-{{end}} | {{if .Required}}Yes{{else}}No{{end}} |
 {{- end}}
 {{end}}

@@ -14,6 +14,8 @@ sections:
         href: /docs/cli/gen-config
       - title: list
         href: /docs/cli/list
+      - title: logs
+        href: /docs/cli/logs
       - title: run
         href: /docs/cli/run
       - title: ui

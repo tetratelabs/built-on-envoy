@@ -37,6 +37,7 @@ const CLIName = "boe"
 type CLI struct {
 	List        List        `cmd:"" help:"List available extensions"`
 	Run         Run         `cmd:"" help:"Run Envoy with extensions"`
+	Logs        Logs        `cmd:"" help:"Print the CLI logs"`
 	Healthcheck Healthcheck `cmd:"" help:"Docker HEALTHCHECK command." hidden:""`
 	GenConfig   GenConfig   `cmd:"" help:"Generate Envoy configuration with extensions"`
 	Create      Create      `cmd:"" help:"Create a new extension template"`

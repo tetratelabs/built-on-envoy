@@ -139,6 +139,9 @@ Commands:
   run [flags]
     Run Envoy with extensions
 
+  logs [flags]
+    Print the CLI logs
+
   gen-config [flags]
     Generate Envoy configuration with extensions
 
