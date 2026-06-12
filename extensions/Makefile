@@ -11,7 +11,7 @@ OCI_REGISTRY ?= ghcr.io/tetratelabs
 
 registry_output :=
 ifeq ($(BOE_REGISTRY_INSECURE),true)
-  registry_output := ",registry.insecure=true"
+  registry_output := ",registry.insecure=true"f
 endif
 
 # Default data home layout for boe

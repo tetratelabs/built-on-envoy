@@ -12,6 +12,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
+
+	"github.com/joho/godotenv"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
@@ -47,7 +50,7 @@ func DownloadLibComposerAndBuildIfNeeded(ctx context.Context, downloader *Downlo
 		return nil
 	}
 
-	return BuildLibComposer(downloader.Logger, downloader.Dirs, artifact.Path, version, false)
+	return BuildLibComposer(downloader.Logger, downloader.Dirs, artifact.Path, version, true)
 }
 
 // HasCSharedMain checks if the extension at the given path has a main/ directory,
@@ -117,16 +120,43 @@ func buildExtensionPlugin(logger *slog.Logger, dirs *xdg.Directories, manifest *
 // BuildLibComposer builds the libcomposer.so from source. The composer source code is expected
 // to be at composerSrcPath. The built libcomposer.so will be saved in the local cache directory for
 // composer to load.
-func BuildLibComposer(logger *slog.Logger, dirs *xdg.Directories, composerSrcPath string, version string, buildPlugins bool) error {
-	// Build the libcomposer from source.
+func BuildLibComposer(logger *slog.Logger, dirs *xdg.Directories, composerSrcPath string, version string, lite bool) error {
+	dest := LocalCacheComposerLib(dirs, version)
+	var buildTags string
+
+	commonEnvPath := filepath.Join(composerSrcPath, "Makefile.common")
+	if _, err := os.Stat(commonEnvPath); err == nil {
+		env, err := godotenv.Read(commonEnvPath)
+		if err != nil {
+			logger.Warn("failed to read Makefile.common for build tags", "path", commonEnvPath, "error", err)
+		}
+		if tags, ok := env["BUILD_TAGS"]; ok {
+			// The library supports reading `VAR=value` and `VAR: value`. The ':' is convenient as allows us to read Makefile style
+			// variable declarations. We just need to cleanup the leading '='.
+			buildTags = strings.TrimSpace(strings.TrimPrefix(tags, "="))
+		}
+	}
+	if lite {
+		if buildTags != "" {
+			buildTags += ","
+		}
+		buildTags += "lite"
+	}
+
+	args := []string{
+		"build",
+		"-trimpath",
+		"-buildmode=c-shared",
+		"-o", dest,
+	}
+	if buildTags != "" {
+		args = append(args, "-tags", buildTags)
+	}
+	args = append(args, "./main")
+
 	// #nosec G204
-	cmd := exec.Command("make",
-		"install",
-		"BOE_DATA_HOME="+dirs.DataHome,
-		"NAME=composer",
-		"COMPOSER_LITE=true",
-		"VERSION="+version,
-	)
+	cmd := exec.Command("go", args...)
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=1")
 	cmd.Dir = composerSrcPath
 
 	logger.Debug("building libcomposer from source", "version", version, "cmd", cmd.String())
@@ -134,48 +164,6 @@ func BuildLibComposer(logger *slog.Logger, dirs *xdg.Directories, composerSrcPat
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to build libcomposer from source at %s: %w\nOutput: %s",
-			composerSrcPath, err, string(output))
-	}
-
-	if buildPlugins {
-		// #nosec G204
-		pluginsBuild := exec.Command("make",
-			"install_plugins",
-			"BOE_DATA_HOME="+dirs.DataHome,
-			"VERSION="+version,
-		)
-		pluginsBuild.Dir = composerSrcPath
-
-		logger.Debug("building composer plugins from source", "cmd", pluginsBuild.String())
-
-		output, err = pluginsBuild.CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("failed to build composer example plugin from source at %s: %w\nOutput: %s",
-				composerSrcPath, err, string(output))
-		}
-	}
-
-	return nil
-}
-
-// BuildComposer builds and installs libcomposer from the composer source tree at composerSrcPath
-// into the local cache, tagging it with the given version.
-func BuildComposer(logger *slog.Logger, dirs *xdg.Directories, composerSrcPath string, version string) error {
-	// Build the libcomposer from source.
-	// #nosec G204
-	cmd := exec.Command("make",
-		"install",
-		"BOE_DATA_HOME="+dirs.DataHome,
-		"NAME=composer",
-		"VERSION="+version,
-	)
-	cmd.Dir = composerSrcPath
-
-	logger.Debug("building composer from source", "version", version, "cmd", cmd.String())
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to build composer from source at %s: %w\nOutput: %s",
 			composerSrcPath, err, string(output))
 	}
 

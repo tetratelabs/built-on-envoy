@@ -18,6 +18,8 @@ require (
 	sigs.k8s.io/yaml v1.6.0
 )
 
+require github.com/joho/godotenv v1.5.1
+
 require (
 	cel.dev/expr v0.25.1 // indirect
 	dario.cat/mergo v1.0.2 // indirect
