@@ -153,6 +153,7 @@ func TestRustLocalExtension(t *testing.T) {
 	// avoid potential compatibility issues make the CI flaky.
 	// TODO(wbpcode): remove this if we get the dependency more stable.
 	cargoTomlPath := dataDir + "/rust-e2e/Cargo.toml"
+	// #nosec G304
 	cargoToml, err := os.ReadFile(cargoTomlPath)
 	require.NoError(t, err)
 	cargoToml = regexp.MustCompile(`rev = "[0-9a-f]+"`).
