@@ -251,6 +251,8 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 			if err != nil {
 				return nil, err
 			}
+			manifest.Remote = true
+			manifest.RemoteRef = ext
 			downloaded = append(downloaded, manifest)
 			continue
 		}
@@ -321,9 +323,6 @@ func resolveGoPluginLoader(ctx context.Context, downloader *extensions.Downloade
 		Parent:          extensions.ComposerBundle,
 		Version:         version,
 		ComposerVersion: version,
-		// Marked remote so extensionPositions.sort can match it by reference, like
-		// other downloaded extensions (it is fetched from the registry as composer-lite).
-		Remote: true,
 	}
 	manifest.ApplyDefaults()
 	return manifest, nil
