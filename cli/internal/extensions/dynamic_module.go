@@ -103,16 +103,28 @@ func RustLibNameFromName(name string) string {
 	return strings.ReplaceAll(name, "-", "_")
 }
 
-// copyExtensionManifests copies the main manifest.yaml and any sub-extension
-// manifest.yaml files from srcDir into dstDir. The main manifest is placed at
-// dstDir/manifest.yaml; sub-extension manifests are placed under
-// dstDir/manifests/ preserving their relative directory structure.
+// extensionMetadataFiles are the per-extension metadata files copied into the
+// cache alongside the built library: the manifest and its config schema. The
+// config schema is optional and only copied when present.
+var extensionMetadataFiles = map[string]struct{}{
+	"manifest.yaml":      {},
+	"config.schema.json": {},
+}
+
+// copyExtensionManifests copies the main extension metadata (manifest.yaml and
+// config.schema.json) and any sub-extension metadata files from srcDir into
+// dstDir. Main metadata files are placed at dstDir/<name>; sub-extension
+// metadata files are placed under dstDir/metadatas/ preserving their relative
+// directory structure.
 func copyExtensionManifests(srcDir, dstDir string) error {
 	return filepath.WalkDir(srcDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if d.IsDir() || d.Name() != "manifest.yaml" {
+		if d.IsDir() {
+			return nil
+		}
+		if _, ok := extensionMetadataFiles[d.Name()]; !ok {
 			return nil
 		}
 		rel, err := filepath.Rel(srcDir, path)
@@ -120,10 +132,10 @@ func copyExtensionManifests(srcDir, dstDir string) error {
 			return err
 		}
 		var dst string
-		if rel == "manifest.yaml" {
-			dst = filepath.Join(dstDir, "manifest.yaml")
+		if filepath.Dir(rel) == "." {
+			dst = filepath.Join(dstDir, rel)
 		} else {
-			dst = filepath.Join(dstDir, "manifests", rel)
+			dst = filepath.Join(dstDir, "metadatas", rel)
 		}
 		if err := os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {
 			return err
