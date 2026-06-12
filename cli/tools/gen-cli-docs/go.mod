@@ -14,6 +14,7 @@ require (
 	github.com/envoyproxy/go-control-plane/envoy v1.37.1-0.20260427194735-8b4b133fe2a5 // indirect
 	github.com/envoyproxy/protoc-gen-validate v1.3.3 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
+	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20220913051719-115f729f3c8c // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
