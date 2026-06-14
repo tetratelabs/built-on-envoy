@@ -10,14 +10,14 @@
     "astro": "astro"
   },
   "dependencies": {
-    "@astrojs/mdx": "^6.0.2",
-    "astro": "^6.4.4",
+    "@astrojs/mdx": "^6.0.3",
+    "astro": "^6.4.6",
     "astro-mermaid": "^2.0.2",
     "marked": "^18.0.5",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@types/node": "^25.9.2"
+    "@types/node": "^25.9.3"
   },
   "overrides": {
     "lodash-es": "^4.18.1"
