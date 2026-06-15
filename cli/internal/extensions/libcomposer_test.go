@@ -20,7 +20,7 @@ import (
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
-func TestDownloadLibComposerAndBuildIfNeeded_DownloadError(t *testing.T) {
+func TestDownloadComposerLiteAndBuildIfNeeded_DownloadError(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 	fakeDirs := &xdg.Directories{DataHome: t.TempDir()}
 	d := &Downloader{
@@ -31,7 +31,7 @@ func TestDownloadLibComposerAndBuildIfNeeded_DownloadError(t *testing.T) {
 			return nil, fmt.Errorf("connection refused")
 		},
 	}
-	err := DownloadLibComposerAndBuildIfNeeded(t.Context(), d, "0.1.0", ComposerArtifactLite)
+	err := DownloadComposerLiteAndBuildIfNeeded(t.Context(), d, "0.1.0", ComposerArtifactLite)
 	require.ErrorContains(t, err, "failed to download libcomposer")
 }
 
@@ -54,8 +54,8 @@ func TestBuildLibComposerLite(t *testing.T) {
 	err = BuildLibComposer(logger, fakeDirs, composerPath, composerVersion, true)
 	require.NoError(t, err)
 
-	// Ensure the libcomposer.so is created.
-	out := LocalCacheComposerLib(fakeDirs, composerVersion)
+	// Ensure the libcomposer-lite.so is created in the independent composer-lite slot.
+	out := LocalCacheComposerLiteLib(fakeDirs, composerVersion)
 	_, err = os.Stat(out)
 	require.NoError(t, err)
 

@@ -223,8 +223,8 @@ func setupDynamicModuleSearchPath(params *ConfigGenerationParams) (string, func(
 	for _, ext := range params.Extensions {
 		switch {
 		case ext.Type == extensions.TypeGo && !ext.CShared:
-			// Go plugin extensions are loaded by composer via goplugin-loader.
-			// At this point all Go plugin extensions are guaranteed to use the same version of composer.
+			// Standalone Go plugin extensions are loaded by the composer-lite goplugin-loader.
+			// At this point all Go plugin extensions are guaranteed to use the same composer version.
 			composerVersion = ext.ComposerVersion
 
 		case ext.Type == extensions.TypeRust || (ext.Type == extensions.TypeGo && ext.CShared):
@@ -249,20 +249,20 @@ func setupDynamicModuleSearchPath(params *ConfigGenerationParams) (string, func(
 		}
 	}
 
-	// If there are composer extensions, link libcomposer.so as well
+	// If there are standalone Go plugin extensions, link libcomposer-lite.so (their host loader).
 	if composerVersion != "" {
-		composerPath := extensions.LocalCacheComposerLib(params.Dirs, composerVersion)
+		composerPath := extensions.LocalCacheComposerLiteLib(params.Dirs, composerVersion)
 		linkPath := filepath.Join(tempDir, filepath.Base(composerPath))
-		// Skip if libcomposer.so was already linked above by a bundle-hosted extension
-		// (e.g. goplugin-loader), to avoid a "file exists" error.
+		// Skip if libcomposer-lite.so was already linked above by a c-shared bundle-hosted
+		// extension (e.g. goplugin-loader), to avoid a "file exists" error.
 		if _, err := os.Stat(linkPath); err == nil {
-			params.Logger.Debug("libcomposer already linked, skipping", "linkPath", linkPath)
+			params.Logger.Debug("libcomposer-lite already linked, skipping", "linkPath", linkPath)
 		} else if _, err := os.Stat(composerPath); err == nil {
-			params.Logger.Debug("linking libcomposer for composer extensions", "path", composerPath, "linkPath", linkPath)
+			params.Logger.Debug("linking libcomposer-lite for Go plugin extensions", "path", composerPath, "linkPath", linkPath)
 
 			if err := os.Symlink(composerPath, linkPath); err != nil {
 				cleanup()
-				return "", nil, fmt.Errorf("failed to create symlink for libcomposer: %w", err)
+				return "", nil, fmt.Errorf("failed to create symlink for libcomposer-lite: %w", err)
 			}
 		}
 	}

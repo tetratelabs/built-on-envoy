@@ -478,7 +478,7 @@ func TestComposerFilterGenerator(t *testing.T) {
 					TypedConfig: func() *anypb.Any {
 						dymConfig := &dymhttpv3.DynamicModuleFilter{
 							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-								Name:             "composer",
+								Name:             "composer-lite",
 								LoadGlobally:     true,
 								MetricsNamespace: "builtonenvoy",
 							},
@@ -527,7 +527,7 @@ func TestComposerFilterGenerator(t *testing.T) {
 
 						dymConfig := &dymhttpv3.DynamicModuleFilter{
 							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-								Name:             "composer",
+								Name:             "composer-lite",
 								LoadGlobally:     true,
 								MetricsNamespace: "builtonenvoy",
 							},
@@ -582,7 +582,7 @@ func TestComposerFilterGenerator(t *testing.T) {
 					TypedConfig: func() *anypb.Any {
 						dymConfig := &dymhttpv3.DynamicModuleFilter{
 							DynamicModuleConfig: &dymv3.DynamicModuleConfig{
-								Name:             "composer",
+								Name:             "composer-lite",
 								LoadGlobally:     true,
 								MetricsNamespace: "builtonenvoy",
 							},

@@ -17,8 +17,10 @@ RUN apt-get install -y --no-install-recommends \
 
 RUN go mod download all
 ARG BUILD_TAG=""
+# Output library name: libcomposer.so for the full build, libcomposer-lite.so for the lite build.
+ARG LIB_NAME=libcomposer.so
 # Build go shared library
-RUN CGO_ENABLED=1 go build -trimpath -buildmode=c-shared ${BUILD_TAG} -o libcomposer.so ./main
+RUN CGO_ENABLED=1 go build -trimpath -buildmode=c-shared ${BUILD_TAG} -o ${LIB_NAME} ./main
 
 # Collect all sub-extension manifest.yaml and config.schema.json files preserving their directory structure.
 RUN mkdir -p /metadatas; find . -mindepth 2 \( -name 'manifest.yaml' -o -name 'config.schema.json' \) \

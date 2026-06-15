@@ -322,11 +322,11 @@ func TestDownloadSourceFallbackDisabled(t *testing.T) {
 	require.ErrorIs(t, err, oci.ErrPlatformNotFound)
 }
 
-func TestCheckOrDownloadLibComposerCacheHit(t *testing.T) {
+func TestCheckOrDownloadLibComposerLiteCacheHit(t *testing.T) {
 	version := "0.5.0"
 	dirs := &xdg.Directories{DataHome: t.TempDir()}
-	require.NoError(t, os.MkdirAll(LocalCacheComposerDir(dirs, version), 0o750))
-	require.NoError(t, os.WriteFile(LocalCacheComposerLib(dirs, version), []byte("cached"), 0o600))
+	require.NoError(t, os.MkdirAll(LocalCacheComposerLiteDir(dirs, version), 0o750))
+	require.NoError(t, os.WriteFile(LocalCacheComposerLiteLib(dirs, version), []byte("cached"), 0o600))
 
 	d := &Downloader{
 		Logger:   internaltesting.NewTLogger(t),
@@ -338,7 +338,7 @@ func TestCheckOrDownloadLibComposerCacheHit(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, CheckOrDownloadLibComposer(t.Context(), d, version, ComposerArtifactLite))
+	require.NoError(t, CheckOrDownloadLibComposerLite(t.Context(), d, version))
 }
 
 func TestDownloadComposerExtensionLoadsParentManifest(t *testing.T) {
@@ -554,7 +554,7 @@ examples: []
 	})
 }
 
-func TestCheckOrDownloadLibComposerCacheMiss(t *testing.T) {
+func TestCheckOrDownloadLibComposerLiteCacheMiss(t *testing.T) {
 	version := "0.5.0"
 	dirs := &xdg.Directories{DataHome: t.TempDir()}
 
@@ -575,7 +575,7 @@ func TestCheckOrDownloadLibComposerCacheMiss(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, CheckOrDownloadLibComposer(t.Context(), d, version, ComposerArtifactLite))
+	require.NoError(t, CheckOrDownloadLibComposerLite(t.Context(), d, version))
 }
 
 func TestResolveLatestComposerVersion(t *testing.T) {
