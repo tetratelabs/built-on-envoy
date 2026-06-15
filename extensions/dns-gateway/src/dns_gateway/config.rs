@@ -10,6 +10,8 @@ use std::collections::HashMap;
 pub struct DnsGateway {
     #[serde(default)]
     pub domains: Vec<DomainMatcher>,
+    #[serde(default)]
+    pub fail_open: bool,
 }
 
 #[derive(Debug, Deserialize)]

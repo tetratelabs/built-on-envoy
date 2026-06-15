@@ -9,25 +9,43 @@
 //! with the matched domain and metadata for downstream filters.
 
 use envoy_proxy_dynamic_modules_rust_sdk::*;
+use serde::Deserialize;
 use std::net::Ipv4Addr;
 
 use super::virtual_ip_cache::get_cache;
 
+const DEFAULT_FILTER_STATE_PREFIX: &str = "io.builtonenvoy.dns_gateway";
+
+#[derive(Deserialize, Default)]
+struct CacheLookupConfig {
+    filter_state_prefix: Option<String>,
+}
+
 /// The filter configuration that implements
 /// [`envoy_proxy_dynamic_modules_rust_sdk::NetworkFilterConfig`].
-pub struct CacheLookupFilterConfig;
+pub struct CacheLookupFilterConfig {
+    filter_state_prefix: String,
+}
 
 impl CacheLookupFilterConfig {
     /// Creates a new cache lookup filter configuration.
-    pub fn new(_config: &[u8]) -> Self {
+    pub fn new(config: &[u8]) -> Self {
+        let prefix = serde_json::from_slice::<CacheLookupConfig>(config)
+            .ok()
+            .and_then(|c| c.filter_state_prefix)
+            .unwrap_or_else(|| DEFAULT_FILTER_STATE_PREFIX.to_string());
         envoy_log_info!("Filter initialized");
-        CacheLookupFilterConfig
+        CacheLookupFilterConfig {
+            filter_state_prefix: prefix,
+        }
     }
 }
 
 impl<ENF: EnvoyNetworkFilter> NetworkFilterConfig<ENF> for CacheLookupFilterConfig {
     fn new_network_filter(&self, _envoy: &mut ENF) -> Box<dyn NetworkFilter<ENF>> {
-        Box::new(CacheLookupFilter)
+        Box::new(CacheLookupFilter {
+            filter_state_prefix: self.filter_state_prefix.clone(),
+        })
     }
 }
 
@@ -36,7 +54,9 @@ impl<ENF: EnvoyNetworkFilter> NetworkFilterConfig<ENF> for CacheLookupFilterConf
 ///
 /// Looks up the destination virtual IP in the shared cache and sets filter state
 /// with the matched domain and metadata.
-struct CacheLookupFilter;
+struct CacheLookupFilter {
+    filter_state_prefix: String,
+}
 
 impl<ENF: EnvoyNetworkFilter> NetworkFilter<ENF> for CacheLookupFilter {
     fn on_new_connection(
@@ -62,12 +82,11 @@ impl<ENF: EnvoyNetworkFilter> NetworkFilter<ENF> for CacheLookupFilter {
             }
         };
 
-        envoy_filter.set_filter_state_bytes(b"envoy.dns_gateway.domain", domain.as_bytes());
+        let domain_key = format!("{}.domain", self.filter_state_prefix);
+        envoy_filter.set_filter_state_bytes(domain_key.as_bytes(), domain.as_bytes());
         for (key, value) in &metadata {
-            envoy_filter.set_filter_state_bytes(
-                format!("envoy.dns_gateway.metadata.{}", key).as_bytes(),
-                value.as_bytes(),
-            );
+            let meta_key = format!("{}.metadata.{}", self.filter_state_prefix, key);
+            envoy_filter.set_filter_state_bytes(meta_key.as_bytes(), value.as_bytes());
         }
 
         abi::envoy_dynamic_module_type_on_network_filter_data_status::Continue
@@ -82,6 +101,19 @@ mod tests {
     #[test]
     fn test_config_creation() {
         let _config = CacheLookupFilterConfig::new(b"");
+    }
+
+    #[test]
+    fn test_config_default_prefix() {
+        let config = CacheLookupFilterConfig::new(b"{}");
+        assert_eq!(config.filter_state_prefix, DEFAULT_FILTER_STATE_PREFIX);
+    }
+
+    #[test]
+    fn test_config_custom_prefix() {
+        let config =
+            CacheLookupFilterConfig::new(br#"{"filter_state_prefix": "my.custom.prefix"}"#);
+        assert_eq!(config.filter_state_prefix, "my.custom.prefix");
     }
 
     #[test]
@@ -111,7 +143,60 @@ mod tests {
         let mut mock = MockEnvoyNetworkFilter::new();
         mock.expect_get_local_address()
             .returning(move || (ip.to_string(), 8080));
-        mock.expect_set_filter_state_bytes().returning(|_, _| true);
+        mock.expect_set_filter_state_bytes()
+            .withf(|key, value| {
+                key == b"io.builtonenvoy.dns_gateway.domain"
+                    && value == b"cache-hit-test.example.com"
+            })
+            .times(1)
+            .returning(|_, _| true);
+        mock.expect_set_filter_state_bytes()
+            .withf(|key, value| {
+                key == b"io.builtonenvoy.dns_gateway.metadata.cluster"
+                    && value == b"test_cluster"
+            })
+            .times(1)
+            .returning(|_, _| true);
+
+        let status = filter.on_new_connection(&mut mock);
+        assert_eq!(
+            status,
+            abi::envoy_dynamic_module_type_on_network_filter_data_status::Continue
+        );
+    }
+
+    #[test]
+    fn test_on_new_connection_custom_prefix() {
+        let mut metadata = HashMap::new();
+        metadata.insert("env".to_string(), "prod".to_string());
+        let ip = get_cache()
+            .allocate(
+                "custom-prefix-test.example.com".into(),
+                metadata,
+                0x0C0C_0000, // 12.12.0.0
+                24,
+            )
+            .unwrap();
+
+        let config =
+            CacheLookupFilterConfig::new(br#"{"filter_state_prefix": "my.custom.prefix"}"#);
+        let mut mock = MockEnvoyNetworkFilter::new();
+        let mut filter = config.new_network_filter(&mut mock);
+
+        let mut mock = MockEnvoyNetworkFilter::new();
+        mock.expect_get_local_address()
+            .returning(move || (ip.to_string(), 8080));
+        mock.expect_set_filter_state_bytes()
+            .withf(|key, value| {
+                key == b"my.custom.prefix.domain"
+                    && value == b"custom-prefix-test.example.com"
+            })
+            .times(1)
+            .returning(|_, _| true);
+        mock.expect_set_filter_state_bytes()
+            .withf(|key, value| key == b"my.custom.prefix.metadata.env" && value == b"prod")
+            .times(1)
+            .returning(|_, _| true);
 
         let status = filter.on_new_connection(&mut mock);
         assert_eq!(

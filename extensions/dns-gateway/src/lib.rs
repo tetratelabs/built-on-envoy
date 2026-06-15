@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // The full text of the Apache license is available in the LICENSE file at
 // the root of the repo.
-#![allow(unpredictable_function_pointer_comparisons)] // can be removed once https://github.com/envoyproxy/envoy/pull/44654 is released
 
 use envoy_proxy_dynamic_modules_rust_sdk::*;
 

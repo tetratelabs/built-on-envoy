@@ -109,6 +109,51 @@ struct DnsGatewayFilter {
     config: Arc<config::DnsGateway>,
 }
 
+impl DnsGatewayFilter {
+    /// Processes a raw DNS query and returns the response bytes to send back, or `None` to
+    /// forward the query upstream unchanged.
+    ///
+    /// Returns `None` for non-matching domains, non-query messages, and CIDR-exhausted matched
+    /// domains when `fail_open` is true. Returns a NODATA response for non-A record types on
+    /// matched domains and for CIDR-exhausted matched domains when `fail_open` is false.
+    fn process_dns_query(&self, data: &[u8]) -> Option<Vec<u8>> {
+        let query = Message::read(&mut BinDecoder::new(data))
+            .map_err(|e| envoy_log_warn!("Failed to parse DNS query: {}", e))
+            .ok()?;
+        if query.message_type() != MessageType::Query {
+            return None;
+        }
+
+        let question = query.queries().first()?;
+        // DNS names are fully qualified with a trailing dot (e.g. "api.aws.com.").
+        // Strip it so our wildcard patterns like "*.aws.com" match correctly.
+        let domain = question.name().to_utf8().trim_end_matches('.').to_string();
+
+        let matcher = self
+            .config
+            .domains
+            .iter()
+            .find(|m| matches_domain(&m.domain, &domain))?;
+
+        match question.query_type() {
+            RecordType::A => {
+                let base_ip: u32 = matcher.base_ip.parse::<Ipv4Addr>().ok()?.into();
+                match get_cache().allocate(
+                    domain,
+                    matcher.metadata.clone(),
+                    base_ip,
+                    matcher.prefix_len as u8,
+                ) {
+                    Some(ip) => build_dns_response(&query, question.name(), ip).ok(),
+                    None if self.config.fail_open => None,
+                    None => build_nodata_response(&query).ok(),
+                }
+            }
+            _ => build_nodata_response(&query).ok(),
+        }
+    }
+}
+
 impl<ELF: EnvoyUdpListenerFilter> UdpListenerFilter<ELF> for DnsGatewayFilter {
     fn on_data(
         &mut self,
@@ -122,41 +167,7 @@ impl<ELF: EnvoyUdpListenerFilter> UdpListenerFilter<ELF> for DnsGatewayFilter {
         let data: Vec<u8> = chunks.iter().flat_map(|c| c.as_slice()).copied().collect();
         let peer = envoy_filter.get_peer_address();
 
-        let response = (|| -> Option<Vec<u8>> {
-            let query = Message::read(&mut BinDecoder::new(&data))
-                .map_err(|e| envoy_log_warn!("Failed to parse DNS query: {}", e))
-                .ok()?;
-            if query.message_type() != MessageType::Query {
-                return None;
-            }
-
-            let question = query.queries().first()?;
-            // DNS names are fully qualified with a trailing dot (e.g. "api.aws.com.").
-            // Strip it so our wildcard patterns like "*.aws.com" match correctly.
-            let domain = question.name().to_utf8().trim_end_matches('.').to_string();
-
-            let matcher = self
-                .config
-                .domains
-                .iter()
-                .find(|m| matches_domain(&m.domain, &domain))?;
-
-            match question.query_type() {
-                RecordType::A => {
-                    let base_ip: u32 = matcher.base_ip.parse::<Ipv4Addr>().ok()?.into();
-                    let ip = get_cache().allocate(
-                        domain,
-                        matcher.metadata.clone(),
-                        base_ip,
-                        matcher.prefix_len as u8,
-                    )?;
-                    build_dns_response(&query, question.name(), ip).ok()
-                }
-                _ => build_nodata_response(&query).ok(),
-            }
-        })();
-
-        let Some(response) = response else {
+        let Some(response) = self.process_dns_query(&data) else {
             return Continue;
         };
         let Some((addr, port)) = peer else {
@@ -206,6 +217,7 @@ fn build_nodata_response(query_message: &Message) -> Result<Vec<u8>, Box<dyn std
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
 
     #[test]
     fn test_domain_matcher_wildcard() {
@@ -411,5 +423,182 @@ mod tests {
         }"#;
 
         assert!(DnsGatewayFilterConfig::new(config.as_bytes()).is_none());
+    }
+
+    // ── process_dns_query tests ──────────────────────────────────────────────
+
+    fn make_dns_query(domain: &str, record_type: RecordType) -> Vec<u8> {
+        use hickory_proto::op::{OpCode, Query as DnsQuery};
+        use hickory_proto::rr::DNSClass;
+
+        let name = Name::from_utf8(domain).unwrap();
+        let mut q = DnsQuery::new();
+        q.set_name(name);
+        q.set_query_type(record_type);
+        q.set_query_class(DNSClass::IN);
+
+        let mut msg = Message::new();
+        msg.set_id(1);
+        msg.set_message_type(MessageType::Query);
+        msg.set_op_code(OpCode::Query);
+        msg.set_recursion_desired(true);
+        msg.add_query(q);
+        msg.to_vec().unwrap()
+    }
+
+    fn parse_response(bytes: &[u8]) -> Message {
+        Message::read(&mut BinDecoder::new(bytes)).unwrap()
+    }
+
+    #[test]
+    fn test_process_dns_query_a_record_matched() {
+        let filter = DnsGatewayFilter {
+            config: Arc::new(config::DnsGateway {
+                domains: vec![config::DomainMatcher {
+                    domain: "*.on-data-test.com".to_string(),
+                    base_ip: "10.100.0.0".to_string(),
+                    prefix_len: 24,
+                    metadata: HashMap::new(),
+                }],
+                fail_open: false,
+            }),
+        };
+
+        let query = make_dns_query("api.on-data-test.com", RecordType::A);
+        let response = filter.process_dns_query(&query);
+        assert!(response.is_some(), "expected a DNS response for matched A query");
+
+        let msg = parse_response(&response.unwrap());
+        assert_eq!(msg.message_type(), MessageType::Response);
+        assert_eq!(msg.response_code(), ResponseCode::NoError);
+        assert_eq!(msg.answers().len(), 1);
+        // The allocated virtual IP must fall within 10.100.0.0/24
+        match msg.answers()[0].data() {
+            RData::A(ip) => assert_eq!(&ip.0.octets()[..3], &[10, 100, 0]),
+            other => panic!("expected A record in response, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_process_dns_query_non_matched_domain() {
+        let filter = DnsGatewayFilter {
+            config: Arc::new(config::DnsGateway {
+                domains: vec![config::DomainMatcher {
+                    domain: "*.on-data-test.com".to_string(),
+                    base_ip: "10.100.1.0".to_string(),
+                    prefix_len: 24,
+                    metadata: HashMap::new(),
+                }],
+                fail_open: false,
+            }),
+        };
+
+        let query = make_dns_query("api.other-domain.com", RecordType::A);
+        assert!(
+            filter.process_dns_query(&query).is_none(),
+            "expected None for non-matched domain (pass through)"
+        );
+    }
+
+    #[test]
+    fn test_process_dns_query_aaaa_matched_returns_nodata() {
+        let filter = DnsGatewayFilter {
+            config: Arc::new(config::DnsGateway {
+                domains: vec![config::DomainMatcher {
+                    domain: "*.on-data-test.com".to_string(),
+                    base_ip: "10.100.2.0".to_string(),
+                    prefix_len: 24,
+                    metadata: HashMap::new(),
+                }],
+                fail_open: false,
+            }),
+        };
+
+        let query = make_dns_query("api.on-data-test.com", RecordType::AAAA);
+        let response = filter.process_dns_query(&query);
+        assert!(response.is_some(), "expected NODATA response for AAAA on matched domain");
+
+        let msg = parse_response(&response.unwrap());
+        assert_eq!(msg.message_type(), MessageType::Response);
+        assert_eq!(msg.response_code(), ResponseCode::NoError);
+        assert_eq!(msg.answers().len(), 0, "NODATA response must have no answers");
+    }
+
+    #[test]
+    fn test_process_dns_query_exhausted_fail_open_false_returns_nodata() {
+        // Use a /30 CIDR (4 IPs) to exhaust quickly
+        let base_ip = "10.200.0.0";
+        let base_ip_u32: u32 = base_ip.parse::<Ipv4Addr>().unwrap().into();
+
+        for i in 0..4 {
+            get_cache()
+                .allocate(
+                    format!("exhaust-{}.fail-closed-test.com", i),
+                    HashMap::new(),
+                    base_ip_u32,
+                    30,
+                )
+                .unwrap_or_else(|| panic!("failed to pre-allocate IP {}", i));
+        }
+
+        let filter = DnsGatewayFilter {
+            config: Arc::new(config::DnsGateway {
+                domains: vec![config::DomainMatcher {
+                    domain: "*.fail-closed-test.com".to_string(),
+                    base_ip: base_ip.to_string(),
+                    prefix_len: 30,
+                    metadata: HashMap::new(),
+                }],
+                fail_open: false,
+            }),
+        };
+
+        let query = make_dns_query("new.fail-closed-test.com", RecordType::A);
+        let response = filter.process_dns_query(&query);
+        assert!(
+            response.is_some(),
+            "expected NODATA response when CIDR exhausted and fail_open=false"
+        );
+        assert_eq!(
+            parse_response(&response.unwrap()).answers().len(),
+            0,
+            "exhausted CIDR with fail_open=false must return NODATA"
+        );
+    }
+
+    #[test]
+    fn test_process_dns_query_exhausted_fail_open_true_returns_none() {
+        // Use a /30 CIDR (4 IPs) to exhaust quickly
+        let base_ip = "10.201.0.0";
+        let base_ip_u32: u32 = base_ip.parse::<Ipv4Addr>().unwrap().into();
+
+        for i in 0..4 {
+            get_cache()
+                .allocate(
+                    format!("exhaust-{}.fail-open-test.com", i),
+                    HashMap::new(),
+                    base_ip_u32,
+                    30,
+                )
+                .unwrap_or_else(|| panic!("failed to pre-allocate IP {}", i));
+        }
+
+        let filter = DnsGatewayFilter {
+            config: Arc::new(config::DnsGateway {
+                domains: vec![config::DomainMatcher {
+                    domain: "*.fail-open-test.com".to_string(),
+                    base_ip: base_ip.to_string(),
+                    prefix_len: 30,
+                    metadata: HashMap::new(),
+                }],
+                fail_open: true,
+            }),
+        };
+
+        let query = make_dns_query("new.fail-open-test.com", RecordType::A);
+        assert!(
+            filter.process_dns_query(&query).is_none(),
+            "expected None (pass through) when CIDR exhausted and fail_open=true"
+        );
     }
 }

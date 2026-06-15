@@ -528,6 +528,60 @@ WAF inspection mode. Defaults to "REQUEST_ONLY" if not set.
 
 
 
+<a id="dns-gateway"></a>
+## DNS Gateway Configuration
+
+Configuration for the dns-gateway extension. Pass with --filter-type udp_listener for the dns_gateway filter, or --filter-type network for the cache_lookup filter. {/* range .Properties */}
+
+
+
+<a id="dns-gateway-CacheLookupConfig"></a>
+### Custom type: CacheLookupConfig
+
+
+
+#### filter_state_prefix
+
+Prefix for filter state keys written by the cache_lookup filter. Downstream filters read domain and metadata under this prefix. Default: "io.builtonenvoy.dns_gateway".
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ DNS Gateway Configuration](#dns-gateway) {/* range .Properties */}
+
+<a id="dns-gateway-DnsGatewayConfig"></a>
+### Custom type: DnsGatewayConfig
+
+
+
+#### domains
+
+Domain matchers, each with its own CIDR range for virtual IP allocation.
+
+| | |
+|---|---|
+| **Type** | `[]object` |
+| **Required** | Yes |
+| **Min items** | 1 |
+
+[↑ Top](#) | [↑ DNS Gateway Configuration](#dns-gateway)
+
+#### fail_open
+
+If true, forward queries to upstream resolvers when a CIDR range is exhausted. Default: false (return NODATA, preventing matched domains from leaking to upstream resolvers).
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ DNS Gateway Configuration](#dns-gateway) {/* range .Properties */} {/* range .CustomTypes */} {/* if .CustomTypes */}
+
+
+
+
 <a id="file-server"></a>
 ## File Server Configuration
 

@@ -53,17 +53,9 @@ Requires iptables/nftables rules to redirect application traffic to Envoy:
 
 ## Filter state
 
-`cache_lookup` sets the following keys, accessible via `%FILTER_STATE(...)%`:
-
-| Key                                | Example                          |
-| ---------------------------------- | -------------------------------- |
-| `envoy.dns_gateway.domain`         | `bucket-1.aws.com`               |
-| `envoy.dns_gateway.metadata.<key>` | value from matched domain config |
-
-Usage in Envoy config:
-
-- `%FILTER_STATE(envoy.dns_gateway.domain:PLAIN)%`
-- `%FILTER_STATE(envoy.dns_gateway.metadata.cluster:PLAIN)%`
+`cache_lookup` sets Envoy filter state keys readable via `%FILTER_STATE(<key>:PLAIN)%`.
+The default prefix is `io.builtonenvoy.dns_gateway` and is configurable via `filter_state_prefix`.
+See the [extension page](https://builtonenvoy.io/extensions/dns-gateway) for the full key reference.
 
 ## Domain matching
 
@@ -81,10 +73,13 @@ Usage in Envoy config:
 | `domains[].base_ip`     | string  | Base IPv4 address for virtual IP allocation (e.g. `"10.239.0.0"`) |
 | `domains[].prefix_len`  | integer | CIDR prefix length (1-32). A `/24` gives 256 IPs.                 |
 | `domains[].metadata`    | object  | String key-value pairs exposed via filter state                    |
+| `fail_open`             | boolean | If `true`, forward queries upstream when a CIDR range is exhausted. Default: `false` (return NODATA) |
 
 ### `cache_lookup`
 
-No configuration. Use `filter_config: {}`.
+| Field                  | Type   | Description                                                                          |
+| ---------------------- | ------ | ------------------------------------------------------------------------------------ |
+| `filter_state_prefix`  | string | Prefix for filter state keys. Default: `io.builtonenvoy.dns_gateway`                |
 
 ## Building
 
