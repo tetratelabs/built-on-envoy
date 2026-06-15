@@ -148,6 +148,9 @@ Commands:
   download <extension> [flags]
     Download extensions from the registry
 
+  logs [flags]
+    Print the CLI logs
+
   clean [flags]
     Clean cache directories
 
