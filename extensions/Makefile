@@ -24,7 +24,6 @@ ifeq ($(EXTENSION_PATH),)
 endif
 
 ROOT       := $(shell git rev-parse --show-toplevel)
-GO_VERSION := $(shell sed -ne 's/^go //gp' $(EXTENSION_PATH)/go.mod 2>/dev/null)
 GO_TOOL    := go -C $(EXTENSION_PATH) tool -modfile=$(ROOT)/tools/go.mod
 
 # Labels for this lua extension image.
@@ -176,12 +175,13 @@ push_rust: create_builder
 push_extproc:
 push_extproc: create_builder 
 	@echo "Building and pushing ExtProc extension image for multiple architectures: $(IMAGE)"
-	@docker buildx build \
+	@GO_VERSION=$$(sed -ne 's/^go //gp' $(EXTENSION_PATH)/go.mod); \
+	docker buildx build \
 		--builder $(BUILDER_NAME) \
 		--platform=$(PLATFORMS) \
 		--output type=registry,oci-mediatypes=true$(registry_output) \
 		--provenance=false \
-		--build-arg GO_VERSION="$(GO_VERSION)" \
+		--build-arg GO_VERSION="$$GO_VERSION" \
 		$(PUSH_ANNOTATIONS) \
 		--tag $(IMAGE) $(DEV_TAG) \
 		--file Dockerfile.extproc ./$(EXTENSION_PATH)
