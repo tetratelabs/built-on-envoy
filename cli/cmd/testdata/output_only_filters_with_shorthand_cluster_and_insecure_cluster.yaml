@@ -19,6 +19,10 @@ clusters:
     name: envoy.transport_sockets.tls
     typed_config:
       '@type': type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+      common_tls_context:
+        tls_params:
+          compliance_policies:
+          - FIPS_202205
       sni: example.com
   type: STRICT_DNS
 - dns_lookup_family: V4_ONLY
