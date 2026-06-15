@@ -2,6 +2,8 @@ module github.com/tetratelabs/built-on-envoy
 
 go 1.26.4
 
+godebug fips140=only
+
 require (
 	github.com/alecthomas/kong v1.15.0
 	github.com/envoyproxy/go-control-plane/envoy v1.37.1-0.20260427194735-8b4b133fe2a5

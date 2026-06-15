@@ -687,8 +687,18 @@ func buildTestUpstreamCluster(name string, hostname string, port uint32, tls boo
 		return cluster, nil
 	}
 
-	// Add TLS context
-	tlsContext := &tlsv3.UpstreamTlsContext{Sni: hostname}
+	// Add TLS context with FIPS 140-3 (FIPS_202205) compliance policy, which restricts
+	// Envoy to FIPS-approved cipher suites and curves for both TLS 1.2 and 1.3.
+	tlsContext := &tlsv3.UpstreamTlsContext{
+		Sni: hostname,
+		CommonTlsContext: &tlsv3.CommonTlsContext{
+			TlsParams: &tlsv3.TlsParameters{
+				CompliancePolicies: []tlsv3.TlsParameters_CompliancePolicy{
+					tlsv3.TlsParameters_FIPS_202205,
+				},
+			},
+		},
+	}
 	tlsContextAny, err := anypb.New(tlsContext)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal TLS context to Any: %w", err)
