@@ -383,12 +383,12 @@
     "examples": [
       {
         "title": "Single Wildcard Domain",
-        "description": "Intercept DNS queries for *.aws.com and route TCP connections to virtual IPs via the\nshared cache. Both filter types are required: specify the extension twice, once per\nfilter type. The udp_listener filter carries the domain config; the network filter\nrequires no configuration.\n",
+        "description": "Intercept DNS queries for `*.aws.com` and route TCP connections to virtual IPs via the\nshared cache. Both filter types are required: specify the extension twice, once per\nfilter type. The `udp_listener` filter carries the domain config; the `network` filter\nrequires no configuration.\n",
         "code": "boe run \\\n  --extension dns-gateway --filter-type udp_listener --config '\n    {\n      \"domains\": [\n        {\n          \"domain\": \"*.aws.com\",\n          \"base_ip\": \"10.0.0.0\",\n          \"prefix_len\": 24,\n          \"metadata\": {\n            \"cluster\": \"aws_cluster\"\n          }\n        }\n      ]\n    }' \\\n  --extension dns-gateway --filter-type network\n"
       },
       {
         "title": "Multiple Domains with Routing Metadata",
-        "description": "Route different domain patterns to different upstream clusters using per-domain metadata.\nDownstream filters can read the domain and metadata from Envoy filter state, e.g.\n%FILTER_STATE(io.builtonenvoy.dns_gateway.domain:PLAIN)% in a tcp_proxy route.\n",
+        "description": "Route different domain patterns to different upstream clusters using per-domain metadata.\nDownstream filters can read the domain and metadata from Envoy filter state, e.g.\n`%FILTER_STATE(io.builtonenvoy.dns_gateway.domain:PLAIN)%` in a `tcp_proxy` route.\n",
         "code": "boe run \\\n  --extension dns-gateway --filter-type udp_listener --config '\n    {\n      \"domains\": [\n        {\n          \"domain\": \"*.aws.com\",\n          \"base_ip\": \"10.0.0.0\",\n          \"prefix_len\": 24,\n          \"metadata\": {\n            \"cluster\": \"aws_cluster\",\n            \"token\": \"abc123\"\n          }\n        },\n        {\n          \"domain\": \"example.com\",\n          \"base_ip\": \"10.0.1.0\",\n          \"prefix_len\": 24,\n          \"metadata\": {\n            \"cluster\": \"example_cluster\",\n            \"token\": \"def456\"\n          }\n        }\n      ]\n    }' \\\n  --extension dns-gateway --filter-type network\n"
       }
     ],
