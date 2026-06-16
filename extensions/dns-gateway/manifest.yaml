@@ -98,9 +98,9 @@ filterType:
 examples:
   - title: Single Wildcard Domain
     description: |
-      Intercept DNS queries for *.aws.com and route TCP connections to virtual IPs via the
+      Intercept DNS queries for `*.aws.com` and route TCP connections to virtual IPs via the
       shared cache. Both filter types are required: specify the extension twice, once per
-      filter type. The udp_listener filter carries the domain config; the network filter
+      filter type. The `udp_listener` filter carries the domain config; the `network` filter
       requires no configuration.
     code: |
       boe run \
@@ -122,7 +122,7 @@ examples:
     description: |
       Route different domain patterns to different upstream clusters using per-domain metadata.
       Downstream filters can read the domain and metadata from Envoy filter state, e.g.
-      %FILTER_STATE(io.builtonenvoy.dns_gateway.domain:PLAIN)% in a tcp_proxy route.
+      `%FILTER_STATE(io.builtonenvoy.dns_gateway.domain:PLAIN)%` in a `tcp_proxy` route.
     code: |
       boe run \
         --extension dns-gateway --filter-type udp_listener --config '
