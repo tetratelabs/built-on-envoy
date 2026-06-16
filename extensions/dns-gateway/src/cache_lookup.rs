@@ -12,7 +12,7 @@ use envoy_proxy_dynamic_modules_rust_sdk::*;
 use serde::Deserialize;
 use std::net::Ipv4Addr;
 
-use super::virtual_ip_cache::get_cache;
+use crate::virtual_ip_cache::get_cache;
 
 const DEFAULT_FILTER_STATE_PREFIX: &str = "io.builtonenvoy.dns_gateway";
 

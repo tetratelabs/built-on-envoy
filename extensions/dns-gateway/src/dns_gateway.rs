@@ -9,17 +9,14 @@
 //! 1. UDP listener filter structure with `UdpListenerFilterConfig` and `UdpListenerFilter` traits.
 //! 2. DNS query parsing and response.
 
-pub mod cache_lookup;
-mod config;
-mod virtual_ip_cache;
-
+use crate::config;
+use crate::virtual_ip_cache::get_cache;
 use envoy_proxy_dynamic_modules_rust_sdk::*;
 use hickory_proto::op::{Message, MessageType, ResponseCode};
 use hickory_proto::rr::{Name, RData, Record, RecordType};
 use hickory_proto::serialize::binary::{BinDecodable, BinDecoder};
 use std::net::Ipv4Addr;
 use std::sync::Arc;
-use virtual_ip_cache::get_cache;
 
 /// Matches a domain against a pattern.
 /// Supports exact matches and wildcard patterns like "*.aws.com".

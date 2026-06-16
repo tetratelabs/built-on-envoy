@@ -5,7 +5,10 @@
 
 use envoy_proxy_dynamic_modules_rust_sdk::*;
 
+mod cache_lookup;
+mod config;
 mod dns_gateway;
+mod virtual_ip_cache;
 
 declare_all_init_functions!(init,
     network: new_network_filter_config_fn,
@@ -22,8 +25,8 @@ fn new_network_filter_config_fn<EC: EnvoyNetworkFilterConfig, ENF: EnvoyNetworkF
     filter_config: &[u8],
 ) -> Option<Box<dyn NetworkFilterConfig<ENF>>> {
     match filter_name {
-        "cache_lookup" => Some(Box::new(
-            dns_gateway::cache_lookup::CacheLookupFilterConfig::new(filter_config),
+        "dns-gateway" => Some(Box::new(
+            cache_lookup::CacheLookupFilterConfig::new(filter_config),
         )),
         _ => panic!("Unknown network filter name: {filter_name}"),
     }
@@ -38,7 +41,7 @@ fn new_udp_listener_filter_config_fn<
     filter_config: &[u8],
 ) -> Option<Box<dyn UdpListenerFilterConfig<ELF>>> {
     match filter_name {
-        "dns_gateway" => {
+        "dns-gateway" => {
             let config = dns_gateway::DnsGatewayFilterConfig::new(filter_config)?;
             Some(Box::new(config))
         }
@@ -51,12 +54,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_new_network_filter_config_cache_lookup() {
+    fn test_new_network_filter_config_dns_gateway() {
         let mut mock = MockEnvoyNetworkFilterConfig::new();
         let result = new_network_filter_config_fn::<
             MockEnvoyNetworkFilterConfig,
             MockEnvoyNetworkFilter,
-        >(&mut mock, "cache_lookup", b"");
+        >(&mut mock, "dns-gateway", b"");
         assert!(result.is_some());
     }
 
@@ -82,7 +85,7 @@ mod tests {
         let result = new_udp_listener_filter_config_fn::<
             MockEnvoyUdpListenerFilterConfig,
             MockEnvoyUdpListenerFilter,
-        >(&mut mock, "dns_gateway", config.as_bytes());
+        >(&mut mock, "dns-gateway", config.as_bytes());
         assert!(result.is_some());
     }
 
@@ -92,7 +95,7 @@ mod tests {
         let result = new_udp_listener_filter_config_fn::<
             MockEnvoyUdpListenerFilterConfig,
             MockEnvoyUdpListenerFilter,
-        >(&mut mock, "dns_gateway", b"invalid");
+        >(&mut mock, "dns-gateway", b"invalid");
         assert!(result.is_none());
     }
 

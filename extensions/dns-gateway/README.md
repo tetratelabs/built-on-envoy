@@ -21,13 +21,16 @@ Requires iptables/nftables rules to redirect application traffic to Envoy:
 
 ## How it works
 
-1. **`dns_gateway`** (UDP listener filter) — Intercepts DNS queries. If the queried domain matches
+Both filters are provided by the same `dns-gateway` dynamic module; enable each by its filter
+type (`udp_listener` and `network`).
+
+1. **UDP listener filter** — Intercepts DNS queries. If the queried domain matches
    a configured pattern, allocates a virtual IP from that domain's dedicated CIDR range and responds
    with an A record. Each domain pattern gets its own IP range, so `*.aws.com` and `*.google.com`
    allocate from separate subnets. Caches the mapping from virtual IP to domain and metadata.
    Non-matching queries pass through.
 
-2. **`cache_lookup`** (network filter) — On new TCP connections, looks up the destination virtual IP
+2. **Network filter** — On new TCP connections, looks up the destination virtual IP
    in the shared cache and sets the resolved domain and metadata as Envoy
    [filter state](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/data_sharing_between_filters#primitives)
    for use in routing.
@@ -36,13 +39,13 @@ Requires iptables/nftables rules to redirect application traffic to Envoy:
  Application
      |  DNS query: "bucket-1.aws.com"
      v
- dns_gateway
+ UDP listener filter
      |  matches "*.aws.com", allocates 10.239.0.0 from *.aws.com's range, responds with A record
      v
  Application
      |  TCP connect to 10.239.0.0:443
      v
- cache_lookup
+ network filter
      |  resolves 10.239.0.0 -> domain="bucket-1.aws.com", metadata.cluster="aws"
      v
  tcp_proxy
@@ -53,7 +56,7 @@ Requires iptables/nftables rules to redirect application traffic to Envoy:
 
 ## Filter state
 
-`cache_lookup` sets Envoy filter state keys readable via `%FILTER_STATE(<key>:PLAIN)%`.
+The network filter sets Envoy filter state keys readable via `%FILTER_STATE(<key>:PLAIN)%`.
 The default prefix is `io.builtonenvoy.dns_gateway` and is configurable via `filter_state_prefix`.
 See the [extension page](https://builtonenvoy.io/extensions/dns-gateway) for the full key reference.
 
@@ -64,7 +67,7 @@ See the [extension page](https://builtonenvoy.io/extensions/dns-gateway) for the
 
 ## Configuration
 
-### `dns_gateway`
+### UDP listener filter
 
 | Field                   | Type    | Description                                                        |
 | ----------------------- | ------- | ------------------------------------------------------------------ |
@@ -75,7 +78,7 @@ See the [extension page](https://builtonenvoy.io/extensions/dns-gateway) for the
 | `domains[].metadata`    | object  | String key-value pairs exposed via filter state                    |
 | `fail_open`             | boolean | If `true`, forward queries upstream when a CIDR range is exhausted. Default: `false` (return NODATA) |
 
-### `cache_lookup`
+### Network filter
 
 | Field                  | Type   | Description                                                                          |
 | ---------------------- | ------ | ------------------------------------------------------------------------------------ |
