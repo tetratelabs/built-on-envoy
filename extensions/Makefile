@@ -24,18 +24,17 @@ ifeq ($(EXTENSION_PATH),)
 endif
 
 ROOT       := $(shell git rev-parse --show-toplevel)
-GO_VERSION := $(shell sed -ne 's/^go //gp' $(EXTENSION_PATH)/go.mod)
 GO_TOOL    := go -C $(EXTENSION_PATH) tool -modfile=$(ROOT)/tools/go.mod
 
 # Labels for this lua extension image.
-NAME             := $(shell $(GO_TOOL) yq '.name' ./$(EXTENSION_PATH)/manifest.yaml)
-VERSION          := $(shell $(GO_TOOL) yq '.version' ./$(EXTENSION_PATH)/manifest.yaml)
-TYPE             := $(shell $(GO_TOOL) yq '.type' ./$(EXTENSION_PATH)/manifest.yaml)
-FILTER_TYPE      := $(shell $(GO_TOOL) yq '(.filterType // []) | join(",")' ./$(EXTENSION_PATH)/manifest.yaml)
-DESCRIPTION      := $(shell $(GO_TOOL) yq '.description' ./$(EXTENSION_PATH)/manifest.yaml)
+NAME             := $(shell $(GO_TOOL) yq '.name' manifest.yaml)
+VERSION          := $(shell $(GO_TOOL) yq '.version' manifest.yaml)
+TYPE             := $(shell $(GO_TOOL) yq '.type' manifest.yaml)
+FILTER_TYPE      := $(shell $(GO_TOOL) yq '(.filterType // []) | join(",")' manifest.yaml)
+DESCRIPTION      := $(shell $(GO_TOOL) yq '.description' manifest.yaml)
 TIMESTAMP        := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 COMMIT_SHA       := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
-AUTHOR           := $(shell $(GO_TOOL) yq '.author' ./$(EXTENSION_PATH)/manifest.yaml)
+AUTHOR           := $(shell $(GO_TOOL) yq '.author' manifest.yaml)
 LICENSE          := Apache-2.0
 
 HUB    := $(or $(BOE_REGISTRY),$(OCI_REGISTRY)/built-on-envoy)
@@ -173,14 +172,16 @@ push_rust: create_builder
 		--file Dockerfile.rust ./$(EXTENSION_PATH)
 
 .PHONY: push_extproc
-push_extproc: create_builder
+push_extproc:
+push_extproc: create_builder 
 	@echo "Building and pushing ExtProc extension image for multiple architectures: $(IMAGE)"
-	@docker buildx build \
+	@GO_VERSION=$$(sed -ne 's/^go //gp' $(EXTENSION_PATH)/go.mod); \
+	docker buildx build \
 		--builder $(BUILDER_NAME) \
 		--platform=$(PLATFORMS) \
 		--output type=registry,oci-mediatypes=true$(registry_output) \
 		--provenance=false \
-		--build-arg GO_VERSION="$(GO_VERSION)" \
+		--build-arg GO_VERSION="$$GO_VERSION" \
 		$(PUSH_ANNOTATIONS) \
 		--tag $(IMAGE) $(DEV_TAG) \
 		--file Dockerfile.extproc ./$(EXTENSION_PATH)
