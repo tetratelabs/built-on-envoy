@@ -242,19 +242,14 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 	for _, ext := range refs {
 		bundle, name, tag := splitRef(ext)
 
-		// The reserved name "goplugin-loader" is not a downloadable extension: it drives
-		// the composer's goplugin-loader filter directly from the user-supplied --config.
-		// Resolve the composer version, ensure libcomposer is available, and synthesize a
-		// manifest so the rest of the pipeline treats it like a dynamic-module extension.
+		// The reserved name "goplugin-loader" is the built-in loader compiled into the composer
+		// bundle; it has no standalone artifact of its own. Always resolve it from the composer
+		// bundle (libcomposer.so), whether referenced bare as "goplugin-loader" or fully as
+		// "composer/goplugin-loader". The bundle's embedded goplugin-loader/manifest.yaml is then
+		// resolved by the normal bundled-extension path below, yielding a c-shared, composer-hosted
+		// dynamic-module extension.
 		if name == extensions.GoPluginLoaderName {
-			manifest, err := resolveGoPluginLoader(ctx, downloader, tag)
-			if err != nil {
-				return nil, err
-			}
-			manifest.Remote = true
-			manifest.RemoteRef = ext
-			downloaded = append(downloaded, manifest)
-			continue
+			bundle = extensions.ComposerBundle
 		}
 
 		_, _ = fmt.Fprintf(os.Stderr, "→ %sFetching %s...%s\n", internal.ANSIBold, name, internal.ANSIReset)
@@ -295,38 +290,6 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 	}
 
 	return downloaded, nil
-}
-
-// resolveGoPluginLoader resolves the composer-lite version for the raw goplugin-loader
-// extension, ensures libcomposer.so is present in the local cache, and returns a synthetic
-// manifest describing it. The tag (if not "latest") is interpreted as the composer version.
-func resolveGoPluginLoader(ctx context.Context, downloader *extensions.Downloader, tag string) (*extensions.Manifest, error) {
-	version := tag
-	if version == "" || version == "latest" {
-		resolved, err := extensions.ResolveLatestComposerVersion(ctx, downloader.Logger)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve composer version for %s: %w", extensions.GoPluginLoaderName, err)
-		}
-		version = resolved
-	}
-
-	_, _ = fmt.Fprintf(os.Stderr, "→ %sPreparing %s (composer %s)...%s\n",
-		internal.ANSIBold, extensions.GoPluginLoaderName, version, internal.ANSIReset)
-
-	if err := extensions.CheckOrDownloadLibComposerLite(ctx, downloader, version); err != nil {
-		return nil, fmt.Errorf("failed to download libcomposer %s for %s: %w", version, extensions.GoPluginLoaderName, err)
-	}
-
-	manifest := &extensions.Manifest{
-		Name:            extensions.GoPluginLoaderName,
-		Type:            extensions.TypeGo,
-		CShared:         true,
-		Parent:          extensions.ComposerLiteBundle,
-		Version:         version,
-		ComposerVersion: version,
-	}
-	manifest.ApplyDefaults()
-	return manifest, nil
 }
 
 // parseLogLevels parses a log level string in the format "component:level,component2:level".

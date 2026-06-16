@@ -253,8 +253,7 @@ func setupDynamicModuleSearchPath(params *ConfigGenerationParams) (string, func(
 	if composerVersion != "" {
 		composerPath := extensions.LocalCacheComposerLiteLib(params.Dirs, composerVersion)
 		linkPath := filepath.Join(tempDir, filepath.Base(composerPath))
-		// Skip if libcomposer-lite.so was already linked above by a c-shared bundle-hosted
-		// extension (e.g. goplugin-loader), to avoid a "file exists" error.
+		// Skip if libcomposer-lite.so was already linked above, to avoid a "file exists" error.
 		if _, err := os.Stat(linkPath); err == nil {
 			params.Logger.Debug("libcomposer-lite already linked, skipping", "linkPath", linkPath)
 		} else if _, err := os.Stat(composerPath); err == nil {
