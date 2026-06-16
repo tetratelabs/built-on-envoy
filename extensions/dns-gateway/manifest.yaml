@@ -23,6 +23,8 @@ longDescription: |
   * Attach per-domain credentials or policy metadata to proxied connections
   * Enforce egress access control by selectively intercepting DNS for specific domains
 
+  ![img](/extensions/dns-gateway.png)
+
   ## How it works
 
   The extension is a pair of filters that work together. Both are provided by the same
@@ -80,7 +82,6 @@ longDescription: |
 tags:
   - access-control
   - dns
-  - dynamic-module
   - egress
   - networking
   - routing
@@ -90,6 +91,7 @@ tags:
   - virtual-ip
 license: Apache-2.0
 type: rust
+featured: true
 filterType:
   - udp_listener
   - network

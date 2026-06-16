@@ -234,6 +234,11 @@
 	font-style: italic;
 }
 
+.long-description.prose img {
+	max-width: 100%;
+	height: auto;
+}
+
 .long-description.prose a {
 	color: var(--primary);
 	text-decoration: none;
@@ -359,6 +364,11 @@
 	background: none;
 	padding: 0;
 	border: none;
+}
+
+.example-description.prose img {
+	max-width: 100%;
+	height: auto;
 }
 
 .example-description.prose a {
