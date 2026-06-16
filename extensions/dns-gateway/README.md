@@ -40,13 +40,13 @@ type (`udp_listener` and `network`).
      |  DNS query: "bucket-1.aws.com"
      v
  UDP listener filter
-     |  matches "*.aws.com", allocates 10.239.0.0 from *.aws.com's range, responds with A record
+     |  matches "*.aws.com", allocates 10.0.0.0 from *.aws.com's range, responds with A record
      v
  Application
-     |  TCP connect to 10.239.0.0:443
+     |  TCP connect to 10.0.0.0:443
      v
  network filter
-     |  resolves 10.239.0.0 -> domain="bucket-1.aws.com", metadata.cluster="aws"
+     |  resolves 10.0.0.0 -> domain="bucket-1.aws.com", metadata.cluster="aws"
      v
  tcp_proxy
      |  routes to upstream cluster using filter state
@@ -73,7 +73,7 @@ See the [extension page](https://builtonenvoy.io/extensions/dns-gateway) for the
 | ----------------------- | ------- | ------------------------------------------------------------------ |
 | `domains`               | array   | Domain matchers, each with its own CIDR range                      |
 | `domains[].domain`      | string  | Exact (`"example.com"`) or wildcard (`"*.example.com"`) pattern    |
-| `domains[].base_ip`     | string  | Base IPv4 address for virtual IP allocation (e.g. `"10.239.0.0"`) |
+| `domains[].base_ip`     | string  | Base IPv4 address for virtual IP allocation (e.g. `"10.0.0.0"`) |
 | `domains[].prefix_len`  | integer | CIDR prefix length (1-32). A `/24` gives 256 IPs.                 |
 | `domains[].metadata`    | object  | String key-value pairs exposed via filter state                    |
 | `fail_open`             | boolean | If `true`, forward queries upstream when a CIDR range is exhausted. Default: `false` (return NODATA) |

@@ -239,7 +239,7 @@ mod tests {
             "domains": [
                 {
                     "domain": "*.aws.com",
-                    "base_ip": "10.239.0.0",
+                    "base_ip": "10.0.0.0",
                     "prefix_len": 24,
                     "metadata": {
                         "cluster": "aws_cluster",
@@ -266,9 +266,9 @@ mod tests {
     fn test_config_parsing_multiple_domains() {
         let config = r#"{
             "domains": [
-                {"domain": "*.aws.com", "base_ip": "10.239.0.0", "prefix_len": 24, "metadata": {"cluster": "aws"}},
-                {"domain": "*.google.com", "base_ip": "10.239.1.0", "prefix_len": 24, "metadata": {"cluster": "google"}},
-                {"domain": "exact.example.com", "base_ip": "10.239.2.0", "prefix_len": 24, "metadata": {"cluster": "exact"}}
+                {"domain": "*.aws.com", "base_ip": "10.0.0.0", "prefix_len": 24, "metadata": {"cluster": "aws"}},
+                {"domain": "*.google.com", "base_ip": "10.0.1.0", "prefix_len": 24, "metadata": {"cluster": "google"}},
+                {"domain": "exact.example.com", "base_ip": "10.0.2.0", "prefix_len": 24, "metadata": {"cluster": "exact"}}
             ]
         }"#;
 
@@ -393,7 +393,7 @@ mod tests {
     fn test_config_parsing_rejects_bare_wildcard() {
         let config = r#"{
             "domains": [
-                {"domain": "*", "base_ip": "10.239.0.0", "prefix_len": 24, "metadata": {}}
+                {"domain": "*", "base_ip": "10.0.0.0", "prefix_len": 24, "metadata": {}}
             ]
         }"#;
 

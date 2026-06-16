@@ -108,8 +108,8 @@ mod tests {
     use super::*;
 
     const BASE_10_10: u32 = 0x0A0A_0000; // 10.10.0.0
-    const BASE_239_0: u32 = 0x0AEF_0000; // 10.239.0.0
-    const BASE_239_1: u32 = 0x0AEF_0100; // 10.239.1.0
+    const BASE_0_0: u32 = 0x0A00_0000; // 10.0.0.0
+    const BASE_0_1: u32 = 0x0A00_0100; // 10.0.1.0
 
     #[test]
     fn test_single_range_sequential_allocation() {
@@ -131,14 +131,14 @@ mod tests {
         let cache = VirtualIpCache::new();
 
         let ip_a = cache
-            .allocate("a.amazon.com".into(), HashMap::new(), BASE_239_0, 24)
+            .allocate("a.amazon.com".into(), HashMap::new(), BASE_0_0, 24)
             .unwrap();
         let ip_b = cache
-            .allocate("a.amazonaws.com".into(), HashMap::new(), BASE_239_1, 24)
+            .allocate("a.amazonaws.com".into(), HashMap::new(), BASE_0_1, 24)
             .unwrap();
 
-        assert_eq!(ip_a, Ipv4Addr::new(10, 239, 0, 0));
-        assert_eq!(ip_b, Ipv4Addr::new(10, 239, 1, 0));
+        assert_eq!(ip_a, Ipv4Addr::new(10, 0, 0, 0));
+        assert_eq!(ip_b, Ipv4Addr::new(10, 0, 1, 0));
     }
 
     #[test]
@@ -146,10 +146,10 @@ mod tests {
         let cache = VirtualIpCache::new();
 
         let ip1 = cache
-            .allocate("shared.example.com".into(), HashMap::new(), BASE_239_0, 24)
+            .allocate("shared.example.com".into(), HashMap::new(), BASE_0_0, 24)
             .unwrap();
         let ip2 = cache
-            .allocate("shared.example.com".into(), HashMap::new(), BASE_239_0, 24)
+            .allocate("shared.example.com".into(), HashMap::new(), BASE_0_0, 24)
             .unwrap();
 
         assert_eq!(ip1, ip2);
@@ -163,7 +163,7 @@ mod tests {
         meta.insert("cluster".to_string(), "aws_cluster".to_string());
 
         let ip = cache
-            .allocate("api.aws.com".into(), meta, BASE_239_0, 24)
+            .allocate("api.aws.com".into(), meta, BASE_0_0, 24)
             .unwrap();
         let (domain, metadata) = cache.lookup(ip).unwrap();
         assert_eq!(domain, "api.aws.com");
