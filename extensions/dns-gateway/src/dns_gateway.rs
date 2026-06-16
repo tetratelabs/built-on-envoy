@@ -44,27 +44,19 @@ pub struct DnsGatewayFilterConfig {
 impl DnsGatewayFilterConfig {
     /// Creates a new DNS gateway filter configuration from the raw config bytes.
     ///
-    /// The config arrives as a JSON-serialized google.protobuf.Struct
-    /// wrapped in an Any: `{"@type":"...Struct", "value":{"domains":[...]}}`.
+    /// The config arrives as the JSON object passed via `--config`, e.g.
+    /// `{"domains":[...],"fail_open":false}`.
     pub fn new(config: &[u8]) -> Option<Self> {
-        let gateway_config: config::DnsGateway = std::str::from_utf8(config)
-            .map_err(|e| eprintln!("Invalid UTF-8: {e}"))
-            .and_then(|s| {
-                serde_json::from_str::<serde_json::Value>(s)
-                    .map_err(|e| eprintln!("Invalid JSON: {e}"))
-            })
-            .and_then(|v| {
-                serde_json::from_value(v["value"].clone())
-                    .map_err(|e| eprintln!("Invalid config: {e}"))
-            })
+        let gateway_config: config::DnsGateway = serde_json::from_slice(config)
+            .map_err(|e| envoy_log_error!("Invalid DNS gateway config: {e}"))
             .ok()?;
 
         for d in &gateway_config.domains {
             let name = Name::from_utf8(&d.domain)
-                .map_err(|e| eprintln!("Invalid domain '{}': {e}", d.domain))
+                .map_err(|e| envoy_log_error!("Invalid domain '{}': {e}", d.domain))
                 .ok()?;
             if name.is_wildcard() && name.num_labels() < 2 {
-                eprintln!(
+                envoy_log_error!(
                     "Bare wildcard '{}' is not allowed, use '*.example.com' instead",
                     d.domain
                 );
@@ -73,11 +65,13 @@ impl DnsGatewayFilterConfig {
 
             d.base_ip
                 .parse::<Ipv4Addr>()
-                .map_err(|e| eprintln!("Invalid base_ip '{}' for '{}': {e}", d.base_ip, d.domain))
+                .map_err(|e| {
+                    envoy_log_error!("Invalid base_ip '{}' for '{}': {e}", d.base_ip, d.domain)
+                })
                 .ok()?;
 
             if !(1..=32).contains(&d.prefix_len) {
-                eprintln!("Invalid prefix_len {} for '{}'", d.prefix_len, d.domain);
+                envoy_log_error!("Invalid prefix_len {} for '{}'", d.prefix_len, d.domain);
                 return None;
             }
         }
@@ -240,22 +234,19 @@ mod tests {
     }
 
     #[test]
-    fn test_config_parsing_valid_struct() {
+    fn test_config_parsing_valid() {
         let config = r#"{
-            "@type": "type.googleapis.com/google.protobuf.Struct",
-            "value": {
-                "domains": [
-                    {
-                        "domain": "*.aws.com",
-                        "base_ip": "10.239.0.0",
-                        "prefix_len": 24,
-                        "metadata": {
-                            "cluster": "aws_cluster",
-                            "region": "us-east-1"
-                        }
+            "domains": [
+                {
+                    "domain": "*.aws.com",
+                    "base_ip": "10.239.0.0",
+                    "prefix_len": 24,
+                    "metadata": {
+                        "cluster": "aws_cluster",
+                        "region": "us-east-1"
                     }
-                ]
-            }
+                }
+            ]
         }"#;
 
         let config = DnsGatewayFilterConfig::new(config.as_bytes()).unwrap();
@@ -274,14 +265,11 @@ mod tests {
     #[test]
     fn test_config_parsing_multiple_domains() {
         let config = r#"{
-            "@type": "type.googleapis.com/google.protobuf.Struct",
-            "value": {
-                "domains": [
-                    {"domain": "*.aws.com", "base_ip": "10.239.0.0", "prefix_len": 24, "metadata": {"cluster": "aws"}},
-                    {"domain": "*.google.com", "base_ip": "10.239.1.0", "prefix_len": 24, "metadata": {"cluster": "google"}},
-                    {"domain": "exact.example.com", "base_ip": "10.239.2.0", "prefix_len": 24, "metadata": {"cluster": "exact"}}
-                ]
-            }
+            "domains": [
+                {"domain": "*.aws.com", "base_ip": "10.239.0.0", "prefix_len": 24, "metadata": {"cluster": "aws"}},
+                {"domain": "*.google.com", "base_ip": "10.239.1.0", "prefix_len": 24, "metadata": {"cluster": "google"}},
+                {"domain": "exact.example.com", "base_ip": "10.239.2.0", "prefix_len": 24, "metadata": {"cluster": "exact"}}
+            ]
         }"#;
 
         let config = DnsGatewayFilterConfig::new(config.as_bytes()).unwrap();
@@ -291,11 +279,9 @@ mod tests {
     #[test]
     fn test_config_parsing_missing_base_ip() {
         let config = r#"{
-            "value": {
-                "domains": [
-                    {"domain": "*.aws.com", "prefix_len": 24, "metadata": {}}
-                ]
-            }
+            "domains": [
+                {"domain": "*.aws.com", "prefix_len": 24, "metadata": {}}
+            ]
         }"#;
 
         assert!(DnsGatewayFilterConfig::new(config.as_bytes()).is_none());
@@ -305,11 +291,9 @@ mod tests {
     fn test_config_parsing_missing_prefix_len() {
         // serde defaults missing uint32 to 0, which fails the 1..=32 range check.
         let config = r#"{
-            "value": {
-                "domains": [
-                    {"domain": "*.aws.com", "base_ip": "10.10.0.0", "metadata": {}}
-                ]
-            }
+            "domains": [
+                {"domain": "*.aws.com", "base_ip": "10.10.0.0", "metadata": {}}
+            ]
         }"#;
 
         assert!(DnsGatewayFilterConfig::new(config.as_bytes()).is_none());
@@ -318,11 +302,9 @@ mod tests {
     #[test]
     fn test_config_parsing_invalid_prefix_len() {
         let config = r#"{
-            "value": {
-                "domains": [
-                    {"domain": "*.aws.com", "base_ip": "10.10.0.0", "prefix_len": 33, "metadata": {}}
-                ]
-            }
+            "domains": [
+                {"domain": "*.aws.com", "base_ip": "10.10.0.0", "prefix_len": 33, "metadata": {}}
+            ]
         }"#;
 
         assert!(DnsGatewayFilterConfig::new(config.as_bytes()).is_none());
@@ -336,11 +318,9 @@ mod tests {
     #[test]
     fn test_config_parsing_non_string_metadata_value() {
         let config = r#"{
-            "value": {
-                "domains": [
-                    {"domain": "*.aws.com", "base_ip": "10.10.0.0", "prefix_len": 24, "metadata": {"count": 42}}
-                ]
-            }
+            "domains": [
+                {"domain": "*.aws.com", "base_ip": "10.10.0.0", "prefix_len": 24, "metadata": {"count": 42}}
+            ]
         }"#;
 
         assert!(DnsGatewayFilterConfig::new(config.as_bytes()).is_none());
@@ -412,11 +392,9 @@ mod tests {
     #[test]
     fn test_config_parsing_rejects_bare_wildcard() {
         let config = r#"{
-            "value": {
-                "domains": [
-                    {"domain": "*", "base_ip": "10.239.0.0", "prefix_len": 24, "metadata": {}}
-                ]
-            }
+            "domains": [
+                {"domain": "*", "base_ip": "10.239.0.0", "prefix_len": 24, "metadata": {}}
+            ]
         }"#;
 
         assert!(DnsGatewayFilterConfig::new(config.as_bytes()).is_none());

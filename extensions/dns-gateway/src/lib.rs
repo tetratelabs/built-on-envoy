@@ -75,11 +75,9 @@ mod tests {
     #[test]
     fn test_new_udp_listener_filter_config_dns_gateway() {
         let config = r#"{
-            "value": {
-                "domains": [
-                    {"domain": "*.librs-test.com", "base_ip": "10.200.0.0", "prefix_len": 24, "metadata": {"cluster": "test"}}
-                ]
-            }
+            "domains": [
+                {"domain": "*.librs-test.com", "base_ip": "10.200.0.0", "prefix_len": 24, "metadata": {"cluster": "test"}}
+            ]
         }"#;
         let mut mock = MockEnvoyUdpListenerFilterConfig::new();
         let result = new_udp_listener_filter_config_fn::<
