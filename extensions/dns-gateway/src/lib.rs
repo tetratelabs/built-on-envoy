@@ -3,6 +3,10 @@
 // The full text of the Apache license is available in the LICENSE file at
 // the root of the repo.
 
+// TODO: Remove this once the SDK dependency is updated to a version that contains
+//       this fix: https://github.com/envoyproxy/envoy/pull/44654
+#![allow(unpredictable_function_pointer_comparisons)]
+
 use envoy_proxy_dynamic_modules_rust_sdk::*;
 
 mod cache_lookup;
