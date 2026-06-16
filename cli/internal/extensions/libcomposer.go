@@ -48,10 +48,8 @@ func DownloadComposerLiteAndBuildIfNeeded(ctx context.Context, downloader *Downl
 		return fmt.Errorf("failed to download libcomposer: %w", err)
 	}
 
-	// If the downloaded artifact is a binary, normalize it (legacy artifacts shipped the loader
-	// as libcomposer.so) and we are done. If it's a source artifact, we need to build it.
 	if artifact.ArtifactType == ArtifactBinary {
-		return ensureComposerLiteLib(downloader.Dirs, version)
+		return nil
 	}
 
 	return BuildLibComposer(downloader.Logger, downloader.Dirs, artifact.Path, version, true)
