@@ -268,9 +268,10 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 		switch artifact.ArtifactType {
 		case extensions.ArtifactBinary:
 			if artifact.Manifest.Type == extensions.TypeGo && !artifact.Manifest.CShared {
-				// Ensure the composer is downloaded before running any extensions that may depend on it.
-				if err = extensions.CheckOrDownloadLibComposer(ctx, downloader, artifact.Manifest.ComposerVersion,
-					extensions.ComposerArtifactLite); err != nil {
+				// A standalone Go plugin is hosted by the independent composer-lite loader.
+				// Ensure composer-lite is downloaded before running any extensions that depend on it.
+				if err = extensions.CheckOrDownloadLibComposerLite(ctx, downloader,
+					artifact.Manifest.ComposerVersion); err != nil {
 					return nil, fmt.Errorf("failed to download libcomposer %s for extension %s: %w",
 						artifact.Manifest.ComposerVersion, name, err)
 				}
@@ -312,7 +313,7 @@ func resolveGoPluginLoader(ctx context.Context, downloader *extensions.Downloade
 	_, _ = fmt.Fprintf(os.Stderr, "→ %sPreparing %s (composer %s)...%s\n",
 		internal.ANSIBold, extensions.GoPluginLoaderName, version, internal.ANSIReset)
 
-	if err := extensions.CheckOrDownloadLibComposer(ctx, downloader, version, extensions.ComposerArtifactLite); err != nil {
+	if err := extensions.CheckOrDownloadLibComposerLite(ctx, downloader, version); err != nil {
 		return nil, fmt.Errorf("failed to download libcomposer %s for %s: %w", version, extensions.GoPluginLoaderName, err)
 	}
 
@@ -320,7 +321,7 @@ func resolveGoPluginLoader(ctx context.Context, downloader *extensions.Downloade
 		Name:            extensions.GoPluginLoaderName,
 		Type:            extensions.TypeGo,
 		CShared:         true,
-		Parent:          extensions.ComposerBundle,
+		Parent:          extensions.ComposerLiteBundle,
 		Version:         version,
 		ComposerVersion: version,
 	}
@@ -571,14 +572,15 @@ func handleExtensionSource(ctx context.Context, downloader *extensions.Downloade
 			return fmt.Errorf("failed to build local Go extension %s: %w", rootManifest.Name, err)
 		}
 		if !cshared {
-			// A locally-built old-style Go plugin is loaded via plugin.Open and must link against a
-			// libcomposer built from the same source with the same toolchain/deps; a prebuilt lite
+			// A locally-built old-style Go plugin is hosted by the composer-lite loader.
+			// It is loaded via plugin.Open and must link against a
+			// libcomposer-lite built from the same source with the same toolchain/deps; a prebuilt lite
 			// binary would be ABI-incompatible. Build from source unconditionally rather than via
-			// CheckOrDownloadLibComposer: that cache is keyed only by version and shares the
-			// dym/composer/<version>/libcomposer.so slot with the downloaded lite binary, so a cached
-			// binary (from goplugin-loader or a downloaded plugin) would otherwise be reused here and
-			// reintroduce the ABI mismatch.
-			if err = extensions.DownloadLibComposerAndBuildIfNeeded(ctx, downloader, rootManifest.ComposerVersion,
+			// CheckOrDownloadLibComposerLite: the composer-lite cache is keyed only by version, so a cached
+			// prebuilt binary (from goplugin-loader or a downloaded plugin) would otherwise be reused
+			// here and reintroduce the ABI mismatch. Building from source overwrites that slot with an
+			// ABI-matched libcomposer-lite.so.
+			if err = extensions.DownloadComposerLiteAndBuildIfNeeded(ctx, downloader, rootManifest.ComposerVersion,
 				extensions.ComposerArtifactSource); err != nil {
 				return fmt.Errorf("failed to build libcomposer %s for extension %s: %w",
 					rootManifest.ComposerVersion, rootManifest.Name, err)

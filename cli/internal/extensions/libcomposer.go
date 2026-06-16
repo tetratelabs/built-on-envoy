@@ -28,29 +28,51 @@ const (
 	ComposerArtifactSource = "composer-src"
 )
 
-// CheckOrDownloadLibComposer checks if the libcomposer.so exists in the local cache directory.
-// If not, it tries to download the pre-built libcomposer from OCI registry.
-func CheckOrDownloadLibComposer(ctx context.Context, downloader *Downloader, version string, artifact string) error {
-	if _, err := os.Stat(LocalCacheComposerLib(downloader.Dirs, version)); err == nil {
-		downloader.Logger.Debug("libcomposer already exists in local cache. skipping download", "version", version)
+// CheckOrDownloadLibComposerLite checks if libcomposer-lite.so exists in the local cache directory.
+// If not, it tries to download the pre-built composer-lite from the OCI registry (falling back to
+// building it from source). composer-lite is the loader used to host standalone Go plugins.
+func CheckOrDownloadLibComposerLite(ctx context.Context, downloader *Downloader, version string) error {
+	if _, err := os.Stat(LocalCacheComposerLiteLib(downloader.Dirs, version)); err == nil {
+		downloader.Logger.Debug("libcomposer-lite already exists in local cache. skipping download", "version", version)
 		return nil
 	}
-	return DownloadLibComposerAndBuildIfNeeded(ctx, downloader, version, artifact)
+	return DownloadComposerLiteAndBuildIfNeeded(ctx, downloader, version, ComposerArtifactLite)
 }
 
-// DownloadLibComposerAndBuildIfNeeded is a helper function that combines downloading and building the libcomposer.
-func DownloadLibComposerAndBuildIfNeeded(ctx context.Context, downloader *Downloader, version string, artifactName string) error {
+// DownloadComposerLiteAndBuildIfNeeded combines downloading and building composer-lite: it pulls the
+// given artifact (a prebuilt composer-lite binary, or composer-src) and, when source, builds
+// libcomposer-lite.so from it.
+func DownloadComposerLiteAndBuildIfNeeded(ctx context.Context, downloader *Downloader, version string, artifactName string) error {
 	artifact, err := downloader.DownloadComposer(ctx, version, artifactName)
 	if err != nil {
 		return fmt.Errorf("failed to download libcomposer: %w", err)
 	}
 
-	// If the downloaded artifact is a binary, we are done. If it's a source artifact, we need to build it.
 	if artifact.ArtifactType == ArtifactBinary {
 		return nil
 	}
 
 	return BuildLibComposer(downloader.Logger, downloader.Dirs, artifact.Path, version, true)
+}
+
+// ensureComposerLiteLib normalizes a downloaded composer-lite binary artifact. Legacy
+// composer-lite artifacts shipped the loader as libcomposer.so (the library was not renamed
+// when the lite build was split into its own artifact); the runtime now expects
+// libcomposer-lite.so. If only the legacy file is present, rename it into place so the rest
+// of the CLI can treat composer-lite uniformly.
+func ensureComposerLiteLib(dirs *xdg.Directories, version string) error {
+	liteLib := LocalCacheComposerLiteLib(dirs, version)
+	if _, err := os.Stat(liteLib); err == nil {
+		return nil
+	}
+	legacy := filepath.Join(LocalCacheComposerLiteDir(dirs, version), fmt.Sprintf("lib%s.so", ComposerBundle))
+	if _, err := os.Stat(legacy); err != nil {
+		return nil // nothing to normalize; let downstream surface any missing-file error
+	}
+	if err := os.Rename(legacy, liteLib); err != nil {
+		return fmt.Errorf("failed to normalize legacy composer-lite library: %w", err)
+	}
+	return nil
 }
 
 // HasCSharedMain checks if the extension at the given path has a main/ directory,
@@ -121,7 +143,15 @@ func buildExtensionPlugin(logger *slog.Logger, dirs *xdg.Directories, manifest *
 // to be at composerSrcPath. The built libcomposer.so will be saved in the local cache directory for
 // composer to load.
 func BuildLibComposer(logger *slog.Logger, dirs *xdg.Directories, composerSrcPath string, version string, lite bool) error {
+	// composer-lite is built into its own independent cache slot (libcomposer-lite.so) so it
+	// never collides with a full composer built from the same source for the same version.
 	dest := LocalCacheComposerLib(dirs, version)
+	if lite {
+		dest = LocalCacheComposerLiteLib(dirs, version)
+	}
+	if err := os.MkdirAll(filepath.Dir(dest), 0o750); err != nil {
+		return fmt.Errorf("failed to create composer cache directory: %w", err)
+	}
 	var buildTags string
 
 	commonEnvPath := filepath.Join(composerSrcPath, "Makefile.common")
@@ -174,15 +204,17 @@ func BuildLibComposer(logger *slog.Logger, dirs *xdg.Directories, composerSrcPat
 // preferring the source-artifact manifest and falling back to the installed dynamic-module
 // directory. It returns an error if no manifest is found for that version.
 func GetComposerManifest(dirs *xdg.Directories, version string) (*Manifest, error) {
-	sourceDir := LocalCacheComposerSourceDir(dirs, version)
-	manifestPath := filepath.Join(sourceDir, "manifest.yaml")
-	if _, err := os.Stat(manifestPath); err == nil {
-		return LoadLocalManifest(manifestPath)
-	}
-	extensionDir := LocalCacheComposerDir(dirs, version)
-	manifestPath = filepath.Join(extensionDir, "manifest.yaml")
-	if _, err := os.Stat(manifestPath); err == nil {
-		return LoadLocalManifest(manifestPath)
+	// Prefer the source-artifact manifest, then the installed lite and full dynamic-module
+	// directories (the runtime go-plugin host is composer-lite, so check it before composer).
+	for _, dir := range []string{
+		LocalCacheComposerSourceDir(dirs, version),
+		LocalCacheComposerDir(dirs, version),
+		LocalCacheComposerLiteDir(dirs, version),
+	} {
+		manifestPath := filepath.Join(dir, "manifest.yaml")
+		if _, err := os.Stat(manifestPath); err == nil {
+			return LoadLocalManifest(manifestPath)
+		}
 	}
 	return nil, fmt.Errorf("manifest.yaml not found for composer version %s", version)
 }

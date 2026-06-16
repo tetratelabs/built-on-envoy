@@ -80,7 +80,9 @@ func LocalCacheExtensionDir(dirs *xdg.Directories, manifest *Manifest) string {
 	case TypeExtProc:
 		return filepath.Join(dirs.DataHome, "extensions", "extproc", moduleName, manifest.Version)
 	case TypeComposer:
-		return LocalCacheComposerDir(dirs, manifest.Version)
+		// Keyed off the module name so the full composer (libcomposer.so) and the
+		// independent composer-lite (libcomposer-lite.so) live in separate slots.
+		return composerDir(dirs, moduleName, manifest.Version)
 	default:
 		return filepath.Join(dirs.DataHome, "extensions", moduleName, manifest.Version)
 	}
@@ -108,7 +110,8 @@ func LocalCacheExtension(dirs *xdg.Directories, manifest *Manifest) string {
 		// ext_proc extensions are not Go plugins, so we return the path to the ext_proc server binary instead
 		return filepath.Join(dir, "ext_proc-server")
 	case TypeComposer:
-		return LocalCacheComposerLib(dirs, manifest.Version)
+		// lib<module>.so: libcomposer.so for the full composer, libcomposer-lite.so for composer-lite.
+		return filepath.Join(dir, fmt.Sprintf("lib%s.so", ModuleName(manifest)))
 	default:
 		return filepath.Join(dir, "plugin.so")
 	}
@@ -130,14 +133,37 @@ func LocalCacheExtensionSourceDir(dirs *xdg.Directories, manifest *Manifest, nam
 	return path
 }
 
-// LocalCacheComposerDir returns the local cache directory for the composer.
+// LocalCacheComposerDir returns the local cache directory for the full composer.
 func LocalCacheComposerDir(dirs *xdg.Directories, version string) string {
-	return filepath.Join(dirs.DataHome, "extensions", "dym", "composer", version)
+	return composerDir(dirs, ComposerBundle, version)
 }
 
-// LocalCacheComposerLib returns the local cache path for the composer lib.
+// LocalCacheComposerLib returns the local cache path for the full composer lib (libcomposer.so).
 func LocalCacheComposerLib(dirs *xdg.Directories, version string) string {
-	return filepath.Join(LocalCacheComposerDir(dirs, version), "libcomposer.so")
+	return composerLib(dirs, ComposerBundle, version)
+}
+
+// LocalCacheComposerLiteDir returns the local cache directory for composer-lite, kept
+// independent from the full composer so the two libraries never share a cache slot.
+func LocalCacheComposerLiteDir(dirs *xdg.Directories, version string) string {
+	return composerDir(dirs, ComposerLiteBundle, version)
+}
+
+// LocalCacheComposerLiteLib returns the local cache path for the composer-lite lib
+// (libcomposer-lite.so).
+func LocalCacheComposerLiteLib(dirs *xdg.Directories, version string) string {
+	return composerLib(dirs, ComposerLiteBundle, version)
+}
+
+// composerDir returns the dynamic-module cache directory for a composer bundle (composer or
+// composer-lite) of the given version.
+func composerDir(dirs *xdg.Directories, name, version string) string {
+	return filepath.Join(dirs.DataHome, "extensions", "dym", name, version)
+}
+
+// composerLib returns the shared-library path (lib<name>.so) for a composer bundle.
+func composerLib(dirs *xdg.Directories, name, version string) string {
+	return filepath.Join(composerDir(dirs, name, version), fmt.Sprintf("lib%s.so", name))
 }
 
 // LocalCacheComposerSourceDir returns the local cache directory of the composer source artifact

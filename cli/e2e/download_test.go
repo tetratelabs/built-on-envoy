@@ -45,8 +45,9 @@ func TestDownloadComposer(t *testing.T) {
 			dirs := &xdg.Directories{DataHome: path}
 			manifest := &extensions.Manifest{Name: variant, Version: "0.6.0", Type: extensions.TypeComposer}
 
+			// composer → libcomposer.so, composer-lite → libcomposer-lite.so (independent artifacts).
 			requireDownloadHasFiles(t, manifest,
-				filepath.Base(extensions.LocalCacheComposerLib(dirs, "0.6.0")),
+				filepath.Base(extensions.LocalCacheExtension(dirs, manifest)),
 			)
 		})
 	}

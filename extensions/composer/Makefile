@@ -24,7 +24,12 @@ endif
 BOE_DATA_HOME ?= $(HOME)/.local/share/boe
 
 # Labels for this plugin image.
-NAME             := $(shell $(GO_TOOL) yq '.name' manifest.yaml)
+ORIGIN_NAME      := $(shell $(GO_TOOL) yq '.name' manifest.yaml)
+# NAME is the published identity of the built artifact: the OCI image title, the shared library
+# name (lib$(NAME).so), the image repository and the local cache directory. It is the origin name
+# (composer) for the full build, and is overridden to composer-lite in the COMPOSER_LITE block
+# below so that composer-lite is an independent artifact.
+NAME             := $(ORIGIN_NAME)
 VERSION          := $(shell $(GO_TOOL) yq '.version' manifest.yaml)
 DESCRIPTION      := $(shell $(GO_TOOL) yq '.description' manifest.yaml)
 TIMESTAMP        := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -34,20 +39,23 @@ COMPOSER_VERSION := $(VERSION)
 LICENSE          := Apache-2.0
 
 HUB        := $(or $(BOE_REGISTRY),$(OCI_REGISTRY)/built-on-envoy)
-IMAGE      := $(HUB)/$(NAME):$(VERSION)$(IMAGE_NONCE)
 SOURCE     := https://$(subst ghcr.io,github.com,$(HUB))
 
 comma := ,
 
 # Shared variables used by both this Makefile and the main Makefile.
 include Makefile.common
-# Option to build lite version of the loader.
+# Option to build lite version of the loader. Overriding NAME to composer-lite makes the image
+# repository, OCI title, library name and cache directory all follow automatically.
 ifeq ($(strip $(COMPOSER_LITE)),true)
+	NAME := $(ORIGIN_NAME)-lite
 	DESCRIPTION := Go plugin loader.
-	IMAGE := $(HUB)/$(NAME)-lite:$(VERSION)$(IMAGE_NONCE)
 	BUILD_TAGS := $(if $(BUILD_TAGS),$(BUILD_TAGS)$(comma))lite
 endif
 COMPOSER_BUILD_TAG := $(if $(BUILD_TAGS),-tags $(BUILD_TAGS))
+
+# Defined after the COMPOSER_LITE block so it picks up the final NAME (composer or composer-lite).
+IMAGE      := $(HUB)/$(NAME):$(VERSION)$(IMAGE_NONCE)
 
 # If the version of the image is a development one (ends with '-dev'), we will
 # add an additional 'dev' tag (without the version number) to make it easier to reference the
@@ -139,7 +147,7 @@ create_builder:
 
 # Cross-build through Docker only when a target overrides force_target_os.
 build_cmd_native = CGO_ENABLED=1 go build -trimpath -buildmode=c-shared $(COMPOSER_BUILD_TAG) -o lib$(NAME).so ./main
-build_cmd_cross  = docker buildx build --platform=$(force_target_os)/$(ARCH) --output type=local,dest=. --build-arg BUILD_TAG="$(COMPOSER_BUILD_TAG)" -f ./Dockerfile .
+build_cmd_cross  = docker buildx build --platform=$(force_target_os)/$(ARCH) --output type=local,dest=. --build-arg BUILD_TAG="$(COMPOSER_BUILD_TAG)" --build-arg LIB_NAME="lib$(NAME).so" -f ./Dockerfile .
 
 .PHONY: build
 build:
@@ -167,6 +175,7 @@ build_image:
 		$(CSHARED_ARTIFACT) \
 		$(BINARY_ARTIFACT) \
 		--build-arg BUILD_TAG="$(COMPOSER_BUILD_TAG)" \
+		--build-arg LIB_NAME="lib$(NAME).so" \
 		--build-arg GO_VERSION="$(GO_VERSION)" \
 		-t $(IMAGE)-$(OS)-$(ARCH) \
 		-f ./Dockerfile .
@@ -189,6 +198,7 @@ push_image: create_builder  ## Build and push docker image for the plugin for cr
 		--provenance=false \
 		$(PUSH_ANNOTATIONS) \
 		--build-arg BUILD_TAG="$(COMPOSER_BUILD_TAG)" \
+		--build-arg LIB_NAME="lib$(NAME).so" \
 		--build-arg GO_VERSION="$(GO_VERSION)" \
 		--tag $(IMAGE) $(DEV_TAG) \
 		-f ./Dockerfile .

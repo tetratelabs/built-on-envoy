@@ -20,7 +20,7 @@ import (
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 )
 
-func TestDownloadLibComposerAndBuildIfNeeded_DownloadError(t *testing.T) {
+func TestDownloadComposerLiteAndBuildIfNeeded_DownloadError(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 	fakeDirs := &xdg.Directories{DataHome: t.TempDir()}
 	d := &Downloader{
@@ -31,8 +31,56 @@ func TestDownloadLibComposerAndBuildIfNeeded_DownloadError(t *testing.T) {
 			return nil, fmt.Errorf("connection refused")
 		},
 	}
-	err := DownloadLibComposerAndBuildIfNeeded(t.Context(), d, "0.1.0", ComposerArtifactLite)
+	err := DownloadComposerLiteAndBuildIfNeeded(t.Context(), d, "0.1.0", ComposerArtifactLite)
 	require.ErrorContains(t, err, "failed to download libcomposer")
+}
+
+func TestEnsureComposerLiteLib(t *testing.T) {
+	const version = "0.1.0"
+
+	t.Run("renames legacy libcomposer.so", func(t *testing.T) {
+		dirs := &xdg.Directories{DataHome: t.TempDir()}
+		legacy := filepath.Join(LocalCacheComposerLiteDir(dirs, version), fmt.Sprintf("lib%s.so", ComposerBundle))
+		require.NoError(t, os.MkdirAll(filepath.Dir(legacy), 0o750))
+		require.NoError(t, os.WriteFile(legacy, []byte("legacy-lib"), 0o600))
+
+		require.NoError(t, ensureComposerLiteLib(dirs, version))
+
+		liteLib := LocalCacheComposerLiteLib(dirs, version)
+		// #nosec G304
+		content, err := os.ReadFile(liteLib)
+		require.NoError(t, err)
+		require.Equal(t, "legacy-lib", string(content))
+
+		_, err = os.Stat(legacy)
+		require.True(t, os.IsNotExist(err), "legacy libcomposer.so should have been renamed away")
+	})
+
+	t.Run("leaves existing libcomposer-lite.so untouched", func(t *testing.T) {
+		dirs := &xdg.Directories{DataHome: t.TempDir()}
+		liteLib := LocalCacheComposerLiteLib(dirs, version)
+		require.NoError(t, os.MkdirAll(filepath.Dir(liteLib), 0o750))
+		require.NoError(t, os.WriteFile(liteLib, []byte("lite-lib"), 0o600))
+		legacy := filepath.Join(LocalCacheComposerLiteDir(dirs, version), fmt.Sprintf("lib%s.so", ComposerBundle))
+		require.NoError(t, os.WriteFile(legacy, []byte("legacy-lib"), 0o600))
+
+		require.NoError(t, ensureComposerLiteLib(dirs, version))
+
+		// #nosec G304
+		content, err := os.ReadFile(liteLib)
+		require.NoError(t, err)
+		require.Equal(t, "lite-lib", string(content))
+		// The legacy file is left untouched when the lite lib already exists.
+		_, err = os.Stat(legacy)
+		require.NoError(t, err)
+	})
+
+	t.Run("no-op when neither file present", func(t *testing.T) {
+		dirs := &xdg.Directories{DataHome: t.TempDir()}
+		require.NoError(t, ensureComposerLiteLib(dirs, version))
+		_, err := os.Stat(LocalCacheComposerLiteLib(dirs, version))
+		require.True(t, os.IsNotExist(err))
+	})
 }
 
 func TestBuildLibComposer_InvalidPath(t *testing.T) {
@@ -54,8 +102,8 @@ func TestBuildLibComposerLite(t *testing.T) {
 	err = BuildLibComposer(logger, fakeDirs, composerPath, composerVersion, true)
 	require.NoError(t, err)
 
-	// Ensure the libcomposer.so is created.
-	out := LocalCacheComposerLib(fakeDirs, composerVersion)
+	// Ensure the libcomposer-lite.so is created in the independent composer-lite slot.
+	out := LocalCacheComposerLiteLib(fakeDirs, composerVersion)
 	_, err = os.Stat(out)
 	require.NoError(t, err)
 
