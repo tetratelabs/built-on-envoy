@@ -47,6 +47,7 @@ func TestEnsureComposerLiteLib(t *testing.T) {
 		require.NoError(t, ensureComposerLiteLib(dirs, version))
 
 		liteLib := LocalCacheComposerLiteLib(dirs, version)
+		// #nosec G304
 		content, err := os.ReadFile(liteLib)
 		require.NoError(t, err)
 		require.Equal(t, "legacy-lib", string(content))
@@ -65,6 +66,7 @@ func TestEnsureComposerLiteLib(t *testing.T) {
 
 		require.NoError(t, ensureComposerLiteLib(dirs, version))
 
+		// #nosec G304
 		content, err := os.ReadFile(liteLib)
 		require.NoError(t, err)
 		require.Equal(t, "lite-lib", string(content))
