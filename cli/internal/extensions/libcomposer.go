@@ -48,12 +48,33 @@ func DownloadComposerLiteAndBuildIfNeeded(ctx context.Context, downloader *Downl
 		return fmt.Errorf("failed to download libcomposer: %w", err)
 	}
 
-	// If the downloaded artifact is a binary, we are done. If it's a source artifact, we need to build it.
+	// If the downloaded artifact is a binary, normalize it (legacy artifacts shipped the loader
+	// as libcomposer.so) and we are done. If it's a source artifact, we need to build it.
 	if artifact.ArtifactType == ArtifactBinary {
-		return nil
+		return ensureComposerLiteLib(downloader.Dirs, version)
 	}
 
 	return BuildLibComposer(downloader.Logger, downloader.Dirs, artifact.Path, version, true)
+}
+
+// ensureComposerLiteLib normalizes a downloaded composer-lite binary artifact. Legacy
+// composer-lite artifacts shipped the loader as libcomposer.so (the library was not renamed
+// when the lite build was split into its own artifact); the runtime now expects
+// libcomposer-lite.so. If only the legacy file is present, rename it into place so the rest
+// of the CLI can treat composer-lite uniformly.
+func ensureComposerLiteLib(dirs *xdg.Directories, version string) error {
+	liteLib := LocalCacheComposerLiteLib(dirs, version)
+	if _, err := os.Stat(liteLib); err == nil {
+		return nil
+	}
+	legacy := filepath.Join(LocalCacheComposerLiteDir(dirs, version), fmt.Sprintf("lib%s.so", ComposerBundle))
+	if _, err := os.Stat(legacy); err != nil {
+		return nil // nothing to normalize; let downstream surface any missing-file error
+	}
+	if err := os.Rename(legacy, liteLib); err != nil {
+		return fmt.Errorf("failed to normalize legacy composer-lite library: %w", err)
+	}
+	return nil
 }
 
 // HasCSharedMain checks if the extension at the given path has a main/ directory,

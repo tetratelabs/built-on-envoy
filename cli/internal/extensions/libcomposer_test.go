@@ -35,6 +35,52 @@ func TestDownloadComposerLiteAndBuildIfNeeded_DownloadError(t *testing.T) {
 	require.ErrorContains(t, err, "failed to download libcomposer")
 }
 
+func TestEnsureComposerLiteLib(t *testing.T) {
+	const version = "0.1.0"
+
+	t.Run("renames legacy libcomposer.so", func(t *testing.T) {
+		dirs := &xdg.Directories{DataHome: t.TempDir()}
+		legacy := filepath.Join(LocalCacheComposerLiteDir(dirs, version), fmt.Sprintf("lib%s.so", ComposerBundle))
+		require.NoError(t, os.MkdirAll(filepath.Dir(legacy), 0o750))
+		require.NoError(t, os.WriteFile(legacy, []byte("legacy-lib"), 0o600))
+
+		require.NoError(t, ensureComposerLiteLib(dirs, version))
+
+		liteLib := LocalCacheComposerLiteLib(dirs, version)
+		content, err := os.ReadFile(liteLib)
+		require.NoError(t, err)
+		require.Equal(t, "legacy-lib", string(content))
+
+		_, err = os.Stat(legacy)
+		require.True(t, os.IsNotExist(err), "legacy libcomposer.so should have been renamed away")
+	})
+
+	t.Run("leaves existing libcomposer-lite.so untouched", func(t *testing.T) {
+		dirs := &xdg.Directories{DataHome: t.TempDir()}
+		liteLib := LocalCacheComposerLiteLib(dirs, version)
+		require.NoError(t, os.MkdirAll(filepath.Dir(liteLib), 0o750))
+		require.NoError(t, os.WriteFile(liteLib, []byte("lite-lib"), 0o600))
+		legacy := filepath.Join(LocalCacheComposerLiteDir(dirs, version), fmt.Sprintf("lib%s.so", ComposerBundle))
+		require.NoError(t, os.WriteFile(legacy, []byte("legacy-lib"), 0o600))
+
+		require.NoError(t, ensureComposerLiteLib(dirs, version))
+
+		content, err := os.ReadFile(liteLib)
+		require.NoError(t, err)
+		require.Equal(t, "lite-lib", string(content))
+		// The legacy file is left untouched when the lite lib already exists.
+		_, err = os.Stat(legacy)
+		require.NoError(t, err)
+	})
+
+	t.Run("no-op when neither file present", func(t *testing.T) {
+		dirs := &xdg.Directories{DataHome: t.TempDir()}
+		require.NoError(t, ensureComposerLiteLib(dirs, version))
+		_, err := os.Stat(LocalCacheComposerLiteLib(dirs, version))
+		require.True(t, os.IsNotExist(err))
+	})
+}
+
 func TestBuildLibComposer_InvalidPath(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 	fakeDirs := &xdg.Directories{DataHome: t.TempDir()}
