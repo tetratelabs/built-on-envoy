@@ -1,0 +1,151 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: dns-gateway
+version: 0.1.0
+minEnvoyVersion: 1.38.0
+categories:
+  - Network
+  - Security
+author: Palantir Technologies
+description: Transparent egress routing — intercept DNS and route TCP by domain
+longDescription: |
+  Transparent egress routing for Envoy. Applications make normal DNS lookups and TCP
+  connections — this extension intercepts both so Envoy can control which upstream cluster
+  handles each domain, attach metadata (auth tokens, policy IDs), and enforce routing
+  policy, all without any application changes.
+
+  ## Use cases
+
+  * Route outbound traffic through different upstream proxies based on destination domain
+  * Attach per-domain credentials or policy metadata to proxied connections
+  * Enforce egress access control by selectively intercepting DNS for specific domains
+
+  ![img](/extensions/dns-gateway.png)
+
+  ## How it works
+
+  The extension is a pair of filters that work together. Both are provided by the same
+  `dns-gateway` dynamic module; enable each by its filter type (`udp_listener` and `network`).
+
+  1. **UDP listener filter** — Intercepts DNS queries for configured domain
+     patterns. For each matched query, allocates a virtual IP from a dedicated CIDR range and
+     responds with an A record. The application receives this virtual IP and connects to it
+     as if it were the real destination. Non-matching queries pass through to upstream resolvers.
+
+  2. **Network filter** — When the application opens a TCP connection to a
+     virtual IP, this filter looks up the original domain and its configured metadata from a
+     shared cache and sets them as Envoy
+     [filter state](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/data_sharing_between_filters#primitives).
+     Downstream filters (e.g. `tcp_proxy`, `set_filter_state`) can then use this to select
+     the upstream cluster, set headers, or apply policy.
+
+  ## Configuration
+
+  ### UDP listener filter
+
+  | Field | Type | Required | Description |
+  |-------|------|----------|-------------|
+  | `domains` | array | yes | List of domain patterns to intercept |
+  | `domains[].domain` | string | yes | Exact (`example.com`) or single-level wildcard (`*.aws.com`) |
+  | `domains[].base_ip` | string | yes | Base IPv4 address of the virtual IP CIDR range (e.g. `10.0.0.0`) |
+  | `domains[].prefix_len` | integer | yes | CIDR prefix length (1–32). A /24 gives 256 virtual IPs |
+  | `domains[].metadata` | object | no | String key-value pairs propagated to filter state |
+  | `fail_open` | boolean | no | If `true`, forward queries upstream when a CIDR range is exhausted. Default: `false` (return NODATA) |
+
+  ### Network filter
+
+  | Field | Type | Required | Description |
+  |-------|------|----------|-------------|
+  | `filter_state_prefix` | string | no | Prefix for filter state keys. Default: `io.builtonenvoy.dns_gateway` |
+
+  ## Filter State
+
+  The network filter writes the following keys to Envoy
+  [filter state](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/data_sharing_between_filters#primitives),
+  readable by downstream filters via `%FILTER_STATE(<key>:PLAIN)%`:
+
+  | Key | Example | Description |
+  |-----|---------|-------------|
+  | `<prefix>.domain` | `bucket-1.aws.com` | The matched domain from the DNS query |
+  | `<prefix>.metadata.<key>` | `aws_cluster` | Per-domain metadata values from config |
+
+  The default prefix is `io.builtonenvoy.dns_gateway`.
+
+  ## Prerequisites
+
+  Requires iptables/nftables rules to redirect application traffic to Envoy:
+  - **DNS**: UDP port 53 redirected to Envoy's DNS listener
+  - **TCP**: Outbound connections to virtual IP ranges redirected to Envoy's TCP listener
+tags:
+  - access-control
+  - dns
+  - egress
+  - networking
+  - routing
+  - rust
+  - security
+  - transparent-proxy
+  - virtual-ip
+license: Apache-2.0
+type: rust
+featured: true
+filterType:
+  - udp_listener
+  - network
+examples:
+  - title: Single Wildcard Domain
+    description: |
+      Intercept DNS queries for *.aws.com and route TCP connections to virtual IPs via the
+      shared cache. Both filter types are required: specify the extension twice, once per
+      filter type. The udp_listener filter carries the domain config; the network filter
+      requires no configuration.
+    code: |
+      boe run \
+        --extension dns-gateway --filter-type udp_listener --config '
+          {
+            "domains": [
+              {
+                "domain": "*.aws.com",
+                "base_ip": "10.0.0.0",
+                "prefix_len": 24,
+                "metadata": {
+                  "cluster": "aws_cluster"
+                }
+              }
+            ]
+          }' \
+        --extension dns-gateway --filter-type network
+  - title: Multiple Domains with Routing Metadata
+    description: |
+      Route different domain patterns to different upstream clusters using per-domain metadata.
+      Downstream filters can read the domain and metadata from Envoy filter state, e.g.
+      %FILTER_STATE(io.builtonenvoy.dns_gateway.domain:PLAIN)% in a tcp_proxy route.
+    code: |
+      boe run \
+        --extension dns-gateway --filter-type udp_listener --config '
+          {
+            "domains": [
+              {
+                "domain": "*.aws.com",
+                "base_ip": "10.0.0.0",
+                "prefix_len": 24,
+                "metadata": {
+                  "cluster": "aws_cluster",
+                  "token": "abc123"
+                }
+              },
+              {
+                "domain": "example.com",
+                "base_ip": "10.0.1.0",
+                "prefix_len": 24,
+                "metadata": {
+                  "cluster": "example_cluster",
+                  "token": "def456"
+                }
+              }
+            ]
+          }' \
+        --extension dns-gateway --filter-type network
