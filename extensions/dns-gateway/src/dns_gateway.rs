@@ -441,7 +441,10 @@ mod tests {
 
         let query = make_dns_query("api.on-data-test.com", RecordType::A);
         let response = filter.process_dns_query(&query);
-        assert!(response.is_some(), "expected a DNS response for matched A query");
+        assert!(
+            response.is_some(),
+            "expected a DNS response for matched A query"
+        );
 
         let msg = parse_response(&response.unwrap());
         assert_eq!(msg.message_type(), MessageType::Response);
@@ -491,12 +494,19 @@ mod tests {
 
         let query = make_dns_query("api.on-data-test.com", RecordType::AAAA);
         let response = filter.process_dns_query(&query);
-        assert!(response.is_some(), "expected NODATA response for AAAA on matched domain");
+        assert!(
+            response.is_some(),
+            "expected NODATA response for AAAA on matched domain"
+        );
 
         let msg = parse_response(&response.unwrap());
         assert_eq!(msg.message_type(), MessageType::Response);
         assert_eq!(msg.response_code(), ResponseCode::NoError);
-        assert_eq!(msg.answers().len(), 0, "NODATA response must have no answers");
+        assert_eq!(
+            msg.answers().len(),
+            0,
+            "NODATA response must have no answers"
+        );
     }
 
     #[test]

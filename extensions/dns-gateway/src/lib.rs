@@ -25,9 +25,9 @@ fn new_network_filter_config_fn<EC: EnvoyNetworkFilterConfig, ENF: EnvoyNetworkF
     filter_config: &[u8],
 ) -> Option<Box<dyn NetworkFilterConfig<ENF>>> {
     match filter_name {
-        "dns-gateway" => Some(Box::new(
-            cache_lookup::CacheLookupFilterConfig::new(filter_config),
-        )),
+        "dns-gateway" => Some(Box::new(cache_lookup::CacheLookupFilterConfig::new(
+            filter_config,
+        ))),
         _ => panic!("Unknown network filter name: {filter_name}"),
     }
 }

@@ -152,8 +152,7 @@ mod tests {
             .returning(|_, _| true);
         mock.expect_set_filter_state_bytes()
             .withf(|key, value| {
-                key == b"io.builtonenvoy.dns_gateway.metadata.cluster"
-                    && value == b"test_cluster"
+                key == b"io.builtonenvoy.dns_gateway.metadata.cluster" && value == b"test_cluster"
             })
             .times(1)
             .returning(|_, _| true);
@@ -188,8 +187,7 @@ mod tests {
             .returning(move || (ip.to_string(), 8080));
         mock.expect_set_filter_state_bytes()
             .withf(|key, value| {
-                key == b"my.custom.prefix.domain"
-                    && value == b"custom-prefix-test.example.com"
+                key == b"my.custom.prefix.domain" && value == b"custom-prefix-test.example.com"
             })
             .times(1)
             .returning(|_, _| true);
