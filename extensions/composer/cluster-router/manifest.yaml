@@ -8,7 +8,7 @@ parent: composer
 categories:
   - Traffic Control
   - Network
-author: Anton Kanugalawattage
+author: Palantir Technologies
 description: Traffic routing in a peered Envoy mesh.
 longDescription: |
   This extension routes HTTP requests across a peered Envoy mesh using a path vector
