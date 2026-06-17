@@ -51,29 +51,58 @@ export function flattenSchema(schema) {
             }
         }
 
+        // When oneOf branches are $refs to full object schemas, inline them and
+        // merge their properties into the parent so JSONEditor can render fields.
+        if (node.oneOf && node.oneOf.some(b => b.$ref)) {
+            node.oneOf = node.oneOf.map(b => {
+                if (!b.$ref) return b;
+                const refPath = b.$ref.replace(/^#\/(\$defs|definitions)\//, '');
+                const def = defs[refPath];
+                return def ? JSON.parse(JSON.stringify(def)) : b;
+            });
+            if (node.oneOf.some(b => b.type === 'object' || b.properties)) {
+                node.type = node.type || 'object';
+                node.properties = node.properties || {};
+                for (const b of node.oneOf) {
+                    if (!b.properties) continue;
+                    for (const [key, prop] of Object.entries(b.properties)) {
+                        const merged = { ...prop };
+                        // Strip minItems — merged array properties are optional in the flat
+                        // schema, so enforcing a minimum item count is no longer appropriate.
+                        if (merged.type === 'array') delete merged.minItems;
+                        node.properties[key] = merged;
+                    }
+                }
+            }
+        }
+
         // Flatten oneOf on objects: convert branches into optional properties
         // and record the constraint for custom validation.
         if (node.type === 'object' && node.oneOf) {
             const branches = [];
             const oneOfHints = [];
+            const totalBranches = node.oneOf.length;
             for (const branch of node.oneOf) {
                 if (branch.required) {
                     branches.push(branch.required);
                     oneOfHints.push(branch.required.join(' + '));
                 }
             }
-            if (oneOfHints.length > 0) {
+            // Only add description/constraint when every branch has required fields.
+            // If any branch has no required, it's always satisfied — no constraint needed.
+            if (oneOfHints.length > 0 && oneOfHints.length === totalBranches) {
                 node.description = (node.description || '') +
                     ' (provide one of: ' + oneOfHints.join(', or ') + ')';
             }
-            if (branches.length > 0) {
+            if (branches.length > 0 && branches.length === totalBranches) {
                 oneOfConstraints.push({ path, branches });
+                // Only skip optional-props detection when a constraint is enforced.
+                // Without this flag, merged properties are correctly detected as optional.
+                node._jeOneOf = true;
             }
             delete node.oneOf;
             delete node.required;
             delete node.additionalProperties;
-            // Mark as oneOf-flattened so optional-props detection skips it
-            node._jeOneOf = true;
         }
 
         // Detect objects with additionalProperties (free-form key/value maps)
