@@ -16,6 +16,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 // maxResponseBytes caps a single peer advertisement response.
@@ -47,10 +49,10 @@ func NewAdvertisementServer(envoyID, listen string, table *AtomicTable) (*Advert
 func setSocketReuse(_ /* network */, _ /* address */ string, c syscall.RawConn) error {
 	var setErr error
 	if err := c.Control(func(fd uintptr) {
-		if setErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1); setErr != nil {
+		if setErr = unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_REUSEADDR, 1); setErr != nil {
 			return
 		}
-		setErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEPORT, 1)
+		setErr = unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_REUSEPORT, 1)
 	}); err != nil {
 		return err
 	}
