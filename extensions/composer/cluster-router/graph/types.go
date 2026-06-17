@@ -16,6 +16,7 @@ type PeerSpec struct {
 // ClusterRole tags a local Envoy cluster for the routing algorithm.
 type ClusterRole string
 
+// Recognized cluster roles.
 const (
 	RoleTerminal ClusterRole = "terminal"
 	RolePeer     ClusterRole = "peer"

@@ -14,6 +14,7 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 )
 
+// Logger logs the daemon's background messages at the chosen level.
 type Logger func(level shared.LogLevel, format string, args ...any)
 
 // DaemonConfig configures a Daemon.
