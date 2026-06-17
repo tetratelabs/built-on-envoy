@@ -495,6 +495,171 @@ Filter metadata namespace for decoded fields. Defaults to "io.builtonenvoy.opena
 
 
 
+<a id="cluster-router"></a>
+## cluster-router configuration
+
+
+
+### advertise_listen
+
+host:port to serve /advertisements on for peer cluster-router processes.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Min length** | 1 |
+
+[↑ Top](#) | [↑ cluster-router configuration](#cluster-router) {/* if .SubProperties */}
+
+### envoy_id
+
+Stable identifier for this Envoy in the federation. Appears in AS-PATH.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Min length** | 1 |
+
+[↑ Top](#) | [↑ cluster-router configuration](#cluster-router) {/* if .SubProperties */}
+
+### metadata_namespace
+
+Filter metadata namespace the plugin writes routing decisions (next_hop_cluster, target_cluster, distance, as_path) under. Defaults to "io.builtonenvoy.cluster_router" if not set.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ cluster-router configuration](#cluster-router) {/* if .SubProperties */}
+
+### next_hop_header
+
+Header name written by the filter for `cluster_header` routes.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ cluster-router configuration](#cluster-router) {/* if .SubProperties */}
+
+### peers
+
+Outbound peers this Envoy pulls advertisements from and routes traffic to.
+
+| | |
+|---|---|
+| **Type** | `[]object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ cluster-router configuration](#cluster-router)
+
+
+
+#### peers.endpoint
+
+
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ cluster-router configuration](#cluster-router)
+
+
+
+#### peers.id
+
+
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Min length** | 1 |
+
+[↑ Top](#) | [↑ cluster-router configuration](#cluster-router)
+
+
+
+#### peers.local_cluster
+
+Name of the local Envoy cluster that routes data-plane traffic to this peer.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Min length** | 1 |
+
+[↑ Top](#) | [↑ cluster-router configuration](#cluster-router)
+
+   {/* range .SubProperties */} {/* if .SubProperties */}
+
+### poll_interval
+
+How often to pull peer advertisements (Go duration). Must be >= 100ms.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ cluster-router configuration](#cluster-router) {/* if .SubProperties */}
+
+### stale_after
+
+Drop routes from a peer whose last successful sync is older than this (Go duration). Must be >= poll_interval.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ cluster-router configuration](#cluster-router) {/* if .SubProperties */}
+
+### target_cluster_header
+
+Request header name when target_cluster_source is `header`.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ cluster-router configuration](#cluster-router) {/* if .SubProperties */}
+
+### target_cluster_source
+
+Where to read the target cluster name from on each request. The `metadata` source is reserved for a future release and rejected at runtime.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+| **Allowed values** | `header` |
+
+[↑ Top](#) | [↑ cluster-router configuration](#cluster-router) {/* if .SubProperties */}
+
+### terminals
+
+Local cluster names this Envoy fronts as terminal destinations and advertises to peers.
+
+| | |
+|---|---|
+| **Type** | `[]string` |
+| **Required** | No |
+| **Item min length** | 1 |
+
+[↑ Top](#) | [↑ cluster-router configuration](#cluster-router) {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */}
+
+
+
+
 <a id="coraza-waf"></a>
 ## Coraza WAF Configuration
 

@@ -12,6 +12,7 @@ import (
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/bedrock-guardrails/embedded"       // Bedrock Guardrails plugin.
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/cedar/embedded"                    // Cedar authorization plugin.
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/chat-completions-decoder/embedded" // Chat Completions Decoder plugin.
+	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/cluster-router/embedded"           // Cluster Router plugin.
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/example/embedded"                  // Example built-in plugin.
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/file-server/embedded"              // File server plugin.
 	// Go plugin to loader other composer plugins that be compiled into separate shared libraries.

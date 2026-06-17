@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/cluster-router/config.schema.json",
+  "title": "cluster-router configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["envoy_id", "advertise_listen"],
+  "properties": {
+    "envoy_id": {
+      "type": "string",
+      "description": "Stable identifier for this Envoy in the federation. Appears in AS-PATH.",
+      "minLength": 1
+    },
+    "advertise_listen": {
+      "type": "string",
+      "description": "host:port to serve /advertisements on for peer cluster-router processes.",
+      "minLength": 1
+    },
+    "target_cluster_source": {
+      "type": "string",
+      "description": "Where to read the target cluster name from on each request. The `metadata` source is reserved for a future release and rejected at runtime.",
+      "enum": ["header"],
+      "default": "header"
+    },
+    "target_cluster_header": {
+      "type": "string",
+      "description": "Request header name when target_cluster_source is `header`.",
+      "default": "x-target-cluster"
+    },
+    "next_hop_header": {
+      "type": "string",
+      "description": "Header name written by the filter for `cluster_header` routes.",
+      "default": "x-next-hop"
+    },
+    "peers": {
+      "type": "array",
+      "description": "Outbound peers this Envoy pulls advertisements from and routes traffic to.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "endpoint", "local_cluster"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "endpoint": { "type": "string", "format": "uri" },
+          "local_cluster": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Name of the local Envoy cluster that routes data-plane traffic to this peer."
+          }
+        }
+      }
+    },
+    "terminals": {
+      "type": "array",
+      "description": "Local cluster names this Envoy fronts as terminal destinations and advertises to peers.",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "poll_interval": {
+      "type": "string",
+      "description": "How often to pull peer advertisements (Go duration). Must be >= 100ms.",
+      "default": "10s"
+    },
+    "stale_after": {
+      "type": "string",
+      "description": "Drop routes from a peer whose last successful sync is older than this (Go duration). Must be >= poll_interval.",
+      "default": "60s"
+    },
+    "metadata_namespace": {
+      "type": "string",
+      "description": "Filter metadata namespace the plugin writes routing decisions (next_hop_cluster, target_cluster, distance, as_path) under. Defaults to \"io.builtonenvoy.cluster_router\" if not set.",
+      "default": "io.builtonenvoy.cluster_router"
+    }
+  }
+}
