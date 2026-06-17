@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/composer/goplugin-loader/config.schema.json",
+  "title": "Go Plugin Loader Configuration",
+  "description": "Configuration for the built-in Go plugin loader. Identifies a standalone Go plugin to load at runtime and the configuration to pass to it.",
+  "type": "object",
+  "required": ["name", "url"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Name of the Go plugin to load.",
+      "minLength": 1
+    },
+    "url": {
+      "type": "string",
+      "description": "Location of the plugin binary. Supports \"file://\" URLs for local paths and \"oci://\" URLs for plugins fetched from an OCI registry at runtime.",
+      "minLength": 1
+    },
+    "config": {
+      "type": "object",
+      "description": "Plugin-specific configuration passed through verbatim to the loaded plugin.",
+      "additionalProperties": true
+    },
+    "strict_check": {
+      "type": "boolean",
+      "description": "Whether to enforce strict host/plugin compatibility checks (Go version, build flags, and shared dependency versions/checksums) before loading. Defaults to true."
+    }
+  }
+}

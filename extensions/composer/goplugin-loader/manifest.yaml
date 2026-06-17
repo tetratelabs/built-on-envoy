@@ -48,10 +48,7 @@ longDescription: |
   - `GOPLUGIN_INSECURE` — set to `true` to allow insecure (HTTP) registry connections
 type: go
 tags:
-  - go
   - plugin-loader
-  - dynamic-module
-  - built-in
 license: Apache-2.0
 examples:
   - title: Load a local Go plugin

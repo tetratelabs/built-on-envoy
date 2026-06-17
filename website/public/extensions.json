@@ -562,10 +562,7 @@
       "http"
     ],
     "tags": [
-      "go",
-      "plugin-loader",
-      "dynamic-module",
-      "built-in"
+      "plugin-loader"
     ],
     "license": "Apache-2.0",
     "examples": [
@@ -583,7 +580,8 @@
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
     "composerVersion": "0.8.0-dev",
-    "sourcePath": "composer/goplugin-loader"
+    "sourcePath": "composer/goplugin-loader",
+    "configReferencePath": "/docs/reference/extensions#goplugin-loader"
   },
   {
     "name": "ip-restriction",
