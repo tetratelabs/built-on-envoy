@@ -589,6 +589,42 @@
     "configReferencePath": "/docs/reference/extensions#file-server"
   },
   {
+    "name": "goplugin-loader",
+    "version": "0.8.0-dev",
+    "parent": "composer",
+    "categories": [
+      "Misc"
+    ],
+    "author": "Tetrate",
+    "description": "Built-in loader that hosts standalone Go plugins at runtime; always compiled into composer",
+    "longDescription": "The Go Plugin Loader is a built-in Envoy dynamic module filter that loads standalone\nGo plugins (`.so` files built with `-buildmode=plugin`) at runtime, without recompiling\nthe host binary. It is registered as the well-known HTTP filter config factory named\n`goplugin-loader`.\n\n## Always built-in\n\nThe loader is **always** compiled into the Composer (`libcomposer.so`) and Composer Lite\n(`libcomposer-lite.so`) dynamic modules. It is **not** a standalone, independently\ninstallable or releasable Go plugin: because it is the component that loads other Go\nplugins, it can never itself be compiled as an independent Go plugin.\n\nUsers reference it directly via `--extension goplugin-loader` or\n`--extension composer/goplugin-loader`, which drives the loader to fetch and load the\nconfigured plugin at runtime.\n\n## Configuration\n\nThe loader is configured with the `GoPlugin` message:\n\n- `name`: the plugin name to load\n- `url`: where to fetch the plugin binary (`file://` for local paths, `oci://` for OCI registries)\n- `config`: optional plugin-specific configuration passed through to the loaded plugin\n- `strict_check`: whether to enforce strict host/plugin compatibility checks (defaults to `true`)\n\n## Runtime environment variables\n\n- `GOPLUGIN_CACHE_DIR` — directory to cache downloaded plugin binaries\n- `GOPLUGIN_PULL_SECRET` — credentials for authenticating to the OCI registry\n- `GOPLUGIN_INSECURE` — set to `true` to allow insecure (HTTP) registry connections\n",
+    "type": "go",
+    "filterType": [
+      "http"
+    ],
+    "tags": [
+      "plugin-loader"
+    ],
+    "license": "Apache-2.0",
+    "examples": [
+      {
+        "title": "Load a local Go plugin",
+        "description": "Drive the built-in goplugin-loader directly to load a locally-built plugin `.so`\nfrom a `file://` URL.\n",
+        "code": "boe run --extension goplugin-loader \\\n  --config '{\n    \"name\": \"my-plugin\",\n    \"url\": \"file:///path/to/myplugin.so\",\n    \"config\": {}\n  }'\n"
+      },
+      {
+        "title": "Load a Go plugin from an OCI registry",
+        "description": "Fetch and load a plugin binary directly from an OCI registry at runtime using an\n`oci://` URL.\n",
+        "code": "boe run --extension goplugin-loader \\\n  --config '{\n    \"name\": \"my-plugin\",\n    \"url\": \"oci://ghcr.io/tetratelabs/built-on-envoy/extension-my-plugin:v1.0.0\"\n  }'\n"
+      }
+    ],
+    "minEnvoyVersion": "1.38.0",
+    "maxEnvoyVersion": "1.39.0",
+    "composerVersion": "0.8.0-dev",
+    "sourcePath": "composer/goplugin-loader",
+    "configReferencePath": "/docs/reference/extensions#goplugin-loader"
+  },
+  {
     "name": "ip-restriction",
     "version": "0.2.0",
     "categories": [

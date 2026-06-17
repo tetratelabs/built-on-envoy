@@ -831,6 +831,60 @@ URL path prefix to match (e.g. "/static/").
 
 
 
+<a id="goplugin-loader"></a>
+## Go Plugin Loader Configuration
+
+Configuration for the built-in Go plugin loader. Identifies a standalone Go plugin to load at runtime and the configuration to pass to it.
+
+### config
+
+Plugin-specific configuration passed through verbatim to the loaded plugin.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Go Plugin Loader Configuration](#goplugin-loader) {/* if .SubProperties */}
+
+### name
+
+Name of the Go plugin to load.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Min length** | 1 |
+
+[↑ Top](#) | [↑ Go Plugin Loader Configuration](#goplugin-loader) {/* if .SubProperties */}
+
+### strict_check
+
+Whether to enforce strict host/plugin compatibility checks (Go version, build flags, and shared dependency versions/checksums) before loading. Defaults to true.
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Go Plugin Loader Configuration](#goplugin-loader) {/* if .SubProperties */}
+
+### url
+
+Location of the plugin binary. Supports "file://" URLs for local paths and "oci://" URLs for plugins fetched from an OCI registry at runtime.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Min length** | 1 |
+
+[↑ Top](#) | [↑ Go Plugin Loader Configuration](#goplugin-loader) {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */}
+
+
+
+
 <a id="ip-restriction"></a>
 ## IP Restriction Configuration
 

@@ -218,10 +218,16 @@ push_code: create_builder  ## Build and push source code image
 		--tag $(CODE_IMAGE) \
 		-f ./Dockerfile.code .
 
+# The goplugin-loader is the built-in loader that hosts standalone Go plugins. It is always
+# compiled into composer/composer-lite and, being the loader itself, can never be built as an
+# independent Go plugin, so it is excluded from the standalone plugin build/install/release targets.
+# Its manifest.yaml exists only for catalog/metadata purposes.
+BUILTIN_PLUGIN_DIRS := goplugin-loader
+
 # Find all sub-directories containing a manifest.yaml file and get their names.
-# Ignore current directory.
+# Ignore current directory and the always-built-in loader.
 PLUGIN_DIRS := $(shell find . -mindepth 2 -maxdepth 2 -type f -name 'manifest.yaml' -exec dirname {} \; | sort)
-PLUGIN_CLEAN_DIRS := $(notdir $(PLUGIN_DIRS))
+PLUGIN_CLEAN_DIRS := $(filter-out $(BUILTIN_PLUGIN_DIRS),$(notdir $(PLUGIN_DIRS)))
 
 push_plugins: ## Push all plugin images
 	@for dir in $(PLUGIN_CLEAN_DIRS); do \
