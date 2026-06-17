@@ -185,7 +185,7 @@ func TestHandleGetSchema_Found(t *testing.T) {
 	s := newTestServer(&mockExecutor{})
 	require.NoError(t, s.loadLocalExtensions([]string{"testdata/test-lua"}))
 
-	for _, name := range []string{"cedar", "test-lua"} {
+	for _, name := range []string{"cedar-auth", "test-lua"} {
 		t.Run(name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/extensions/%s/schema", name), nil)
 			w := httptest.NewRecorder()
