@@ -1097,14 +1097,56 @@ func TestDownloadExtensions(t *testing.T) {
 		require.ErrorIs(t, err, errFail)
 	})
 
-	t.Run("goplugin-loader reserved name synthesizes a bundle manifest", func(t *testing.T) {
+	t.Run("goplugin-loader resolves from the composer bundle", func(t *testing.T) {
 		dataHome := t.TempDir()
-		// Pre-seed libcomposer-lite.so so CheckOrDownloadLibComposer hits the cache and avoids network.
-		composerLiteLib := extensions.LocalCacheComposerLiteLib(&xdg.Directories{DataHome: dataHome}, "1.0.0")
-		require.NoError(t, os.MkdirAll(filepath.Dir(composerLiteLib), 0o750))
-		require.NoError(t, os.WriteFile(composerLiteLib, []byte("fake"), 0o600))
+		dirs := &xdg.Directories{DataHome: dataHome}
 
-		d := &extensions.Downloader{Logger: internaltesting.NewTLogger(t), Dirs: &xdg.Directories{DataHome: dataHome}}
+		// The bare "goplugin-loader" reference is remapped to the composer bundle, which is
+		// downloaded and then walked for the embedded goplugin-loader child manifest. Pre-stage the
+		// composer bundle cache (root manifest + embedded child) so the mock Pull (a no-op) leaves
+		// the resolver real files to read.
+		composerCacheDir := extensions.LocalCacheComposerDir(dirs, "1.0.0")
+		require.NoError(t, os.MkdirAll(filepath.Join(composerCacheDir, "metadatas", "goplugin-loader"), 0o750))
+		require.NoError(t, os.WriteFile(filepath.Join(composerCacheDir, "manifest.yaml"), []byte(`name: composer
+version: 1.0.0
+composerVersion: 1.0.0
+categories:
+  - Misc
+author: Test
+description: test composer
+longDescription: |
+  test composer
+type: composer
+tags:
+  - go
+license: Apache-2.0
+examples: []
+extensionSet: true
+`), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(composerCacheDir, "metadatas", "goplugin-loader", "manifest.yaml"), []byte(`name: goplugin-loader
+parent: composer
+categories:
+  - Misc
+author: Test
+description: built-in go plugin loader
+longDescription: |
+  built-in go plugin loader
+type: go
+tags:
+  - go
+license: Apache-2.0
+examples: []
+`), 0o600))
+
+		mock := &mockOCIClient{annotations: map[string]string{
+			ocispec.AnnotationTitle:                 extensions.ComposerBundle,
+			ocispec.AnnotationVersion:               "1.0.0",
+			extensions.OCIAnnotationExtensionType:   string(extensions.TypeComposer),
+			extensions.OCIAnnotationComposerVersion: "1.0.0",
+			extensions.OCIAnnotationCShared:         "true",
+			extensions.OCIAnnotationArtifact:        extensions.ArtifactBinary,
+		}}
+		d := newTestDownloader(t, dataHome, mock)
 
 		manifests, err := downloadExtensions(t.Context(), d, []string{extensions.GoPluginLoaderName + ":1.0.0"}, false)
 		require.NoError(t, err)
@@ -1114,7 +1156,8 @@ func TestDownloadExtensions(t *testing.T) {
 		require.Equal(t, extensions.GoPluginLoaderName, m.Name)
 		require.Equal(t, extensions.TypeGo, m.Type)
 		require.True(t, m.CShared, "goplugin-loader must be treated as a c-shared dynamic module")
-		require.Equal(t, extensions.ComposerLiteBundle, m.Parent)
+		// Hosted by the full composer bundle, not composer-lite.
+		require.Equal(t, extensions.ComposerBundle, m.Parent)
 		require.Equal(t, "1.0.0", m.Version)
 		require.Equal(t, "1.0.0", m.ComposerVersion)
 		require.True(t, m.Remote)
@@ -1122,15 +1165,15 @@ func TestDownloadExtensions(t *testing.T) {
 		require.Equal(t, []extensions.FilterType{extensions.FilterTypeHTTP}, m.FilterTypes)
 	})
 
-	t.Run("goplugin-loader missing composer cache fails without network", func(t *testing.T) {
-		// No libcomposer-lite.so seeded and a concrete tag: CheckOrDownloadLibComposerLite must try
-		// to download via the (mock) client. A pull error surfaces as a wrapped error.
+	t.Run("goplugin-loader fails when the composer bundle cannot be pulled", func(t *testing.T) {
+		// A concrete tag with no cached bundle: the composer bundle download must hit the (mock)
+		// client, and a pull error surfaces as a wrapped error.
 		mock := &mockOCIClient{pullErr: errors.New("no network")}
 		d := newTestDownloader(t, t.TempDir(), mock)
 
 		_, err := downloadExtensions(t.Context(), d, []string{extensions.GoPluginLoaderName + ":9.9.9"}, false)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), extensions.GoPluginLoaderName)
+		require.Contains(t, err.Error(), extensions.ComposerBundle)
 	})
 }
 

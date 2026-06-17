@@ -1,0 +1,74 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# NOTE: The goplugin-loader is always built into the composer (and composer-lite)
+# dynamic module. Unlike the sibling extensions in this directory, it has no
+# `standalone/` package and is deliberately excluded from the standalone Go plugin
+# build/install/release targets in ../Makefile, because it is the loader that hosts
+# other Go plugins and therefore can never be compiled or shipped as an independent
+# Go plugin itself. This manifest exists only to document and catalog the loader.
+name: goplugin-loader
+parent: composer
+categories:
+  - Misc
+author: Tetrate
+description: Built-in loader that hosts standalone Go plugins at runtime; always compiled into composer
+longDescription: |
+  The Go Plugin Loader is a built-in Envoy dynamic module filter that loads standalone
+  Go plugins (`.so` files built with `-buildmode=plugin`) at runtime, without recompiling
+  the host binary. It is registered as the well-known HTTP filter config factory named
+  `goplugin-loader`.
+
+  ## Always built-in
+
+  The loader is **always** compiled into the Composer (`libcomposer.so`) and Composer Lite
+  (`libcomposer-lite.so`) dynamic modules. It is **not** a standalone, independently
+  installable or releasable Go plugin: because it is the component that loads other Go
+  plugins, it can never itself be compiled as an independent Go plugin.
+
+  Users reference it directly via `--extension goplugin-loader` or
+  `--extension composer/goplugin-loader`, which drives the loader to fetch and load the
+  configured plugin at runtime.
+
+  ## Configuration
+
+  The loader is configured with the `GoPlugin` message:
+
+  - `name`: the plugin name to load
+  - `url`: where to fetch the plugin binary (`file://` for local paths, `oci://` for OCI registries)
+  - `config`: optional plugin-specific configuration passed through to the loaded plugin
+  - `strict_check`: whether to enforce strict host/plugin compatibility checks (defaults to `true`)
+
+  ## Runtime environment variables
+
+  - `GOPLUGIN_CACHE_DIR` — directory to cache downloaded plugin binaries
+  - `GOPLUGIN_PULL_SECRET` — credentials for authenticating to the OCI registry
+  - `GOPLUGIN_INSECURE` — set to `true` to allow insecure (HTTP) registry connections
+type: go
+tags:
+  - plugin-loader
+license: Apache-2.0
+examples:
+  - title: Load a local Go plugin
+    description: |
+      Drive the built-in goplugin-loader directly to load a locally-built plugin `.so`
+      from a `file://` URL.
+    code: |
+      boe run --extension goplugin-loader \
+        --config '{
+          "name": "my-plugin",
+          "url": "file:///path/to/myplugin.so",
+          "config": {}
+        }'
+  - title: Load a Go plugin from an OCI registry
+    description: |
+      Fetch and load a plugin binary directly from an OCI registry at runtime using an
+      `oci://` URL.
+    code: |
+      boe run --extension goplugin-loader \
+        --config '{
+          "name": "my-plugin",
+          "url": "oci://ghcr.io/tetratelabs/built-on-envoy/extension-my-plugin:v1.0.0"
+        }'
