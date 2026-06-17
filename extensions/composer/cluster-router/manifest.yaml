@@ -118,24 +118,6 @@ longDescription: |
   flows: client → envoy1 → `peer_envoy2` cluster → envoy2 → `remote_svc` cluster
   → backend. Each Envoy makes its own next-hop decision from its own table.
 
-  ## Configuration Reference
-
-  | Field | Required | Default | Description |
-  |---|---|---|---|
-  | `envoy_id` | yes | — | Stable identifier for this Envoy in the federation. Appears in AS-PATH. |
-  | `advertise_listen` | yes | — | `host:port` to serve `/advertisements` on for peer pulls. |
-  | `peers` | no | `[]` | Outbound peers this Envoy pulls advertisements from and routes traffic to. |
-  | `peers[].id` | yes | — | Peer's `envoy_id`. |
-  | `peers[].endpoint` | yes | — | Base URL of the peer's `advertise_listen`. |
-  | `peers[].local_cluster` | yes | — | Name of the local Envoy cluster that points at this peer. |
-  | `terminals` | no | `[]` | Local cluster names this Envoy fronts and advertises as destinations. |
-  | `poll_interval` | no | `"10s"` | How often to pull peer advertisements. Must be >= 100ms. |
-  | `stale_after` | no | `"60s"` | Drop routes from a peer whose last successful sync is older than this. Must be >= `poll_interval`. |
-  | `target_cluster_source` | no | `"header"` | Where to read the target cluster name from. `"metadata"` is reserved and rejected. |
-  | `target_cluster_header` | no | `"x-target-cluster"` | Request header name when `target_cluster_source` is `"header"`. |
-  | `next_hop_header` | no | `"x-next-hop"` | Header the plugin writes for `cluster_header` routes. |
-  | `metadata_namespace` | no | `"io.builtonenvoy.cluster_router"` | Filter-metadata namespace the plugin writes the routing decision under. |
-
   ## Distance and mesh depth
 
   Each route carries a cumulative `distance`. Every link currently counts as one
@@ -151,6 +133,7 @@ tags:
   - filter
   - routing
   - mesh
+featured: true
 license: Apache-2.0
 examples:
   - title: envoy1 — upstream side of a two-Envoy mesh
