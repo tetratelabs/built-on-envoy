@@ -186,6 +186,107 @@ describe('flattenSchema — File Server', () => {
     });
 });
 
+// Schema that mimics dns-gateway.json: root-level oneOf with $ref branches,
+// one branch has required fields, the other does not.
+const dnsGatewayLikeSchema = {
+    title: 'DNS Gateway Configuration',
+    description: 'Pass with --filter-type udp_listener or --filter-type network.',
+    $defs: {
+        DnsGatewayConfig: {
+            type: 'object',
+            required: ['domains'],
+            additionalProperties: false,
+            properties: {
+                domains: {
+                    type: 'array',
+                    minItems: 1,
+                    items: {
+                        type: 'object',
+                        required: ['domain', 'base_ip'],
+                        additionalProperties: false,
+                        properties: {
+                            domain: { type: 'string' },
+                            base_ip: { type: 'string' },
+                        },
+                    },
+                },
+                fail_open: { type: 'boolean', default: false },
+            },
+        },
+        CacheLookupConfig: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+                filter_state_prefix: { type: 'string', default: 'io.builtonenvoy.dns_gateway' },
+            },
+        },
+    },
+    oneOf: [
+        { $ref: '#/$defs/DnsGatewayConfig' },
+        { $ref: '#/$defs/CacheLookupConfig' },
+    ],
+};
+
+describe('flattenSchema — dns-gateway-like (oneOf of $ref branches)', () => {
+    it('merges properties from all $ref branches into root', () => {
+        const { schema } = flattenSchema(dnsGatewayLikeSchema);
+        expect(schema.properties.domains).toBeDefined();
+        expect(schema.properties.fail_open).toBeDefined();
+        expect(schema.properties.filter_state_prefix).toBeDefined();
+    });
+
+    it('sets type to object on the root when missing', () => {
+        const { schema } = flattenSchema(dnsGatewayLikeSchema);
+        expect(schema.type).toBe('object');
+    });
+
+    it('removes oneOf from the output', () => {
+        const { schema } = flattenSchema(dnsGatewayLikeSchema);
+        expect(schema.oneOf).toBeUndefined();
+    });
+
+    it('removes $defs from the output', () => {
+        const { schema } = flattenSchema(dnsGatewayLikeSchema);
+        expect(schema.$defs).toBeUndefined();
+    });
+
+    it('records no oneOf constraint (CacheLookupConfig has no required fields)', () => {
+        const { oneOfConstraints } = flattenSchema(dnsGatewayLikeSchema);
+        expect(oneOfConstraints).toHaveLength(0);
+    });
+
+    it('does NOT mark root as _jeOneOf (no constraint recorded → optional-props detection runs)', () => {
+        const { schema } = flattenSchema(dnsGatewayLikeSchema);
+        expect(schema._jeOneOf).toBeUndefined();
+    });
+
+    it('detects root as having optional properties', () => {
+        const { optionalPropsPaths } = flattenSchema(dnsGatewayLikeSchema);
+        expect(optionalPropsPaths).toContain('');
+    });
+
+    it('strips minItems from the merged domains array', () => {
+        const { schema } = flattenSchema(dnsGatewayLikeSchema);
+        expect(schema.properties.domains.minItems).toBeUndefined();
+    });
+
+    it('removes additionalProperties from the root', () => {
+        const { schema } = flattenSchema(dnsGatewayLikeSchema);
+        expect(schema.additionalProperties).toBeUndefined();
+    });
+
+    it('removes additionalProperties:false from nested branch items', () => {
+        const { schema } = flattenSchema(dnsGatewayLikeSchema);
+        expect(schema.properties.domains.items.additionalProperties).toBeUndefined();
+    });
+
+    it('does not mutate the original schema', () => {
+        const original = JSON.parse(JSON.stringify(dnsGatewayLikeSchema));
+        flattenSchema(dnsGatewayLikeSchema);
+        expect(dnsGatewayLikeSchema).toEqual(original);
+    });
+});
+
 describe('flattenSchema — does not mutate the original schema', () => {
     it('original schema is unchanged after flattening', () => {
         const original = JSON.parse(JSON.stringify(cedarSchema));
