@@ -19,8 +19,8 @@ build: compiled/bundle.js  ## Build the UI assets.
 config-schemas: $(SCHEMA_FILES)
 	@mkdir -p $(SCHEMAS_DIR)
 	@for f in $(SCHEMA_FILES); do \
-		dir=$$(basename "$$(dirname "$$f")"); \
-		cp "$$f" "$(SCHEMAS_DIR)/$$dir.json"; \
+		name=$$($(GO_TOOL) yq '.name' $$(dirname "$$f")/manifest.yaml); \
+		cp "$$f" "$(SCHEMAS_DIR)/$$name.json"; \
 	done
 
 compiled/bundle.js: src/node_modules config-schemas
