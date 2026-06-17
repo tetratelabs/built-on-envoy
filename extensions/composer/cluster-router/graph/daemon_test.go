@@ -34,7 +34,7 @@ func TestDaemon_TwoEnvoyConvergence(t *testing.T) {
 		EnvoyID:         "envoyA",
 		AdvertiseListen: "127.0.0.1:0",
 		Peers: []PeerSpec{{
-			ID: "envoyB", Endpoint: "http://" + bServer.Addr(), LocalCluster: "peer_envoy_b", Weight: 10,
+			ID: "envoyB", Endpoint: "http://" + bServer.Addr(), LocalCluster: "peer_envoy_b",
 		}},
 		Terminals:    []string{"local_a"},
 		PollInterval: 20 * time.Millisecond,
@@ -45,7 +45,7 @@ func TestDaemon_TwoEnvoyConvergence(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		r, ok := d.Table.Load().Lookup("remote_svc")
-		return ok && r.NextHopLocalCluster == "peer_envoy_b" && r.Distance == 10
+		return ok && r.NextHopLocalCluster == "peer_envoy_b" && r.Distance == 1
 	}, 2*time.Second, 20*time.Millisecond)
 
 	r, _ := d.Table.Load().Lookup("local_a")
@@ -71,7 +71,7 @@ func TestDaemon_StalePeerRoutesExpire(t *testing.T) {
 		EnvoyID:         "envoyA",
 		AdvertiseListen: "127.0.0.1:0",
 		Peers: []PeerSpec{{
-			ID: "envoyB", Endpoint: peer.URL, LocalCluster: "peer_envoy_b", Weight: 10,
+			ID: "envoyB", Endpoint: peer.URL, LocalCluster: "peer_envoy_b",
 		}},
 		PollInterval: 20 * time.Millisecond,
 		StaleAfter:   100 * time.Millisecond,
@@ -109,8 +109,8 @@ func TestDaemon_PollsPeersInParallel(t *testing.T) {
 		EnvoyID:         "envoyA",
 		AdvertiseListen: "127.0.0.1:0",
 		Peers: []PeerSpec{
-			{ID: "envoyB", Endpoint: pb.URL, LocalCluster: "peer_envoy_b", Weight: 10},
-			{ID: "envoyC", Endpoint: pc.URL, LocalCluster: "peer_envoy_c", Weight: 10},
+			{ID: "envoyB", Endpoint: pb.URL, LocalCluster: "peer_envoy_b"},
+			{ID: "envoyC", Endpoint: pc.URL, LocalCluster: "peer_envoy_c"},
 		},
 		PollInterval: 1 * time.Second,
 		StaleAfter:   10 * time.Second,

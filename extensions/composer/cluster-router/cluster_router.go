@@ -12,7 +12,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -24,7 +26,9 @@ import (
 // ExtensionName is the filter name composer registers this plugin under.
 const ExtensionName = "cluster-router"
 
-const dynMetadataNamespace = "boe.cluster_router"
+const defaultMetadataNamespace = "io.builtonenvoy.cluster_router"
+
+const minPollInterval = 100 * time.Millisecond
 
 type targetSource string
 
@@ -44,6 +48,7 @@ type Config struct {
 	Terminals           []string         `json:"terminals"`
 	PollInterval        string           `json:"poll_interval"`
 	StaleAfter          string           `json:"stale_after"`
+	MetadataNamespace   string           `json:"metadata_namespace"`
 
 	pollInterval time.Duration
 	staleAfter   time.Duration
@@ -63,18 +68,8 @@ func parseConfig(raw []byte) (*Config, error) {
 }
 
 func (c *Config) validate() error {
-	if c.EnvoyID == "" {
-		return fmt.Errorf("envoy_id is required")
-	}
-	if c.AdvertiseListen == "" {
-		return fmt.Errorf("advertise_listen is required")
-	}
 	if c.TargetClusterSource == "" {
 		c.TargetClusterSource = targetSourceHeader
-	}
-	if c.TargetClusterSource != targetSourceHeader {
-		// `metadata` is reserved in the enum but not yet implemented.
-		return fmt.Errorf("target_cluster_source must be: header")
 	}
 	if c.TargetClusterHeader == "" {
 		c.TargetClusterHeader = "x-target-cluster"
@@ -88,60 +83,78 @@ func (c *Config) validate() error {
 	if c.StaleAfter == "" {
 		c.StaleAfter = "60s"
 	}
-	d, err := time.ParseDuration(c.PollInterval)
-	if err != nil {
-		return fmt.Errorf("poll_interval: %w", err)
+	if c.MetadataNamespace == "" {
+		c.MetadataNamespace = defaultMetadataNamespace
 	}
-	if d < minPollInterval {
-		return fmt.Errorf("poll_interval must be >= %s", minPollInterval)
+
+	// Accumulate all problems so one rejected reload reports them together.
+	var errs []error
+
+	if c.EnvoyID == "" {
+		errs = append(errs, errors.New("envoy_id is required"))
 	}
-	c.pollInterval = d
-	d, err = time.ParseDuration(c.StaleAfter)
-	if err != nil {
-		return fmt.Errorf("stale_after: %w", err)
+	if c.AdvertiseListen == "" {
+		errs = append(errs, errors.New("advertise_listen is required"))
 	}
-	if d < c.pollInterval {
-		return fmt.Errorf("stale_after (%s) must be >= poll_interval (%s)", d, c.pollInterval)
+	if c.TargetClusterSource != targetSourceHeader {
+		// `metadata` is reserved in the enum but not yet implemented.
+		errs = append(errs, errors.New("target_cluster_source must be: header"))
 	}
-	c.staleAfter = d
+
+	if d, err := time.ParseDuration(c.PollInterval); err != nil {
+		errs = append(errs, fmt.Errorf("poll_interval: %w", err))
+	} else if d < minPollInterval {
+		errs = append(errs, fmt.Errorf("poll_interval must be >= %s", minPollInterval))
+	} else {
+		c.pollInterval = d
+	}
+	if d, err := time.ParseDuration(c.StaleAfter); err != nil {
+		errs = append(errs, fmt.Errorf("stale_after: %w", err))
+	} else {
+		c.staleAfter = d
+	}
+	// Only comparable once both durations parsed.
+	if c.pollInterval > 0 && c.staleAfter > 0 && c.staleAfter < c.pollInterval {
+		errs = append(errs, fmt.Errorf("stale_after (%s) must be >= poll_interval (%s)", c.staleAfter, c.pollInterval))
+	}
+
 	seen := map[string]bool{}
 	peerLocals := map[string]bool{}
 	for i, p := range c.Peers {
 		if p.ID == "" || p.Endpoint == "" || p.LocalCluster == "" {
-			return fmt.Errorf("peers[%d]: id, endpoint, local_cluster required", i)
+			errs = append(errs, fmt.Errorf("peers[%d]: id, endpoint, local_cluster required", i))
+		}
+		if p.Endpoint != "" {
+			if u, err := url.Parse(p.Endpoint); err != nil || u.Scheme == "" || u.Host == "" {
+				errs = append(errs, fmt.Errorf("peers[%d]: endpoint %q must be an absolute URL (e.g. http://host:port)", i, p.Endpoint))
+			}
 		}
 		if p.ID == c.EnvoyID {
-			return fmt.Errorf("peers[%d]: id must not equal envoy_id %q", i, c.EnvoyID)
+			errs = append(errs, fmt.Errorf("peers[%d]: id must not equal envoy_id %q", i, c.EnvoyID))
 		}
 		if seen[p.ID] {
-			return fmt.Errorf("peers[%d]: duplicate id %q", i, p.ID)
+			errs = append(errs, fmt.Errorf("peers[%d]: duplicate id %q", i, p.ID))
 		}
 		seen[p.ID] = true
-		if p.Weight < 0 {
-			return fmt.Errorf("peers[%d]: weight must be >= 0", i)
-		}
-		if p.Weight == 0 {
-			c.Peers[i].Weight = 10
-		}
 		peerLocals[p.LocalCluster] = true
 	}
+
 	seenTerm := map[string]bool{}
 	for i, name := range c.Terminals {
 		if name == "" {
-			return fmt.Errorf("terminals[%d]: name required", i)
+			errs = append(errs, fmt.Errorf("terminals[%d]: name required", i))
 		}
 		if seenTerm[name] {
-			return fmt.Errorf("terminals[%d]: duplicate name %q", i, name)
+			errs = append(errs, fmt.Errorf("terminals[%d]: duplicate name %q", i, name))
 		}
 		if peerLocals[name] {
-			return fmt.Errorf("terminals[%d]: %q is also a peer local_cluster", i, name)
+			errs = append(errs, fmt.Errorf("terminals[%d]: %q is also a peer local_cluster", i, name))
 		}
 		seenTerm[name] = true
 	}
-	return nil
-}
 
-const minPollInterval = 100 * time.Millisecond
+	return errors.Join(errs...)
+}
 
 // Plugin is the per-stream filter instance.
 type Plugin struct {
@@ -164,8 +177,9 @@ func (p *Plugin) OnRequestHeaders(headers shared.HeaderMap, _ bool) shared.Heade
 
 	route, ok := p.table.Load().Lookup(target)
 	if !ok {
+		// Unknown target cluster, so 404 rather than 503.
 		body, _ := json.Marshal(map[string]string{"error": "no_route", "target": target})
-		p.handle.SendLocalResponse(503,
+		p.handle.SendLocalResponse(404,
 			[][2]string{{"content-type", "application/json"}},
 			body,
 			"cluster-router-no-route",
@@ -176,11 +190,12 @@ func (p *Plugin) OnRequestHeaders(headers shared.HeaderMap, _ bool) shared.Heade
 	headers.Set(p.cfg.NextHopHeader, route.NextHopLocalCluster)
 	p.handle.ClearRouteCache()
 
-	p.handle.SetMetadata(dynMetadataNamespace, "next_hop_cluster", route.NextHopLocalCluster)
-	p.handle.SetMetadata(dynMetadataNamespace, "target_cluster", route.TargetCluster)
-	p.handle.SetMetadata(dynMetadataNamespace, "distance", int64(route.Distance))
+	ns := p.cfg.MetadataNamespace
+	p.handle.SetMetadata(ns, "next_hop_cluster", route.NextHopLocalCluster)
+	p.handle.SetMetadata(ns, "target_cluster", route.TargetCluster)
+	p.handle.SetMetadata(ns, "distance", int64(route.Distance))
 	if len(route.ASPath) > 0 {
-		p.handle.SetMetadata(dynMetadataNamespace, "as_path", strings.Join(route.ASPath, ","))
+		p.handle.SetMetadata(ns, "as_path", strings.Join(route.ASPath, ","))
 	}
 	return shared.HeadersStatusContinue
 }
@@ -231,6 +246,7 @@ func (f *PluginConfigFactory) Create(handle shared.HttpFilterConfigHandle, unpar
 		Terminals:       cfg.Terminals,
 		PollInterval:    cfg.pollInterval,
 		StaleAfter:      cfg.staleAfter,
+		Logger:          handle.Log,
 	})
 	if err := d.Start(context.Background()); err != nil {
 		handle.Log(shared.LogLevelError, "cluster-router: daemon start: %v", err)

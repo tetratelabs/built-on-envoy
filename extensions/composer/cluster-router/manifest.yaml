@@ -92,7 +92,7 @@ longDescription: |
                         filter_name: cluster-router
                         filter_config:
                           "@type": type.googleapis.com/google.protobuf.StringValue
-                          value: '{"envoy_id":"envoy1","advertise_listen":"0.0.0.0:7001","peers":[{"id":"envoy2","endpoint":"http://envoy2.internal:7002","local_cluster":"peer_envoy2","weight":10}]}'
+                          value: '{"envoy_id":"envoy1","advertise_listen":"0.0.0.0:7001","peers":[{"id":"envoy2","endpoint":"http://envoy2.internal:7002","local_cluster":"peer_envoy2"}]}'
                     - name: envoy.filters.http.router
                       typed_config: { "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router }
     clusters:
@@ -128,13 +128,22 @@ longDescription: |
   | `peers[].id` | yes | — | Peer's `envoy_id`. |
   | `peers[].endpoint` | yes | — | Base URL of the peer's `advertise_listen`. |
   | `peers[].local_cluster` | yes | — | Name of the local Envoy cluster that points at this peer. |
-  | `peers[].weight` | no | `10` | Per-link cost added to advertised distance. Must be >= 0. |
   | `terminals` | no | `[]` | Local cluster names this Envoy fronts and advertises as destinations. |
   | `poll_interval` | no | `"10s"` | How often to pull peer advertisements. Must be >= 100ms. |
   | `stale_after` | no | `"60s"` | Drop routes from a peer whose last successful sync is older than this. Must be >= `poll_interval`. |
   | `target_cluster_source` | no | `"header"` | Where to read the target cluster name from. `"metadata"` is reserved and rejected. |
   | `target_cluster_header` | no | `"x-target-cluster"` | Request header name when `target_cluster_source` is `"header"`. |
   | `next_hop_header` | no | `"x-next-hop"` | Header the plugin writes for `cluster_header` routes. |
+  | `metadata_namespace` | no | `"io.builtonenvoy.cluster_router"` | Filter-metadata namespace the plugin writes the routing decision under. |
+
+  ## Distance and mesh depth
+
+  Each route carries a cumulative `distance`. Every link currently counts as one
+  hop, so a route's distance is simply its hop count. Best-path selection prefers
+  the lowest distance, then the shortest AS-PATH, then the lexicographically
+  smallest next-hop peer id.
+
+  A route is dropped once its distance exceeds `32`.
 type: go
 tags:
   - go
@@ -154,7 +163,7 @@ examples:
           "envoy_id": "envoy1",
           "advertise_listen": "0.0.0.0:7001",
           "peers": [
-            { "id": "envoy2", "endpoint": "http://envoy2.internal:7002", "local_cluster": "peer_envoy2", "weight": 10 }
+            { "id": "envoy2", "endpoint": "http://envoy2.internal:7002", "local_cluster": "peer_envoy2" }
           ],
           "poll_interval": "10s",
           "stale_after": "60s"

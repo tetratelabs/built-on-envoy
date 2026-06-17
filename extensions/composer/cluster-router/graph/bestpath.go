@@ -7,12 +7,14 @@ package graph
 
 import "sort"
 
-// MaxASPath caps the AS-PATH length we accept from a peer.
+// MaxASPath caps the AS-PATH length we accept from a peer, bounding mesh depth.
 const MaxASPath = 32
 
-// MaxDistance caps the advertised cost we accept from a peer. Pinned to
-// MaxASPath: a sane mesh shouldn't need distances larger than the hop bound.
+// MaxDistance caps the advertised distance we accept. Each hop adds 1, so distance
+// equals the hop count and the bound matches MaxASPath: at most 32 hops.
 const MaxDistance = MaxASPath
+
+const hopCost = 1
 
 // PeerAdvertisement pairs an inbound advertisement with the local PeerSpec it arrived through.
 type PeerAdvertisement struct {
@@ -56,7 +58,7 @@ func Compute(localEnvoyID string, locals map[string]LocalCluster, advs []PeerAdv
 			candidate := Route{
 				TargetCluster:       r.TargetCluster,
 				NextHopLocalCluster: pa.Peer.LocalCluster,
-				Distance:            pa.Peer.Weight + r.Distance,
+				Distance:            r.Distance + hopCost,
 				ASPath:              prepend(pa.Peer.ID, r.ASPath),
 			}
 			existing, ok := out[r.TargetCluster]

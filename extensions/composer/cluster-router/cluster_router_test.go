@@ -28,6 +28,7 @@ func newTestPlugin(t *testing.T, routes map[string]graph.Route) (*Plugin, *mocks
 		TargetClusterSource: targetSourceHeader,
 		TargetClusterHeader: "x-target-cluster",
 		NextHopHeader:       "x-next-hop",
+		MetadataNamespace:   defaultMetadataNamespace,
 	}
 	return &Plugin{cfg: cfg, table: tbl, handle: handle}, handle
 }
@@ -43,10 +44,10 @@ func TestPlugin_LookupHit_WritesHeaderAndMetadata(t *testing.T) {
 	})
 
 	handle.EXPECT().ClearRouteCache()
-	handle.EXPECT().SetMetadata(dynMetadataNamespace, "next_hop_cluster", "peer_envoy_b")
-	handle.EXPECT().SetMetadata(dynMetadataNamespace, "target_cluster", "remote_svc")
-	handle.EXPECT().SetMetadata(dynMetadataNamespace, "distance", int64(10))
-	handle.EXPECT().SetMetadata(dynMetadataNamespace, "as_path", "envoyB")
+	handle.EXPECT().SetMetadata(defaultMetadataNamespace, "next_hop_cluster", "peer_envoy_b")
+	handle.EXPECT().SetMetadata(defaultMetadataNamespace, "target_cluster", "remote_svc")
+	handle.EXPECT().SetMetadata(defaultMetadataNamespace, "distance", int64(10))
+	handle.EXPECT().SetMetadata(defaultMetadataNamespace, "as_path", "envoyB")
 
 	hdrs := fake.NewFakeHeaderMap(map[string][]string{
 		"x-target-cluster": {"remote_svc"},
@@ -57,11 +58,11 @@ func TestPlugin_LookupHit_WritesHeaderAndMetadata(t *testing.T) {
 	require.Equal(t, "peer_envoy_b", hdrs.GetOne("x-next-hop").ToUnsafeString())
 }
 
-func TestPlugin_LookupMiss_SendsLocalReply503(t *testing.T) {
+func TestPlugin_LookupMiss_SendsLocalReply404(t *testing.T) {
 	p, handle := newTestPlugin(t, map[string]graph.Route{})
 
 	var sentBody []byte
-	handle.EXPECT().SendLocalResponse(uint32(503), gomock.Any(), gomock.Any(), gomock.Any()).
+	handle.EXPECT().SendLocalResponse(uint32(404), gomock.Any(), gomock.Any(), gomock.Any()).
 		Do(func(_ uint32, _ [][2]string, body []byte, _ string) {
 			sentBody = body
 		})
@@ -87,9 +88,9 @@ func TestPlugin_LocalTerminal_OmitsASPathMetadata(t *testing.T) {
 		"payments": {TargetCluster: "payments", NextHopLocalCluster: "payments"},
 	})
 	handle.EXPECT().ClearRouteCache()
-	handle.EXPECT().SetMetadata(dynMetadataNamespace, "next_hop_cluster", "payments")
-	handle.EXPECT().SetMetadata(dynMetadataNamespace, "target_cluster", "payments")
-	handle.EXPECT().SetMetadata(dynMetadataNamespace, "distance", int64(0))
+	handle.EXPECT().SetMetadata(defaultMetadataNamespace, "next_hop_cluster", "payments")
+	handle.EXPECT().SetMetadata(defaultMetadataNamespace, "target_cluster", "payments")
+	handle.EXPECT().SetMetadata(defaultMetadataNamespace, "distance", int64(0))
 
 	hdrs := fake.NewFakeHeaderMap(map[string][]string{"x-target-cluster": {"payments"}})
 	status := p.OnRequestHeaders(hdrs, true)
@@ -98,7 +99,7 @@ func TestPlugin_LocalTerminal_OmitsASPathMetadata(t *testing.T) {
 
 func TestPlugin_StripsClientSuppliedNextHopHeader_OnLookupMiss(t *testing.T) {
 	p, handle := newTestPlugin(t, map[string]graph.Route{})
-	handle.EXPECT().SendLocalResponse(uint32(503), gomock.Any(), gomock.Any(), gomock.Any())
+	handle.EXPECT().SendLocalResponse(uint32(404), gomock.Any(), gomock.Any(), gomock.Any())
 
 	hdrs := fake.NewFakeHeaderMap(map[string][]string{
 		"x-target-cluster": {"unknown"},
@@ -143,6 +144,62 @@ func TestParseConfig_Defaults(t *testing.T) {
 	require.Equal(t, targetSourceHeader, c.TargetClusterSource)
 	require.Equal(t, "x-target-cluster", c.TargetClusterHeader)
 	require.Equal(t, "x-next-hop", c.NextHopHeader)
+	require.Equal(t, defaultMetadataNamespace, c.MetadataNamespace)
+}
+
+func TestParseConfig_CustomMetadataNamespace(t *testing.T) {
+	c, err := parseConfig([]byte(`{
+		"envoy_id":"a","advertise_listen":"0.0.0.0:0",
+		"metadata_namespace":"io.custom.ns"
+	}`))
+	require.NoError(t, err)
+	require.Equal(t, "io.custom.ns", c.MetadataNamespace)
+}
+
+func TestParseConfig_RejectsInvalidPeerEndpoint(t *testing.T) {
+	_, err := parseConfig([]byte(`{
+		"envoy_id":"a","advertise_listen":"0.0.0.0:0",
+		"peers":[{"id":"b","endpoint":"not-a-url","local_cluster":"peer_b"}]
+	}`))
+	require.ErrorContains(t, err, "must be an absolute URL")
+}
+
+func TestParseConfig_ReportsAllErrorsAtOnce(t *testing.T) {
+	// Missing envoy_id, missing advertise_listen, and an unparseable poll_interval
+	// must all surface together (errors.Join), not one-at-a-time.
+	_, err := parseConfig([]byte(`{"poll_interval":"nope"}`))
+	require.Error(t, err)
+	require.ErrorContains(t, err, "envoy_id is required")
+	require.ErrorContains(t, err, "advertise_listen is required")
+	require.ErrorContains(t, err, "poll_interval")
+}
+
+func TestPlugin_WritesMetadataUnderConfiguredNamespace(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	handle := mocks.NewMockHttpFilterHandle(ctrl)
+	handle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	tbl := graph.NewAtomicTable("envoyA")
+	tbl.Store(&graph.Table{EnvoyID: "envoyA", Routes: map[string]graph.Route{
+		"remote_svc": {TargetCluster: "remote_svc", NextHopLocalCluster: "peer_b"},
+	}})
+	p := &Plugin{
+		cfg: &Config{
+			TargetClusterSource: targetSourceHeader,
+			TargetClusterHeader: "x-target-cluster",
+			NextHopHeader:       "x-next-hop",
+			MetadataNamespace:   "io.custom.ns",
+		},
+		table:  tbl,
+		handle: handle,
+	}
+
+	handle.EXPECT().ClearRouteCache()
+	handle.EXPECT().SetMetadata("io.custom.ns", "next_hop_cluster", "peer_b")
+	handle.EXPECT().SetMetadata("io.custom.ns", "target_cluster", "remote_svc")
+	handle.EXPECT().SetMetadata("io.custom.ns", "distance", int64(0))
+
+	hdrs := fake.NewFakeHeaderMap(map[string][]string{"x-target-cluster": {"remote_svc"}})
+	require.Equal(t, shared.HeadersStatusContinue, p.OnRequestHeaders(hdrs, true))
 }
 
 func TestParseConfig_RejectsPeerSelfReference(t *testing.T) {
@@ -170,14 +227,6 @@ func TestParseConfig_RejectsMetadataSource(t *testing.T) {
 		"target_cluster_source":"metadata"
 	}`))
 	require.ErrorContains(t, err, "target_cluster_source")
-}
-
-func TestParseConfig_RejectsNegativeWeight(t *testing.T) {
-	_, err := parseConfig([]byte(`{
-		"envoy_id":"a","advertise_listen":"0.0.0.0:0",
-		"peers":[{"id":"b","endpoint":"http://b","local_cluster":"peer_b","weight":-1}]
-	}`))
-	require.ErrorContains(t, err, "weight")
 }
 
 func TestParseConfig_RejectsSubFloorPollInterval(t *testing.T) {

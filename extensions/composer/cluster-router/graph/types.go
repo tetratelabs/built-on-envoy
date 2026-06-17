@@ -11,13 +11,11 @@ type PeerSpec struct {
 	ID           string `json:"id"`
 	Endpoint     string `json:"endpoint"`
 	LocalCluster string `json:"local_cluster"`
-	Weight       int    `json:"weight,omitempty"`
 }
 
 // ClusterRole tags a local Envoy cluster for the routing algorithm.
 type ClusterRole string
 
-// Recognized cluster roles. Set via filter_metadata.boe.cluster_router.role.
 const (
 	RoleTerminal ClusterRole = "terminal"
 	RolePeer     ClusterRole = "peer"

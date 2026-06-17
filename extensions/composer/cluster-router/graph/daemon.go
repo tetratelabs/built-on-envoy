@@ -7,11 +7,14 @@ package graph
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 )
+
+type Logger func(level shared.LogLevel, format string, args ...any)
 
 // DaemonConfig configures a Daemon.
 type DaemonConfig struct {
@@ -22,6 +25,13 @@ type DaemonConfig struct {
 	PollInterval    time.Duration
 	StaleAfter      time.Duration
 	HTTPClient      *http.Client
+	Logger          Logger
+}
+
+func (d *Daemon) logf(level shared.LogLevel, format string, args ...any) {
+	if d.cfg.Logger != nil {
+		d.cfg.Logger(level, format, args...)
+	}
 }
 
 // Daemon owns the background poll loop and serves /advertisements.
@@ -146,7 +156,7 @@ func (d *Daemon) collectPeers(ctx context.Context) []PeerAdvertisement {
 				used[i] = true
 				return
 			}
-			log.Printf("cluster-router: peer %s fetch failed: %v", p.ID, err)
+			d.logf(shared.LogLevelWarn, "cluster-router: peer %s fetch failed: %v", p.ID, err)
 			d.mu.Lock()
 			entry, ok := d.lastPeer[p.ID]
 			d.mu.Unlock()

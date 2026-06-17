@@ -30,7 +30,7 @@ func TestCompute_LearnsFromPeer(t *testing.T) {
 		"peer_b": {Name: "peer_b", Role: RolePeer, PeerID: "envoyB"},
 	}
 	advs := []PeerAdvertisement{{
-		Peer: PeerSpec{ID: "envoyB", LocalCluster: "peer_b", Weight: 10},
+		Peer: PeerSpec{ID: "envoyB", LocalCluster: "peer_b"},
 		Adv: Advertisement{
 			EnvoyID: "envoyB",
 			Routes: []Route{
@@ -41,7 +41,7 @@ func TestCompute_LearnsFromPeer(t *testing.T) {
 	routes := Compute("envoyA", locals, advs)
 	r := routes["remote_svc"]
 	require.Equal(t, "peer_b", r.NextHopLocalCluster)
-	require.Equal(t, 10, r.Distance)
+	require.Equal(t, 1, r.Distance)
 	require.Equal(t, []string{"envoyB"}, r.ASPath)
 }
 
@@ -50,7 +50,7 @@ func TestCompute_TransitiveTwoHops(t *testing.T) {
 		"peer_b": {Name: "peer_b", Role: RolePeer, PeerID: "envoyB"},
 	}
 	advs := []PeerAdvertisement{{
-		Peer: PeerSpec{ID: "envoyB", LocalCluster: "peer_b", Weight: 10},
+		Peer: PeerSpec{ID: "envoyB", LocalCluster: "peer_b"},
 		Adv: Advertisement{
 			EnvoyID: "envoyB",
 			Routes: []Route{
@@ -61,7 +61,7 @@ func TestCompute_TransitiveTwoHops(t *testing.T) {
 	routes := Compute("envoyA", locals, advs)
 	r := routes["far_svc"]
 	require.Equal(t, "peer_b", r.NextHopLocalCluster)
-	require.Equal(t, 17, r.Distance)
+	require.Equal(t, 8, r.Distance)
 	require.Equal(t, []string{"envoyB", "envoyC"}, r.ASPath)
 }
 
@@ -70,7 +70,7 @@ func TestCompute_DropsLoopedAdvertisement(t *testing.T) {
 		"peer_b": {Name: "peer_b", Role: RolePeer, PeerID: "envoyB"},
 	}
 	advs := []PeerAdvertisement{{
-		Peer: PeerSpec{ID: "envoyB", LocalCluster: "peer_b", Weight: 10},
+		Peer: PeerSpec{ID: "envoyB", LocalCluster: "peer_b"},
 		Adv: Advertisement{
 			EnvoyID: "envoyB",
 			Routes: []Route{
@@ -88,7 +88,7 @@ func TestCompute_LocalTerminalBeatsPeerAdvertisement(t *testing.T) {
 		"peer_b":   {Name: "peer_b", Role: RolePeer, PeerID: "envoyB"},
 	}
 	advs := []PeerAdvertisement{{
-		Peer: PeerSpec{ID: "envoyB", LocalCluster: "peer_b", Weight: 1},
+		Peer: PeerSpec{ID: "envoyB", LocalCluster: "peer_b"},
 		Adv: Advertisement{
 			EnvoyID: "envoyB",
 			Routes:  []Route{{TargetCluster: "payments", NextHopLocalCluster: "payments", Distance: 0}},
@@ -104,13 +104,15 @@ func TestCompute_PicksLowerDistance(t *testing.T) {
 		"peer_b": {Name: "peer_b", Role: RolePeer, PeerID: "envoyB"},
 		"peer_c": {Name: "peer_c", Role: RolePeer, PeerID: "envoyC"},
 	}
+	// peer_b reaches svc via a longer path (advertised distance 5) than peer_c
+	// (advertised distance 0); each local hop adds 1, so peer_c wins 1 vs 6.
 	advs := []PeerAdvertisement{
 		{
-			Peer: PeerSpec{ID: "envoyB", LocalCluster: "peer_b", Weight: 100},
-			Adv:  Advertisement{Routes: []Route{{TargetCluster: "svc", Distance: 0}}},
+			Peer: PeerSpec{ID: "envoyB", LocalCluster: "peer_b"},
+			Adv:  Advertisement{Routes: []Route{{TargetCluster: "svc", Distance: 5}}},
 		},
 		{
-			Peer: PeerSpec{ID: "envoyC", LocalCluster: "peer_c", Weight: 1},
+			Peer: PeerSpec{ID: "envoyC", LocalCluster: "peer_c"},
 			Adv:  Advertisement{Routes: []Route{{TargetCluster: "svc", Distance: 0}}},
 		},
 	}
@@ -125,11 +127,11 @@ func TestCompute_TieBreakOnPeerID(t *testing.T) {
 	}
 	advs := []PeerAdvertisement{
 		{
-			Peer: PeerSpec{ID: "envoyC", LocalCluster: "peer_c", Weight: 10},
+			Peer: PeerSpec{ID: "envoyC", LocalCluster: "peer_c"},
 			Adv:  Advertisement{Routes: []Route{{TargetCluster: "svc", Distance: 0}}},
 		},
 		{
-			Peer: PeerSpec{ID: "envoyB", LocalCluster: "peer_b", Weight: 10},
+			Peer: PeerSpec{ID: "envoyB", LocalCluster: "peer_b"},
 			Adv:  Advertisement{Routes: []Route{{TargetCluster: "svc", Distance: 0}}},
 		},
 	}
@@ -140,7 +142,7 @@ func TestCompute_TieBreakOnPeerID(t *testing.T) {
 func TestCompute_DropsCandidateWhenLocalClusterMissing(t *testing.T) {
 	locals := map[string]LocalCluster{}
 	advs := []PeerAdvertisement{{
-		Peer: PeerSpec{ID: "envoyB", LocalCluster: "peer_b", Weight: 10},
+		Peer: PeerSpec{ID: "envoyB", LocalCluster: "peer_b"},
 		Adv:  Advertisement{Routes: []Route{{TargetCluster: "svc", Distance: 0}}},
 	}}
 	require.Empty(t, Compute("envoyA", locals, advs))
@@ -168,7 +170,7 @@ func TestCompute_DropsEmptyTargetCluster(t *testing.T) {
 		"peer_b": {Name: "peer_b", Role: RolePeer, PeerID: "envoyB"},
 	}
 	advs := []PeerAdvertisement{{
-		Peer: PeerSpec{ID: "envoyB", LocalCluster: "peer_b", Weight: 10},
+		Peer: PeerSpec{ID: "envoyB", LocalCluster: "peer_b"},
 		Adv: Advertisement{Routes: []Route{
 			{TargetCluster: "", Distance: 0},
 			{TargetCluster: "valid", Distance: 0},
@@ -184,7 +186,7 @@ func TestCompute_DropsNegativeDistance(t *testing.T) {
 		"peer_b": {Name: "peer_b", Role: RolePeer, PeerID: "envoyB"},
 	}
 	advs := []PeerAdvertisement{{
-		Peer: PeerSpec{ID: "envoyB", LocalCluster: "peer_b", Weight: 10},
+		Peer: PeerSpec{ID: "envoyB", LocalCluster: "peer_b"},
 		Adv:  Advertisement{Routes: []Route{{TargetCluster: "svc", Distance: -1}}},
 	}}
 	require.Empty(t, Compute("envoyA", locals, advs))
@@ -199,7 +201,7 @@ func TestCompute_DropsOversizeASPath(t *testing.T) {
 		overlong[i] = "x"
 	}
 	advs := []PeerAdvertisement{{
-		Peer: PeerSpec{ID: "envoyB", LocalCluster: "peer_b", Weight: 10},
+		Peer: PeerSpec{ID: "envoyB", LocalCluster: "peer_b"},
 		Adv:  Advertisement{Routes: []Route{{TargetCluster: "svc", Distance: 0, ASPath: overlong}}},
 	}}
 	require.Empty(t, Compute("envoyA", locals, advs))
@@ -210,14 +212,14 @@ func TestCompute_DedupesWithinAdvertisement(t *testing.T) {
 		"peer_b": {Name: "peer_b", Role: RolePeer, PeerID: "envoyB"},
 	}
 	advs := []PeerAdvertisement{{
-		Peer: PeerSpec{ID: "envoyB", LocalCluster: "peer_b", Weight: 10},
+		Peer: PeerSpec{ID: "envoyB", LocalCluster: "peer_b"},
 		Adv: Advertisement{Routes: []Route{
 			{TargetCluster: "svc", Distance: 0},
 			{TargetCluster: "svc", Distance: 999, ASPath: []string{"evil"}},
 		}},
 	}}
 	routes := Compute("envoyA", locals, advs)
-	require.Equal(t, 10, routes["svc"].Distance)
+	require.Equal(t, 1, routes["svc"].Distance)
 }
 
 func TestCompute_TieBreakOnIdenticalDistanceAndPath(t *testing.T) {
@@ -225,16 +227,16 @@ func TestCompute_TieBreakOnIdenticalDistanceAndPath(t *testing.T) {
 		"peer_b": {Name: "peer_b", Role: RolePeer, PeerID: "envoyB"},
 		"peer_c": {Name: "peer_c", Role: RolePeer, PeerID: "envoyC"},
 	}
-	// Same weight, both report distance 0 with empty ASPath: candidates have
+	// Same cost, both report distance 0 with empty ASPath: candidates have
 	// identical distance (10) and AS-PATH length (1). Tie-break must be
 	// deterministic on the first AS-PATH element (peer id).
 	advs := []PeerAdvertisement{
 		{
-			Peer: PeerSpec{ID: "envoyC", LocalCluster: "peer_c", Weight: 10},
+			Peer: PeerSpec{ID: "envoyC", LocalCluster: "peer_c"},
 			Adv:  Advertisement{Routes: []Route{{TargetCluster: "svc", Distance: 0}}},
 		},
 		{
-			Peer: PeerSpec{ID: "envoyB", LocalCluster: "peer_b", Weight: 10},
+			Peer: PeerSpec{ID: "envoyB", LocalCluster: "peer_b"},
 			Adv:  Advertisement{Routes: []Route{{TargetCluster: "svc", Distance: 0}}},
 		},
 	}
@@ -249,7 +251,7 @@ func TestCompute_DropsRouteWhenDirectPeerIDInASPath(t *testing.T) {
 	// envoyB advertising a route whose AS-PATH already contains envoyB is
 	// malformed; drop it instead of double-counting.
 	advs := []PeerAdvertisement{{
-		Peer: PeerSpec{ID: "envoyB", LocalCluster: "peer_b", Weight: 10},
+		Peer: PeerSpec{ID: "envoyB", LocalCluster: "peer_b"},
 		Adv:  Advertisement{Routes: []Route{{TargetCluster: "svc", ASPath: []string{"envoyB", "envoyZ"}}}},
 	}}
 	require.Empty(t, Compute("envoyA", locals, advs))

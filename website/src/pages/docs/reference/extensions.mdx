@@ -524,6 +524,17 @@ Stable identifier for this Envoy in the federation. Appears in AS-PATH.
 
 [↑ Top](#) | [↑ cluster-router configuration](#cluster-router) {/* if .SubProperties */}
 
+### metadata_namespace
+
+Filter metadata namespace the plugin writes routing decisions (next_hop_cluster, target_cluster, distance, as_path) under. Defaults to "io.builtonenvoy.cluster_router" if not set.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ cluster-router configuration](#cluster-router) {/* if .SubProperties */}
+
 ### next_hop_header
 
 Header name written by the filter for `cluster_header` routes.
@@ -584,19 +595,6 @@ Name of the local Envoy cluster that routes data-plane traffic to this peer.
 | **Type** | `string` |
 | **Required** | Yes |
 | **Min length** | 1 |
-
-[↑ Top](#) | [↑ cluster-router configuration](#cluster-router)
-
-
-
-#### peers.weight
-
-Per-link cost added to advertised distance during best-path selection.
-
-| | |
-|---|---|
-| **Type** | `integer` |
-| **Required** | No |
 
 [↑ Top](#) | [↑ cluster-router configuration](#cluster-router)
 

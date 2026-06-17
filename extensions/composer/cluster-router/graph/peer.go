@@ -30,10 +30,9 @@ type AdvertisementServer struct {
 }
 
 // NewAdvertisementServer binds the listener and prepares (but does not start)
-// the HTTP server. SO_REUSEADDR is set so an LDS reload that recreates the
-// filter chain can rebind the port without waiting for TIME_WAIT.
+// the HTTP server.
 func NewAdvertisementServer(envoyID, listen string, table *AtomicTable) (*AdvertisementServer, error) {
-	lc := net.ListenConfig{Control: setReuseAddr}
+	lc := net.ListenConfig{Control: setSocketReuse}
 	lis, err := lc.Listen(context.Background(), "tcp", listen)
 	if err != nil {
 		return nil, fmt.Errorf("advertise listen %q: %w", listen, err)
@@ -45,10 +44,13 @@ func NewAdvertisementServer(envoyID, listen string, table *AtomicTable) (*Advert
 	return as, nil
 }
 
-func setReuseAddr(_ /* network */, _ /* address */ string, c syscall.RawConn) error {
+func setSocketReuse(_ /* network */, _ /* address */ string, c syscall.RawConn) error {
 	var setErr error
 	if err := c.Control(func(fd uintptr) {
-		setErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
+		if setErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1); setErr != nil {
+			return
+		}
+		setErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEPORT, 1)
 	}); err != nil {
 		return err
 	}
