@@ -22,8 +22,7 @@
     import { untrack } from 'svelte';
     import { categoryClass } from '../lib/utils.js';
     import { getConfigs, getInstancesOf, isRunning, setRunning,
-             addExtensionInstance, deselectExtension, deselectAllInstancesOf, setConfig,
-             instanceExtName, getDisplayLabel } from '../lib/store.svelte.js';
+             addExtensionInstance, deselectExtension, deselectAllInstancesOf, setConfig, getDisplayLabel } from '../lib/store.svelte.js';
     import { getSchema, postRun, postStop } from '../lib/api.js';
     import { parseSSEStream } from '../lib/sse.js';
     import ConfigForm from './ConfigForm.svelte';
@@ -32,12 +31,12 @@
     // Props
     let { ext, instanceId = null, onRunAllPanelRequest, onClearRunAllError } = $props();
 
-    // Main row active when ≥1 instances exist; instance rows always active.
-    let isOn = $derived(instanceId !== null || instanceCount > 0);
-
     // Instance count for this extension (used by definition row for the count badge)
     let activeInstances = $derived(getInstancesOf(ext.name));
     let instanceCount   = $derived(activeInstances.length);
+
+    // Main row active when ≥1 instances exist; instance rows always active.
+    let isOn = $derived(instanceId !== null || instanceCount > 0);
 
     // Display label: "ext-name" for single instance, "ext-name #N" for multiples
     let displayLabel = $derived(instanceId !== null ? getDisplayLabel(instanceId) : ext.name);
