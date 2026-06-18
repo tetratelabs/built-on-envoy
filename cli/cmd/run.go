@@ -31,16 +31,14 @@ const defaultLogLevel = "error"
 
 // Run is a command to run Envoy with extensions.
 type Run struct {
-	EnvoyVersion     string   `help:"Envoy version to use (e.g., 1.31.0, dev, dev-latest)" env:"ENVOY_VERSION"`
-	EnvoyVersionsURL string   `name:"envoy-versions-url" help:"URL of the Envoy versions JSON. Override to use debug builds (see archive-envoy)." env:"ENVOY_VERSIONS_URL" hidden:""`
-	EnvoyPath        string   `name:"envoy-path" help:"Path to a custom Envoy binary. Skips Envoy download and version selection." env:"ENVOY_PATH"`
-	LogLevel         string   `help:"Envoy component log level." default:"all:error" env:"ENVOY_LOG_LEVEL"`
-	RunID            string   `name:"run-id" env:"BOE_RUN_ID" help:"Run identifier for this invocation. Overrides the default timestamp-based ID."`
-	ListenPort       uint32   `help:"Port for Envoy listener to accept incoming traffic." default:"10000"`
-	AdminPort        uint32   `name:"admin-port" help:"Port for Envoy admin interface." default:"9901" env:"BOE_ADMIN_PORT"`
-	Extensions       []string `name:"extension" help:"Extensions to enable (in the format: \"name\" or \"name:version\")."`
-	Local            []string `name:"local" sep:"none" help:"Path to a directory containing a local Extension to enable." type:"existingdir"`
-	Dev              bool     `help:"Whether to allow downloading dev versions of extensions (with -dev suffix). By default, only stable versions are allowed." default:"false"`
+	Envoy      EnvoyFlags `embed:""`
+	LogLevel   string     `help:"Envoy component log level." default:"all:error" env:"ENVOY_LOG_LEVEL"`
+	RunID      string     `name:"run-id" env:"BOE_RUN_ID" help:"Run identifier for this invocation. Overrides the default timestamp-based ID."`
+	ListenPort uint32     `help:"Port for Envoy listener to accept incoming traffic." default:"10000"`
+	AdminPort  uint32     `name:"admin-port" help:"Port for Envoy admin interface." default:"9901" env:"BOE_ADMIN_PORT"`
+	Extensions []string   `name:"extension" help:"Extensions to enable (in the format: \"name\" or \"name:version\")."`
+	Local      []string   `name:"local" sep:"none" help:"Path to a directory containing a local Extension to enable." type:"existingdir"`
+	Dev        bool       `help:"Whether to allow downloading dev versions of extensions (with -dev suffix). By default, only stable versions are allowed." default:"false"`
 	// sep:"none" disables Kong's default comma-separated splitting for []string flags.
 	// JSON config values contain commas (e.g. {"a":"1","b":"2"}) which would otherwise
 	// be split into separate invalid fragments, causing protobuf unmarshal failures.
@@ -49,31 +47,12 @@ type Run struct {
 	NativeHTTPFiltersBefore []string     `name:"native-http-filter-before" sep:"none" help:"Optional YAML/JSON native HTTP filter list (or @filepath) per extension position. Overrides manifest nativeHttpFilters.before."`
 	NativeHTTPFiltersAfter  []string     `name:"native-http-filter-after" sep:"none" help:"Optional YAML/JSON native HTTP filter list (or @filepath) per extension position. Overrides manifest nativeHttpFilters.after."`
 	Clusters                ClusterFlags `embed:""`
-	TestUpstreamHost        string       `name:"test-upstream-host" help:"Hostname for the test upstream cluster. Mutually exclusive with --test-upstream-cluster. Defaults to \"httpbin.org\"."`
-	TestUpstreamCluster     string       `name:"test-upstream-cluster" help:"Name of an existing configured cluster to use as the test upstream. The cluster must be configured via --cluster, --cluster-insecure, or --cluster-json. Mutually exclusive with --test-upstream-host."`
-	Docker                  bool         `help:"Run Envoy as a Docker container instead of using func-e." default:"false" env:"BOE_RUN_DOCKER"`
-	Pull                    string       `name:"pull" help:"Pull policy for the BOE Docker image (missing, always, never). Only applicable when running with --docker." enum:"missing,always,never" default:"missing"`
-	DockerImageVersion      string       `name:"docker-image-version" help:"Override the BOE Docker image tag to use when running with --docker. By default, the image version matches the BOE version."`
+	Docker                  DockerFlags  `embed:""`
 	OCI                     OCIFlags     `embed:""`
 
 	extensionPositions extensionPositions `kong:"-"` // Internal field: tracks the original position of extensions specified via both --extension and --local flags
 	defaultLogLevel    string             `kong:"-"` // Internal field: parsed default log level
 	componentLogLevel  string             `kong:"-"` // Internal field: parsed component log levels
-}
-
-// OCIFlags holds flags for OCI registry authentication and configuration.
-type OCIFlags struct {
-	Registry string `name:"registry" env:"BOE_REGISTRY" help:"OCI registry URL for the extensions." default:"${default_registry}"`
-	Insecure bool   `name:"insecure" env:"BOE_REGISTRY_INSECURE" help:"Allow connecting to an insecure (HTTP) registry." default:"false"`
-	Username string `name:"username" env:"BOE_REGISTRY_USERNAME" help:"Username for the OCI registry."`
-	Password string `name:"password" env:"BOE_REGISTRY_PASSWORD" help:"Password for the OCI registry." type:"password" sensitive:"true"`
-}
-
-// ClusterFlags holds flags for additional Envoy clusters.
-type ClusterFlags struct {
-	Secure   []string `name:"cluster" help:"Optional additional Envoy cluster provided in the host:tlsPort pattern." `
-	Insecure []string `name:"cluster-insecure" help:"Optional additional Envoy cluster (with TLS transport disabled) provided in the host:port pattern." `
-	JSONSpec []string `name:"cluster-json" sep:"none" help:"Optional additional Envoy cluster providing the complete cluster config in JSON format." `
 }
 
 //go:embed run_help.md
@@ -97,13 +76,13 @@ func (r *Run) Validate() error {
 	if err != nil {
 		return err
 	}
-	if r.TestUpstreamHost != "" && r.TestUpstreamCluster != "" {
+	if r.Clusters.TestUpstreamHost != "" && r.Clusters.TestUpstreamCluster != "" {
 		return fmt.Errorf("--test-upstream-host and --test-upstream-cluster are mutually exclusive")
 	}
-	if r.EnvoyPath != "" && r.EnvoyVersion != "" {
+	if r.Envoy.Path != "" && r.Envoy.Version != "" {
 		return fmt.Errorf("--envoy-path and --envoy-version are mutually exclusive")
 	}
-	if r.DockerImageVersion != "" && !r.Docker {
+	if r.Docker.ImageVersion != "" && !r.Docker.Enabled {
 		return fmt.Errorf("--docker-image-version can only be used with --docker")
 	}
 	return nil
@@ -112,7 +91,7 @@ func (r *Run) Validate() error {
 // Run executes the run command
 func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logger) error {
 	logger.Debug("handling run command", "cmd", internal.RedactSensitive(r))
-	if r.Docker {
+	if r.Docker.Enabled {
 		runner := &envoy.RunnerDocker{
 			Logger:          logger,
 			Registry:        r.OCI.Registry,
@@ -122,17 +101,17 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 			RunID:           r.RunID,
 			Arch:            runtime.GOARCH,
 			LocalExtensions: r.Local,
-			Pull:            r.Pull,
-			ImageVersion:    r.DockerImageVersion,
+			Pull:            r.Docker.Pull,
+			ImageVersion:    r.Docker.ImageVersion,
 		}
 		return runner.Run(ctx)
 	}
 
 	// We need to validate the existence here and not in the initial command as the path could be relative to
 	// the Docker container when running in Docker.
-	if r.EnvoyPath != "" {
-		if _, err := os.Stat(r.EnvoyPath); err != nil {
-			return fmt.Errorf("specified Envoy binary not found at %s: %w", r.EnvoyPath, err)
+	if r.Envoy.Path != "" {
+		if _, err := os.Stat(r.Envoy.Path); err != nil {
+			return fmt.Errorf("specified Envoy binary not found at %s: %w", r.Envoy.Path, err)
 		}
 	}
 
@@ -162,20 +141,20 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 		return err
 	}
 
-	if r.EnvoyPath != "" {
-		logger.Debug("using custom Envoy binary; skipping Envoy version resolution", "envoy_path", r.EnvoyPath)
+	if r.Envoy.Path != "" {
+		logger.Debug("using custom Envoy binary; skipping Envoy version resolution", "envoy_path", r.Envoy.Path)
 	} else {
 		// If no Envoy version is specified, check if the extensions have Envoy version constraints defined
 		// and if so, use them to determine a compatible Envoy version to run.
-		if r.EnvoyVersion == "" {
-			r.EnvoyVersion, err = extensions.ResolveMinimumCompatibleEnvoyVersion(extensionsToRun)
+		if r.Envoy.Version == "" {
+			r.Envoy.Version, err = extensions.ResolveMinimumCompatibleEnvoyVersion(extensionsToRun)
 			if err != nil {
 				return err
 			}
-			logger.Debug("resolved Envoy version from manifests", "envoy_version", r.EnvoyVersion)
+			logger.Debug("resolved Envoy version from manifests", "envoy_version", r.Envoy.Version)
 		} else {
-			logger.Debug("validating Envoy version compatibility for extensions", "envoy_version", r.EnvoyVersion)
-			if err = validateEnvoyCompat(r.EnvoyVersion, extensionsToRun); err != nil {
+			logger.Debug("validating Envoy version compatibility for extensions", "envoy_version", r.Envoy.Version)
+			if err = validateEnvoyCompat(r.Envoy.Version, extensionsToRun); err != nil {
 				return err
 			}
 		}
@@ -201,9 +180,9 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 
 	runner := &envoy.RunnerFuncE{
 		Logger:                  logger,
-		EnvoyVersion:            r.EnvoyVersion,
-		EnvoyVersionsURL:        r.EnvoyVersionsURL,
-		EnvoyPath:               r.EnvoyPath,
+		EnvoyVersion:            r.Envoy.Version,
+		EnvoyVersionsURL:        r.Envoy.VersionsURL,
+		EnvoyPath:               r.Envoy.Path,
 		DefaultLogLevel:         r.defaultLogLevel,
 		ComponentLogLevel:       r.componentLogLevel,
 		Dirs:                    dirs,
@@ -218,8 +197,8 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 		Clusters:                r.Clusters.Secure,
 		ClustersInsecure:        r.Clusters.Insecure,
 		ClustersJSON:            r.Clusters.JSONSpec,
-		TestUpstreamHost:        r.TestUpstreamHost,
-		TestUpstreamCluster:     r.TestUpstreamCluster,
+		TestUpstreamHost:        r.Clusters.TestUpstreamHost,
+		TestUpstreamCluster:     r.Clusters.TestUpstreamCluster,
 		ExtProcBinaries:         extProcBinaries,
 	}
 

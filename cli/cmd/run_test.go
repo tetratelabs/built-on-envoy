@@ -151,8 +151,8 @@ func TestParseCmdRunDefaults(t *testing.T) {
 	require.Equal(t, "all:error", cli.Run.LogLevel)
 	require.Equal(t, uint32(10000), cli.Run.ListenPort)
 	require.Equal(t, uint32(9901), cli.Run.AdminPort)
-	require.Empty(t, cli.Run.EnvoyVersion)
-	require.Empty(t, cli.Run.EnvoyPath)
+	require.Empty(t, cli.Run.Envoy.Version)
+	require.Empty(t, cli.Run.Envoy.Path)
 	require.Empty(t, cli.Run.Extensions)
 	require.Equal(t, extensions.DefaultOCIRegistry, cli.Run.OCI.Registry)
 	require.False(t, cli.Run.OCI.Insecure)
@@ -263,7 +263,7 @@ func TestParseCmdRunCustomValues(t *testing.T) {
 	require.Equal(t, "all:debug,upstream:trace", cli.Run.LogLevel)
 	require.Equal(t, uint32(8080), cli.Run.ListenPort)
 	require.Equal(t, uint32(9000), cli.Run.AdminPort)
-	require.Equal(t, "1.31.0", cli.Run.EnvoyVersion)
+	require.Equal(t, "1.31.0", cli.Run.Envoy.Version)
 	require.Equal(t, "custom-run-id", cli.Run.RunID)
 	require.Equal(t, []string{"cors:1.0.0", "rate-limiter", "auth-jwt"}, cli.Run.Extensions)
 	require.Equal(t, "localhost:5000", cli.Run.OCI.Registry)
@@ -279,26 +279,32 @@ func TestRunValidateMutualExclusion(t *testing.T) {
 		{
 			name: "test upstream host and cluster",
 			run: Run{
-				LogLevel:            "all:error",
-				TestUpstreamHost:    "example.com",
-				TestUpstreamCluster: "example.com:443",
+				LogLevel: "all:error",
+				Clusters: ClusterFlags{
+					TestUpstreamHost:    "example.com",
+					TestUpstreamCluster: "example.com:443",
+				},
 			},
 			expectedErr: "--test-upstream-host and --test-upstream-cluster are mutually exclusive",
 		},
 		{
 			name: "envoy path and version",
 			run: Run{
-				LogLevel:     "all:error",
-				EnvoyPath:    "/usr/local/bin/envoy",
-				EnvoyVersion: "1.38.0",
+				LogLevel: "all:error",
+				Envoy: EnvoyFlags{
+					Path:    "/usr/local/bin/envoy",
+					Version: "1.38.0",
+				},
 			},
 			expectedErr: "--envoy-path and --envoy-version are mutually exclusive",
 		},
 		{
 			name: "docker image version without docker",
 			run: Run{
-				LogLevel:           "all:error",
-				DockerImageVersion: "custom-version",
+				LogLevel: "all:error",
+				Docker: DockerFlags{
+					ImageVersion: "custom-version",
+				},
 			},
 			expectedErr: "--docker-image-version can only be used with --docker",
 		},
@@ -456,7 +462,7 @@ func TestRunInvalidConfig(t *testing.T) {
 }
 
 func TestRunInvalidEnvoyPath(t *testing.T) {
-	r := &Run{EnvoyPath: "/nonexistent/path/to/envoy"}
+	r := &Run{Envoy: EnvoyFlags{Path: "/nonexistent/path/to/envoy"}}
 	err := r.Run(t.Context(), &xdg.Directories{}, internaltesting.NewTLogger(t))
 	require.ErrorContains(t, err, "Envoy binary not found")
 }
@@ -713,8 +719,8 @@ func TestValidateEnvoyCompat(t *testing.T) {
 
 func TestRunIncompatibleEnvoyVersion(t *testing.T) {
 	r := &Run{
-		EnvoyVersion: "1.38.0",
-		Local:        []string{"./testdata/input_lua_inline"},
+		Envoy: EnvoyFlags{Version: "1.38.0"},
+		Local: []string{"./testdata/input_lua_inline"},
 	}
 
 	var err error

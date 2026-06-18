@@ -171,16 +171,6 @@ type mockFlusherOnly struct{ flush func() }
 
 func (m *mockFlusherOnly) Flush() { m.flush() }
 
-func TestRunParams_Args(t *testing.T) {
-	require.Empty(t, (&RunParams{}).Args())
-
-	args := (&RunParams{LogLevel: "debug", EnvoyVersion: "v1", EnvoyVersionsURL: "http://x", EnvoyPath: "/bin/envoy", Dev: true}).Args()
-	require.Equal(t, []string{"--log-level", "debug", "--envoy-version", "v1", "--envoy-versions-url", "http://x", "--envoy-path", "/bin/envoy", "--dev"}, args)
-
-	require.Equal(t, []string{"--log-level", "warn"}, (&RunParams{LogLevel: "warn"}).Args())
-	require.Equal(t, []string{"--dev"}, (&RunParams{Dev: true}).Args())
-}
-
 func TestExecutorSelfExe(t *testing.T) {
 	e := &Executor{logger: discardLogger()}
 	require.NotEmpty(t, e.selfExe())

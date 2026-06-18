@@ -27,3 +27,9 @@ Start the UI enabling also some local extensions:
     ```shell
     boe ui --local /path/to/my/extension1 --local /path/to/my/extension2 
     ```
+
+Start the UI to run the extensions against a custom upstream host instead of the default `httpbin.org`:
+
+    ```shell
+    boe ui --test-upstream-host api.openai.com
+    ```

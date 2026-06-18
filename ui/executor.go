@@ -60,9 +60,6 @@ func freePorts(n int) ([]int, error) {
 func buildArgs(action string, baseArgs []string, exts []*ExtensionConfig) []string {
 	args := []string{action}
 	args = append(args, baseArgs...)
-	if runtime.GOOS == "darwin" && runtime.GOARCH == "amd64" {
-		args = append(args, "--docker")
-	}
 	if ports, err := freePorts(2); err == nil {
 		args = append(args, "--listen-port", strconv.Itoa(ports[0]), "--admin-port", strconv.Itoa(ports[1]))
 	}
@@ -126,7 +123,9 @@ func ansiToHTML(text string) string {
 
 			color, ok := defaultCodeColors[code]
 			if ok {
-				b.WriteString(`<span class="` + color + `">`)
+				b.WriteString(`<span class="`)
+				b.WriteString(color)
+				b.WriteString(`">`)
 				openTags++
 				continue
 			}

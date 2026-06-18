@@ -83,15 +83,6 @@ Flags:
       --cluster-json=CLUSTER-JSON
                                    Optional additional Envoy cluster providing
                                    the complete cluster config in JSON format.
-      --registry="%s"
-                                   OCI registry URL for the extensions
-                                   ($BOE_REGISTRY).
-      --insecure                   Allow connecting to an insecure (HTTP)
-                                   registry ($BOE_REGISTRY_INSECURE).
-      --username=STRING            Username for the OCI registry
-                                   ($BOE_REGISTRY_USERNAME).
-      --password=STRING            Password for the OCI registry
-                                   ($BOE_REGISTRY_PASSWORD).
       --test-upstream-host=STRING
                                    Hostname for the test upstream
                                    cluster. Mutually exclusive with
@@ -103,6 +94,15 @@ Flags:
                                    configured via --cluster, --cluster-insecure,
                                    or --cluster-json. Mutually exclusive with
                                    --test-upstream-host.
+      --registry="%s"
+                                   OCI registry URL for the extensions
+                                   ($BOE_REGISTRY).
+      --insecure                   Allow connecting to an insecure (HTTP)
+                                   registry ($BOE_REGISTRY_INSECURE).
+      --username=STRING            Username for the OCI registry
+                                   ($BOE_REGISTRY_USERNAME).
+      --password=STRING            Password for the OCI registry
+                                   ($BOE_REGISTRY_PASSWORD).
       --output="-"                 Directory to put the generated config into.
                                    Use "-" to print it to the standard output.
 `, internaltesting.WrapHelp(genConfigHelp), extensions.DefaultOCIRegistry)
@@ -238,13 +238,13 @@ func TestGenConfig(t *testing.T) {
 				ListenPort: 10000,
 				Local:      tt.local,
 				Clusters: ClusterFlags{
-					Secure:   tt.clusters,
-					Insecure: tt.clustersInsecure,
-					JSONSpec: tt.clustersJSON,
+					Secure:              tt.clusters,
+					Insecure:            tt.clustersInsecure,
+					JSONSpec:            tt.clustersJSON,
+					TestUpstreamCluster: tt.testUpstreamCluster,
 				},
-				TestUpstreamCluster: tt.testUpstreamCluster,
-				Output:              "-",
-				stdout:              &buf,
+				Output: "-",
+				stdout: &buf,
 			}
 
 			var args []string
@@ -269,8 +269,10 @@ func TestGenConfig(t *testing.T) {
 
 func TestGenConfigValidateMutualExclusion(t *testing.T) {
 	cmd := &GenConfig{
-		TestUpstreamHost:    "example.com",
-		TestUpstreamCluster: "example.com:443",
+		Clusters: ClusterFlags{
+			TestUpstreamHost:    "example.com",
+			TestUpstreamCluster: "example.com:443",
+		},
 	}
 	require.ErrorContains(t, cmd.Validate(), "--test-upstream-host and --test-upstream-cluster are mutually exclusive")
 }

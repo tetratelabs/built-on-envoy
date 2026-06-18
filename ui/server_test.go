@@ -226,3 +226,74 @@ func TestHandleRun_StreamingNotSupported(t *testing.T) {
 
 	require.Equal(t, http.StatusInternalServerError, w.code)
 }
+
+func TestRunParams_Args(t *testing.T) {
+	tests := []struct {
+		name   string
+		params *RunParams
+		want   []string
+	}{
+		{
+			name:   "nil receiver",
+			params: nil,
+			want:   nil,
+		},
+		{
+			name:   "empty params",
+			params: &RunParams{},
+			want:   nil,
+		},
+		{
+			name:   "log level",
+			params: &RunParams{LogLevel: "warn"},
+			want:   []string{"--log-level", "warn"},
+		},
+		{
+			name:   "dev false emits no flag",
+			params: &RunParams{Dev: false},
+			want:   nil,
+		},
+		{
+			name: "all flags",
+			params: &RunParams{
+				LogLevel:            "debug",
+				EnvoyVersion:        "1.30.0",
+				EnvoyVersionsURL:    "https://example.com/versions.json",
+				EnvoyPath:           "/usr/local/bin/envoy",
+				Dev:                 true,
+				ClustersSecure:      []string{"a.example.com", "b.example.com"},
+				ClustersInsecure:    []string{"b.example.com", "c.example.com"},
+				ClustersJSONSpec:    []string{`{"name":"x"}`, `{"name":"y"}`},
+				TestUpstreamHost:    "localhost:9090",
+				TestUpstreamCluster: "my-cluster",
+				Docker:              true,
+				DockerImage:         "my-docker-image",
+				DockerPullPolicy:    "always",
+			},
+			want: []string{
+				"--log-level", "debug",
+				"--envoy-version", "1.30.0",
+				"--envoy-versions-url", "https://example.com/versions.json",
+				"--envoy-path", "/usr/local/bin/envoy",
+				"--dev",
+				"--cluster", "a.example.com",
+				"--cluster", "b.example.com",
+				"--cluster-insecure", "b.example.com",
+				"--cluster-insecure", "c.example.com",
+				"--cluster-json", `{"name":"x"}`,
+				"--cluster-json", `{"name":"y"}`,
+				"--test-upstream-host", "localhost:9090",
+				"--test-upstream-cluster", "my-cluster",
+				"--docker",
+				"--docker-image-version", "my-docker-image",
+				"--pull", "always",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, tt.params.Args())
+		})
+	}
+}
