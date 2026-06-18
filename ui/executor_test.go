@@ -165,7 +165,7 @@ func TestBuildArgs_FilterType(t *testing.T) {
 
 		// Positional order must match extension order:
 		// opa has no filter type → empty string; dns-gateway → "network"
-		require.Equal(t, "", args[ftIdx+1], "first ext (no filter type) must use empty string")
+		require.Empty(t, args[ftIdx+1], "first ext (no filter type) must use empty string")
 		require.Equal(t, "--filter-type", args[ftIdx+2])
 		require.Equal(t, "network", args[ftIdx+3])
 	})

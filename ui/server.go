@@ -167,7 +167,7 @@ func (s *Server) handleGetExtensions(w http.ResponseWriter, _ *http.Request) {
 		}
 		deduped = append(deduped, ext)
 	}
-	extensions = append(localExtensions, deduped...)
+	extensions = append(localExtensions, deduped...) //nolint:gocritic
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(extensions); err != nil {
