@@ -1,18 +1,100 @@
 ---
+const videos = [
+	{
+		title: "Trying extensions with the Built On Envoy UI",
+		description:
+			"The UI automatically renders the configuration forms based on the extension configuration schema and allows running Envoy easily from the browser with a few clicks.",
+		type: "local" as const,
+		src: "/boe-ui.mp4",
+	},
+	{
+		title: "Creating Envoy extensions",
+		description:
+			"Learn how to scaffold a new extension from scratch and try it out in a few minutes.",
+		type: "youtube" as const,
+		src: "https://www.youtube.com/embed/wttcM9VvFB0",
+	},
+	{
+		title: "Bringing the power of Envoy extensibility to Go and Rust developers",
+		description:
+			"Virtual EnvoyCon 2026 showcasing Built On Envoy to the community, and the Q&A discussion around the project and Envoy Dynamic Modules.",
+		type: "youtube" as const,
+		src: "https://www.youtube.com/embed/xO6aLbncxEE",
+	},
+];
 ---
 
 <section class="video-showcase">
 	<div class="container">
 		<h2>See it in Action</h2>
-		<p class="section-subtitle">Watch how easy it is to discover, run, and build Envoy extensions</p>
-		<div class="video-wrapper">
-			<iframe
-				src="https://www.youtube.com/embed/wttcM9VvFB0"
-				title="Built on Envoy - Demo"
-				frameborder="0"
-				allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-				allowfullscreen
-			></iframe>
+		<div class="video-carousel-header">
+			<h3 class="video-slide-title" id="video-slide-title">{videos[0].title}</h3>
+			<p class="video-caption" id="video-slide-caption">{videos[0].description}</p>
+		</div>
+		<div class="video-carousel">
+			<button class="carousel-arrow carousel-arrow-left hidden" aria-label="Previous video">
+				<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+					<path d="M15 18L9 12L15 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+				</svg>
+			</button>
+			<div class="video-carousel-viewport">
+				<div class="video-carousel-track">
+					{videos.map((video) => (
+						<div class="video-carousel-slide">
+							<div class="video-wrapper">
+								{video.type === "local" ? (
+									<video controls muted playsinline preload="metadata">
+										<source src={video.src} type="video/mp4" />
+									</video>
+								) : (
+									<iframe
+										src={video.src}
+										title={video.title}
+										style="border: 0"
+										allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+										allowfullscreen
+									></iframe>
+								)}
+							</div>
+						</div>
+					))}
+				</div>
+			</div>
+			<button class="carousel-arrow carousel-arrow-right" aria-label="Next video">
+				<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+					<path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+				</svg>
+			</button>
+		</div>
+		<div class="video-carousel-dots">
+			{videos.map((_, i) => (
+				<button class={`video-carousel-dot${i === 0 ? " active" : ""}`} aria-label={`Video ${i + 1}`}></button>
+			))}
 		</div>
 	</div>
 </section>
+
+<script is:inline define:vars={{ videos }}>
+	const track = document.querySelector(".video-carousel-track");
+	const slides = document.querySelectorAll(".video-carousel-slide");
+	const prevBtn = document.querySelector(".video-carousel .carousel-arrow-left");
+	const nextBtn = document.querySelector(".video-carousel .carousel-arrow-right");
+	const dots = document.querySelectorAll(".video-carousel-dot");
+	const titleEl = document.getElementById("video-slide-title");
+	const captionEl = document.getElementById("video-slide-caption");
+	let current = 0;
+
+	function goTo(index) {
+		current = index;
+		track.style.transform = `translateX(-${current * 100}%)`;
+		dots.forEach((dot, i) => dot.classList.toggle("active", i === current));
+		prevBtn.classList.toggle("hidden", current === 0);
+		nextBtn.classList.toggle("hidden", current === slides.length - 1);
+		titleEl.textContent = videos[current].title;
+		captionEl.textContent = videos[current].description;
+	}
+
+	prevBtn.addEventListener("click", () => goTo(current - 1));
+	nextBtn.addEventListener("click", () => goTo(current + 1));
+	dots.forEach((dot, i) => dot.addEventListener("click", () => goTo(i)));
+</script>
