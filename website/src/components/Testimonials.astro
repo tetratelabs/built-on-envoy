@@ -99,9 +99,10 @@ const showArrows = testimonials.length > 3;
 </section>
 
 <script>
-	const track = document.querySelector(".testimonials-track");
-	const leftBtn = document.querySelector(".carousel-arrow-left");
-	const rightBtn = document.querySelector(".carousel-arrow-right");
+	const container = document.querySelector(".testimonials-carousel");
+	const track = container?.querySelector(".testimonials-track");
+	const leftBtn = container?.querySelector(".carousel-arrow-left");
+	const rightBtn = container?.querySelector(".carousel-arrow-right");
 
 	if (track && leftBtn && rightBtn) {
 		const updateArrows = () => {
