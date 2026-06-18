@@ -136,6 +136,89 @@ func TestBuildArgs(t *testing.T) {
 	})
 }
 
+func TestBuildArgs_FilterType(t *testing.T) {
+	t.Run("no filter types — no --filter-type flags emitted", func(t *testing.T) {
+		exts := []*ExtensionConfig{
+			{Name: "opa", Config: ""},
+			{Name: "cedar", Config: ""},
+		}
+		args := buildArgs("run", nil, exts)
+		require.NotContains(t, strings.Join(args, " "), "--filter-type")
+	})
+
+	t.Run("one ext with filter type — all exts get positional --filter-type", func(t *testing.T) {
+		exts := []*ExtensionConfig{
+			{Name: "opa", Config: ""},
+			{Name: "dns-gateway", Config: "", FilterType: "network"},
+		}
+		args := buildArgs("run", nil, exts)
+
+		// Locate the first --filter-type flag.
+		ftIdx := -1
+		for i, a := range args {
+			if a == "--filter-type" {
+				ftIdx = i
+				break
+			}
+		}
+		require.GreaterOrEqual(t, ftIdx, 0, "--filter-type not found in args")
+
+		// Positional order must match extension order:
+		// opa has no filter type → empty string; dns-gateway → "network"
+		require.Equal(t, "", args[ftIdx+1], "first ext (no filter type) must use empty string")
+		require.Equal(t, "--filter-type", args[ftIdx+2])
+		require.Equal(t, "network", args[ftIdx+3])
+	})
+
+	t.Run("all exts have filter types", func(t *testing.T) {
+		exts := []*ExtensionConfig{
+			{Name: "dns-gateway", Config: "", FilterType: "udp_listener"},
+			{Name: "other", Config: "", FilterType: "network"},
+		}
+		args := buildArgs("run", nil, exts)
+		joined := strings.Join(args, " ")
+		require.Contains(t, joined, "--filter-type udp_listener")
+		require.Contains(t, joined, "--filter-type network")
+	})
+
+	t.Run("filter-type flags appear after all --config flags", func(t *testing.T) {
+		exts := []*ExtensionConfig{
+			{Name: "opa", Config: "cfg1", FilterType: "http"},
+		}
+		args := buildArgs("run", nil, exts)
+
+		configIdx, filterIdx := -1, -1
+		for i, a := range args {
+			if a == "--config" && configIdx == -1 {
+				configIdx = i
+			}
+			if a == "--filter-type" && filterIdx == -1 {
+				filterIdx = i
+			}
+		}
+		require.Positive(t, configIdx, "--config not found")
+		require.Positive(t, filterIdx, "--filter-type not found")
+		require.Greater(t, filterIdx, configIdx, "--filter-type must come after --config")
+	})
+}
+
+func TestRunStreaming_FilterType(t *testing.T) {
+	e := &Executor{logger: discardLogger(), exe: "/bin/echo"}
+	w := &flushingRecorder{httptest.NewRecorder()}
+
+	e.RunStreaming(context.Background(), []*ExtensionConfig{
+		{Name: "dns-gateway", Config: "", FilterType: "network"},
+		{Name: "opa", Config: ""},
+	}, w, w)
+
+	body := w.Body.String()
+	// The echo output contains the full arg list; verify filter-type flags are present.
+	require.Contains(t, body, "--filter-type network")
+	require.Equal(t, 2, strings.Count(body, "--filter-type"),
+		"expected two --filter-type flags (one per extension, positionally aligned)")
+	require.Contains(t, body, "event: status\ndata: completed")
+}
+
 func TestFreePorts(t *testing.T) {
 	t.Run("returns requested number of ports", func(t *testing.T) {
 		ports, err := freePorts(3)

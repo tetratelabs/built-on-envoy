@@ -149,11 +149,25 @@ func (s *Server) handleGetExtensions(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	var localExtensions []any
-	for _, local := range s.localExts {
+	localNames := make(map[string]struct{}, len(s.localExts))
+	for name, local := range s.localExts {
 		localExtensions = append(localExtensions, local.Manifest)
+		localNames[name] = struct{}{}
 	}
 
-	extensions = append(localExtensions, extensions...)
+	// Local extensions override catalog entries with the same name.
+	deduped := make([]any, 0, len(extensions))
+	for _, ext := range extensions {
+		if m, ok := ext.(map[string]any); ok {
+			if name, ok := m["name"].(string); ok {
+				if _, isLocal := localNames[name]; isLocal {
+					continue
+				}
+			}
+		}
+		deduped = append(deduped, ext)
+	}
+	extensions = append(localExtensions, deduped...)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(extensions); err != nil {
@@ -194,9 +208,10 @@ type RunRequest struct {
 
 // ExtensionConfig represents an extension with its optional configuration.
 type ExtensionConfig struct {
-	Name      string `json:"name"`
-	Config    string `json:"config"`
-	LocalPath string `json:"-"`
+	Name       string `json:"name"`
+	Config     string `json:"config"`
+	FilterType string `json:"filterType,omitempty"`
+	LocalPath  string `json:"-"`
 }
 
 func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {

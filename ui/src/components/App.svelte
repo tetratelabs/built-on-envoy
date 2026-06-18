@@ -12,7 +12,8 @@
     // and bridges window.catalog for inline HTML onclick handlers.
 
     import { getExtensions, getSelected, getConfigs, getRunOrder, isRunning,
-             setExtensions, setRunning, setConfig, reorderRun }
+             setExtensions, setRunning, setConfig, reorderRun,
+             instanceExtName, getDisplayLabel }
         from '../lib/store.svelte.js';
     import { postRun, postStop } from '../lib/api.js';
     import { parseSSEStream } from '../lib/sse.js';
@@ -72,37 +73,40 @@
     // ── runAll ───────────────────────────────────────────────────────────────
 
     export async function runAll() {
-        // Sync configs from all selected forms
-        for (const [name] of getSelected()) {
-            const cfg = getRowRef(name)?.getCurrentConfig?.();
-            if (cfg) setConfig(name, cfg);
+        // Sync configs from all selected instance forms
+        for (const [instanceId] of getSelected()) {
+            const cfg = getRowRef(instanceId)?.getCurrentConfig?.();
+            if (cfg) setConfig(instanceId, cfg);
         }
 
-        // Validate each selected extension via its form (includes required + oneOf checks)
-        const errors = [];
-        for (const [name] of getSelected()) {
-            const formRef = getRowRef(name)?.getFormRef?.();
-            if (!formRef) continue;
-            formRef.clearErrors();
-            const extErrors = formRef.validate();
-            errors.push(...extErrors);
+        // Validate each selected instance (form fields + filter type selection)
+        const errorsByInstance = [];
+        for (const [instanceId] of getSelected()) {
+            const rowRef = getRowRef(instanceId);
+            if (!rowRef) continue;
+            rowRef.clearErrors();
+            const extErrors = rowRef.validate();
+            if (extErrors.length > 0) errorsByInstance.push({ instanceId, extErrors });
         }
 
-        if (errors.length > 0) {
-            for (const { name } of errors) {
-                getRowRef(name)?.showErrors?.();  // sets invalid=true (red border) + form highlights
+        if (errorsByInstance.length > 0) {
+            for (const { instanceId } of errorsByInstance) {
+                getRowRef(instanceId)?.showErrors?.();
             }
-            const count = errors.reduce((s, e) => s + e.errors.length, 0);
+            const count = errorsByInstance.reduce(
+                (s, { extErrors }) => s + extErrors.reduce((ss, e) => ss + e.errors.length, 0), 0);
             _setRunAllError(count);
             return;
         }
         _clearRunAllError();
 
-        const extensions = getRunOrder().map(name => ({
-            name, config: getConfigs().get(name) || '',
+        const extensions = getRunOrder().map(instanceId => ({
+            name: instanceExtName(instanceId),
+            config: getConfigs().get(instanceId) || '',
+            filterType: getRowRef(instanceId)?.getFilterType?.() ?? '',
         }));
 
-        const title = `Run: ${getRunOrder().join(', ')}`;
+        const title = `Run: ${getRunOrder().map(getDisplayLabel).join(', ')}`;
         await _streamRun({ extensions }, title);
     }
 
@@ -267,7 +271,7 @@
 <div class="order-popover-wrapper" class:visible={runPopoverVisible} bind:this={runPopoverEl}>
     <OrderPopover
         title="Run Order"
-        order={getRunOrder()}
+        order={getRunOrder().map(getDisplayLabel)}
         reorderFn={reorderRun}
         onclose={() => { runPopoverVisible = false; }}
     />

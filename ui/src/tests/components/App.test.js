@@ -23,6 +23,8 @@ vi.mock('../../lib/store.svelte.js', async () => {
         isRunning: vi.fn(() => false),
         setRunning: vi.fn(),
         setConfig: vi.fn(),
+        addExtensionInstance: vi.fn(),
+        deselectAllInstancesOf: vi.fn(),
     };
 });
 
@@ -37,6 +39,7 @@ const exts = [
 ];
 
 beforeEach(() => {
+    store.clearStore(); // reset real store state (runOrder, selected, counter) from previous tests
     vi.clearAllMocks();
     store.getExtensions.mockReturnValue([]);
     store.getSelected.mockReturnValue(new Map());
@@ -223,13 +226,15 @@ function makeSseResponse(events) {
 
 describe('App runAll validation', () => {
     it('shows validation errors and does not run when required fields are empty', async () => {
-        const { selectExtension: realSelect,
+        const { addExtensionInstance: realAdd, deselectAllInstancesOf: realDeselectAll,
                 getSelected: realGetSelected, getRunOrder: realGetRunOrder,
                 isRunning: realIsRunning } = await vi.importActual('../../lib/store.svelte.js');
 
         store.getSelected.mockImplementation(realGetSelected);
         store.getRunOrder.mockImplementation(realGetRunOrder);
         store.isRunning.mockImplementation(realIsRunning);
+        store.addExtensionInstance.mockImplementation(realAdd);
+        store.deselectAllInstancesOf.mockImplementation(realDeselectAll);
 
         // Extension with a required field in its schema
         const ext = { name: 'bedrock', description: 'Bedrock', categories: ['AI'], tags: [] };
@@ -248,13 +253,10 @@ describe('App runAll validation', () => {
         const { container, component } = render(App);
         await waitFor(() => expect(container.querySelector('.catalog')).toBeTruthy());
 
-        // Toggle the extension on (real store updates, row + form render)
+        // Toggle the definition row — real addExtensionInstance creates an instance row
         const checkbox = container.querySelector('input[type="checkbox"]');
         await fireEvent.change(checkbox, { target: { checked: true } });
         await waitFor(() => expect(container.querySelector('.ext-row.active')).toBeTruthy());
-
-        // Also select it in the real store so runAll sees it in getSelected()
-        realSelect(ext);
 
         // Wait for JSONEditor ready (stub fires setTimeout 0)
         await waitFor(() => expect(container.querySelector('.config-section-body')).toBeTruthy());
@@ -286,13 +288,15 @@ describe('App runAll validation', () => {
     });
 
     it('clears error message from header DOM after a validation failure then fix', async () => {
-        const { selectExtension: realSelect,
+        const { addExtensionInstance: realAdd, deselectAllInstancesOf: realDeselectAll,
                 getSelected: realGetSelected, getRunOrder: realGetRunOrder,
                 isRunning: realIsRunning } = await vi.importActual('../../lib/store.svelte.js');
 
         store.getSelected.mockImplementation(realGetSelected);
         store.getRunOrder.mockImplementation(realGetRunOrder);
         store.isRunning.mockImplementation(realIsRunning);
+        store.addExtensionInstance.mockImplementation(realAdd);
+        store.deselectAllInstancesOf.mockImplementation(realDeselectAll);
 
         const ext = { name: 'bedrock', description: 'Bedrock', categories: ['AI'], tags: [] };
         globalThis.fetch = vi.fn(() =>
@@ -311,7 +315,6 @@ describe('App runAll validation', () => {
         const checkbox = container.querySelector('input[type="checkbox"]');
         await fireEvent.change(checkbox, { target: { checked: true } });
         await waitFor(() => expect(container.querySelector('.ext-row.active')).toBeTruthy());
-        realSelect(ext);
         await waitFor(() => expect(container.querySelector('.config-section-body')).toBeTruthy());
 
         // First runAll — validation fails, error appears in header
@@ -333,13 +336,15 @@ describe('App runAll validation', () => {
 
 describe('App runAll error — cleared by toggle or individual Run', () => {
     async function setupWithValidationError() {
-        const { selectExtension: realSelect,
+        const { addExtensionInstance: realAdd, deselectAllInstancesOf: realDeselectAll,
                 getSelected: realGetSelected, getRunOrder: realGetRunOrder,
                 isRunning: realIsRunning } = await vi.importActual('../../lib/store.svelte.js');
 
         store.getSelected.mockImplementation(realGetSelected);
         store.getRunOrder.mockImplementation(realGetRunOrder);
         store.isRunning.mockImplementation(realIsRunning);
+        store.addExtensionInstance.mockImplementation(realAdd);
+        store.deselectAllInstancesOf.mockImplementation(realDeselectAll);
 
         const ext = { name: 'bedrock', description: 'Bedrock', categories: ['AI'], tags: [] };
         globalThis.fetch = vi.fn(() =>
@@ -358,11 +363,10 @@ describe('App runAll error — cleared by toggle or individual Run', () => {
         const result = render(App);
         await waitFor(() => expect(result.container.querySelector('.catalog')).toBeTruthy());
 
-        // Toggle the extension on
+        // Toggle the definition row — real addExtensionInstance creates an instance row
         const checkbox = result.container.querySelector('input[type="checkbox"]');
         await fireEvent.change(checkbox, { target: { checked: true } });
         await waitFor(() => expect(result.container.querySelector('.ext-row.active')).toBeTruthy());
-        realSelect(ext);
         await waitFor(() => expect(result.container.querySelector('.config-section-body')).toBeTruthy());
 
         // Trigger runAll — validation fails, error banner appears
@@ -512,7 +516,7 @@ describe('App shared terminal — popin', () => {
         );
         store.getExtensions.mockReturnValue(exts);
 
-        const { selectExtension: realSelect,
+        const { addExtensionInstance: realAdd, deselectAllInstancesOf: realDeselectAll,
                 getSelected: realGetSelected, getConfigs: realGetConfigs,
                 isRunning: realIsRunning } = await vi.importActual('../../lib/store.svelte.js');
 
@@ -521,6 +525,8 @@ describe('App shared terminal — popin', () => {
         store.isRunning.mockImplementation(realIsRunning);
         store.setRunning.mockImplementation(() => {});
         store.setConfig.mockImplementation(() => {});
+        store.addExtensionInstance.mockImplementation(realAdd);
+        store.deselectAllInstancesOf.mockImplementation(realDeselectAll);
 
         // A stream that never ends so panel stays running during popout
         let closeStream;
@@ -531,8 +537,7 @@ describe('App shared terminal — popin', () => {
         const { container } = render(App);
         await waitFor(() => expect(container.querySelector('.catalog')).toBeTruthy());
 
-        // Toggle first extension on and run it
-        realSelect(exts[0]);
+        // Toggle definition row — real addExtensionInstance creates an instance row
         const checkbox = container.querySelector('input[type="checkbox"]');
         await fireEvent.change(checkbox, { target: { checked: true } });
         await waitFor(() => expect(container.querySelector('.ext-run-btn')).toBeTruthy());
