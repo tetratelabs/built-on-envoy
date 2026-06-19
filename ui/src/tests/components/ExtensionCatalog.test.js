@@ -15,7 +15,7 @@ vi.mock('../../lib/store.svelte.js', async () => {
     const actual = await vi.importActual('../../lib/store.svelte.js');
     return {
         ...actual,
-        selectExtension: vi.fn(),
+        addExtensionInstance: vi.fn(),
         deselectExtension: vi.fn(),
         setConfig: vi.fn(),
         getSelected: vi.fn(() => new Map()),

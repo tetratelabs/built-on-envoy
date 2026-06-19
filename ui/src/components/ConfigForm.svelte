@@ -18,10 +18,14 @@
     import { getConfigs, setConfig } from '../lib/store.svelte.js';
 
     // Props
-    // name   — extension name (used as key in store and for raw-textarea id)
-    // schema — raw JSON schema object from the API, or null
-    // config — $bindable: current config JSON string; parent reads this back
-    let { name, schema, config = $bindable(null) } = $props();
+    // name       — extension name (used for raw-textarea id and schema lookups)
+    // instanceId — store key for this config slot (falls back to name if not provided)
+    // schema     — raw JSON schema object from the API, or null
+    // config     — $bindable: current config JSON string; parent reads this back
+    let { name, schema, instanceId = null, config = $bindable(null) } = $props();
+
+    // The key used to read/write configs in the store.
+    const configKey = () => instanceId ?? name;
 
     // DOM ref for the editor container div
     let containerEl = $state(null);
@@ -76,7 +80,7 @@
         });
 
         editor.on('ready', () => {
-            const saved = config ?? getConfigs().get(name);
+            const saved = config ?? getConfigs().get(configKey());
             if (saved) {
                 try { editor.setValue(JSON.parse(saved)); } catch { /* ignore */ }
             }
@@ -95,7 +99,7 @@
                 return v !== undefined && v !== null && v !== '';
             });
             config = hasValues ? JSON.stringify(val) : null;
-            setConfig(name, config);
+            setConfig(configKey(), config);
         });
 
         // $effect cleanup: runs before re-run or on unmount
@@ -129,7 +133,7 @@
         }
         const textarea = containerEl?.querySelector(`#raw-config-${name}`);
         if (textarea?.value.trim()) return textarea.value.trim();
-        return getConfigs().get(name) || '';
+        return getConfigs().get(configKey()) || '';
     }
 
     export function validate() {
@@ -195,21 +199,33 @@
 
     // ── Private helpers ──────────────────────────────────────────────────────
 
+    // Convert a schema path (which uses "__items__" for array positions) to a
+    // regex that matches JSONEditor's rendered data-schemapath (which uses actual
+    // numeric indices like "domains.0.metadata").
+    function _pathToRegex(pattern) {
+        const escaped = pattern.split('.').map(seg =>
+            seg === '__items__' ? '\\d+' : seg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        ).join('\\.');
+        return new RegExp('^' + escaped + '$');
+    }
+
     function _markAddPropFields(root) {
         if (additionalPropsPaths.length === 0) return;
+        const patterns = additionalPropsPaths.map(_pathToRegex);
         root.querySelectorAll('[data-schemapath]').forEach(el => {
             const sp = el.getAttribute('data-schemapath');
             const fieldPath = sp === 'root' ? '' : sp.replace(/^root\.?/, '');
-            if (additionalPropsPaths.includes(fieldPath)) el.classList.add('je-add-props-field');
+            if (patterns.some(re => re.test(fieldPath))) el.classList.add('je-add-props-field');
         });
     }
 
     function _markOptionalPropFields(root) {
         if (optionalPropsPaths.length === 0) return;
+        const patterns = optionalPropsPaths.map(_pathToRegex);
         root.querySelectorAll('[data-schemapath]').forEach(el => {
             const sp = el.getAttribute('data-schemapath');
             const fieldPath = sp === 'root' ? '' : sp.replace(/^root\.?/, '');
-            if (optionalPropsPaths.includes(fieldPath)) el.classList.add('je-optional-props-field');
+            if (patterns.some(re => re.test(fieldPath))) el.classList.add('je-optional-props-field');
         });
     }
 
@@ -220,6 +236,8 @@
             if (!pending) {
                 pending = true;
                 requestAnimationFrame(() => {
+                    _markAddPropFields(root);
+                    _markOptionalPropFields(root);
                     fixEditorUI(root);
                     pending = false;
                 });
@@ -240,7 +258,7 @@
         rows="8"
         style="width:100%; font-family:var(--font-mono); font-size:13px; padding:8px; border:1px solid var(--border); border-radius:var(--radius-sm);"
         placeholder='&#123;"key": "value"&#125;'
-    >{getConfigs().get(name) ?? ''}</textarea>
+    >{getConfigs().get(configKey()) ?? ''}</textarea>
 {/if}
 
 <div bind:this={containerEl} class="config-section-body"></div>
