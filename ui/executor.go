@@ -73,6 +73,22 @@ func buildArgs(action string, baseArgs []string, exts []*ExtensionConfig) []stri
 	for _, ext := range exts {
 		args = append(args, "--config", ext.Config)
 	}
+	// Pass --filter-type positionally only when at least one extension has an
+	// override set. Extensions without an override receive an empty string so
+	// the positional index stays aligned; the CLI ignores empty filter-type values
+	// for single-filter-type extensions.
+	hasFilterType := false
+	for _, ext := range exts {
+		if ext.FilterType != "" {
+			hasFilterType = true
+			break
+		}
+	}
+	if hasFilterType {
+		for _, ext := range exts {
+			args = append(args, "--filter-type", ext.FilterType)
+		}
+	}
 	return args
 }
 

@@ -543,9 +543,19 @@ body {
 .config-section-body input[type="text"],
 .config-section-body input[type="number"],
 .config-section-body input[type="integer"],
-.config-section-body select,
 .config-section-body textarea {
     width: 100%;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.4;
+    transition: border-color 0.2s;
+}
+.config-section-body select {
+    display: block;
+    width: auto;
     padding: 6px 10px;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
@@ -892,7 +902,52 @@ body {
 .ext-list {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
+}
+
+/* Group: wraps the main row + its instance rows */
+.ext-group {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Active group becomes the outer card; main row and instances live inside it */
+.ext-group-active {
+    border: 1px solid var(--primary);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 0 0 1px rgba(124,58,237,0.15);
+}
+
+/* Main row inside active group: strip its own card look, keep rounded top */
+.ext-group-active > .ext-row-main {
+    border: none;
+    box-shadow: none;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    overflow: hidden;
+}
+
+/* Body area below the header; holds instance sub-cards */
+.ext-group-body {
+    border-top: 1px solid var(--border);
+    padding: 10px 12px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Instance sub-cards inside the body */
+.ext-group-body .ext-row-instance {
+    border-color: rgba(91,33,182,0.35);
+    box-shadow: none;
+}
+
+/* Main rows never expand — hide chevron and keep default cursor */
+.ext-row-main .ext-row-chevron,
+.ext-row-main.active .ext-row-chevron {
+    display: none !important;
+}
+.ext-row-main.active > .ext-row-header {
+    cursor: default;
 }
 
 .ext-row {
@@ -967,6 +1022,12 @@ body {
     color: var(--primary);
 }
 
+/* Local extensions use a span (no link) — keep name text black at all states */
+span.ext-row-name,
+.ext-row.active span.ext-row-name {
+    color: var(--text);
+}
+
 a.ext-row-name {
     text-decoration: none;
 }
@@ -1007,6 +1068,37 @@ a.ext-row-name:hover {
 }
 
 /* Actions area (run button + stop) */
+/* Filter-type selector — matches config form field styles */
+.filter-type-selector {
+    margin-bottom: 12px;
+}
+.filter-type-label {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+.filter-type-select {
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    color: var(--text);
+    line-height: 1.4;
+    transition: border-color 0.2s;
+    cursor: pointer;
+}
+.filter-type-select:focus {
+    outline: none;
+    border-color: var(--primary-light);
+    box-shadow: 0 0 0 3px rgba(124,58,237,0.1);
+}
+
 .ext-row-actions {
     display: flex;
     align-items: center;
@@ -1101,4 +1193,76 @@ a.ext-row-name:hover {
 
 .ext-toggle input:focus-visible + .ext-toggle-slider {
     box-shadow: 0 0 0 3px rgba(124,58,237,0.25);
+}
+
+/* ---- Instance row label ---- */
+.ext-instance-label {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ---- Add-instance button (main row, icon only) ---- */
+.ext-add-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1.5px solid var(--primary-light);
+    background: transparent;
+    color: var(--primary-light);
+    cursor: pointer;
+    flex-shrink: 0;
+    padding: 0;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.ext-add-btn:hover {
+    background: var(--primary-light);
+    color: white;
+    border-color: var(--primary-light);
+}
+
+/* ---- Remove-instance button (instance rows, icon only) ---- */
+.ext-remove-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border-muted);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+    padding: 0;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.ext-remove-btn:hover {
+    border-color: var(--error);
+    background: rgba(239,68,68,0.08);
+    color: var(--error);
+}
+
+/* Disabled state for toggle, add, and remove controls while running */
+.ext-toggle input:disabled + .ext-toggle-slider {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+.ext-toggle:has(input:disabled) {
+    cursor: not-allowed;
+}
+.ext-add-btn:disabled,
+.ext-remove-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    pointer-events: none;
 }

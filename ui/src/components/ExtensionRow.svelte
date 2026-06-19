@@ -8,22 +8,46 @@
 <script>
     // ExtensionRow.svelte — a single extension card in the catalog list
     //
-    // Manages the toggle (select/deselect), lazy schema loading, config form,
-    // and inline terminal for per-extension execution.
+    // Two modes controlled by the `instanceId` prop:
+    //
+    //   instanceId = null   →  "main row": always visible per extension.
+    //                          Toggle ON creates the first instance; toggle OFF
+    //                          removes ALL instances. A "+" button (shown when active)
+    //                          adds more instances. No config form.
+    //
+    //   instanceId = "foo#N"  →  "instance row": shows config form, run button, and
+    //                            filter type selector. Has a "×" remove button instead
+    //                            of a toggle.
 
+    import { untrack } from 'svelte';
     import { categoryClass } from '../lib/utils.js';
-    import { getConfigs, getSelected, isRunning, setRunning,
-             selectExtension, deselectExtension, setConfig } from '../lib/store.svelte.js';
+    import { getConfigs, getInstancesOf, isRunning, setRunning,
+             addExtensionInstance, deselectExtension, deselectAllInstancesOf, setConfig, getDisplayLabel } from '../lib/store.svelte.js';
     import { getSchema, postRun, postStop } from '../lib/api.js';
     import { parseSSEStream } from '../lib/sse.js';
     import ConfigForm from './ConfigForm.svelte';
     import InlineTerminal from './InlineTerminal.svelte';
 
     // Props
-    let { ext, onRunAllPanelRequest, onClearRunAllError } = $props();
+    let { ext, instanceId = null, onRunAllPanelRequest, onClearRunAllError } = $props();
+
+    // Instance count for this extension (used by definition row for the count badge)
+    let activeInstances = $derived(getInstancesOf(ext.name));
+    let instanceCount   = $derived(activeInstances.length);
+
+    // Main row active when ≥1 instances exist; instance rows always active.
+    let isOn = $derived(instanceId !== null || instanceCount > 0);
+
+    // Display label: "ext-name" for single instance, "ext-name #N" for multiples
+    let displayLabel = $derived(instanceId !== null ? getDisplayLabel(instanceId) : ext.name);
+
+    // Filter type — only relevant for extensions declaring >1 filter types
+    let needsFilterType  = $derived((ext.filterType ?? []).length > 1);
+    // Pre-select the first filter type so a valid value is always present.
+    // untrack() makes the intentional initial-only read explicit to the compiler.
+    let selectedFilterType = $state(untrack(() => (ext.filterType ?? []).length > 1 ? ext.filterType[0] : ''));
 
     // Local state
-    let isOn       = $derived(getSelected().has(ext.name));
     let collapsed  = $state(false);
     let schema     = $state(undefined);   // undefined = not yet loaded, null = no schema
     let schemaLoading = $state(false);
@@ -37,39 +61,53 @@
     // Inline panel visibility
     let showPanel       = $state(false);
     let panelRunning    = $state(false);
-    let poppedOut       = $state(false);  // true while output is in shared terminal
-    let _sharedAppendFn  = null;          // set by handlePopout, cleared on popIn
-    let _sharedRunningFn = null;          // notifies App when running state changes
+    let poppedOut       = $state(false);
+    let _sharedAppendFn  = null;
+    let _sharedRunningFn = null;
+
+    // Load schema at mount for instance rows only (main rows have no config form).
+    $effect(() => {
+        if (instanceId !== null) _loadSchema();
+    });
 
     // ── Toggle ────────────────────────────────────────────────────────────────
 
-    async function handleToggle(e) {
+    // Main row toggle: ON creates the first instance, OFF removes all instances.
+    function handleToggle() {
         onClearRunAllError?.();
-        const checked = e.target.checked;
-        if (checked) {
-            selectExtension(ext);
-            collapsed = false;
-            await _loadSchema();
+        if (isOn) {
+            deselectAllInstancesOf(ext.name);
         } else {
-            // Save config before deselecting
-            const cfg = formRef?.getCurrentConfig?.();
-            if (cfg) setConfig(ext.name, cfg);
-            deselectExtension(ext.name);
-            invalid = false;
-            runErrorMsg = '';
-            showPanel = false;
+            addExtensionInstance(ext);
         }
+    }
+
+    // "+" button on main row: add another instance while one already exists.
+    function handleAddInstance(e) {
+        e.stopPropagation();
+        addExtensionInstance(ext);
+        onClearRunAllError?.();
+    }
+
+    // "×" button on instance row: remove this instance.
+    function handleRemove(e) {
+        e.stopPropagation();
+        deselectExtension(instanceId);
+        invalid = false;
+        runErrorMsg = '';
+        showPanel = false;
+        onClearRunAllError?.();
     }
 
     function handleHeaderClick(e) {
         if (e.target.closest('.ext-toggle') || e.target.closest('a')) return;
-        if (isOn) collapsed = !collapsed;
+        if (instanceId !== null) collapsed = !collapsed;
     }
 
     // ── Schema loading ────────────────────────────────────────────────────────
 
     async function _loadSchema() {
-        if (schema !== undefined) return; // already loaded (null means no schema)
+        if (schema !== undefined) return;
         schemaLoading = true;
         try {
             const resp = await getSchema(ext.name);
@@ -89,11 +127,17 @@
 
     async function handleRun() {
         onClearRunAllError?.();
-        // Sync config from form
-        const cfg = formRef?.getCurrentConfig?.() ?? '';
-        if (cfg) setConfig(ext.name, cfg);
 
-        // Validate
+        // Validate filter type selection when required
+        if (needsFilterType && !selectedFilterType) {
+            runErrorMsg = 'Select a filter type before running.';
+            invalid = true;
+            return;
+        }
+
+        const cfg = formRef?.getCurrentConfig?.() ?? '';
+        if (cfg) setConfig(instanceId, cfg);
+
         const errors = formRef?.validate?.() ?? [];
         if (errors.length > 0) {
             formRef?.showErrors?.();
@@ -115,7 +159,11 @@
         setRunning(true);
 
         const payload = {
-            extensions: [{ name: ext.name, config: getConfigs().get(ext.name) || '' }],
+            extensions: [{
+                name: ext.name,
+                config: getConfigs().get(instanceId) || '',
+                filterType: needsFilterType ? selectedFilterType : '',
+            }],
         };
 
         try {
@@ -156,7 +204,7 @@
         const lines = terminalRef?.getLines() ?? [];
         poppedOut = true;
         onRunAllPanelRequest?.({
-            title: `Run: ${ext.name}`,
+            title: `Run: ${displayLabel}`,
             lines,
             running: panelRunning,
             setSharedAppend:   (fn) => { _sharedAppendFn  = fn; },
@@ -170,22 +218,49 @@
 
     // ── Public API (callable from parent) ────────────────────────────────────
 
-    export function getName() { return ext.name; }
-    export function getFormRef() { return formRef; }
+    export function getName()             { return ext.name; }
+    export function getInstanceId()       { return instanceId; }
+    export function getFilterType()       { return needsFilterType ? selectedFilterType : ''; }
+    export function getFormRef()          { return formRef; }
     export function getOneOfConstraints() { return formRef?.getOneOfConstraints?.() ?? []; }
-    export function getCurrentConfig() { return formRef?.getCurrentConfig?.() ?? ''; }
-    export function validate() { return formRef?.validate?.() ?? []; }
-    export function showErrors() { formRef?.showErrors?.(); invalid = true; }
-    export function clearErrors() { formRef?.clearErrors?.(); invalid = false; }
+    export function getCurrentConfig()    { return formRef?.getCurrentConfig?.() ?? ''; }
+
+    export function validate() {
+        const errors = formRef?.validate?.() ?? [];
+        if (needsFilterType && !selectedFilterType) {
+            invalid = true;
+            runErrorMsg = 'Select a filter type before running.';
+            return [...errors, { name: ext.name, errors: ['Filter type is required'] }];
+        }
+        return errors;
+    }
+
+    export function showErrors() {
+        formRef?.showErrors?.();
+        invalid = true;
+        if (needsFilterType && !selectedFilterType) {
+            runErrorMsg = 'Select a filter type before running.';
+        }
+    }
+
+    export function clearErrors() {
+        formRef?.clearErrors?.();
+        invalid = false;
+        runErrorMsg = '';
+    }
+
     export function markInvalid() { invalid = true; }
 </script>
 
 <div
     class="ext-row"
+    class:ext-row-main={instanceId === null}
+    class:ext-row-instance={instanceId !== null}
     class:active={isOn}
     class:collapsed={isOn && collapsed}
     class:ext-row-invalid={invalid}
     data-ext-name={ext.name}
+    data-instance-id={instanceId}
 >
     <!-- Header -->
     <div class="ext-row-header" onclick={handleHeaderClick} role="presentation">
@@ -195,42 +270,84 @@
             </svg>
         </span>
 
-        <div class="ext-row-info">
-            {#if !ext.local}
-                <a
-                    class="ext-row-name"
-                    href="https://builtonenvoy.io/extensions/{encodeURIComponent(ext.name)}"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                >{ext.name}</a>
-            {:else}
-                <span>{ext.name}</span>
+        {#if instanceId === null}
+            <!-- Main row: full info with link, description, and categories -->
+            <div class="ext-row-info">
+                {#if !ext.local}
+                    <a
+                        class="ext-row-name"
+                        href="https://builtonenvoy.io/extensions/{encodeURIComponent(ext.name)}"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >{displayLabel}</a>
+                {:else}
+                    <span class="ext-row-name">{displayLabel}</span>
+                {/if}
+                <div class="ext-row-desc">{ext.description}</div>
+            </div>
+
+            <div class="ext-row-categories">
+                {#each [...new Set(ext.categories ?? [])] as cat (cat)}
+                    <span class={categoryClass(cat)}>{cat}</span>
+                {/each}
+            </div>
+
+            <!-- "+" add instance button, shown when active -->
+            {#if isOn}
+                <button class="ext-add-btn" onclick={handleAddInstance} title="Add another instance" disabled={isRunning()}>
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                        <line x1="8" y1="2" x2="8" y2="14"/>
+                        <line x1="2" y1="8" x2="14" y2="8"/>
+                    </svg>
+                </button>
             {/if}
-            <div class="ext-row-desc">{ext.description}</div>
-        </div>
 
-        <div class="ext-row-categories">
-            {#each ext.categories as cat (cat)}
-                <span class={categoryClass(cat)}>{cat}</span>
-            {/each}
-        </div>
-
-        <label class="ext-toggle">
-            <input type="checkbox" checked={isOn} onchange={handleToggle}>
-            <span class="ext-toggle-slider"></span>
-        </label>
+            <label class="ext-toggle">
+                <input type="checkbox" checked={isOn} onchange={handleToggle} disabled={isRunning()}>
+                <span class="ext-toggle-slider"></span>
+            </label>
+        {:else}
+            <!-- Instance row: compact — just the label and a remove button -->
+            <span class="ext-instance-label">{displayLabel}</span>
+            <button class="ext-remove-btn" onclick={handleRemove} title="Remove this instance" disabled={isRunning()}>
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3,4 4,4 13,4"/>
+                    <path d="M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/>
+                    <path d="M13 4l-1 9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1L3 4"/>
+                    <line x1="7" y1="7" x2="7" y2="11"/>
+                    <line x1="9" y1="7" x2="9" y2="11"/>
+                </svg>
+            </button>
+        {/if}
     </div>
 
-    <!-- Body (only shown when active) -->
-    {#if isOn}
+    <!-- Body (only for instance rows; main row has no config form) -->
+    {#if isOn && instanceId !== null}
         <div class="ext-row-body">
+            <!-- Filter type selector (only for extensions with multiple filter types) -->
+            {#if needsFilterType}
+                <div class="filter-type-selector">
+                    <label class="filter-type-label">
+                        Filter type
+                        <select
+                            class="filter-type-select"
+                            bind:value={selectedFilterType}
+                        >
+                            {#each [...new Set(ext.filterType ?? [])] as ft (ft)}
+                                <option value={ft}>{ft}</option>
+                            {/each}
+                        </select>
+                    </label>
+                </div>
+            {/if}
+
             <!-- Config form -->
             {#if schemaLoading}
                 <div class="loading-overlay" style="padding:20px 0">
                     <div class="spinner"></div> Loading schema...
                 </div>
             {:else}
-                <ConfigForm bind:this={formRef} name={ext.name} {schema} />
+                <ConfigForm bind:this={formRef} name={ext.name} {instanceId} {schema} />
             {/if}
 
             <!-- Actions -->
