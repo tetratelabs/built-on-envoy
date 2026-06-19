@@ -21,13 +21,13 @@ import (
 
 // UI is a command that starts the Extension Manager web UI.
 type UI struct {
-	Port             int      `help:"HTTP server port." default:"18000"`
-	LogLevel         string   `help:"Envoy component log level." default:"all:error" env:"ENVOY_LOG_LEVEL"`
-	EnvoyVersion     string   `help:"Envoy version to use (e.g., 1.31.0, dev, dev-latest)" env:"ENVOY_VERSION"`
-	EnvoyVersionsURL string   `name:"envoy-versions-url" help:"URL of the Envoy versions JSON. Override to use debug builds (see archive-envoy)." env:"ENVOY_VERSIONS_URL" hidden:""`
-	EnvoyPath        string   `name:"envoy-path" help:"Path to a custom Envoy binary. Skips Envoy download and version selection." env:"ENVOY_PATH"`
-	Local            []string `name:"local" sep:"none" help:"Path to a directory containing a local Extension to enable." type:"existingdir"`
-	Dev              bool     `help:"Whether to allow downloading dev versions of extensions (with -dev suffix). By default, only stable versions are allowed." default:"false"`
+	Port     int          `help:"HTTP server port." default:"18000"`
+	LogLevel string       `help:"Envoy component log level." default:"all:error" env:"ENVOY_LOG_LEVEL"`
+	Envoy    EnvoyFlags   `embed:""`
+	Local    []string     `name:"local" sep:"none" help:"Path to a directory containing a local Extension to enable." type:"existingdir"`
+	Dev      bool         `help:"Whether to allow downloading dev versions of extensions (with -dev suffix). By default, only stable versions are allowed." default:"false"`
+	Clusters ClusterFlags `embed:""`
+	Docker   DockerFlags  `embed:""`
 
 	openBrowserFunc func(string) error // overridable for tests; nil means use openBrowser
 }
@@ -43,12 +43,20 @@ func (u *UI) Run(ctx context.Context, logger *slog.Logger) error {
 	logger.Debug("handling ui command", "port", u.Port)
 
 	handler, err := ui.NewServer(logger, &ui.RunParams{
-		LogLevel:         u.LogLevel,
-		EnvoyVersion:     u.EnvoyVersion,
-		EnvoyVersionsURL: u.EnvoyVersionsURL,
-		EnvoyPath:        u.EnvoyPath,
-		Dev:              u.Dev,
-		LocalExtensions:  u.Local,
+		LogLevel:            u.LogLevel,
+		EnvoyVersion:        u.Envoy.Version,
+		EnvoyVersionsURL:    u.Envoy.VersionsURL,
+		EnvoyPath:           u.Envoy.Path,
+		Dev:                 u.Dev,
+		LocalExtensions:     u.Local,
+		ClustersSecure:      u.Clusters.Secure,
+		ClustersInsecure:    u.Clusters.Insecure,
+		ClustersJSONSpec:    u.Clusters.JSONSpec,
+		TestUpstreamHost:    u.Clusters.TestUpstreamHost,
+		TestUpstreamCluster: u.Clusters.TestUpstreamCluster,
+		Docker:              u.Docker.Enabled,
+		DockerImage:         u.Docker.ImageVersion,
+		DockerPullPolicy:    u.Docker.Pull,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create UI server: %w", err)

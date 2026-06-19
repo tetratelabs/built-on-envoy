@@ -13,6 +13,37 @@ import (
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 )
 
+// EnvoyFlags holds flags for Envoy configuration.
+type EnvoyFlags struct {
+	Version     string `name:"envoy-version" help:"Envoy version to use (e.g., 1.31.0, dev, dev-latest)" env:"ENVOY_VERSION"`
+	VersionsURL string `name:"envoy-versions-url" help:"URL of the Envoy versions JSON. Override to use debug builds (see archive-envoy)." env:"ENVOY_VERSIONS_URL" hidden:""`
+	Path        string `name:"envoy-path" help:"Path to a custom Envoy binary. Skips Envoy download and version selection." env:"ENVOY_PATH"`
+}
+
+// OCIFlags holds flags for OCI registry authentication and configuration.
+type OCIFlags struct {
+	Registry string `name:"registry" env:"BOE_REGISTRY" help:"OCI registry URL for the extensions." default:"${default_registry}"`
+	Insecure bool   `name:"insecure" env:"BOE_REGISTRY_INSECURE" help:"Allow connecting to an insecure (HTTP) registry." default:"false"`
+	Username string `name:"username" env:"BOE_REGISTRY_USERNAME" help:"Username for the OCI registry."`
+	Password string `name:"password" env:"BOE_REGISTRY_PASSWORD" help:"Password for the OCI registry." type:"password" sensitive:"true"`
+}
+
+// ClusterFlags holds flags for additional Envoy clusters.
+type ClusterFlags struct {
+	Secure              []string `name:"cluster" help:"Optional additional Envoy cluster provided in the host:tlsPort pattern." `
+	Insecure            []string `name:"cluster-insecure" help:"Optional additional Envoy cluster (with TLS transport disabled) provided in the host:port pattern." `
+	JSONSpec            []string `name:"cluster-json" sep:"none" help:"Optional additional Envoy cluster providing the complete cluster config in JSON format." `
+	TestUpstreamHost    string   `name:"test-upstream-host" help:"Hostname for the test upstream cluster. Mutually exclusive with --test-upstream-cluster. Defaults to \"httpbin.org\"."`
+	TestUpstreamCluster string   `name:"test-upstream-cluster" help:"Name of an existing configured cluster to use as the test upstream. The cluster must be configured via --cluster, --cluster-insecure, or --cluster-json. Mutually exclusive with --test-upstream-host."`
+}
+
+// DockerFlags holds flags for Docker configuration.
+type DockerFlags struct {
+	Enabled      bool   `name:"docker" help:"Run Envoy as a Docker container instead of using func-e." default:"false" env:"BOE_RUN_DOCKER"`
+	Pull         string `name:"pull" help:"Pull policy for the BOE Docker image (missing, always, never). Only applicable when running with --docker." enum:"missing,always,never" default:"missing"`
+	ImageVersion string `name:"docker-image-version" help:"Override the BOE Docker image tag to use when running with --docker. By default, the image version matches the BOE version."`
+}
+
 // extensionPositions keeps track of the original position of extensions specified via --extension and --local flags.
 type extensionPositions struct {
 	local  map[string][]int // maps local extension flag values to their positions

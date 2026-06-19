@@ -43,12 +43,20 @@ type Server struct {
 
 // RunParams are the parameters for running extensions.
 type RunParams struct {
-	LogLevel         string
-	EnvoyVersion     string
-	EnvoyVersionsURL string
-	EnvoyPath        string
-	Dev              bool
-	LocalExtensions  []string
+	LogLevel            string
+	EnvoyVersion        string
+	EnvoyVersionsURL    string
+	EnvoyPath           string
+	Dev                 bool
+	LocalExtensions     []string
+	ClustersSecure      []string
+	ClustersInsecure    []string
+	ClustersJSONSpec    []string
+	TestUpstreamHost    string
+	TestUpstreamCluster string
+	Docker              bool
+	DockerImage         string
+	DockerPullPolicy    string
 }
 
 // LocalExtension represents a local extension with its path and manifest.
@@ -78,6 +86,31 @@ func (r *RunParams) Args() []string {
 	if r.Dev {
 		args = append(args, "--dev")
 	}
+	for _, cluster := range r.ClustersSecure {
+		args = append(args, "--cluster", cluster)
+	}
+	for _, cluster := range r.ClustersInsecure {
+		args = append(args, "--cluster-insecure", cluster)
+	}
+	for _, cluster := range r.ClustersJSONSpec {
+		args = append(args, "--cluster-json", cluster)
+	}
+	if r.TestUpstreamHost != "" {
+		args = append(args, "--test-upstream-host", r.TestUpstreamHost)
+	}
+	if r.TestUpstreamCluster != "" {
+		args = append(args, "--test-upstream-cluster", r.TestUpstreamCluster)
+	}
+	if r.Docker {
+		args = append(args, "--docker")
+	}
+	if r.DockerImage != "" {
+		args = append(args, "--docker-image-version", r.DockerImage)
+	}
+	if r.DockerPullPolicy != "" {
+		args = append(args, "--pull", r.DockerPullPolicy)
+	}
+
 	return args
 }
 
