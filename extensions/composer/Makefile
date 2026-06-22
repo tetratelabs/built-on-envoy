@@ -207,7 +207,6 @@ push_image: create_builder  ## Build and push docker image for the plugin for cr
 CODE_IMAGE := $(HUB)/$(NAME)-src:$(VERSION)$(IMAGE_NONCE)
 .PHONY: push_code
 push_code: create_builder  ## Build and push source code image
-	$(MAKE) -C integration clean
 	@echo "Building and pushing source code image..."
 	docker buildx build \
 		--builder $(BUILDER_NAME) \
