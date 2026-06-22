@@ -22,7 +22,7 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v4
         id: changes
         with:
@@ -43,7 +43,7 @@ jobs:
       extproc-extensions: ${{ steps.discover.outputs.extproc-extensions }}
       has-composer: ${{ steps.discover.outputs.has-composer }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Discover extensions
         id: discover
         run: |
