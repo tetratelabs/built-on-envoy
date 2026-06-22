@@ -28,7 +28,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
-	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
+	internaltesting "github.com/tetratelabs/built-on-envoy/internal/testing"
 )
 
 //go:embed testdata/output_config.yaml

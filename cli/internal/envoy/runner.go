@@ -414,7 +414,7 @@ func (r *RunnerDocker) Run(ctx context.Context) error {
 
 	args := r.dockerRunArgs(image, localExtArgs)
 
-	fmt.Printf("→ %sRunning Envoy in Docker (%v)...%s\n", internal.ANSIBold, image, internal.ANSIReset)
+	fmt.Fprintf(os.Stderr, "→ %sRunning Envoy in Docker (%v)...%s\n", internal.ANSIBold, image, internal.ANSIReset)
 
 	cmd = exec.CommandContext(ctx, "docker", args...) //nolint:gosec
 	cmd.Stdout = os.Stdout

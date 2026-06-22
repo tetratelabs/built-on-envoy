@@ -16,7 +16,7 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 
-	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
+	internaltesting "github.com/tetratelabs/built-on-envoy/internal/testing"
 )
 
 func init() {

@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
-	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
+	internaltesting "github.com/tetratelabs/built-on-envoy/internal/testing"
 )
 
 func TestCreateGoWithDockerSupport(t *testing.T) {

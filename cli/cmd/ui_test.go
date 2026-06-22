@@ -18,8 +18,6 @@ import (
 
 	"github.com/alecthomas/kong"
 	"github.com/stretchr/testify/require"
-
-	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 )
 
 func TestParseCmdUIHelp(t *testing.T) {
@@ -86,7 +84,7 @@ Flags:
                                  Override the BOE Docker image tag to use when
                                  running with --docker. By default, the image
                                  version matches the BOE version.
-`, internaltesting.WrapHelp(uiHelp))
+`, wrapHelp(uiHelp))
 
 	require.Equal(t, expected, buf.String())
 }

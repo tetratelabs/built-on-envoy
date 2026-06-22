@@ -21,8 +21,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal"
-	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
+	internaltesting "github.com/tetratelabs/built-on-envoy/internal/testing"
 )
 
 func TestParseCmdCreateHelp(t *testing.T) {
@@ -60,7 +60,7 @@ Flags:
                                    to the extension name.
       --composer-version=STRING    Composer version for Go extensions. Resolved
                                    from the registry if not set.
-`, internaltesting.WrapHelp(createHelp))
+`, wrapHelp(createHelp))
 	require.Equal(t, expected, buf.String())
 }
 

@@ -23,7 +23,7 @@ import (
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
-	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
+	internaltesting "github.com/tetratelabs/built-on-envoy/internal/testing"
 )
 
 var (

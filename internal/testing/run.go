@@ -105,7 +105,13 @@ func FreePorts(t *testing.T, count int) []int {
 func RunCLI(t *testing.T, cliBin string, args ...string) *os.Process {
 	// Capture logs, only dump on failure.
 	logDir := t.TempDir()
-	buffers := DumpLogsOnFail(t, logDir, "boe Stdout", "boe Stderr")
+
+	var buffers OutBuffers
+	if teeFile := os.Getenv("TEST_BOE_CLI_OUTPUT_FILE"); teeFile != "" {
+		buffers = TeeOutput(t, teeFile, "boe Stdout", "boe Stderr")
+	} else {
+		buffers = DumpLogsOnFail(t, logDir, "boe Stdout", "boe Stderr")
+	}
 
 	t.Logf("Starting boe with args: %v", args)
 

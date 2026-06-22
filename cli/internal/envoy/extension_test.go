@@ -33,8 +33,8 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
-	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
+	internaltesting "github.com/tetratelabs/built-on-envoy/internal/testing"
 )
 
 func TestGenerateFilterConfigUnsupportedType(t *testing.T) {

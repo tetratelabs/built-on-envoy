@@ -18,8 +18,8 @@ import (
 	"github.com/alecthomas/kong"
 	"github.com/stretchr/testify/require"
 
-	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
+	internaltesting "github.com/tetratelabs/built-on-envoy/internal/testing"
 )
 
 func TestParseCmdLogsHelp(t *testing.T) {
@@ -48,7 +48,7 @@ Flags:
   -f, --follow      Follow the log output (like tail -f).
   -t, --tail=INT    Number of recent log lines to show. Defaults to 20 when
                     --follow is set, 0 (all lines) otherwise.
-`, internaltesting.WrapHelp(logsHelp))
+`, wrapHelp(logsHelp))
 
 	require.Equal(t, expected, buf.String())
 }

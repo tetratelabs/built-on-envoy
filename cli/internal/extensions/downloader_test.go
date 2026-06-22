@@ -17,8 +17,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/oci"
-	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
+	internaltesting "github.com/tetratelabs/built-on-envoy/internal/testing"
 )
 
 // mockRepositoryClient is a mock implementation of oci.RepositoryClient for testing.

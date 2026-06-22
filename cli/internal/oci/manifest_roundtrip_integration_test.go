@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 
-	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
+	internaltesting "github.com/tetratelabs/built-on-envoy/internal/testing"
 )
 
 type nativeHTTPFiltersManifest struct {

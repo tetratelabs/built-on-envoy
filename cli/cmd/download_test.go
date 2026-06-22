@@ -16,8 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
-	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
+	internaltesting "github.com/tetratelabs/built-on-envoy/internal/testing"
 )
 
 func TestParseCmdDownloadHelp(t *testing.T) {
@@ -64,7 +64,7 @@ Flags:
                            ($BOE_REGISTRY_USERNAME).
       --password=STRING    Password for the OCI registry
                            ($BOE_REGISTRY_PASSWORD).
-`, internaltesting.WrapHelp(downloadHelp), extensions.DefaultOCIRegistry)
+`, wrapHelp(downloadHelp), extensions.DefaultOCIRegistry)
 	require.Equal(t, expected, buf.String())
 }
 

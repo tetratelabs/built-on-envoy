@@ -22,8 +22,8 @@ import (
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/oci"
-	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
+	internaltesting "github.com/tetratelabs/built-on-envoy/internal/testing"
 )
 
 func TestParseCmdRunHelp(t *testing.T) {
@@ -121,7 +121,7 @@ Flags:
                                    ($BOE_REGISTRY_USERNAME).
       --password=STRING            Password for the OCI registry
                                    ($BOE_REGISTRY_PASSWORD).
-`, internaltesting.WrapHelp(runHelp), extensions.DefaultOCIRegistry)
+`, wrapHelp(runHelp), extensions.DefaultOCIRegistry)
 
 	require.Equal(t, expected, buf.String())
 }

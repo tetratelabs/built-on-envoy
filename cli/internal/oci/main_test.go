@@ -13,7 +13,7 @@ import (
 	"os"
 	"testing"
 
-	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
+	internaltesting "github.com/tetratelabs/built-on-envoy/internal/testing"
 )
 
 var (
