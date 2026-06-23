@@ -29,7 +29,7 @@ func init() {
 func newLocalRegistryRepositoryClient(t *testing.T) RepositoryClient {
 	// Create a remote repository and client
 	logger := internaltesting.NewTLogger(t)
-	repoRef := fmt.Sprintf("%s/test/extension", registryAddr)
+	repoRef := fmt.Sprintf("%s/test/extension", testRegistry.Address)
 	repo, err := NewRemoteRepository(logger, repoRef, &ClientOptions{
 		PlainHTTP: true, // Local registry doesn't use TLS
 	})
@@ -43,7 +43,7 @@ func TestPullMultiArch(t *testing.T) {
 	builder := internaltesting.CreateBuildxBuilderForTest(t)
 
 	// Create the multi-arch image
-	testRepo := fmt.Sprintf("%s/test-multiarch", registryAddr)
+	testRepo := fmt.Sprintf("%s/test-multiarch", testRegistry.Address)
 	// #nosec G204
 	cmd := exec.CommandContext(t.Context(), "docker", "buildx", "build",
 		"--builder", builder,

@@ -19,8 +19,8 @@ import (
 
 var (
 	cliBin       string
-	registryAddr string
 	builder      string
+	testRegistry *internaltesting.TestRegistry
 )
 
 func TestMain(m *testing.M) {
@@ -32,29 +32,28 @@ func TestMain(m *testing.M) {
 	}
 
 	ctx := context.Background()
-	registryContainer, addr, err := internaltesting.StartOCIRegistry(ctx)
+	testRegistry, err = internaltesting.StartOCIRegistry(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to start local OCI registry: %v\n", err)
 		os.Exit(1)
 	}
-	registryAddr = addr
 
 	var cleanup func()
 	builder, cleanup, err = internaltesting.CreateBuildxBuilder(ctx)
 	if err != nil {
-		_ = registryContainer.Terminate(ctx)
+		_ = testRegistry.Container.Terminate(ctx)
 		fmt.Fprintf(os.Stderr, "failed to create buildx builder: %v\n", err)
 		os.Exit(1)
 	}
 
 	testUpstream := httptest.NewServer(httpbin.New())
 	// This env var is used in the tests RunEnvoy to automatically configure the test upstream cluster.
-	_ = os.Setenv("TEST_BOE_UPSTREAM_CLUSTER_INSECURE", testUpstream.Listener.Addr().String())
+	_ = os.Setenv(internaltesting.TestUpstreamClusterInsecure.Name(), testUpstream.Listener.Addr().String())
 
 	code := m.Run()
 
 	testUpstream.Close()
-	_ = registryContainer.Terminate(ctx)
+	_ = testRegistry.Container.Terminate(ctx)
 	cleanup()
 
 	os.Exit(code)

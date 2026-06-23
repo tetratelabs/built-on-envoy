@@ -76,6 +76,7 @@ func TeeOutput(t testing.TB, teeFile string, labels ...string) OutBuffers {
 	if err != nil {
 		t.Fatalf("TeeLogsOnFail: create tee file %s: %v", teeFile, err)
 	}
+	t.Cleanup(func() { _ = f.Close() })
 
 	buffers := CaptureOutput(labels...)
 	teeBuffers := make([]OutBuffer, len(labels))

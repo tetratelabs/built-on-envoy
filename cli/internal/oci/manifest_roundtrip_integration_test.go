@@ -29,7 +29,7 @@ type nativeHTTPFiltersManifest struct {
 
 func TestManifestYAMLRoundTrip(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
-	repoRef := fmt.Sprintf("%s/test/roundtrip-native-filters", registryAddr)
+	repoRef := fmt.Sprintf("%s/test/roundtrip-native-filters", testRegistry.Address)
 	repo, err := NewRemoteRepository(logger, repoRef, &ClientOptions{PlainHTTP: true})
 	require.NoError(t, err)
 	client := NewRepositoryClient(logger, repo)

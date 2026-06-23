@@ -8,6 +8,8 @@ package internaltesting
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"testing"
 
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -15,7 +17,7 @@ import (
 
 // StartOCIRegistry starts a local OCI registry for testing and returns
 // the container instance and its address in "host:port" format.
-func StartOCIRegistry(ctx context.Context) (testcontainers.Container, string, error) {
+func StartOCIRegistry(ctx context.Context) (*TestRegistry, error) {
 	registryContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
 			Image:        "registry:2",
@@ -25,19 +27,39 @@ func StartOCIRegistry(ctx context.Context) (testcontainers.Container, string, er
 		Started: true,
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to start local Docker registry: %w", err)
+		return nil, fmt.Errorf("failed to start local Docker registry: %w", err)
 	}
 
 	host, err := registryContainer.Host(ctx)
 	if err != nil {
 		_ = registryContainer.Terminate(ctx)
-		return nil, "", fmt.Errorf("failed to get registry host: %w", err)
+		return nil, fmt.Errorf("failed to get registry host: %w", err)
 	}
 	port, err := registryContainer.MappedPort(ctx, "5000")
 	if err != nil {
 		_ = registryContainer.Terminate(ctx)
-		return nil, "", fmt.Errorf("failed to get registry port: %w", err)
+		return nil, fmt.Errorf("failed to get registry port: %w", err)
 	}
 
-	return registryContainer, fmt.Sprintf("%s:%s", host, port.Port()), nil
+	return &TestRegistry{
+		Address:   fmt.Sprintf("%s:%s", host, port.Port()),
+		Insecure:  true,
+		Container: registryContainer,
+	}, nil
+}
+
+// TestRegistry represents a local OCI registry for testing purposes.
+type TestRegistry struct {
+	// Address is the address of the registry in "host:port" format.
+	Address string
+	// Insecure indicates whether the registry is insecure (HTTP).
+	Insecure bool
+	// Container is the testcontainers container instance for the registry.
+	Container testcontainers.Container
+}
+
+// Configure sets the necessary environment variables for the test to use the current OCI registry.
+func (r *TestRegistry) Configure(t testing.TB) {
+	t.Setenv("BOE_REGISTRY", r.Address)
+	t.Setenv("BOE_REGISTRY_INSECURE", strconv.FormatBool(r.Insecure))
 }

@@ -29,7 +29,7 @@ func newLocalRegistryClient(t *testing.T) RegistryClient {
 
 	// Populate the test repos
 	for _, repoName := range testRepos {
-		repoRef := fmt.Sprintf("%s/%s", registryAddr, repoName)
+		repoRef := fmt.Sprintf("%s/%s", testRegistry.Address, repoName)
 		repo, err := NewRemoteRepository(logger, repoRef, &ClientOptions{
 			PlainHTTP: true, // Local registry doesn't use TLS
 		})
@@ -41,7 +41,7 @@ func newLocalRegistryClient(t *testing.T) RegistryClient {
 	}
 
 	// Create a remote registry and client
-	registry, err := NewRemoteRegistry(logger, registryAddr, &ClientOptions{
+	registry, err := NewRemoteRegistry(logger, testRegistry.Address, &ClientOptions{
 		PlainHTTP: true, // Local registry doesn't use TLS
 	})
 	require.NoError(t, err)

@@ -28,7 +28,7 @@ func TestMain(m *testing.M) {
 
 	testUpstream := httptest.NewServer(httpbin.New())
 	// This env var is used in the tests RunEnvoy to automatically configure the test upstream cluster.
-	_ = os.Setenv("TEST_BOE_UPSTREAM_CLUSTER_INSECURE", testUpstream.Listener.Addr().String())
+	_ = os.Setenv(internaltesting.TestUpstreamClusterInsecure.Name(), testUpstream.Listener.Addr().String())
 
 	code := m.Run()
 

@@ -17,30 +17,30 @@ import (
 )
 
 var (
-	registryAddr string
+	testRegistry *internaltesting.TestRegistry
 	builder      string
 )
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
-	registryContainer, addr, err := internaltesting.StartOCIRegistry(ctx)
+	var err error
+	testRegistry, err = internaltesting.StartOCIRegistry(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to start local OCI registry: %v\n", err)
 		os.Exit(1)
 	}
-	registryAddr = addr
 
 	var cleanup func()
 	builder, cleanup, err = internaltesting.CreateBuildxBuilder(ctx)
 	if err != nil {
-		_ = registryContainer.Terminate(ctx)
+		_ = testRegistry.Container.Terminate(ctx)
 		fmt.Fprintf(os.Stderr, "failed to create buildx builder: %v\n", err)
 		os.Exit(1)
 	}
 
 	code := m.Run()
 
-	_ = registryContainer.Terminate(ctx)
+	_ = testRegistry.Container.Terminate(ctx)
 	cleanup()
 
 	os.Exit(code)

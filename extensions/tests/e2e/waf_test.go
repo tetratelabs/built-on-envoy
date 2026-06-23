@@ -111,8 +111,8 @@ func TestFTW(t *testing.T) {
 	ports := internaltesting.FreePorts(t, 1)
 
 	// This env var is used in the tests RunEnvoy to automatically configure "albedo" the test upstream cluster.
-	t.Setenv("TEST_BOE_UPSTREAM_CLUSTER_INSECURE", "localhost:"+strconv.Itoa(albedoPort))
-	t.Setenv("TEST_BOE_CLI_OUTPUT_FILE", envoyLogs) // Write CLI output to this file in addition to the in-mem buffers.
+	internaltesting.TestUpstreamClusterInsecure.Set(t, "localhost:"+strconv.Itoa(albedoPort))
+	internaltesting.TestCLIOutputFile.Set(t, envoyLogs) // Write CLI output to this file in addition to the in-mem buffers.
 
 	const config = `{
 	"mode": "FULL",

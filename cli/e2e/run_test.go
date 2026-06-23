@@ -6,7 +6,6 @@
 package e2e
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"net/http"
@@ -24,11 +23,6 @@ import (
 	"github.com/tetratelabs/built-on-envoy/cli/internal"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
 	internaltesting "github.com/tetratelabs/built-on-envoy/internal/testing"
-)
-
-var (
-	defaultRequestTimeoutFromEnv, _ = time.ParseDuration(os.Getenv("TEST_BOE_REQUEST_TIMEOUT"))
-	defaultRequestTimeout           = cmp.Or(defaultRequestTimeoutFromEnv, 5*time.Second)
 )
 
 func TestDefaultProxy(t *testing.T) {
@@ -124,7 +118,7 @@ func TestRustRemoteExtension(t *testing.T) {
 	// Set X-Forwarded-For header to an IP address that should be denied by the ip-restriction extension.
 	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
 
-	ctx, cancel := context.WithTimeout(t.Context(), defaultRequestTimeout)
+	ctx, cancel := context.WithTimeout(t.Context(), internaltesting.TestRequestTimeout.Get())
 	t.Cleanup(cancel)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -137,7 +131,8 @@ func TestRustRemoteExtension(t *testing.T) {
 }
 
 func TestRustLocalExtension(t *testing.T) {
-	t.Setenv("TEST_BOE_RUN_ENVOY_TIMEOUT", "5m")
+	internaltesting.RunEnvoyTimeout.Set(t, 5*time.Minute)
+
 	dataDir := t.TempDir()
 
 	// Create a brand new extension
@@ -218,6 +213,7 @@ func TestLocalGoExtensionLegacyPluginPath(t *testing.T) {
 
 func testLocalGoExtension(t *testing.T, removeCSharedMain bool) {
 	t.Helper()
+	testRegistry.Configure(t)
 
 	// Load composer version to make it explicit in the create command and avoid pulling it from the
 	// public extension catalog, as versions may differ with the local one.
@@ -228,8 +224,6 @@ func testLocalGoExtension(t *testing.T, removeCSharedMain bool) {
 
 	// Local builds for Go will pull libcomposer from the remote registry. However, when we're doing changes to versions, etc, we don't want it to
 	// pull an obsolete version, so we'll just push the current composer source to the local registry and use that for the test.
-	t.Setenv("BOE_REGISTRY", registryAddr)
-	t.Setenv("BOE_REGISTRY_INSECURE", "true")
 	makeCmd := exec.CommandContext(t.Context(), "make", "push_code")
 	makeCmd.Dir = "../../extensions/composer"
 	output, err := makeCmd.CombinedOutput()
@@ -348,7 +342,7 @@ func dummy() string {
 // soft build-info checks, not the linker's hard ABI requirement.
 func TestGoPluginLoaderRemoteExtension(t *testing.T) {
 	// Building two images, pushing, and starting Envoy can take a while.
-	t.Setenv("TEST_BOE_RUN_ENVOY_TIMEOUT", "5m")
+	internaltesting.RunEnvoyTimeout.Set(t, 5*time.Minute)
 
 	const composerDir = "../../extensions/composer"
 
@@ -362,8 +356,7 @@ func TestGoPluginLoaderRemoteExtension(t *testing.T) {
 	// Point both the build tooling and the goplugin-loader image fetcher at the local
 	// insecure registry. These env vars are inherited by the spawned boe process, so the
 	// fetcher pulls the plugin over plain HTTP (BOE_REGISTRY_INSECURE).
-	t.Setenv("BOE_REGISTRY", registryAddr)
-	t.Setenv("BOE_REGISTRY_INSECURE", "true")
+	testRegistry.Configure(t)
 
 	// Dedicated data home so the composer bundle download and the plugin pull cache are isolated.
 	dataHome := t.TempDir()
@@ -375,11 +368,11 @@ func TestGoPluginLoaderRemoteExtension(t *testing.T) {
 	// buildkit rejects for single-platform). The target pushes directly (--output type=registry), so
 	// no separate docker push is needed. It tags the image <HUB>/extension-<name>:<version>, with HUB
 	// derived from OCI_REGISTRY; BOE_REGISTRY_INSECURE (set above) makes the export insecure.
-	pluginRef := fmt.Sprintf("%s/built-on-envoy/extension-example-go:%s", registryAddr, version)
+	pluginRef := fmt.Sprintf("%s/built-on-envoy/extension-example-go:%s", testRegistry.Address, version)
 	runCmd(t, composerDir, "make", "-f", "Makefile.plugin", "push_image",
 		"PLATFORMS=linux/"+runtime.GOARCH,
 		"EXTENSION_PATH=example",
-		"OCI_REGISTRY="+registryAddr,
+		"OCI_REGISTRY="+testRegistry.Address,
 	)
 	pluginURL := "oci://" + pluginRef
 
@@ -389,7 +382,7 @@ func TestGoPluginLoaderRemoteExtension(t *testing.T) {
 	// and resolves the embedded goplugin-loader manifest from the bundle's /metadatas.
 	runCmd(t, composerDir, "make", "push_image",
 		"PLATFORMS=linux/"+runtime.GOARCH,
-		"OCI_REGISTRY="+registryAddr,
+		"OCI_REGISTRY="+testRegistry.Address,
 	)
 
 	// Step 3: run the goplugin-loader extension, pointing it at the pushed plugin image via
@@ -416,7 +409,7 @@ func TestGoPluginLoaderRemoteExtension(t *testing.T) {
 //  2. run `boe run --extension composer/example-go` which downloads the full composer binary
 //     artifact and resolves the example-go child extension manifest from within the bundle.
 func TestComposerBundleExtension(t *testing.T) {
-	t.Setenv("TEST_BOE_RUN_ENVOY_TIMEOUT", "5m")
+	internaltesting.RunEnvoyTimeout.Set(t, 5*time.Minute)
 
 	const composerDir = "../../extensions/composer"
 
@@ -426,14 +419,13 @@ func TestComposerBundleExtension(t *testing.T) {
 	require.True(t, ok)
 	version := composer.Version
 
-	t.Setenv("BOE_REGISTRY", registryAddr)
-	t.Setenv("BOE_REGISTRY_INSECURE", "true")
+	testRegistry.Configure(t)
 	t.Setenv("BOE_DATA_HOME", t.TempDir())
 
 	// Build and push the full composer image (single platform) to the local registry.
 	runCmd(t, composerDir, "make", "push_image",
 		"PLATFORMS=linux/"+runtime.GOARCH,
-		"OCI_REGISTRY="+registryAddr,
+		"OCI_REGISTRY="+testRegistry.Address,
 	)
 
 	// Run boe with the bundle-prefixed extension reference: composer/example-go.
