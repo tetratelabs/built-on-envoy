@@ -44,9 +44,9 @@ func TestWAFSmoke(t *testing.T) {
 }`
 
 	ports := internaltesting.FreePorts(t, 2)
-	proxyPort := ports[0]
+	proxyPort, adminPort := ports[0], ports[1]
 
-	internaltesting.RunEnvoy(t, cliBin, proxyPort, ports[1],
+	internaltesting.RunEnvoy(t, cliBin, proxyPort, adminPort,
 		"--log-level", "dynamic_modules:debug",
 		"--local", "../../composer/waf",
 		"--config", config)
