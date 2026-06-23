@@ -12,8 +12,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
+	internaltesting "github.com/tetratelabs/built-on-envoy/internal/testing"
 )
 
 func TestCheckOrBuildRustDynamicModule_Unsupported(t *testing.T) {

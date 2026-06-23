@@ -18,15 +18,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
-	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
+	internaltesting "github.com/tetratelabs/built-on-envoy/internal/testing"
 )
 
 func TestCreateGoWithDockerSupport(t *testing.T) {
 	tmpDir := t.TempDir()
 	ctx := t.Context()
-
-	t.Setenv("BOE_REGISTRY_INSECURE", "true")
-	t.Setenv("BOE_REGISTRY", registryAddr)
+	testRegistry.Configure(t)
 
 	// Create a new extension with an explicit composer version to avoid registry lookup in tests.
 	version := "0.1.0"
@@ -145,7 +143,7 @@ func TestCreateGoWithDockerSupport(t *testing.T) {
 		require.NoError(t, err, "Makefile push_code target should be valid")
 
 		// Pull the image manifest and check annotations
-		fetchManifest(t, registryAddr, "extension-src-test-docker", version)
+		fetchManifest(t, testRegistry.Address, "extension-src-test-docker", version)
 	})
 }
 
@@ -154,9 +152,7 @@ func TestCreateRustNetworkAndListenerFilters(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	ctx := t.Context()
-
-	t.Setenv("BOE_REGISTRY_INSECURE", "true")
-	t.Setenv("BOE_REGISTRY", registryAddr)
+	testRegistry.Configure(t)
 
 	for _, filterType := range []extensions.FilterType{
 		extensions.FilterTypeNetwork,

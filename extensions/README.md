@@ -8,11 +8,16 @@ Each extension should be in its own directory with:
 
 ```
 extension-name/
-├── README.md           # Description and usage
-├── manifest.yaml       # Metadata (name, version, author, etc.)
-├── {go,lua,rs}         # Extension code (language-specific)
-├── config.schema.json  # (Optional) JSON schema describing the extension configuration
+├── README.md            # Description and usage
+├── manifest.yaml        # Metadata (name, version, author, etc.)
+├── {go,lua,rs}          # Extension code (language-specific)
+└── config.schema.json   # (Optional) JSON schema describing the extension configuration
 ```
+
+## Extension e2e tests
+
+Extension e2e tests live in the [tests/e2e](./tests/e2e) directory. Take a look at the README file
+there for details on writing end-to-end tests for your extension.
 
 ## Contributing an Extension
 

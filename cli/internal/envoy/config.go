@@ -600,6 +600,9 @@ func buildHTTPConnectionManager(filters []*hcmv3.HttpFilter, testUpstreamCluster
 				},
 			},
 		},
+		HttpProtocolOptions: &corev3.Http1ProtocolOptions{
+			AcceptHttp_10: true,
+		},
 		HttpFilters: httpFilters,
 		RouteSpecifier: &hcmv3.HttpConnectionManager_RouteConfig{
 			RouteConfig: &routev3.RouteConfiguration{

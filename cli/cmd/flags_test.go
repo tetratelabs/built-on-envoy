@@ -6,7 +6,10 @@
 package cmd
 
 import (
+	"bytes"
+	"go/doc"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -121,4 +124,26 @@ func TestExtensionPositionsSort(t *testing.T) {
 			require.Equal(t, tt.want, sorted)
 		})
 	}
+}
+
+// wrapHelp wraps the given help text to 80 characters width with proper indentation.
+// It uses the same logic the CLI would use to format help texts.
+// This is useful to compare expected help texts in tests.
+func wrapHelp(text string) string {
+	p := new(doc.Package)
+	pr := p.Printer()
+	pr.TextCodePrefix = "    "
+	pr.TextWidth = 80
+
+	w := bytes.NewBuffer(nil)
+	w.Write(pr.Text(p.Parser().Parse(text)))
+	godocText := w.String()
+
+	out := bytes.NewBuffer(nil)
+	for _, line := range strings.Split(strings.TrimSpace(godocText), "\n") {
+		out.WriteString(strings.TrimRight(line, " "))
+		out.WriteString("\n")
+	}
+
+	return out.String()
 }

@@ -19,7 +19,7 @@ import (
 func ExtensionsFS(t *testing.T) fs.FS {
 	t.Helper()
 	_, f, _, _ := runtime.Caller(0)
-	dir := filepath.Join(filepath.Dir(f), "..", "..", "..", "extensions")
+	dir := filepath.Join(filepath.Dir(f), "..", "..", "extensions")
 	require.DirExists(t, dir)
 	return os.DirFS(dir)
 }

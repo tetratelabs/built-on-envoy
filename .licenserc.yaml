@@ -31,7 +31,7 @@ header:
     - "**/.claude/**"
     - "**/*.json"
     - "**/*.log"
-    - "**/integration/coreruleset/**"
+    - "**/testdata/waf/coreruleset/**"
     # UI files
     - "src/node_modules/**"
     - "src/coverage/**"

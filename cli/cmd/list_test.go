@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
-	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
+	internaltesting "github.com/tetratelabs/built-on-envoy/internal/testing"
 )
 
 // loadExtensionManifests loads manifests from the source extensions directory.
@@ -51,7 +51,7 @@ List available extensions
 %s
 Flags:
   -h, --help    Show context-sensitive help.
-`, internaltesting.WrapHelp(listHelp))
+`, wrapHelp(listHelp))
 
 	require.Equal(t, expected, buf.String())
 }

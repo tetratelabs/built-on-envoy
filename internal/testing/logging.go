@@ -70,11 +70,51 @@ func CaptureOutput(labels ...string) OutBuffers {
 	return buffers
 }
 
+// TeeOutput creates labeled log capture writers that also write to a file as writes happen.
+func TeeOutput(t testing.TB, teeFile string, labels ...string) OutBuffers {
+	f, err := os.Create(filepath.Clean(teeFile))
+	if err != nil {
+		t.Fatalf("TeeLogsOnFail: create tee file %s: %v", teeFile, err)
+	}
+	t.Cleanup(func() { _ = f.Close() })
+
+	buffers := CaptureOutput(labels...)
+	teeBuffers := make([]OutBuffer, len(labels))
+	for i, b := range buffers {
+		teeBuffers[i] = &teeBuffer{
+			outBuffer: b.(*outBuffer),
+			extra:     f,
+		}
+	}
+
+	return teeBuffers
+}
+
+// teeBuffer writes to both an in-memory buffer and an extra writer (e.g. a file).
+type teeBuffer struct {
+	*outBuffer
+	extra io.Writer
+}
+
+func (s *teeBuffer) Write(p []byte) (n int, err error) {
+	_, _ = s.extra.Write(p) // best-effort; don't let file errors mask buffer writes
+	return s.outBuffer.Write(p)
+}
+
 // DumpLogsOnFail creates labeled log capture writers that dump only on test failure.
 // Returns WriterStringers in the same order as labels.
 func DumpLogsOnFail(t testing.TB, logDir string, labels ...string) OutBuffers {
-	buffers := CaptureOutput(labels...)
+	return dumpLogsOnFail(t, logDir, CaptureOutput(labels...), labels...)
+}
 
+// TeeLogsOnFail is like DumpLogsOnFail but also streams each label's output to its own
+// file as writes happen, in addition to the in-memory buffer.
+func TeeLogsOnFail(t testing.TB, logDir, teeFile string, labels ...string) OutBuffers {
+	return dumpLogsOnFail(t, logDir, TeeOutput(t, teeFile, labels...), labels...)
+}
+
+// dumpLogsOnFail registers a t.Cleanup function to dump logs from buffers on test failure.
+func dumpLogsOnFail(t testing.TB, logDir string, buffers OutBuffers, labels ...string) OutBuffers {
 	t.Cleanup(func() {
 		if t.Failed() {
 			for i, label := range labels {
@@ -91,7 +131,6 @@ func DumpLogsOnFail(t testing.TB, logDir string, labels ...string) OutBuffers {
 			}
 		}
 	})
-
 	return buffers
 }
 

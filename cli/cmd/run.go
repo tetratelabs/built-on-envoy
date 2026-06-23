@@ -500,14 +500,14 @@ func handleExtensionSource(ctx context.Context, downloader *extensions.Downloade
 	}
 	switch rootManifest.Type {
 	case extensions.TypeComposer:
-		fmt.Printf("→ %sBuilding composer for %s...%s\n", internal.ANSIBold, extensionManifest.Name, internal.ANSIReset)
+		fmt.Fprintf(os.Stderr, "→ %sBuilding composer for %s...%s\n", internal.ANSIBold, extensionManifest.Name, internal.ANSIReset)
 		logger.Info("building composer from local source", "name", rootManifest.Name, "version", rootManifest.Version)
 		if err := extensions.BuildLibComposer(logger, downloader.Dirs, rootPath, rootManifest.Version, false); err != nil {
 			return fmt.Errorf("failed to build libcomposer for local extension %s: %w", rootManifest.Name, err)
 		}
 		extensionManifest.CShared = true
 	case extensions.TypeGo:
-		fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, rootManifest.Name, internal.ANSIReset)
+		fmt.Fprintf(os.Stderr, "→ %sBuilding %s...%s\n", internal.ANSIBold, rootManifest.Name, internal.ANSIReset)
 		logger.Info("building local Go extension", "name", rootManifest.Name, "version", rootManifest.Version)
 		cshared, err := extensions.BuildExtensionFromPath(logger, downloader.Dirs, rootManifest, rootPath)
 		if err != nil {
@@ -534,14 +534,14 @@ func handleExtensionSource(ctx context.Context, downloader *extensions.Downloade
 		}
 		extensionManifest.CShared = cshared
 	case extensions.TypeRust:
-		fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, rootManifest.Name, internal.ANSIReset)
+		fmt.Fprintf(os.Stderr, "→ %sBuilding %s...%s\n", internal.ANSIBold, rootManifest.Name, internal.ANSIReset)
 		downloader.Logger.Info("building local Rust extension", "name", rootManifest.Name, "version", rootManifest.Version)
 		// Build dynamic module (currently supports Rust)
 		if err := extensions.BuildDynamicModule(downloader.Logger, downloader.Dirs, rootManifest, rootPath); err != nil {
 			return err
 		}
 	case extensions.TypeExtProc:
-		fmt.Printf("→ %sBuilding %s...%s\n", internal.ANSIBold, rootManifest.Name, internal.ANSIReset)
+		fmt.Fprintf(os.Stderr, "→ %sBuilding %s...%s\n", internal.ANSIBold, rootManifest.Name, internal.ANSIReset)
 		downloader.Logger.Info("building local ext_proc extension", "name", rootManifest.Name, "version", rootManifest.Version)
 		if err := extensions.BuildExtProcBinary(downloader.Logger, downloader.Dirs, rootManifest, rootPath); err != nil {
 			return err

@@ -147,7 +147,7 @@ create_builder:
 
 # Cross-build through Docker only when a target overrides force_target_os.
 build_cmd_native = CGO_ENABLED=1 go build -trimpath -buildmode=c-shared $(COMPOSER_BUILD_TAG) -o lib$(NAME).so ./main
-build_cmd_cross  = docker buildx build --platform=$(force_target_os)/$(ARCH) --output type=local,dest=. --build-arg BUILD_TAG="$(COMPOSER_BUILD_TAG)" --build-arg LIB_NAME="lib$(NAME).so" -f ./Dockerfile .
+build_cmd_cross  = docker buildx build --platform=$(force_target_os)/$(ARCH) --output type=local,dest=. --build-arg GO_VERSION="$(GO_VERSION)" --build-arg BUILD_TAG="$(COMPOSER_BUILD_TAG)" --build-arg LIB_NAME="lib$(NAME).so" -f ./Dockerfile .
 
 .PHONY: build
 build:
@@ -207,7 +207,6 @@ push_image: create_builder  ## Build and push docker image for the plugin for cr
 CODE_IMAGE := $(HUB)/$(NAME)-src:$(VERSION)$(IMAGE_NONCE)
 .PHONY: push_code
 push_code: create_builder  ## Build and push source code image
-	$(MAKE) -C integration clean
 	@echo "Building and pushing source code image..."
 	docker buildx build \
 		--builder $(BUILDER_NAME) \
@@ -243,9 +242,3 @@ install_plugins: ## Install all plugins locally
 	@for dir in $(PLUGIN_CLEAN_DIRS); do \
 		$(MAKE) -f Makefile.plugin install EXTENSION_PATH=$$dir; \
 	done
-
-# Envoy runs in a Linux container, so the integration library must be Linux.
-.PHONY: test-integration
-test-integration: force_target_os := $(OS)
-test-integration: build
-	$(MAKE) -C integration test

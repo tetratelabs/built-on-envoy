@@ -18,8 +18,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/envoy"
-	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
+	internaltesting "github.com/tetratelabs/built-on-envoy/internal/testing"
 )
 
 func TestParseCmdCleanHelp(t *testing.T) {
@@ -52,7 +52,7 @@ Flags:
       --state-cache        Clean the state cache directory.
       --runtime-cache      Clean the runtime cache directory.
       --docker             Clean the Docker volume used as a cache.
-`, internaltesting.WrapHelp(cleanHelp))
+`, wrapHelp(cleanHelp))
 	require.Equal(t, expected, buf.String())
 }
 

@@ -17,8 +17,8 @@ import (
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
-	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
+	internaltesting "github.com/tetratelabs/built-on-envoy/internal/testing"
 )
 
 func TestParseCmdGenConfigHelp(t *testing.T) {
@@ -105,7 +105,7 @@ Flags:
                                    ($BOE_REGISTRY_PASSWORD).
       --output="-"                 Directory to put the generated config into.
                                    Use "-" to print it to the standard output.
-`, internaltesting.WrapHelp(genConfigHelp), extensions.DefaultOCIRegistry)
+`, wrapHelp(genConfigHelp), extensions.DefaultOCIRegistry)
 
 	require.Equal(t, expected, buf.String())
 }

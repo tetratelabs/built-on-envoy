@@ -6,7 +6,6 @@
 package internaltesting
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -22,21 +21,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// defaultRunEnvoyTimeout is the default timeout for waiting for Envoy to start.
-const defaultRunEnvoyTimeout = 90 * time.Second
-
-// runEnvoyTimeout returns the timeout duration for waiting for Envoy to start.
-func runEnvoyTimeout() time.Duration {
-	timeout, _ := time.ParseDuration(os.Getenv("TEST_BOE_RUN_ENVOY_TIMEOUT"))
-	return cmp.Or(timeout, defaultRunEnvoyTimeout)
-}
-
 // testUpstreamArgs returns CLI arguments for the test upstream cluster if set via environment variables.
 func testUpstreamArgs() []string {
-	if testUpstream := os.Getenv("TEST_BOE_UPSTREAM_CLUSTER"); testUpstream != "" {
+	if testUpstream := TestUpstreamCluster.Get(); testUpstream != "" {
 		return []string{"--cluster", testUpstream, "--test-upstream-cluster", testUpstream}
 	}
-	if testUpstream := os.Getenv("TEST_BOE_UPSTREAM_CLUSTER_INSECURE"); testUpstream != "" {
+	if testUpstream := TestUpstreamClusterInsecure.Get(); testUpstream != "" {
 		return []string{"--cluster-insecure", testUpstream, "--test-upstream-cluster", testUpstream}
 	}
 	return nil
@@ -72,7 +62,7 @@ func RunEnvoy(t *testing.T, cliBin string, listenPort int, adminPort int, args .
 
 	require.Eventually(t, func() bool {
 		return IsPortInUse(t.Context(), listenPort)
-	}, runEnvoyTimeout(), 100*time.Millisecond, "Envoy did not start listening on port %d", listenPort)
+	}, RunEnvoyTimeout.Get(), 100*time.Millisecond, "Envoy did not start listening on port %d", listenPort)
 
 	AwaitAdminReady(t, adminPort)
 
@@ -105,7 +95,13 @@ func FreePorts(t *testing.T, count int) []int {
 func RunCLI(t *testing.T, cliBin string, args ...string) *os.Process {
 	// Capture logs, only dump on failure.
 	logDir := t.TempDir()
-	buffers := DumpLogsOnFail(t, logDir, "boe Stdout", "boe Stderr")
+
+	var buffers OutBuffers
+	if teeFile := TestCLIOutputFile.Get(); teeFile != "" {
+		buffers = TeeOutput(t, teeFile, "boe Stdout", "boe Stderr")
+	} else {
+		buffers = DumpLogsOnFail(t, logDir, "boe Stdout", "boe Stderr")
+	}
 
 	t.Logf("Starting boe with args: %v", args)
 
@@ -156,7 +152,7 @@ func AwaitAdminReady(t *testing.T, adminPort int) {
 			return false
 		}
 		return resp.StatusCode == http.StatusOK && strings.EqualFold(strings.TrimSpace(string(body)), "live")
-	}, runEnvoyTimeout(), 100*time.Millisecond, "Envoy admin not ready on port %d", adminPort)
+	}, RunEnvoyTimeout.Get(), 100*time.Millisecond, "Envoy admin not ready on port %d", adminPort)
 }
 
 // IsPortInUse checks if a port is in use (returns true if listening).

@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2/registry"
 
-	internaltesting "github.com/tetratelabs/built-on-envoy/cli/internal/testing"
+	internaltesting "github.com/tetratelabs/built-on-envoy/internal/testing"
 )
 
 type registryClientTest struct {
