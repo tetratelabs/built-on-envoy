@@ -39,8 +39,8 @@ If you need to use another upstream, you can set the value of the `TestUpstreamC
 ```sh
 make test
 
-# Run a specific test with verbose output
-GO_TEST_ARGS="-run TestMyExtension -v" make test
+# Run a specific test with verbose output and custom verison of Envoy
+make test GO_TEST_ARGS="-run TestMyExtension -v" ENVOY_VERSION=1.38.0
 ```
 
 ## Environment variables
