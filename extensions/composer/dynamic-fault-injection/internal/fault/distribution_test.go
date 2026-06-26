@@ -7,7 +7,6 @@ package fault
 
 import (
 	"math"
-	"math/rand"
 	"testing"
 	"time"
 )
@@ -21,8 +20,7 @@ func TestProbabilityDistribution_Sample(t *testing.T) {
 		{Quantile: 1.0, Duration: 1 * time.Second},
 	}
 
-	rng := rand.New(rand.NewSource(42))
-	dist := NewProbabilityDistribution(percentiles, rng)
+	dist := NewProbabilityDistribution(percentiles)
 
 	const numSamples = 100000
 	var samples []time.Duration
@@ -52,8 +50,7 @@ func TestProbabilityDistribution_SampleWithValue(t *testing.T) {
 		{Quantile: 1.0, Duration: 200 * time.Millisecond},
 	}
 
-	rng := rand.New(rand.NewSource(42))
-	dist := NewProbabilityDistribution(percentiles, rng)
+	dist := NewProbabilityDistribution(percentiles)
 
 	tests := []struct {
 		name      string
@@ -94,9 +91,8 @@ func TestStatefulProbabilityDistribution_Sample(t *testing.T) {
 		{Quantile: 1.0, Duration: 1 * time.Second},
 	}
 
-	rng := rand.New(rand.NewSource(42))
 	const resolution = 10000
-	dist := NewStatefulProbabilityDistribution(percentiles, resolution, rng)
+	dist := NewStatefulProbabilityDistribution(percentiles, resolution)
 
 	var samples []time.Duration
 	for i := 0; i < resolution; i++ {
@@ -125,9 +121,8 @@ func TestStatefulProbabilityDistribution_Reshuffle(t *testing.T) {
 		{Quantile: 1.0, Duration: 100 * time.Millisecond},
 	}
 
-	rng := rand.New(rand.NewSource(42))
 	const resolution = 100
-	dist := NewStatefulProbabilityDistribution(percentiles, resolution, rng)
+	dist := NewStatefulProbabilityDistribution(percentiles, resolution)
 
 	// Sample more than resolution to trigger reshuffle.
 	for i := 0; i < resolution+50; i++ {
@@ -158,8 +153,7 @@ func TestResponseDistribution_StatusWeighting(t *testing.T) {
 		},
 	}
 
-	rng := rand.New(rand.NewSource(42))
-	rd, err := NewResponseDistribution(statusDists, rng)
+	rd, err := NewResponseDistribution(statusDists)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -199,8 +193,7 @@ func TestResponseDistribution_DurationRanges(t *testing.T) {
 		},
 	}
 
-	rng := rand.New(rand.NewSource(42))
-	rd, err := NewResponseDistribution(statusDists, rng)
+	rd, err := NewResponseDistribution(statusDists)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -230,8 +223,7 @@ func TestResponseDistribution_FlatDistribution(t *testing.T) {
 		},
 	}
 
-	rng := rand.New(rand.NewSource(42))
-	rd, err := NewResponseDistribution(statusDists, rng)
+	rd, err := NewResponseDistribution(statusDists)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -267,8 +259,7 @@ func TestLoadBasedResponseDistribution_Healthy(t *testing.T) {
 		},
 	}
 
-	rng := rand.New(rand.NewSource(42))
-	lb, err := NewLoadBasedResponseDistribution(healthyDists, 100, tippingDists, 500, nil, rng)
+	lb, err := NewLoadBasedResponseDistribution(healthyDists, 100, tippingDists, 500, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -308,8 +299,7 @@ func TestLoadBasedResponseDistribution_TippingPoint(t *testing.T) {
 		},
 	}
 
-	rng := rand.New(rand.NewSource(42))
-	lb, err := NewLoadBasedResponseDistribution(healthyDists, 100, tippingDists, 500, nil, rng)
+	lb, err := NewLoadBasedResponseDistribution(healthyDists, 100, tippingDists, 500, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -346,8 +336,7 @@ func TestLoadBasedResponseDistribution_GreyZone(t *testing.T) {
 		},
 	}
 
-	rng := rand.New(rand.NewSource(42))
-	lb, err := NewLoadBasedResponseDistribution(healthyDists, 100, tippingDists, 500, nil, rng)
+	lb, err := NewLoadBasedResponseDistribution(healthyDists, 100, tippingDists, 500, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -407,8 +396,7 @@ func TestLoadBasedResponseDistribution_GreyZoneWithPenalty(t *testing.T) {
 		RecoveryRate:           0.5,
 	}
 
-	rng := rand.New(rand.NewSource(42))
-	lb, err := NewLoadBasedResponseDistribution(healthyDists, 100, tippingDists, 500, gz, rng)
+	lb, err := NewLoadBasedResponseDistribution(healthyDists, 100, tippingDists, 500, gz)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -440,8 +428,7 @@ func TestProbabilityDistribution_AllSamplesPositive(t *testing.T) {
 		{Quantile: 1.0, Duration: 500 * time.Millisecond},
 	}
 
-	rng := rand.New(rand.NewSource(12345))
-	dist := NewProbabilityDistribution(percentiles, rng)
+	dist := NewProbabilityDistribution(percentiles)
 
 	for i := 0; i < 10000; i++ {
 		s := dist.Sample()

@@ -8,6 +8,7 @@ package main
 
 import (
 	shared "github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
+
 	impl "github.com/tetratelabs/built-on-envoy/extensions/composer/dynamic-fault-injection"
 )
 
