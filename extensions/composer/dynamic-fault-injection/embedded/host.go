@@ -8,6 +8,7 @@ package host
 
 import (
 	sdk "github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go"
+
 	impl "github.com/tetratelabs/built-on-envoy/extensions/composer/dynamic-fault-injection"
 )
 

@@ -3,10 +3,14 @@
 // The full text of the Apache license is available in the LICENSE file at
 // the root of the repo.
 
+// Package fault provides the basic building blocks for simulating faults and latencies,
+// to be used by an envoy filter, including probability distributions for response times
+// and status codes, as well as load-based behavior with grey zone handling.
 package fault
 
 import (
-	"math/rand"
+	"crypto/rand"
+	"math/big"
 	"sync"
 	"time"
 )
@@ -15,20 +19,18 @@ import (
 // between percentile boundaries. Stateless — each sample is independent.
 type ProbabilityDistribution struct {
 	percentiles []Percentile
-	rng         *rand.Rand
 }
 
 // NewProbabilityDistribution creates a new stateless probability distribution.
-func NewProbabilityDistribution(percentiles []Percentile, rng *rand.Rand) *ProbabilityDistribution {
+func NewProbabilityDistribution(percentiles []Percentile) *ProbabilityDistribution {
 	return &ProbabilityDistribution{
 		percentiles: percentiles,
-		rng:         rng,
 	}
 }
 
 // Sample returns a random duration from the distribution.
 func (pd *ProbabilityDistribution) Sample() time.Duration {
-	r := pd.rng.Float64()
+	r := cryptoFloat64()
 	return pd.SampleWithValue(r)
 }
 
@@ -73,12 +75,11 @@ func (pd *ProbabilityDistribution) SampleWithValue(r float64) time.Duration {
 type StatefulProbabilityDistribution struct {
 	values []time.Duration
 	index  int
-	rng    *rand.Rand
 }
 
 // NewStatefulProbabilityDistribution creates a new stateful distribution with
 // the given resolution (number of pre-computed samples).
-func NewStatefulProbabilityDistribution(percentiles []Percentile, resolution int, rng *rand.Rand) *StatefulProbabilityDistribution {
+func NewStatefulProbabilityDistribution(percentiles []Percentile, resolution int) *StatefulProbabilityDistribution {
 	values := make([]time.Duration, resolution)
 	idx := 0
 	prevQuantile := 0.0
@@ -105,21 +106,20 @@ func NewStatefulProbabilityDistribution(percentiles []Percentile, resolution int
 		idx++
 	}
 
-	rng.Shuffle(len(values), func(i, j int) {
+	cryptoShuffle(len(values), func(i, j int) {
 		values[i], values[j] = values[j], values[i]
 	})
 
 	return &StatefulProbabilityDistribution{
 		values: values,
 		index:  0,
-		rng:    rng,
 	}
 }
 
 // Sample returns the next pre-computed duration, reshuffling when the cycle completes.
 func (spd *StatefulProbabilityDistribution) Sample() time.Duration {
 	if spd.index >= len(spd.values) {
-		spd.rng.Shuffle(len(spd.values), func(i, j int) {
+		cryptoShuffle(len(spd.values), func(i, j int) {
 			spd.values[i], spd.values[j] = spd.values[j], spd.values[i]
 		})
 		spd.index = 0
@@ -140,7 +140,6 @@ type ResponseSample struct {
 type ResponseDistribution struct {
 	entries     []responseEntry
 	totalWeight int
-	rng         *rand.Rand
 }
 
 type responseEntry struct {
@@ -150,7 +149,7 @@ type responseEntry struct {
 }
 
 // NewResponseDistribution creates a ResponseDistribution from a set of StatusDistributions.
-func NewResponseDistribution(statusDists []StatusDistribution, rng *rand.Rand) (*ResponseDistribution, error) {
+func NewResponseDistribution(statusDists []StatusDistribution) (*ResponseDistribution, error) {
 	entries := make([]responseEntry, 0, len(statusDists))
 	totalWeight := 0
 
@@ -159,7 +158,7 @@ func NewResponseDistribution(statusDists []StatusDistribution, rng *rand.Rand) (
 		if err != nil {
 			return nil, err
 		}
-		dist := NewStatefulProbabilityDistribution(percentiles, sd.Resolution, rng)
+		dist := NewStatefulProbabilityDistribution(percentiles, sd.Resolution)
 		entries = append(entries, responseEntry{
 			status:       sd.Status,
 			weight:       sd.Resolution,
@@ -171,14 +170,13 @@ func NewResponseDistribution(statusDists []StatusDistribution, rng *rand.Rand) (
 	return &ResponseDistribution{
 		entries:     entries,
 		totalWeight: totalWeight,
-		rng:         rng,
 	}, nil
 }
 
 // Sample selects a status code by weight and returns a sampled response.
 func (rd *ResponseDistribution) Sample() ResponseSample {
 	// Select status by weighted random choice.
-	r := rd.rng.Intn(rd.totalWeight)
+	r := cryptoIntn(rd.totalWeight)
 	cumulative := 0
 	for i := range rd.entries {
 		cumulative += rd.entries[i].weight
@@ -205,7 +203,6 @@ type LoadBasedResponseDistribution struct {
 	healthyRPS   float64
 	tippingRPS   float64
 	greyZone     *greyZoneState
-	rng          *rand.Rand
 	mu           sync.Mutex
 }
 
@@ -226,13 +223,12 @@ func NewLoadBasedResponseDistribution(
 	tippingDists []StatusDistribution,
 	tippingRPS float64,
 	gz *GreyZoneConfig,
-	rng *rand.Rand,
 ) (*LoadBasedResponseDistribution, error) {
-	healthy, err := NewResponseDistribution(healthyDists, rng)
+	healthy, err := NewResponseDistribution(healthyDists)
 	if err != nil {
 		return nil, err
 	}
-	tipping, err := NewResponseDistribution(tippingDists, rng)
+	tipping, err := NewResponseDistribution(tippingDists)
 	if err != nil {
 		return nil, err
 	}
@@ -242,7 +238,6 @@ func NewLoadBasedResponseDistribution(
 		tippingPoint: tipping,
 		healthyRPS:   healthyRPS,
 		tippingRPS:   tippingRPS,
-		rng:          rng,
 	}
 
 	if gz != nil {
@@ -279,7 +274,7 @@ func (lb *LoadBasedResponseDistribution) Sample(currentRPS float64) ResponseSamp
 
 	// Decide whether to use healthy or tipping distribution based on position.
 	var sample ResponseSample
-	if lb.rng.Float64() > greyPosition {
+	if cryptoFloat64() > greyPosition {
 		sample = lb.healthy.Sample()
 	} else {
 		sample = lb.tippingPoint.Sample()
@@ -329,4 +324,26 @@ func (lb *LoadBasedResponseDistribution) calculateGreyZonePenalty(greyPosition f
 	}
 
 	return basePenalty
+}
+
+// cryptoFloat64 returns a cryptographically random float64 in [0, 1).
+func cryptoFloat64() float64 {
+	maximum := new(big.Int).SetUint64(1 << 53)
+	n, _ := rand.Int(rand.Reader, maximum)
+	return float64(n.Uint64()) / float64(1<<53)
+}
+
+// cryptoIntn returns a cryptographically random int in [0, n).
+func cryptoIntn(n int) int {
+	maximum := big.NewInt(int64(n))
+	val, _ := rand.Int(rand.Reader, maximum)
+	return int(val.Int64())
+}
+
+// cryptoShuffle performs a Fisher-Yates shuffle using crypto/rand.
+func cryptoShuffle(n int, swap func(i, j int)) {
+	for i := n - 1; i > 0; i-- {
+		j := cryptoIntn(i + 1)
+		swap(i, j)
+	}
 }

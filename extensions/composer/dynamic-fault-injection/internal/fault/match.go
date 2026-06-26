@@ -6,7 +6,6 @@
 package fault
 
 import (
-	"math/rand"
 	"strings"
 )
 
@@ -73,5 +72,6 @@ func ShouldApply(percentage float64) bool {
 	if percentage <= 0 {
 		return false
 	}
-	return rand.Float64()*100 < percentage
+	// Use crypto/rand for unbiased sampling.
+	return cryptoFloat64()*100 < percentage
 }

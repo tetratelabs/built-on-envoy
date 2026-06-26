@@ -8,10 +8,10 @@ package impl
 
 import (
 	"fmt"
-	"math/rand"
 	"time"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
+
 	"github.com/tetratelabs/built-on-envoy/extensions/composer/dynamic-fault-injection/internal/fault"
 )
 
@@ -68,7 +68,7 @@ func (a *headerMapAdapter) GetOne(name string) string {
 
 // OnRequestHeaders is called when the request is flowing to the upstream.
 // We match the route, sample from the distribution, and record the start time.
-func (f *latencyFaultFilter) OnRequestHeaders(headers shared.HeaderMap, endStream bool) shared.HeadersStatus {
+func (f *latencyFaultFilter) OnRequestHeaders(headers shared.HeaderMap, _ bool) shared.HeadersStatus {
 	path := headers.GetOne(":path").ToUnsafeString()
 
 	// Find the matching endpoint and sample.
@@ -103,7 +103,7 @@ func (f *latencyFaultFilter) OnRequestHeaders(headers shared.HeaderMap, endStrea
 // OnResponseHeaders is called when the response arrives from the upstream.
 // We calculate how much time the upstream actually took, then inject only
 // the remaining delay (target - actual) to match the sampled distribution.
-func (f *latencyFaultFilter) OnResponseHeaders(headers shared.HeaderMap, endStream bool) shared.HeadersStatus {
+func (f *latencyFaultFilter) OnResponseHeaders(headers shared.HeaderMap, _ bool) shared.HeadersStatus {
 	if !f.matched {
 		return shared.HeadersStatusContinue
 	}
@@ -125,7 +125,7 @@ func (f *latencyFaultFilter) OnResponseHeaders(headers shared.HeaderMap, endStre
 				time.Sleep(remainingDelay)
 				scheduler.Schedule(func() {
 					f.handle.SendLocalResponse(
-						uint32(sample.Status),
+						uint32(sample.Status), //nolint:gosec // Status is validated to be 100-599 by ParseConfig
 						[][2]string{
 							{"Content-Type", "text/plain"},
 							{"x-fault-injected", "abort"},
@@ -144,7 +144,7 @@ func (f *latencyFaultFilter) OnResponseHeaders(headers shared.HeaderMap, endStre
 
 		// No remaining delay needed — immediate abort.
 		f.handle.SendLocalResponse(
-			uint32(f.sample.Status),
+			uint32(f.sample.Status), //nolint:gosec // Status is validated to be 100-599 by ParseConfig
 			[][2]string{
 				{"Content-Type", "text/plain"},
 				{"x-fault-injected", "abort"},
@@ -210,7 +210,6 @@ func buildFilterFactory(config []byte) (*latencyFaultFilterFactory, error) {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 	factory := &latencyFaultFilterFactory{
 		config: cfg,
 	}
@@ -223,7 +222,7 @@ func buildFilterFactory(config []byte) (*latencyFaultFilterFactory, error) {
 
 		// Build the simple response distribution if responses are configured.
 		if len(ep.Responses) > 0 {
-			dist, err := fault.NewResponseDistribution(ep.Responses, rng)
+			dist, err := fault.NewResponseDistribution(ep.Responses)
 			if err != nil {
 				return nil, fmt.Errorf("endpoint %d: failed to build response distribution: %w", i, err)
 			}
@@ -238,7 +237,6 @@ func buildFilterFactory(config []byte) (*latencyFaultFilterFactory, error) {
 				ep.LoadBased.TippingPoint.Responses,
 				ep.LoadBased.TippingPoint.ThresholdRPS,
 				ep.LoadBased.GreyZone,
-				rng,
 			)
 			if err != nil {
 				return nil, fmt.Errorf("endpoint %d: failed to build load-based distribution: %w", i, err)
