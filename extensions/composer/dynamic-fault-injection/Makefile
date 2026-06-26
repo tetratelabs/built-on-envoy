@@ -1,0 +1,217 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# WARNING: This Makefile is auto-generated. Do not modify it directly.
+# If you need to customize the build process, consider using environment variables
+# or wrapper scripts instead of editing this file.
+
+default: build
+
+# This IMAGE_NONCE will be appended to the final image tag if set.
+# It is intended to be used in CI environments to ensure that each image
+# built gets a unique tag.
+IMAGE_NONCE  ?=
+OCI_REGISTRY ?= ghcr.io/tetratelabs
+
+registry_output :=
+ifeq ($(BOE_REGISTRY_INSECURE),true)
+  registry_output := ",registry.insecure=true"
+endif
+
+# Default data home layout for boe
+BOE_DATA_HOME ?= /home/alessandro/.local/share/boe
+
+YQ               := go run github.com/mikefarah/yq/v4@v4.53.2
+
+# Labels for this plugin image.
+NAME             := $(shell $(YQ) '.name' manifest.yaml)
+VERSION          := $(shell $(YQ) '.version' manifest.yaml)
+TYPE             := $(shell $(YQ) '.type' manifest.yaml)
+FILTER_TYPE      := $(shell $(YQ) '(.filterType // []) | join(",")' manifest.yaml)
+DESCRIPTION      := $(shell $(YQ) '.description' manifest.yaml)
+TIMESTAMP        := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+COMMIT_SHA       := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
+AUTHOR           := $(shell $(YQ) '.author' manifest.yaml)
+COMPOSER_VERSION := $(shell $(YQ) '.composerVersion // ""' manifest.yaml)
+LICENSE          := Apache-2.0
+
+HUB    := $(or $(BOE_REGISTRY),$(OCI_REGISTRY)/built-on-envoy)
+IMAGE  := $(HUB)/extension-$(NAME):$(VERSION)$(IMAGE_NONCE)
+SOURCE := https://$(subst ghcr.io,github.com,$(HUB))
+
+ARCH := $(shell uname -m)
+ifeq ($(ARCH),x86_64)
+  ARCH := amd64
+else ifeq ($(ARCH),aarch64)
+  ARCH := arm64
+endif
+
+# Base OCI image annotations (shared by all image types)
+BASE_OCI_ANNOTATIONS := \
+	--annotation "org.opencontainers.image.source=$(SOURCE)" \
+	--annotation "org.opencontainers.image.licenses=$(LICENSE)" \
+	--annotation "org.opencontainers.image.title=$(NAME)" \
+	--annotation "org.opencontainers.image.version=$(VERSION)" \
+	--annotation "org.opencontainers.image.description=$(DESCRIPTION)" \
+	--annotation "org.opencontainers.image.created=$(TIMESTAMP)" \
+	--annotation "org.opencontainers.image.revision=$(COMMIT_SHA)" \
+	--annotation "org.opencontainers.image.authors=$(AUTHOR)" \
+	--annotation "io.tetratelabs.built-on-envoy.extension.type=$(TYPE)" \
+	--annotation "io.tetratelabs.built-on-envoy.extension.filter_type=$(FILTER_TYPE)" \
+	--annotation "io.tetratelabs.built-on-envoy.extension.composer_version=$(COMPOSER_VERSION)"
+
+# Artifact type annotations
+BINARY_ARTIFACT  := --annotation "io.tetratelabs.built-on-envoy.extension.artifact=binary"
+SOURCE_ARTIFACT  := --annotation "io.tetratelabs.built-on-envoy.extension.artifact=source"
+CSHARED_ARTIFACT := --annotation "io.tetratelabs.built-on-envoy.extension.cshared=true"
+
+# Multi-platform OCI annotations (with index,manifest prefix, for binary artifacts)
+comma := ,
+MULTI_OCI_ANNOTATIONS := \
+	$(subst --annotation ",--annotation "index$(comma)manifest:,$(BASE_OCI_ANNOTATIONS)) \
+	$(subst --annotation ",--annotation "index$(comma)manifest:,$(BINARY_ARTIFACT))
+
+BUILDER_NAME := boe-builder
+.PHONY: create_builder
+create_builder:
+	@docker buildx inspect $(BUILDER_NAME) || \
+		docker buildx create --name $(BUILDER_NAME) \
+			--driver docker-container --driver-opt network=host \
+			--buildkitd-flags '--allow-insecure-entitlement network.host' --use
+
+##@ Build
+
+.PHONY: build
+build:  ## Compile the extension into an Envoy Dynamic Module
+	CGO_ENABLED=1 go build -trimpath -buildmode=c-shared -o lib$(NAME).so ./main
+
+.PHONY: build-plugin
+build-plugin:  ## Compile the extension into a Go plugin, loadable by the Composer Dynamic Module
+	go build -trimpath -buildmode=plugin -o plugin.so ./standalone
+
+.PHONY: test
+test:  ## Run the unit tests
+	go test ./...
+
+.PHONY: integration-test
+integration-test: build  ## Run integration tests with Envoy
+	@echo "Copying module for integration tests..."
+	cp lib$(NAME).so integration/lib$(NAME).so
+	@echo "Running integration tests..."
+	cd integration && go test -v -timeout 300s ./...
+	@echo "Integration tests passed."
+
+.PHONY: install
+install: build  ## Build and copy the Dynamic Module to the default BOE extension cache directory
+	@echo "Installing $(NAME)..."
+	mkdir -p $(BOE_DATA_HOME)/extensions/dym/$(NAME)/$(VERSION); \
+	cp lib$(NAME).so $(BOE_DATA_HOME)/extensions/dym/$(NAME)/$(VERSION)/lib$(NAME).so;
+	cp manifest.yaml $(BOE_DATA_HOME)/extensions/dym/$(NAME)/$(VERSION)/manifest.yaml;
+	if [ -f config.schema.json ]; then cp config.schema.json $(BOE_DATA_HOME)/extensions/dym/$(NAME)/$(VERSION)/config.schema.json; fi;
+	@echo "Installed to $(BOE_DATA_HOME)/extensions/dym/$(NAME)"
+
+.PHONY: install-plugin
+install-plugin: build-plugin  ## Build and copy the Go plugin to the default BOE extension cache directory
+	@echo "Installing $(NAME) as Go plugin..."
+	mkdir -p $(BOE_DATA_HOME)/extensions/goplugin/$(NAME)/$(VERSION); \
+	cp plugin.so $(BOE_DATA_HOME)/extensions/goplugin/$(NAME)/$(VERSION)/plugin.so;
+	cp manifest.yaml $(BOE_DATA_HOME)/extensions/goplugin/$(NAME)/$(VERSION)/manifest.yaml;
+	if [ -f config.schema.json ]; then cp config.schema.json $(BOE_DATA_HOME)/extensions/goplugin/$(NAME)/$(VERSION)/config.schema.json; fi;
+	@echo "Installed to $(BOE_DATA_HOME)/extensions/goplugin/$(NAME)"
+
+.PHONY: clean
+clean:  ## Clean up the build artifacts
+	rm -f lib$(NAME).so plugin.so
+	rm -f integration/lib$(NAME).so
+
+
+##@ Packaging
+
+# For single local platform build, we will add the OS and ARCH to the image tag to avoid confusion.
+# And we will not push it to the registry by default.
+.PHONY: build_image
+build_image:  ## Build the OCI image for the extension Dynamic Module
+	docker buildx build \
+		--output type=docker,oci-mediatypes=true \
+		--provenance=false \
+		$(BASE_OCI_ANNOTATIONS) \
+		$(CSHARED_ARTIFACT) \
+		$(BINARY_ARTIFACT) \
+		--build-arg NAME="$(NAME)" \
+		-t $(IMAGE)-linux-$(ARCH) \
+		-f ./Dockerfile .
+
+# For single local platform build, we will add the OS and ARCH to the image tag to avoid confusion.
+# And we will not push it to the registry by default.
+.PHONY: build_image_plugin
+build_image_plugin:  ## Build the OCI image for the extension Go plugin
+	docker buildx build \
+		--output type=docker,oci-mediatypes=true \
+		--provenance=false \
+		$(BASE_OCI_ANNOTATIONS) \
+		$(BINARY_ARTIFACT) \
+		-t $(IMAGE)-linux-$(ARCH) \
+		-f ./Dockerfile.plugin .
+
+host_os := $(shell uname -s | tr '[:upper:]' '[:lower:]')
+# Darwin: QEMU amd64 emulation crashes on go mod download; use native only.
+ifeq ($(host_os),darwin)
+  PLATFORMS ?= linux/$(ARCH)
+else
+  PLATFORMS ?= linux/arm64,linux/amd64
+endif
+# index,manifest: annotations are only valid for multi-platform (OCI index) exports.
+ifneq (,$(findstring $(comma),$(PLATFORMS)))
+  PUSH_ANNOTATIONS := $(MULTI_OCI_ANNOTATIONS)
+  PUSH_CSHARED_ANNOTATION := $(subst --annotation ",--annotation "index$(comma)manifest:,$(CSHARED_ARTIFACT))
+else
+  PUSH_ANNOTATIONS := $(BASE_OCI_ANNOTATIONS) $(BINARY_ARTIFACT)
+  PUSH_CSHARED_ANNOTATION := $(CSHARED_ARTIFACT)
+endif
+.PHONY: push_image
+push_image: create_builder  ## Build and push the OCI image for the extension Dynamic Module
+	@echo "Building and pushing image..."
+	docker buildx build --platform=$(PLATFORMS) \
+		--builder $(BUILDER_NAME) \
+		--output type=registry,oci-mediatypes=true$(registry_output) \
+		--provenance=false \
+		--build-arg NAME="$(NAME)" \
+		$(PUSH_ANNOTATIONS) \
+		$(PUSH_CSHARED_ANNOTATION) \
+		--tag $(IMAGE) \
+		-f ./Dockerfile .
+
+push_image_plugin: create_builder  ## Build and push the OCI image for the extension Go plugin
+	@echo "Building and pushing image..."
+	docker buildx build --platform=$(PLATFORMS) \
+		--builder $(BUILDER_NAME) \
+		--output type=registry,oci-mediatypes=true$(registry_output) \
+		--provenance=false \
+		$(PUSH_ANNOTATIONS) \
+		--tag $(IMAGE) \
+		-f ./Dockerfile.plugin .
+
+# Package source code into an image and push it to the registry.
+CODE_IMAGE := $(HUB)/extension-src-$(NAME):$(VERSION)$(IMAGE_NONCE)
+.PHONY: push_code
+push_code: create_builder  ## Build and push the OCI image with the extension source code
+	@echo "Building and pushing source code image..."
+	docker buildx build \
+		--builder $(BUILDER_NAME) \
+		--output type=registry,oci-mediatypes=true$(registry_output) \
+		--provenance=false \
+		$(BASE_OCI_ANNOTATIONS) \
+		$(SOURCE_ARTIFACT) \
+		--tag $(CODE_IMAGE) \
+		-f ./Dockerfile.code .
+
+
+##@ Help
+
+.PHONY: help
+help:  ## Show this help info
+	@echo "Built On Envoy. Discover, run, and build custom filters with zero friction.\n"
+	@echo "Usage:\n  make \033[36m<Target>\033[0m \n\nTargets:"
+	@awk 'BEGIN {FS = ":.*##"; printf ""} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)

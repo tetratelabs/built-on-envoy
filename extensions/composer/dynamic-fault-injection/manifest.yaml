@@ -1,0 +1,28 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: dynamic-fault-injection
+version: 0.1.0-dev
+categories:
+  - Traffic Control
+  - Performance
+author: spockz
+description: A dynamic fault injection filter that simulates latency distributions and error responses.
+longDescription: |
+  An Envoy HTTP filter that injects configurable latency and fault responses based on
+  percentile distributions. Supports per-endpoint configuration with route matching,
+  load-based response behavior with grey zone transitions, and upstream timing awareness
+  to inject only the remaining delay needed to match target distributions.
+type: go
+composerVersion: 0.1.0-dev
+tags:
+  - go
+  - http
+  - filter
+  - fault-injection
+  - latency
+  - testing
+license: Apache-2.0
+examples: []
