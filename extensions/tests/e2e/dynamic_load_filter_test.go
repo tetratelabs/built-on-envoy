@@ -50,8 +50,7 @@ func TestDistributionDelay(t *testing.T) {
 		req, err := http.NewRequest("GET", fmt.Sprintf("http://localhost:%d/delay/0", proxyPort), nil)
 		require.NoError(t, err)
 
-		internaltesting.RequireEventuallyRequest(t, req, func(resp *http.Response) bool {
-			elapsed := time.Since(start)
+		internaltesting.RequireEventuallyRequestWithTiming(t, req, func(resp *http.Response, elapsed time.Duration) bool {
 			defer func() { _ = resp.Body.Close() }()
 			_, _ = io.ReadAll(resp.Body)
 
