@@ -6,6 +6,7 @@
 package fault
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -68,82 +69,89 @@ func ParseConfig(data []byte) (*FilterConfig, error) {
 	}
 
 	// Validate endpoints.
+	validationErrors := []error{}
 	for i, ep := range cfg.Endpoints {
 		if len(ep.Responses) == 0 && ep.LoadBased == nil {
-			return nil, fmt.Errorf("endpoint %d: must have at least 'responses' or 'load_based' configured", i)
+			validationErrors = append(validationErrors, fmt.Errorf("endpoint %d: must have at least 'responses' or 'load_based' configured", i))
 		}
 		for j, resp := range ep.Responses {
 			if err := validateStatusDistribution(resp, fmt.Sprintf("endpoint %d response %d", i, j)); err != nil {
-				return nil, err
+				validationErrors = append(validationErrors, err)
 			}
 		}
 		if ep.LoadBased != nil {
 			if err := validateLoadBased(ep.LoadBased, i); err != nil {
-				return nil, err
+				validationErrors = append(validationErrors, err)
 			}
 		}
+	}
+
+	if (len(validationErrors)) > 0 {
+		return nil, errors.Join(validationErrors...)
 	}
 
 	return &cfg, nil
 }
 
 func validateStatusDistribution(sd StatusDistribution, context string) error {
+	validationErrors := []error{}
 	if sd.Status < 100 || sd.Status > 599 {
-		return fmt.Errorf("%s: invalid HTTP status code %d", context, sd.Status)
+		validationErrors = append(validationErrors, fmt.Errorf("%s: invalid HTTP status code %d", context, sd.Status))
 	}
 	if sd.Resolution <= 0 {
-		return fmt.Errorf("%s: resolution must be positive, got %d", context, sd.Resolution)
+		validationErrors = append(validationErrors, fmt.Errorf("%s: resolution must be positive, got %d", context, sd.Resolution))
 	}
 	if len(sd.Distribution) == 0 {
-		return fmt.Errorf("%s: distribution must have at least one entry", context)
+		validationErrors = append(validationErrors, fmt.Errorf("%s: distribution must have at least one entry", context))
 	}
 	if _, err := ParsePercentileDistribution(sd.Distribution); err != nil {
-		return fmt.Errorf("%s: %w", context, err)
+		validationErrors = append(validationErrors, fmt.Errorf("%s: %w", context, err))
 	}
-	return nil
+	return errors.Join(validationErrors...)
 }
 
 func validateLoadBased(lb *LoadBasedConfig, endpointIdx int) error {
+	validationErrors := []error{}
 	if lb.Healthy == nil {
-		return fmt.Errorf("endpoint %d: load_based.healthy is required", endpointIdx)
+		validationErrors = append(validationErrors, fmt.Errorf("endpoint %d: load_based.healthy is required", endpointIdx))
 	}
 	if lb.TippingPoint == nil {
-		return fmt.Errorf("endpoint %d: load_based.tipping_point is required", endpointIdx)
+		validationErrors = append(validationErrors, fmt.Errorf("endpoint %d: load_based.tipping_point is required", endpointIdx))
 	}
 	if lb.Healthy.ThresholdRPS <= 0 {
-		return fmt.Errorf("endpoint %d: load_based.healthy.threshold_rps must be positive", endpointIdx)
+		validationErrors = append(validationErrors, fmt.Errorf("endpoint %d: load_based.healthy.threshold_rps must be positive", endpointIdx))
 	}
 	if lb.TippingPoint.ThresholdRPS <= lb.Healthy.ThresholdRPS {
-		return fmt.Errorf("endpoint %d: load_based.tipping_point.threshold_rps must be greater than healthy.threshold_rps", endpointIdx)
+		validationErrors = append(validationErrors, fmt.Errorf("endpoint %d: load_based.tipping_point.threshold_rps must be greater than healthy.threshold_rps", endpointIdx))
 	}
 	for j, resp := range lb.Healthy.Responses {
 		if err := validateStatusDistribution(resp, fmt.Sprintf("endpoint %d healthy response %d", endpointIdx, j)); err != nil {
-			return err
+			validationErrors = append(validationErrors, err)
 		}
 	}
 	for j, resp := range lb.TippingPoint.Responses {
 		if err := validateStatusDistribution(resp, fmt.Sprintf("endpoint %d tipping_point response %d", endpointIdx, j)); err != nil {
-			return err
+			validationErrors = append(validationErrors, err)
 		}
 	}
 	if lb.GreyZone != nil {
 		if _, err := time.ParseDuration(lb.GreyZone.PenaltyBase); err != nil {
-			return fmt.Errorf("endpoint %d: grey_zone.penalty_base: %w", endpointIdx, err)
+			validationErrors = append(validationErrors, fmt.Errorf("endpoint %d: grey_zone.penalty_base: %w", endpointIdx, err))
 		}
 		if _, err := time.ParseDuration(lb.GreyZone.SpikePenaltyDuration); err != nil {
-			return fmt.Errorf("endpoint %d: grey_zone.spike_penalty_duration: %w", endpointIdx, err)
+			validationErrors = append(validationErrors, fmt.Errorf("endpoint %d: grey_zone.spike_penalty_duration: %w", endpointIdx, err))
 		}
 		if lb.GreyZone.SpikeThreshold <= 0 || lb.GreyZone.SpikeThreshold >= 1 {
-			return fmt.Errorf("endpoint %d: grey_zone.spike_threshold must be between 0 and 1 exclusive", endpointIdx)
+			validationErrors = append(validationErrors, fmt.Errorf("endpoint %d: grey_zone.spike_threshold must be between 0 and 1 exclusive", endpointIdx))
 		}
 		if lb.GreyZone.SpikePenaltyMultiplier <= 0 {
-			return fmt.Errorf("endpoint %d: grey_zone.spike_penalty_multiplier must be positive", endpointIdx)
+			validationErrors = append(validationErrors, fmt.Errorf("endpoint %d: grey_zone.spike_penalty_multiplier must be positive", endpointIdx))
 		}
 		if lb.GreyZone.RecoveryRate <= 0 || lb.GreyZone.RecoveryRate > 1 {
-			return fmt.Errorf("endpoint %d: grey_zone.recovery_rate must be between 0 exclusive and 1 inclusive", endpointIdx)
+			validationErrors = append(validationErrors, fmt.Errorf("endpoint %d: grey_zone.recovery_rate must be between 0 exclusive and 1 inclusive", endpointIdx))
 		}
 	}
-	return nil
+	return errors.Join(validationErrors...)
 }
 
 // Percentile represents a quantile-duration pair in a distribution.
