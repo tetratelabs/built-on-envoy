@@ -4,7 +4,7 @@
 # the root of the repo.
 
 name: dynamic-fault-injection
-version: 0.1.0-dev
+parent: composer
 categories:
   - Traffic Control
   - Performance
@@ -16,7 +16,6 @@ longDescription: |
   load-based response behavior with grey zone transitions, and upstream timing awareness
   to inject only the remaining delay needed to match target distributions.
 type: go
-composerVersion: 0.1.0-dev
 tags:
   - go
   - http
