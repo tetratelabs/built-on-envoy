@@ -8,7 +8,11 @@ package fault
 import (
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
+
+// ToDo: Add errors.As or errors.Is assertions on actual error messages.
 
 func TestParseConfig_BasicEndpoint(t *testing.T) {
 	input := `
@@ -219,6 +223,61 @@ endpoints:
 	_, err := ParseConfig([]byte(input))
 	if err == nil {
 		t.Fatal("expected error for invalid status code")
+	}
+}
+
+func TestParseConfig_MultipleValidationErrors(t *testing.T) {
+	input := `
+endpoints:
+  - match:
+      prefix: "/api/"
+    responses:
+      - status: 999
+        resolution: 100
+        distribution:
+          p0.0: "1ms"
+          p50.0: "10ms"
+  - match:
+      prefix: "/otherAPI/"
+    responses:
+     - status: 999
+       resolution: 0
+       distribution:
+         p0.0: "1ms"
+         p50.0: "10ms"
+`
+
+	// We should see 3 errors.
+	// - Invalid status code for the /api/ prefix match
+	// - Invalid status code for the /otherAPI/ prefix match
+	// - Invalid resolution (0) for the /otherAPI/ prefix match
+	_, err := ParseConfig([]byte(input))
+
+	totalSumOfErrors := countErrorsRecursively(err)
+
+	require.Equal(t, 3, totalSumOfErrors)
+	if err == nil {
+		t.Fatal("expected error for invalid status code")
+	}
+}
+
+func countErrorsRecursively(err error) int {
+	for {
+		switch x := err.(type) {
+		case interface{ Unwrap() error }:
+			err = x.Unwrap()
+			if err == nil {
+				return 1
+			}
+		case interface{ Unwrap() []error }:
+			errorCount := 0
+			for _, err := range err.(interface{ Unwrap() []error }).Unwrap() {
+				errorCount += countErrorsRecursively(err)
+			}
+			return errorCount
+		default:
+			return 1
+		}
 	}
 }
 
