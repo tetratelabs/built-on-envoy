@@ -79,11 +79,13 @@ func TeeOutput(t testing.TB, teeFile string, labels ...string) OutBuffers {
 	t.Cleanup(func() { _ = f.Close() })
 
 	buffers := CaptureOutput(labels...)
+	var fileMu sync.Mutex // shared across all teeBuffers writing to the same file
 	teeBuffers := make([]OutBuffer, len(labels))
 	for i, b := range buffers {
 		teeBuffers[i] = &teeBuffer{
 			outBuffer: b.(*outBuffer),
 			extra:     f,
+			fileMu:    &fileMu,
 		}
 	}
 
@@ -93,11 +95,16 @@ func TeeOutput(t testing.TB, teeFile string, labels ...string) OutBuffers {
 // teeBuffer writes to both an in-memory buffer and an extra writer (e.g. a file).
 type teeBuffer struct {
 	*outBuffer
-	extra io.Writer
+	extra  io.Writer
+	fileMu *sync.Mutex // shared among all teeBuffers writing to the same file
 }
 
 func (s *teeBuffer) Write(p []byte) (n int, err error) {
+	// s.extra is shared among all teeBuffers writing to the same file, so we need to lock it to
+	// avoid interleaved writes.
+	s.fileMu.Lock()
 	_, _ = s.extra.Write(p) // best-effort; don't let file errors mask buffer writes
+	s.fileMu.Unlock()
 	return s.outBuffer.Write(p)
 }
 
