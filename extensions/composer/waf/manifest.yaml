@@ -62,12 +62,14 @@ longDescription: |
   The optional `mode` setting controls which parts of the HTTP exchange are evaluated by the WAF.
   Use the narrowest mode that matches your policy to avoid unnecessary processing.
 
-  - `REQUEST_ONLY` (default): Inspect request headers, body, and trailers only. This is the best choice for
-    typical OWASP CRS deployments that focus on inbound attack detection.
-  - `RESPONSE_ONLY`: Inspect response headers, body, and trailers only. Use this when you only need
-    outbound inspection, such as detecting sensitive data in responses.
-  - `FULL`: Inspect both request and response phases. Use this when your rules need visibility into both
-    directions of traffic.
+  - `REQUEST_ONLY` (default): Inspect request headers, body, and trailers only. Best for deployments
+    that focus on inbound only attack detection.
+  - `FULL`: Inspect both request and response phases. Best for a fully deployed WAF with OWASP CRS
+    usage.
+  - `RESPONSE_ONLY` (deprecated): Inspect the response phase only, skipping request-phase rule
+    evaluation. Retained for backward compatibility and will be removed in a future release.
+    Note: response only mode is not compatibile with a default OWASP CRS installation because it
+    skips request-phase initialization.
 
   ```json
   {
