@@ -55,6 +55,12 @@ Create an ExtProc extension:
     boe create my-extproc-extension --type ext_proc
     ```
 
+Create a Wasm extension (Go, compiled to WebAssembly):
+
+    ```shell
+    boe create my-wasm-extension --type wasm
+    ```
+
 ## Extension Types
 
     - **go**: An HTTP filter extension using the Envoy dynamic modules SDK for Go.
@@ -66,3 +72,6 @@ Create an ExtProc extension:
       and UDP listener filters via `--filter-type`.
     - **ext_proc**: An extension that runs as an Envoy External Processor server as an
       independent process.
+    - **wasm**: An HTTP filter written in Go using the proxy-wasm Go SDK and compiled to a
+      WebAssembly module with the standard Go toolchain (GOOS=wasip1 GOARCH=wasm).
+      Network filters are not currently supported for Wasm extensions.

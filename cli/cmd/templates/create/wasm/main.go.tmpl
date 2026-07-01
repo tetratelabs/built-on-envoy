@@ -1,0 +1,95 @@
+// Copyright Built On Envoy
+// SPDX-License-Identifier: Apache-2.0
+// The full text of the Apache license is available in the LICENSE file at
+// the root of the repo.
+
+// Package main implements a proxy-wasm HTTP filter for {{ .Name }}.
+//
+// It is built as a WebAssembly module with the standard Go toolchain:
+//
+//	env GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o plugin.wasm .
+package main
+
+import (
+	"encoding/json"
+
+	"github.com/proxy-wasm/proxy-wasm-go-sdk/proxywasm"
+	"github.com/proxy-wasm/proxy-wasm-go-sdk/proxywasm/types"
+)
+
+// responseHeaderName is the response header this filter adds to every response.
+const responseHeaderName = "x-wasm-header"
+
+func main() {}
+
+func init() {
+	proxywasm.SetVMContext(&vmContext{})
+}
+
+// vmContext implements types.VMContext, the root context for the whole Wasm VM.
+type vmContext struct {
+	types.DefaultVMContext
+}
+
+// NewPluginContext creates a plugin context for each plugin configuration.
+func (*vmContext) NewPluginContext(uint32) types.PluginContext {
+	return &pluginContext{}
+}
+
+// pluginContext implements types.PluginContext and holds configuration shared
+// by all HTTP streams handled by this plugin.
+type pluginContext struct {
+	types.DefaultPluginContext
+	headerValue string
+}
+
+// config mirrors config.schema.json and is parsed from the plugin configuration
+// passed via `boe run --config '{"header_value":"..."}'`.
+type config struct {
+	HeaderValue string `json:"header_value"`
+}
+
+// OnPluginStart reads the plugin configuration and caches the header value.
+func (p *pluginContext) OnPluginStart(pluginConfigurationSize int) types.OnPluginStartStatus {
+	p.headerValue = "example"
+	if pluginConfigurationSize == 0 {
+		return types.OnPluginStartStatusOK
+	}
+
+	data, err := proxywasm.GetPluginConfiguration()
+	if err != nil {
+		proxywasm.LogCriticalf("failed to read plugin configuration: %v", err)
+		return types.OnPluginStartStatusFailed
+	}
+
+	var c config
+	if err := json.Unmarshal(data, &c); err != nil {
+		proxywasm.LogCriticalf("failed to parse plugin configuration: %v", err)
+		return types.OnPluginStartStatusFailed
+	}
+	if c.HeaderValue != "" {
+		p.headerValue = c.HeaderValue
+	}
+	return types.OnPluginStartStatusOK
+}
+
+// NewHttpContext creates a context for each HTTP stream.
+// The method name is fixed by the proxy-wasm-go-sdk types.PluginContext interface.
+func (p *pluginContext) NewHttpContext(uint32) types.HttpContext { //nolint:revive
+	return &httpContext{headerValue: p.headerValue}
+}
+
+// httpContext implements types.HttpContext for a single HTTP stream.
+type httpContext struct {
+	types.DefaultHttpContext
+	headerValue string
+}
+
+// OnHttpResponseHeaders adds the configured header to the response.
+// The method name is fixed by the proxy-wasm-go-sdk types.HttpContext interface.
+func (h *httpContext) OnHttpResponseHeaders(int, bool) types.Action { //nolint:revive
+	if err := proxywasm.AddHttpResponseHeader(responseHeaderName, h.headerValue); err != nil {
+		proxywasm.LogErrorf("failed to add response header: %v", err)
+	}
+	return types.ActionContinue
+}

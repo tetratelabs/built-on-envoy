@@ -546,6 +546,12 @@ func handleExtensionSource(ctx context.Context, downloader *extensions.Downloade
 		if err := extensions.BuildExtProcBinary(downloader.Logger, downloader.Dirs, rootManifest, rootPath); err != nil {
 			return err
 		}
+	case extensions.TypeWasm:
+		fmt.Fprintf(os.Stderr, "→ %sBuilding %s...%s\n", internal.ANSIBold, rootManifest.Name, internal.ANSIReset)
+		downloader.Logger.Info("building local wasm extension", "name", rootManifest.Name, "version", rootManifest.Version)
+		if err := extensions.BuildWasm(downloader.Logger, downloader.Dirs, rootManifest, rootPath); err != nil {
+			return err
+		}
 	}
 	return nil
 }

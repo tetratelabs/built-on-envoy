@@ -1,0 +1,46 @@
+name: {{ .Name }}
+version: 0.1.0
+categories:
+  - Misc
+author: Unknown
+description: A custom Wasm extension.
+longDescription: |
+  A custom Wasm HTTP filter built with the proxy-wasm Go SDK.
+
+  ## Features
+
+  * **Custom Header**: Adds a custom header to responses
+  * **Configurable**: Configure the header value via JSON config
+
+  ## Configuration
+
+  Configure the extension with a JSON object:
+  - `header_value`: The value to set in the custom header (default: "example")
+
+  ## Building
+
+  This is a Go module compiled to a WebAssembly module with the standard Go
+  toolchain:
+
+  ```bash
+  env GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o plugin.wasm .
+  ```
+type: wasm
+tags:
+  - wasm
+  - go
+  - http
+  - filter
+license: Apache-2.0
+examples:
+  - title: Basic Usage
+    description: Run the extension with default configuration
+    code: |
+      boe run --local .
+  - title: Custom Header Value
+    description: Configure a custom header value
+    code: |
+      boe run --local . --config '
+        {
+          "header_value": "my-custom-value"
+        }'

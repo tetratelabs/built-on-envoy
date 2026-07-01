@@ -189,6 +189,14 @@ func (g *GenConfig) writeConfig(
 		case extensions.TypeLua:
 			// Lua extensions are rendered inline, so there is nothing to copy
 			continue
+		case extensions.TypeWasm:
+			// Wasm modules are referenced by Envoy via vm_config.code.local.filename, which
+			// currently holds the absolute cache path. Copy the module next to the config under a
+			// stable name and rewrite the filename so the exported config works out-of-the-box.
+			// The absolute cache path is unique to this extension and only appears as the wasm
+			// filename, so a plain replace is safe regardless of the config output format.
+			dstExtensionFile = filepath.Join(g.Output, m.Name+".wasm")
+			config = strings.ReplaceAll(config, srcExtensionFile, m.Name+".wasm")
 		case extensions.TypeGo:
 			if m.CShared {
 				// C-shared Go extensions need to be copied with their original name (e.g. lib<name>.so)

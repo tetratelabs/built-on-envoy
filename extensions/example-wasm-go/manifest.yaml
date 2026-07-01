@@ -1,0 +1,40 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: example-wasm-go
+version: 0.1.0
+categories:
+  - Examples
+author: Tetrate
+description: Example Wasm extension (Go) that adds a custom response header.
+longDescription: |
+  A minimal Wasm HTTP filter written in Go with the
+  [proxy-wasm Go SDK](https://github.com/proxy-wasm/proxy-wasm-go-sdk). It adds a
+  configurable `x-wasm-header` header to every response.
+
+  The module is compiled to WebAssembly with the standard Go toolchain
+  (`GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared`) and executed by Envoy's
+  built-in V8 Wasm runtime.
+
+  ## Configuration
+
+  - `header_value`: The value to set in the `x-wasm-header` header (default: "example").
+type: wasm
+tags:
+  - wasm
+  - go
+  - http
+  - filter
+  - example
+license: Apache-2.0
+examples:
+  - title: Basic Usage
+    description: Run the example extension locally
+    code: |
+      boe run --extension example-wasm-go
+  - title: Custom Header Value
+    description: Configure a custom header value
+    code: |
+      boe run --extension example-wasm-go --config '{"header_value": "my-custom-value"}'

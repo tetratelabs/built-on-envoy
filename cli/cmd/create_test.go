@@ -51,7 +51,8 @@ Arguments:
 Flags:
   -h, --help                       Show context-sensitive help.
 
-      --type="go"                  Type of the extension (go, rust, ext_proc).
+      --type="go"                  Type of the extension (go, rust, ext_proc,
+                                   wasm).
       --filter-type="http"         Filter type (http, network, listener,
                                    udp_listener). Network, listener, and
                                    udp_listener filters are only supported for
@@ -245,6 +246,64 @@ func TestCreateExtProc_Run(t *testing.T) {
 	mainGo, err := os.ReadFile(filepath.Join(repoPath, "main.go"))
 	require.NoError(t, err)
 	assert.Contains(t, string(mainGo), "extprocv3.RegisterExternalProcessorServer(srv, processor)")
+}
+
+func TestCreateWasm_Run(t *testing.T) {
+	// Ensure go is available as the command runs `go mod tidy`
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skip("go not found in PATH")
+	}
+
+	tmpDir := t.TempDir()
+	name := "my-wasm-extension"
+
+	c := &Create{
+		Type: "wasm",
+		Name: name,
+		Path: tmpDir,
+	}
+
+	err := c.Run(t.Context(), &xdg.Directories{}, internaltesting.NewTLogger(t))
+	require.NoError(t, err)
+
+	repoPath := filepath.Join(tmpDir, name)
+	require.DirExists(t, repoPath)
+
+	files := []string{
+		"main.go",
+		"main_test.go",
+		"manifest.yaml",
+		"config.schema.json",
+		"go.mod",
+		"Dockerfile",
+		"Dockerfile.code",
+		".dockerignore",
+		".gitignore",
+		"Makefile",
+	}
+	for _, f := range files {
+		require.FileExists(t, filepath.Join(repoPath, f), "expected file %s to exist", f)
+	}
+
+	// verify manifest.yaml content
+	// #nosec G304
+	manifest, err := os.ReadFile(filepath.Join(repoPath, "manifest.yaml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(manifest), "name: "+name)
+	assert.Contains(t, string(manifest), "type: wasm")
+
+	// verify go.mod content
+	// #nosec G304
+	goMod, err := os.ReadFile(filepath.Join(repoPath, "go.mod"))
+	require.NoError(t, err)
+	assert.Contains(t, string(goMod), `module `+name)
+	assert.Contains(t, string(goMod), "github.com/proxy-wasm/proxy-wasm-go-sdk")
+
+	// verify main.go content
+	// #nosec G304
+	mainGo, err := os.ReadFile(filepath.Join(repoPath, "main.go"))
+	require.NoError(t, err)
+	assert.Contains(t, string(mainGo), "proxywasm.SetVMContext(&vmContext{})")
 }
 
 func TestCreateRust_Run(t *testing.T) {

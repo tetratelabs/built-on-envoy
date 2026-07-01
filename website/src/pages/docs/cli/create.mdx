@@ -65,6 +65,12 @@ Create an ExtProc extension:
     boe create my-extproc-extension --type ext_proc
     ```
 
+Create a Wasm extension (Go, compiled to WebAssembly):
+
+    ```shell
+    boe create my-wasm-extension --type wasm
+    ```
+
 ## Extension Types
 
     - **go**: An HTTP filter extension using the Envoy dynamic modules SDK for Go.
@@ -76,6 +82,9 @@ Create an ExtProc extension:
       and UDP listener filters via `--filter-type`.
     - **ext_proc**: An extension that runs as an Envoy External Processor server as an
       independent process.
+    - **wasm**: An HTTP filter written in Go using the proxy-wasm Go SDK and compiled to a
+      WebAssembly module with the standard Go toolchain (GOOS=wasip1 GOARCH=wasm).
+      Network filters are not currently supported for Wasm extensions.
 
 
 ## Usage details
@@ -97,7 +106,7 @@ boe create --help
 
 | Name | Description | Type | Default | Env Var | Required |
 |------|-------------|------|---------|-----|----------|
-| `--type` | Type of the extension (go, rust, ext_proc). | `string` | `go` | - | No |
+| `--type` | Type of the extension (go, rust, ext_proc, wasm). | `string` | `go` | - | No |
 | `--filter-type` | Filter type (http, network, listener, udp_listener). Network, listener, and udp_listener filters are only supported for rust. | `string` | `http` | - | No |
 | `--path` | Output directory for the extension. Defaults to the extension name. | `string` | - | - | No |
 | `--composer-version` | Composer version for Go extensions. Resolved from the registry if not set. | `string` | - | - | No |

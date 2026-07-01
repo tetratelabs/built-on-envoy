@@ -10,7 +10,7 @@ categories:
 author: Test Author
 description: A test extension
 longDescription: |
-  Invalid: wasm has no HTTP anchor (generator returns ErrUnimplemented).
+  Invalid: wasm cannot anchor nativeHttpFilters (see hasHTTPAnchor / schema).
 type: wasm
 tags:
   - test

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -196,6 +197,46 @@ func TestNewRemoteRepository_WithOptions(t *testing.T) {
 func TestNewRemoteRepository_InvalidReference(t *testing.T) {
 	_, err := NewRemoteRepository(internaltesting.NewTLogger(t), "invalid:reference:format", nil)
 	require.Error(t, err)
+}
+
+func TestSelectIndexManifest(t *testing.T) {
+	desc := func(arch string) ocispec.Descriptor {
+		return ocispec.Descriptor{
+			Digest:   digest.Digest("sha256:" + arch),
+			Platform: &ocispec.Platform{OS: "linux", Architecture: arch},
+		}
+	}
+	unknown := ocispec.Descriptor{
+		Digest:   "sha256:attestation",
+		Platform: &ocispec.Platform{OS: platformUnknown, Architecture: platformUnknown},
+	}
+	amd64 := desc("amd64")
+	arm64 := desc("arm64")
+	linux := &ocispec.Platform{OS: "linux", Architecture: "amd64"}
+
+	t.Run("non-wasm matches requested platform", func(t *testing.T) {
+		index := ocispec.Index{Manifests: []ocispec.Descriptor{arm64, amd64}}
+		got, found := selectIndexManifest(&index, linux)
+		require.True(t, found)
+		require.Equal(t, amd64.Digest, got.Digest)
+	})
+
+	t.Run("non-wasm no matching platform", func(t *testing.T) {
+		index := ocispec.Index{Manifests: []ocispec.Descriptor{arm64}}
+		_, found := selectIndexManifest(&index, linux)
+		require.False(t, found)
+	})
+
+	t.Run("wasm ignores platform and skips attestation entries", func(t *testing.T) {
+		index := ocispec.Index{
+			Annotations: map[string]string{ociAnnotationExtensionType: extensionTypeWasm},
+			Manifests:   []ocispec.Descriptor{unknown, arm64, amd64},
+		}
+		// Request a platform absent from the index; wasm should still resolve to the first real entry.
+		got, found := selectIndexManifest(&index, &ocispec.Platform{OS: "windows", Architecture: "amd64"})
+		require.True(t, found)
+		require.Equal(t, arm64.Digest, got.Digest)
+	})
 }
 
 var _ TargetWithTags = (*memoryWithTags)(nil)

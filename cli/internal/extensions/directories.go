@@ -64,6 +64,7 @@ func ModuleName(manifest *Manifest) string {
 //   - go: extensions/goplugin/<name>/<version> for plugins,
 //     or extensions/dym/<name>/<version> when manifest.CShared is true
 //   - rust: extensions/dym/<name>/<version>
+//   - wasm: extensions/wasm/<name>/<version>
 //   - ext_proc: extensions/extproc/<name>/<version>
 //   - others: extensions/<name>/<version>
 func LocalCacheExtensionDir(dirs *xdg.Directories, manifest *Manifest) string {
@@ -77,6 +78,8 @@ func LocalCacheExtensionDir(dirs *xdg.Directories, manifest *Manifest) string {
 		return filepath.Join(dirs.DataHome, "extensions", "goplugin", moduleName, manifest.Version)
 	case TypeRust:
 		return filepath.Join(dirs.DataHome, "extensions", "dym", moduleName, manifest.Version)
+	case TypeWasm:
+		return filepath.Join(dirs.DataHome, "extensions", "wasm", moduleName, manifest.Version)
 	case TypeExtProc:
 		return filepath.Join(dirs.DataHome, "extensions", "extproc", moduleName, manifest.Version)
 	case TypeComposer:
@@ -92,6 +95,7 @@ func LocalCacheExtensionDir(dirs *xdg.Directories, manifest *Manifest) string {
 // Returns the appropriate library file name for each extension type:
 // - go: plugin.so for plugins, or lib<name>.so when manifest.CShared is true
 // - rust: lib<name>.so (uses original name from manifest)
+// - wasm: plugin.wasm
 // - ext_proc: ext_proc-server (standalone binary)
 // - others: plugin.so (default)
 func LocalCacheExtension(dirs *xdg.Directories, manifest *Manifest) string {
@@ -106,6 +110,9 @@ func LocalCacheExtension(dirs *xdg.Directories, manifest *Manifest) string {
 	case TypeRust:
 		// Use the original manifest name for the library
 		return filepath.Join(dir, fmt.Sprintf("lib%s.so", ModuleName(manifest)))
+	case TypeWasm:
+		// Wasm extensions are referenced by Envoy via vm_config.code.local.filename.
+		return filepath.Join(dir, "plugin.wasm")
 	case TypeExtProc:
 		// ext_proc extensions are not Go plugins, so we return the path to the ext_proc server binary instead
 		return filepath.Join(dir, "ext_proc-server")

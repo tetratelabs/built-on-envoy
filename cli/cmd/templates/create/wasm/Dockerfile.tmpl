@@ -1,0 +1,30 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# WARNING: This Dockerfile is auto-generated. Do not modify it directly.
+# If you need to customize the build process, consider creating a separate
+# Dockerfile (e.g., Dockerfile.custom) instead of editing this file.
+
+# Build the Wasm module
+FROM golang:{{ .GoVersion }} AS builder
+
+WORKDIR /workspace
+COPY . .
+
+RUN go mod download all
+
+# Delegate the build to the Makefile so the build command lives in a single place.
+# The same pattern works for other languages by swapping the base image and reusing
+# the Makefile's `build` target.
+RUN make build
+
+# Final stage - minimal image with just the compiled module and metadata.
+FROM scratch AS final
+
+COPY --from=builder /workspace/out/plugin.wasm /
+COPY --from=builder /workspace/manifest.yaml /
+# Use a wildcard to copy config.schema.json if it exists, since COPY will fail if the file does not exist and we want to
+# allow for optional presence of this file.
+COPY --from=builder /workspace/config.schema.json* /

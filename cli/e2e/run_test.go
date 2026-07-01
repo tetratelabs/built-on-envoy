@@ -203,6 +203,90 @@ func TestExtProcRemoteExtension(t *testing.T) {
 		})
 }
 
+// TestWasmLocalExtension scaffolds a Wasm extension with `boe create --type wasm`, then runs it
+// with `--local`. This exercises the local build path (BuildWasm compiles the Go source to a
+// wasip1/wasm c-shared module) and the plugin configuration path (the --config string is delivered
+// to the module and surfaced via proxy_on_configure).
+func TestWasmLocalExtension(t *testing.T) {
+	// Creating the extension (go mod tidy), compiling the Wasm module, and starting Envoy can take
+	// a while.
+	internaltesting.RunEnvoyTimeout.Set(t, 5*time.Minute)
+
+	dataDir := t.TempDir()
+
+	// Create a brand new Wasm extension.
+	process := internaltesting.RunCLI(t, cliBin, "create", "wasm-e2e",
+		"--type", "wasm",
+		"--path", dataDir,
+	)
+	status, err := process.Wait()
+	require.NoError(t, err)
+	require.Equal(t, 0, status.ExitCode())
+
+	// Run the newly created extension, passing a custom header value to exercise config delivery.
+	ports := internaltesting.FreePorts(t, 2)
+	proxyPort := ports[0]
+	internaltesting.RunEnvoy(t, cliBin, proxyPort, ports[1],
+		"--log-level", "wasm:info",
+		"--local", dataDir+"/wasm-e2e",
+		"--config", `{"header_value":"local-value"}`,
+	)
+
+	internaltesting.RequireEventuallyGet(t,
+		fmt.Sprintf("http://localhost:%d/status/200", proxyPort),
+		func(r *http.Response) bool {
+			return r.Header.Get("x-wasm-header") == "local-value"
+		})
+}
+
+// TestWasmRemoteExtension scaffolds a Wasm extension with `boe create --type wasm`, pushes it to
+// the local test registry via the scaffolded Makefile's push_image target (an architecture-
+// independent single manifest), then runs it remotely with `--extension`. This exercises the full
+// remote flow: pull the compiled module from the registry into the local cache and run it.
+func TestWasmRemoteExtension(t *testing.T) {
+	// Creating, building the image, pushing, and starting Envoy can take a while.
+	internaltesting.RunEnvoyTimeout.Set(t, 5*time.Minute)
+
+	// Point boe and the build tooling at the local insecure registry. Setting BOE_REGISTRY makes
+	// the scaffolded Makefile's HUB resolve to the registry address, so push_image publishes to
+	// <registry>/extension-wasm-e2e:<version>, which is exactly what `--extension wasm-e2e` resolves to.
+	testRegistry.Configure(t)
+
+	// Dedicated data home so the pull cache is isolated from the host.
+	t.Setenv("BOE_DATA_HOME", t.TempDir())
+
+	dataDir := t.TempDir()
+
+	// Create a brand new Wasm extension.
+	process := internaltesting.RunCLI(t, cliBin, "create", "wasm-e2e",
+		"--type", "wasm",
+		"--path", dataDir,
+	)
+	status, err := process.Wait()
+	require.NoError(t, err)
+	require.Equal(t, 0, status.ExitCode())
+
+	// Build and push the architecture-independent image to the local registry via the scaffolded
+	// Makefile. The extension version comes from the scaffolded manifest (0.1.0).
+	runCmd(t, dataDir+"/wasm-e2e", "make", "push_image")
+
+	// Run the remote extension: this resolves wasm-e2e:0.1.0 against BOE_REGISTRY, downloads the
+	// compiled module into the local cache, and executes it.
+	ports := internaltesting.FreePorts(t, 2)
+	proxyPort := ports[0]
+	internaltesting.RunEnvoy(t, cliBin, proxyPort, ports[1],
+		"--log-level", "wasm:info",
+		"--extension", "wasm-e2e:0.1.0",
+	)
+
+	internaltesting.RequireEventuallyGet(t,
+		fmt.Sprintf("http://localhost:%d/status/200", proxyPort),
+		func(r *http.Response) bool {
+			// No --config was passed, so the plugin uses its default header value.
+			return r.Header.Get("x-wasm-header") == "example"
+		})
+}
+
 func TestLocalGoExtension(t *testing.T) {
 	testLocalGoExtension(t, false)
 }

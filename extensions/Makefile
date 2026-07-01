@@ -79,6 +79,10 @@ MULTI_OCI_ANNOTATIONS := \
 build-extproc:
 	@CGO_ENABLED=0 go -C $(EXTENSION_PATH) build -a -ldflags="-s -w" -o ./out/ext_proc-server .
 
+.PHONY: build-wasm
+build-wasm:
+	@GOOS=wasip1 GOARCH=wasm CGO_ENABLED=0 go -C $(EXTENSION_PATH) build -buildmode=c-shared -o ./out/plugin.wasm .
+
 .PHONY: format-go
 format-go:
 	@echo "format => ./$(EXTENSION_PATH)/..."
@@ -185,6 +189,22 @@ push_extproc: create_builder
 		$(PUSH_ANNOTATIONS) \
 		--tag $(IMAGE) $(DEV_TAG) \
 		--file Dockerfile.extproc ./$(EXTENSION_PATH)
+
+.PHONY: push_wasm
+push_wasm: create_builder
+	@echo "Building and pushing Wasm extension image (architecture-independent): $(IMAGE)"
+# Wasm modules are architecture-independent, so we push a single manifest (no multi-arch index)
+# that any platform can pull. The builder cross-compiles to wasip1/wasm regardless of host arch.
+	@GO_VERSION=$$(sed -ne 's/^go //gp' $(EXTENSION_PATH)/go.mod); \
+	docker buildx build \
+		--builder $(BUILDER_NAME) \
+		--output type=registry,oci-mediatypes=true$(registry_output) \
+		--provenance=false \
+		--build-arg GO_VERSION="$$GO_VERSION" \
+		$(BASE_OCI_ANNOTATIONS) \
+		$(BINARY_ARTIFACT) \
+		--tag $(IMAGE) $(DEV_TAG) \
+		--file Dockerfile.wasm ./$(EXTENSION_PATH)
 
 CODE_IMAGE := $(HUB)/extension-src-$(NAME):$(VERSION)$(IMAGE_NONCE)
 .PHONY: push_code
