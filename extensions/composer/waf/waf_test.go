@@ -55,6 +55,7 @@ func newWAFFactory(t *testing.T, ctrl *gomock.Controller, directives []string, m
 	configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	configHandle.EXPECT().DefineCounter("waf_tx_total").Return(shared.MetricID(1), shared.MetricsSuccess)
 	configHandle.EXPECT().DefineCounter("waf_tx_blocked", "authority", "phase", "rule_id").Return(shared.MetricID(2), shared.MetricsSuccess)
+	configHandle.EXPECT().DefineHistogram("waf_tx_duration").Return(shared.MetricID(3), shared.MetricsSuccess)
 
 	factory, err := (&wafPluginConfigFactory{}).Create(configHandle, configBytes)
 	require.NoError(t, err)
@@ -292,6 +293,7 @@ func Test_RequestOnlyWaf(t *testing.T) {
 		// Header only request.
 		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
 
 		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
 			":authority":   {"example.com:8080"},
@@ -322,6 +324,7 @@ func Test_RequestOnlyWaf(t *testing.T) {
 		// Handle request with upgrade.
 		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
 
 		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
 			":authority":   {"example.com:8080"},
@@ -365,6 +368,7 @@ func Test_RequestOnlyWaf(t *testing.T) {
 		// Handle request with body.
 		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
 
 		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
 			":authority":   {"example.com:8080"},
@@ -405,6 +409,7 @@ func Test_RequestOnlyWaf(t *testing.T) {
 	t.Run("Handle request with body and trailers", func(t *testing.T) {
 		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
 
 		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
 			":authority":   {"example.com:8080"},
@@ -446,6 +451,7 @@ func Test_RequestOnlyWaf(t *testing.T) {
 		// Response should be no-op in request only mode.
 		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
 
 		requestHeaders := fake.NewFakeHeaderMap(map[string][]string{
 			":authority":   {"example.com:8080"},
@@ -501,6 +507,8 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 		// Request should be no-op in response only mode.
 		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
 			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 
@@ -541,6 +549,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 		// Header only response.
 		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
 
 		requestHeaders := fake.NewFakeHeaderMap(map[string][]string{
 			":authority":   {"example.com:8080"},
@@ -574,6 +583,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 		// Handle response with upgrade.
 		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
 
 		requestHeaders := fake.NewFakeHeaderMap(map[string][]string{
 			":authority":   {"example.com:8080"},
@@ -620,6 +630,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 	t.Run("Handle response with body", func(t *testing.T) {
 		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
 
 		requestHeaders := fake.NewFakeHeaderMap(map[string][]string{
 			":authority":   {"example.com:8080"},
@@ -664,6 +675,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 	t.Run("Handle response with body and trailers", func(t *testing.T) {
 		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
 
 		requestHeaders := fake.NewFakeHeaderMap(map[string][]string{
 			":authority":   {"example.com:8080"},
@@ -708,6 +720,7 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 	t.Run("Handle response with SSE", func(t *testing.T) {
 		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
 
 		requestHeaders := fake.NewFakeHeaderMap(map[string][]string{
 			":authority":   {"example.com:8080"},
@@ -775,6 +788,7 @@ func Test_FullWaf(t *testing.T) {
 		// Full WAF request and response processing.
 		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
@@ -860,6 +874,8 @@ func Test_BlockRequestWaf(t *testing.T) {
 	t.Run("Block request on headers", func(t *testing.T) {
 		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
 			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(
@@ -900,6 +916,8 @@ func Test_BlockRequestWaf(t *testing.T) {
 	t.Run("Block request on body", func(t *testing.T) {
 		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
 			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(
@@ -944,6 +962,8 @@ func Test_BlockRequestWaf(t *testing.T) {
 	t.Run("Block response on body", func(t *testing.T) {
 		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
 			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(
@@ -1004,6 +1024,7 @@ func Test_BlockRequest(t *testing.T) {
 	configHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	configHandle.EXPECT().DefineCounter("waf_tx_total").Return(shared.MetricID(1), shared.MetricsSuccess)
 	configHandle.EXPECT().DefineCounter("waf_tx_blocked", "authority", "phase", "rule_id").Return(shared.MetricID(2), shared.MetricsSuccess)
+	configHandle.EXPECT().DefineHistogram("waf_tx_duration").Return(shared.MetricID(3), shared.MetricsSuccess)
 	m := newMetrics(configHandle)
 
 	t.Run("nil interruption sends 500 and records internal block metric", func(*testing.T) {
@@ -1122,6 +1143,8 @@ func Test_SecRequestBodyAccessOff(t *testing.T) {
 
 			pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 			pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+			pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
 
@@ -1196,6 +1219,8 @@ func Test_Phase2ArgsRuleWithSecRequestBodyAccessOff(t *testing.T) {
 
 			pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 			pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+			pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
 
@@ -1287,6 +1312,8 @@ func Test_Phase2RulesOnHeaderOnlyRequest(t *testing.T) {
 
 			pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 			pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+			pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
 			pluginHandle.EXPECT().IncrementCounterValue(
@@ -1387,6 +1414,8 @@ func Test_Phase4RulesOnHeaderOnlyResponse(t *testing.T) {
 
 			pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 			pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+			pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
 			pluginHandle.EXPECT().IncrementCounterValue(
@@ -1462,6 +1491,8 @@ func Test_SecResponseBodyAccessOff(t *testing.T) {
 
 			pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 			pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+			pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
 
@@ -1537,6 +1568,8 @@ func Test_Phase4ResponseHeadersRuleWithSecResponseBodyAccessOff(t *testing.T) {
 
 			pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 			pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+			pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
 
@@ -1628,6 +1661,7 @@ func Test_PerRouteConfigOverride(t *testing.T) {
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(
 			pkg.UnsafeBufferFromString("127.0.0.1:8080"), true)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
 
 		plugin := baseFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
@@ -1738,6 +1772,8 @@ func Test_ProcessPartialBodyLimit(t *testing.T) {
 
 		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:8080"), true)
 		pluginHandle.EXPECT().IncrementCounterValue(
@@ -1763,6 +1799,8 @@ func Test_ProcessPartialBodyLimit(t *testing.T) {
 
 		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:8080"), true)
 
@@ -1794,6 +1832,8 @@ func Test_ProcessPartialBodyLimit(t *testing.T) {
 		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
 		pluginHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:8080"), true)
 		pluginHandle.EXPECT().ReceivedBufferedRequestBody().Return(false)
@@ -1832,6 +1872,8 @@ func Test_ProcessPartialBodyLimit(t *testing.T) {
 
 		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:8080"), true)
 		pluginHandle.EXPECT().IncrementCounterValue(
@@ -1875,6 +1917,8 @@ func Test_ProcessPartialBodyLimit(t *testing.T) {
 
 		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:8080"), true)
 		pluginHandle.EXPECT().IncrementCounterValue(
@@ -1903,6 +1947,8 @@ func Test_ProcessPartialBodyLimit(t *testing.T) {
 
 		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:8080"), true)
 
@@ -1936,6 +1982,8 @@ func Test_ProcessPartialBodyLimit(t *testing.T) {
 		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
 		pluginHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:8080"), true)
 		pluginHandle.EXPECT().ReceivedBufferedResponseBody().Return(false)
@@ -1977,6 +2025,8 @@ func Test_ProcessPartialBodyLimit(t *testing.T) {
 
 		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("127.0.0.1:8080"), true)
 		pluginHandle.EXPECT().IncrementCounterValue(
@@ -2027,6 +2077,8 @@ func Test_PerRouteConfigBlocksRequest(t *testing.T) {
 	pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(
 		pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
 	pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+	pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+
 	pluginHandle.EXPECT().IncrementCounterValue(
 		shared.MetricID(2), uint64(1),
 		"example.com",
