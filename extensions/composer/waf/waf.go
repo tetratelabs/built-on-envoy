@@ -242,8 +242,13 @@ func (p *wafPlugin) OnRequestHeaders(headers shared.HeaderMap, endOfStream bool)
 }
 
 func (p *wafPlugin) OnRequestBody(body shared.BodyBuffer, endOfStream bool) shared.BodyStatus {
+	if p.txContext == nil {
+		p.handle.Log(shared.LogLevelDebug,
+			"Request body phase reached without a previously initialized context. Passing through")
+		return shared.BodyStatusContinue
+	}
 	//nolint:staticcheck // ModeResponseOnly is deprecated but intentionally still handled for backward compatibility.
-	if p.txContext == nil || p.txContext.IsRuleEngineOff() || p.mode == waf.ModeResponseOnly || p.requestBodyProcessed {
+	if p.txContext.IsRuleEngineOff() || p.mode == waf.ModeResponseOnly || p.requestBodyProcessed {
 		return shared.BodyStatusContinue
 	}
 
@@ -289,8 +294,13 @@ func (p *wafPlugin) OnRequestBody(body shared.BodyBuffer, endOfStream bool) shar
 }
 
 func (p *wafPlugin) OnRequestTrailers(_ shared.HeaderMap) shared.TrailersStatus {
+	if p.txContext == nil {
+		p.handle.Log(shared.LogLevelDebug,
+			"Request trailers phase reached without a previously initialized context. Passing through")
+		return shared.TrailersStatusContinue
+	}
 	//nolint:staticcheck // ModeResponseOnly is deprecated but intentionally still handled for backward compatibility.
-	if p.txContext == nil || p.txContext.IsRuleEngineOff() || p.mode == waf.ModeResponseOnly || p.requestBodyProcessed {
+	if p.txContext.IsRuleEngineOff() || p.mode == waf.ModeResponseOnly || p.requestBodyProcessed {
 		return shared.TrailersStatusContinue
 	}
 
@@ -311,7 +321,12 @@ func (p *wafPlugin) OnResponseHeaders(headers shared.HeaderMap, endOfStream bool
 	// phase, skipping request-phase initialization (CRS phase 1).
 	// It leads to uninitialized TX variables and 403s, replacing the original response code
 	// (e.g. 431) with a false positive.
-	if p.txContext == nil || p.txContext.IsRuleEngineOff() || p.mode == waf.ModeRequestOnly {
+	if p.txContext == nil {
+		p.handle.Log(shared.LogLevelDebug,
+			"Response headers phase reached without a previously initialized context. Passing through")
+		return shared.HeadersStatusContinue
+	}
+	if p.txContext.IsRuleEngineOff() || p.mode == waf.ModeRequestOnly {
 		return shared.HeadersStatusContinue
 	}
 
@@ -354,7 +369,12 @@ func (p *wafPlugin) OnResponseHeaders(headers shared.HeaderMap, endOfStream bool
 
 func (p *wafPlugin) OnResponseBody(body shared.BodyBuffer, endOfStream bool) shared.BodyStatus {
 	// txContext is nil when the request phase never ran (see OnResponseHeaders).
-	if p.txContext == nil || p.txContext.IsRuleEngineOff() || p.mode == waf.ModeRequestOnly || p.responseBodyProcessed {
+	if p.txContext == nil {
+		p.handle.Log(shared.LogLevelDebug,
+			"Response body phase reached without a previously initialized context. Passing through")
+		return shared.BodyStatusContinue
+	}
+	if p.txContext.IsRuleEngineOff() || p.mode == waf.ModeRequestOnly || p.responseBodyProcessed {
 		return shared.BodyStatusContinue
 	}
 
@@ -401,7 +421,12 @@ func (p *wafPlugin) OnResponseBody(body shared.BodyBuffer, endOfStream bool) sha
 
 func (p *wafPlugin) OnResponseTrailers(_ shared.HeaderMap) shared.TrailersStatus {
 	// txContext is nil when the request phase never ran (see OnResponseHeaders).
-	if p.txContext == nil || p.txContext.IsRuleEngineOff() || p.mode == waf.ModeRequestOnly || p.responseBodyProcessed {
+	if p.txContext == nil {
+		p.handle.Log(shared.LogLevelDebug,
+			"Response trailers phase reached without a previously initialized context. Passing through")
+		return shared.TrailersStatusContinue
+	}
+	if p.txContext.IsRuleEngineOff() || p.mode == waf.ModeRequestOnly || p.responseBodyProcessed {
 		return shared.TrailersStatusContinue
 	}
 
