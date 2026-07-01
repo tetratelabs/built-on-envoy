@@ -3,15 +3,17 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-name: parent-invalid-type
-parent: composer
+name: parent-rust-valid
+parent: dns-gateway
 categories:
-  - Security
+  - Network
 author: Test Author
-description: A child extension that inherits parent version
+description: A Rust child extension that inherits its version from a bundle parent
 longDescription: |
-  This is a child extension.
-type: wasm
+  This is a Rust child extension of an extension set.
+type: rust
+filterType:
+  - network
 tags:
   - test
 license: Apache-2.0
