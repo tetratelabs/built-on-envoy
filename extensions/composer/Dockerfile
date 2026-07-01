@@ -7,13 +7,13 @@ ARG GO_VERSION
 
 FROM golang:${GO_VERSION} AS builder
 
-WORKDIR /workspace
-COPY . .
-
 # Install necessary tools for cgo
 RUN apt-get update
 RUN apt-get install -y --no-install-recommends \
     ca-certificates wget git ssh netcat-openbsd gcc build-essential binutils binutils-gold
+
+WORKDIR /workspace
+COPY . .
 
 RUN go mod download all
 ARG BUILD_TAG=""
