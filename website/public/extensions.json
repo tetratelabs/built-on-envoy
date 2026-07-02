@@ -1,7 +1,7 @@
 [
   {
     "name": "anthropic-messages-decoder",
-    "version": "0.9.0",
+    "version": "0.10.0-dev",
     "parent": "composer",
     "categories": [
       "AI",
@@ -50,13 +50,13 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.9.0",
+    "composerVersion": "0.10.0-dev",
     "sourcePath": "composer/anthropic-decoder",
     "configReferencePath": "/docs/reference/extensions#anthropic-messages-decoder"
   },
   {
     "name": "azure-content-safety",
-    "version": "0.9.0",
+    "version": "0.10.0-dev",
     "parent": "composer",
     "categories": [
       "Security",
@@ -118,13 +118,13 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.9.0",
+    "composerVersion": "0.10.0-dev",
     "sourcePath": "composer/azure-content-safety",
     "configReferencePath": "/docs/reference/extensions#azure-content-safety"
   },
   {
     "name": "bedrock-guardrails",
-    "version": "0.9.0",
+    "version": "0.10.0-dev",
     "parent": "composer",
     "categories": [
       "AI",
@@ -169,13 +169,13 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.9.0",
+    "composerVersion": "0.10.0-dev",
     "sourcePath": "composer/bedrock-guardrails",
     "configReferencePath": "/docs/reference/extensions#bedrock-guardrails"
   },
   {
     "name": "cedar-auth",
-    "version": "0.9.0",
+    "version": "0.10.0-dev",
     "parent": "composer",
     "categories": [
       "Security"
@@ -249,13 +249,13 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.9.0",
+    "composerVersion": "0.10.0-dev",
     "sourcePath": "composer/cedar",
     "configReferencePath": "/docs/reference/extensions#cedar-auth"
   },
   {
     "name": "chat-completions-decoder",
-    "version": "0.9.0",
+    "version": "0.10.0-dev",
     "parent": "composer",
     "categories": [
       "AI",
@@ -304,13 +304,13 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.9.0",
+    "composerVersion": "0.10.0-dev",
     "sourcePath": "composer/chat-completions-decoder",
     "configReferencePath": "/docs/reference/extensions#chat-completions-decoder"
   },
   {
     "name": "cluster-router",
-    "version": "0.9.0",
+    "version": "0.10.0-dev",
     "parent": "composer",
     "categories": [
       "Traffic Control",
@@ -346,13 +346,13 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.9.0",
+    "composerVersion": "0.10.0-dev",
     "sourcePath": "composer/cluster-router",
     "configReferencePath": "/docs/reference/extensions#cluster-router"
   },
   {
     "name": "coraza-waf",
-    "version": "0.9.0",
+    "version": "0.10.0-dev",
     "parent": "composer",
     "categories": [
       "Security"
@@ -390,7 +390,7 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.9.0",
+    "composerVersion": "0.10.0-dev",
     "sourcePath": "composer/waf",
     "configReferencePath": "/docs/reference/extensions#coraza-waf"
   },
@@ -479,7 +479,7 @@
   },
   {
     "name": "example-go",
-    "version": "0.9.0",
+    "version": "0.10.0-dev",
     "parent": "composer",
     "categories": [
       "Examples"
@@ -506,7 +506,7 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.9.0",
+    "composerVersion": "0.10.0-dev",
     "sourcePath": "composer/example"
   },
   {
@@ -587,7 +587,7 @@
   },
   {
     "name": "file-server",
-    "version": "0.9.0",
+    "version": "0.10.0-dev",
     "parent": "composer",
     "categories": [
       "Traffic Control"
@@ -621,13 +621,13 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.9.0",
+    "composerVersion": "0.10.0-dev",
     "sourcePath": "composer/file-server",
     "configReferencePath": "/docs/reference/extensions#file-server"
   },
   {
     "name": "goplugin-loader",
-    "version": "0.9.0",
+    "version": "0.10.0-dev",
     "parent": "composer",
     "categories": [
       "Misc"
@@ -657,7 +657,7 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.9.0",
+    "composerVersion": "0.10.0-dev",
     "sourcePath": "composer/goplugin-loader",
     "configReferencePath": "/docs/reference/extensions#goplugin-loader"
   },
@@ -713,7 +713,7 @@
   },
   {
     "name": "jwe-decrypt",
-    "version": "0.9.0",
+    "version": "0.10.0-dev",
     "parent": "composer",
     "categories": [
       "Authentication"
@@ -769,13 +769,13 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.9.0",
+    "composerVersion": "0.10.0-dev",
     "sourcePath": "composer/jwe-decrypt",
     "configReferencePath": "/docs/reference/extensions#jwe-decrypt"
   },
   {
     "name": "llm-proxy",
-    "version": "0.9.0",
+    "version": "0.10.0-dev",
     "parent": "composer",
     "categories": [
       "AI"
@@ -823,13 +823,13 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.9.0",
+    "composerVersion": "0.10.0-dev",
     "sourcePath": "composer/llm-proxy",
     "configReferencePath": "/docs/reference/extensions#llm-proxy"
   },
   {
     "name": "opa",
-    "version": "0.9.0",
+    "version": "0.10.0-dev",
     "parent": "composer",
     "categories": [
       "Security"
@@ -903,13 +903,13 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.9.0",
+    "composerVersion": "0.10.0-dev",
     "sourcePath": "composer/opa",
     "configReferencePath": "/docs/reference/extensions#opa"
   },
   {
     "name": "openapi-validator",
-    "version": "0.9.0",
+    "version": "0.10.0-dev",
     "parent": "composer",
     "categories": [
       "Traffic Control"
@@ -956,13 +956,13 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.9.0",
+    "composerVersion": "0.10.0-dev",
     "sourcePath": "composer/openapi-validator",
     "configReferencePath": "/docs/reference/extensions#openapi-validator"
   },
   {
     "name": "openfga",
-    "version": "0.9.0",
+    "version": "0.10.0-dev",
     "parent": "composer",
     "categories": [
       "AI",
@@ -1029,13 +1029,13 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.9.0",
+    "composerVersion": "0.10.0-dev",
     "sourcePath": "composer/openfga",
     "configReferencePath": "/docs/reference/extensions#openfga"
   },
   {
     "name": "saml",
-    "version": "0.9.0",
+    "version": "0.10.0-dev",
     "parent": "composer",
     "categories": [
       "Authentication",
@@ -1088,13 +1088,13 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.9.0",
+    "composerVersion": "0.10.0-dev",
     "sourcePath": "composer/saml",
     "configReferencePath": "/docs/reference/extensions#saml"
   },
   {
     "name": "token-exchange",
-    "version": "0.9.0",
+    "version": "0.10.0-dev",
     "parent": "composer",
     "categories": [
       "Authentication",
@@ -1126,7 +1126,7 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.9.0",
+    "composerVersion": "0.10.0-dev",
     "sourcePath": "composer/token-exchange",
     "configReferencePath": "/docs/reference/extensions#token-exchange"
   }
