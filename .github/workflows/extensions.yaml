@@ -41,6 +41,7 @@ jobs:
     outputs:
       rust-extensions: ${{ steps.discover.outputs.rust-extensions }}
       extproc-extensions: ${{ steps.discover.outputs.extproc-extensions }}
+      wasm-extensions: ${{ steps.discover.outputs.wasm-extensions }}
       has-composer: ${{ steps.discover.outputs.has-composer }}
     steps:
       - uses: actions/checkout@v7
@@ -92,16 +93,21 @@ jobs:
 
           # Filter ExtProc extensions
           extproc_extensions=$(echo "$extensions" | jq -c '[.[] | select(.type == "ext_proc")]')
-          
+
+          # Filter Wasm extensions
+          wasm_extensions=$(echo "$extensions" | jq -c '[.[] | select(.type == "wasm")]')
+
           # Check if composer extension exists
           has_composer=$(echo "$extensions" | jq '[.[] | select(.name == "composer")] | length > 0')
-          
+
           echo "rust-extensions=$rust_extensions" >> $GITHUB_OUTPUT
           echo "extproc-extensions=$extproc_extensions" >> $GITHUB_OUTPUT
+          echo "wasm-extensions=$wasm_extensions" >> $GITHUB_OUTPUT
           echo "has-composer=$has_composer" >> $GITHUB_OUTPUT
-          
+
           echo "Rust extensions: $rust_extensions"
           echo "ExtProc extensions: $extproc_extensions"
+          echo "Wasm extensions: $wasm_extensions"
           echo "Has composer: $has_composer"
 
   rust-checks:
@@ -124,6 +130,14 @@ jobs:
     uses: ./.github/workflows/extensions-extproc.yaml
     with:
       extensions: ${{ needs.discover.outputs.extproc-extensions }}
+    secrets: inherit
+
+  wasm-checks:
+    needs: discover
+    if: ${{ needs.discover.outputs.wasm-extensions != '[]' }}
+    uses: ./.github/workflows/extensions-wasm.yaml
+    with:
+      extensions: ${{ needs.discover.outputs.wasm-extensions }}
     secrets: inherit
 
   e2e-check:
@@ -173,6 +187,7 @@ jobs:
       - rust-checks
       - go-checks
       - extproc-checks
+      - wasm-checks
       - e2e-check
       - e2e
     # We need this to run always to force-fail (and not skip) if any needed

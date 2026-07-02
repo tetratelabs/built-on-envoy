@@ -68,6 +68,14 @@ jobs:
           echo "Releasing ExtProc extension: ${{ matrix.extension.name }}"
           make -C extensions push_extproc push_code
 
+      - name: Release Wasm Extension
+        if: matrix.extension.type == 'wasm'
+        env:
+          EXTENSION_PATH: ${{ matrix.extension.path }}
+        run: |
+          echo "Releasing Wasm extension: ${{ matrix.extension.name }}"
+          make -C extensions push_wasm push_code
+
       - name: Release Composer
         if: matrix.extension.name == 'composer'
         run: |

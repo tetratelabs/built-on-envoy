@@ -79,6 +79,8 @@ MULTI_OCI_ANNOTATIONS := \
 build-extproc:
 	@CGO_ENABLED=0 go -C $(EXTENSION_PATH) build -a -ldflags="-s -w" -o ./out/ext_proc-server .
 
+# TODO(wbpcode): support to detect the language of the extension and build it accordingly.
+# For now, we only support Go extensions.
 .PHONY: build-wasm
 build-wasm:
 	@GOOS=wasip1 GOARCH=wasm CGO_ENABLED=0 go -C $(EXTENSION_PATH) build -buildmode=c-shared -o ./out/plugin.wasm .
@@ -177,7 +179,7 @@ push_rust: create_builder
 
 .PHONY: push_extproc
 push_extproc:
-push_extproc: create_builder 
+push_extproc: create_builder
 	@echo "Building and pushing ExtProc extension image for multiple architectures: $(IMAGE)"
 	@GO_VERSION=$$(sed -ne 's/^go //gp' $(EXTENSION_PATH)/go.mod); \
 	docker buildx build \

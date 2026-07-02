@@ -18,10 +18,9 @@ COPY . .
 
 RUN go mod download all
 
-# Delegate the build to the extension's Makefile so the build command lives in a
-# single place. The same pattern works for other languages by swapping the base
-# image and reusing the Makefile's `build` target (e.g. cargo for Rust).
-RUN make build
+# Compile the module to a WASI reactor (wasip1/wasm, c-shared). Keep this in sync
+# with the `build-wasm` target in extensions/Makefile.
+RUN GOOS=wasip1 GOARCH=wasm CGO_ENABLED=0 go build -buildmode=c-shared -o out/plugin.wasm .
 
 FROM scratch AS final
 
