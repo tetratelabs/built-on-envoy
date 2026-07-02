@@ -19,11 +19,13 @@ import (
 	dymhttpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/dynamic_modules/v3"
 	extprocv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/ext_proc/v3"
 	luav3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/lua/v3"
+	wasmhttpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/wasm/v3"
 	dymlistv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/listener/dynamic_modules/v3"
 	dymnetv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/dynamic_modules/v3"
 	hcmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
 	dymudpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/udp/dynamic_modules/v3"
 	httpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/upstreams/http/v3"
+	wasmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/wasm/v3"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -43,16 +45,38 @@ func TestGenerateFilterConfigUnsupportedType(t *testing.T) {
 	require.ErrorIs(t, err, ErrUnsupportedExtensionType)
 }
 
-func TestGenerateFilterConfigUnimplemented(t *testing.T) {
-	for _, et := range []extensions.Type{
-		extensions.TypeWasm,
-	} {
-		t.Run(string(et), func(t *testing.T) {
-			manifest := extensions.Manifest{Type: et}
-			_, err := GenerateFilterConfig(internaltesting.NewTLogger(t), &manifest, &xdg.Directories{}, "")
-			require.ErrorIs(t, err, ErrUnimplemented)
-		})
-	}
+func TestWasmGenerateFilterConfig(t *testing.T) {
+	dirs := &xdg.Directories{DataHome: t.TempDir()}
+	manifest := &extensions.Manifest{Name: "example-wasm-go", Version: "0.1.0", Type: extensions.TypeWasm}
+
+	t.Run("with config", func(t *testing.T) {
+		resources, err := GenerateFilterConfig(internaltesting.NewTLogger(t), manifest, dirs, `{"header_value":"hello"}`)
+		require.NoError(t, err)
+		require.Len(t, resources.HTTPFilters, 1)
+		require.Equal(t, "example-wasm-go", resources.HTTPFilters[0].GetName())
+
+		wasm := &wasmhttpv3.Wasm{}
+		require.NoError(t, resources.HTTPFilters[0].GetTypedConfig().UnmarshalTo(wasm))
+		require.Equal(t, "example-wasm-go", wasm.GetConfig().GetName())
+		require.Equal(t, wasmRuntimeV8, wasm.GetConfig().GetVmConfig().GetRuntime())
+		require.Equal(t, extensions.LocalCacheExtension(dirs, manifest),
+			wasm.GetConfig().GetVmConfig().GetCode().GetLocal().GetFilename())
+		require.Equal(t, wasmv3.FailurePolicy_FAIL_RELOAD, wasm.GetConfig().GetFailurePolicy())
+		require.True(t, wasm.GetConfig().GetAllowOnHeadersStopIteration().GetValue())
+
+		configured := &wrapperspb.StringValue{}
+		require.NoError(t, wasm.GetConfig().GetConfiguration().UnmarshalTo(configured))
+		require.JSONEq(t, `{"header_value":"hello"}`, configured.GetValue())
+	})
+
+	t.Run("without config", func(t *testing.T) {
+		resources, err := GenerateFilterConfig(internaltesting.NewTLogger(t), manifest, dirs, "")
+		require.NoError(t, err)
+		require.Len(t, resources.HTTPFilters, 1)
+		wasm := &wasmhttpv3.Wasm{}
+		require.NoError(t, resources.HTTPFilters[0].GetTypedConfig().UnmarshalTo(wasm))
+		require.Nil(t, wasm.GetConfig().GetConfiguration())
+	})
 }
 
 func TestLuaGenerateFilterConfig(t *testing.T) {

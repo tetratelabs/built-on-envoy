@@ -69,6 +69,13 @@ func TestLocalCacheExtensionDirs(t *testing.T) {
 	require.Equal(t, "/home/user/.local/share/extensions/extproc/test/1.0.1/ext_proc-server",
 		LocalCacheExtension(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeExtProc}))
 
+	// Test wasm type
+	require.Equal(t, "/home/user/.local/share/extensions/wasm/test/1.0.1",
+		LocalCacheExtensionDir(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeWasm}))
+
+	require.Equal(t, "/home/user/.local/share/extensions/wasm/test/1.0.1/plugin.wasm",
+		LocalCacheExtension(dirs, &Manifest{Name: "test", Version: "1.0.1", Type: TypeWasm}))
+
 	// Test composer type
 	require.Equal(t, "/home/user/.local/share/extensions/dym/composer/1.0.1",
 		LocalCacheExtensionDir(dirs, &Manifest{Name: "composer", Version: "1.0.1", Type: TypeComposer}))

@@ -550,6 +550,42 @@
     "sourcePath": "example-lua"
   },
   {
+    "name": "example-wasm-go",
+    "version": "0.1.0",
+    "categories": [
+      "Examples"
+    ],
+    "author": "Tetrate",
+    "description": "Example Wasm extension (Go) that adds a custom response header.",
+    "longDescription": "A minimal Wasm HTTP filter written in Go with the\n[proxy-wasm Go SDK](https://github.com/proxy-wasm/proxy-wasm-go-sdk). It adds a\nconfigurable `x-wasm-header` header to every response.\n\nThe module is compiled to WebAssembly with the standard Go toolchain\n(`GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared`) and executed by Envoy's\nbuilt-in V8 Wasm runtime.\n\n## Configuration\n\n- `header_value`: The value to set in the `x-wasm-header` header (default: \"example\").\n",
+    "type": "wasm",
+    "filterType": [
+      "http"
+    ],
+    "tags": [
+      "wasm",
+      "go",
+      "http",
+      "filter",
+      "example"
+    ],
+    "license": "Apache-2.0",
+    "examples": [
+      {
+        "title": "Basic Usage",
+        "description": "Run the example extension locally",
+        "code": "boe run --extension example-wasm-go\n"
+      },
+      {
+        "title": "Custom Header Value",
+        "description": "Configure a custom header value",
+        "code": "boe run --extension example-wasm-go --config '{\"header_value\": \"my-custom-value\"}'\n"
+      }
+    ],
+    "sourcePath": "example-wasm-go",
+    "configReferencePath": "/docs/reference/extensions#example-wasm-go"
+  },
+  {
     "name": "file-server",
     "version": "0.9.0-dev",
     "parent": "composer",

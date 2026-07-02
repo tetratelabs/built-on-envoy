@@ -1012,7 +1012,7 @@ func TestValidateNativeHTTPFiltersSemanticErrors(t *testing.T) {
 					}},
 				},
 			},
-			expectedErr: "invalid nativeHttpFilters: nativeHttpFilters requires an extension that generates an HTTP filter; \"wasm\" with filterTypes [] has no HTTP anchor",
+			expectedErr: "invalid nativeHttpFilters: nativeHttpFilters is not supported on \"wasm\" extensions",
 		},
 		{
 			name: "after: missing name",

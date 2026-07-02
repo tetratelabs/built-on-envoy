@@ -473,6 +473,9 @@ func validateNativeHTTPFilters(m *Manifest) error {
 		return nil
 	}
 	if !hasHTTPAnchor(m) {
+		if m.Type == TypeWasm {
+			return fmt.Errorf("%w: nativeHttpFilters is not supported on %q extensions", ErrInvalidNativeHTTPFilters, m.Type)
+		}
 		return fmt.Errorf("%w: nativeHttpFilters requires an extension that generates an HTTP filter; %q with filterTypes %v has no HTTP anchor",
 			ErrInvalidNativeHTTPFilters, m.Type, m.FilterTypes)
 	}
@@ -514,10 +517,10 @@ func validateNativeHTTPFilters(m *Manifest) error {
 	return nil
 }
 
-// hasHTTPAnchor reports whether the extension produces an HTTP filter for
-// nativeHttpFilters.before to attach to. Mirrors the generator switch in
-// cli/internal/envoy/extension.go: lua/go/ext_proc always do, rust does only
-// when filterTypes contains http, wasm and composer never do.
+// hasHTTPAnchor reports whether the extension may host nativeHttpFilters.
+// lua/go/ext_proc always may, rust may only when filterTypes contains http.
+// wasm does generate an HTTP filter, but nativeHttpFilters on wasm is disallowed
+// by the manifest schema (like composer), so both return false here.
 func hasHTTPAnchor(m *Manifest) bool {
 	switch m.Type {
 	case TypeLua, TypeGo, TypeExtProc:

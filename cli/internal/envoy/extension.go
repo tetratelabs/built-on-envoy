@@ -20,11 +20,13 @@ import (
 	dymhttpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/dynamic_modules/v3"
 	extprocv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/ext_proc/v3"
 	luav3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/lua/v3"
+	wasmhttpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/wasm/v3"
 	dymlistv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/listener/dynamic_modules/v3"
 	dymnetv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/dynamic_modules/v3"
 	hcmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
 	dymudpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/udp/dynamic_modules/v3"
 	httpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/upstreams/http/v3"
+	wasmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/wasm/v3"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -70,8 +72,6 @@ type (
 var (
 	// ErrUnsupportedExtensionType is returned when an extension type is not supported.
 	ErrUnsupportedExtensionType = fmt.Errorf("unsupported extension type")
-	// ErrUnimplemented is returned when an extension filter generation is not yet implemented.
-	ErrUnimplemented = fmt.Errorf("extension filter generation not yet implemented")
 	// ErrLuaLoadFile is returned when loading Lua code from file fails.
 	ErrLuaLoadFile = fmt.Errorf("failed to load Lua file")
 )
@@ -145,9 +145,76 @@ func (l LuaFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest, 
 	}, nil
 }
 
+// wasmRuntimeV8 is the Envoy Wasm runtime used to execute the compiled module. V8 is the
+// default runtime shipped in official Envoy builds.
+const wasmRuntimeV8 = "envoy.wasm.runtime.v8"
+
 // GenerateFilterConfig generates the filter configuration for Wasm extensions.
-func (w WasmFilterGenerator) GenerateFilterConfig(*extensions.Manifest, *xdg.Directories, string) (*ExtensionResources, error) {
-	return nil, fmt.Errorf("%w: wasm", ErrUnimplemented)
+//
+// It emits an envoy.filters.http.wasm HTTP filter whose VM loads the compiled module from the
+// local cache (extensions/wasm/<name>/<version>/plugin.wasm) via vm_config.code.local.filename.
+// The user-supplied --config string is passed to the plugin as its configuration and surfaced to
+// proxy-wasm modules through proxy_on_configure (e.g. proxywasm.GetPluginConfiguration in Go).
+func (w WasmFilterGenerator) GenerateFilterConfig(manifest *extensions.Manifest,
+	dirs *xdg.Directories, config string,
+) (*ExtensionResources, error) {
+	w.Logger.Info("generating wasm filter config for extension", "name", manifest.Name, "config", config)
+
+	wasmPath := extensions.LocalCacheExtension(dirs, manifest)
+
+	var pluginConfiguration *anypb.Any
+	if config != "" {
+		// The plugin receives the raw config string. proxy-wasm delivers a StringValue's bytes
+		// directly to the module (without the wrapper), so the plugin sees exactly `config`.
+		var err error
+		pluginConfiguration, err = anypb.New(wrapperspb.String(config))
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal wasm plugin configuration to Any: %w", err)
+		}
+	}
+
+	wasmFilter := &wasmhttpv3.Wasm{
+		Config: &wasmv3.PluginConfig{
+			Name:   manifest.Name,
+			RootId: manifest.Name,
+			Vm: &wasmv3.PluginConfig_VmConfig{
+				VmConfig: &wasmv3.VmConfig{
+					VmId:    manifest.Name,
+					Runtime: wasmRuntimeV8,
+					Code: &corev3.AsyncDataSource{
+						Specifier: &corev3.AsyncDataSource_Local{
+							Local: &corev3.DataSource{
+								Specifier: &corev3.DataSource_Filename{
+									Filename: wasmPath,
+								},
+							},
+						},
+					},
+				},
+			},
+			Configuration: pluginConfiguration,
+			// Reload the VM on a fatal error instead of failing closed, so a crashing
+			// plugin recovers rather than serving 503s indefinitely.
+			FailurePolicy: wasmv3.FailurePolicy_FAIL_RELOAD,
+			// Allow the plugin's onRequestHeaders/onResponseHeaders callbacks to pause
+			// filter iteration (StopIteration).
+			AllowOnHeadersStopIteration: wrapperspb.Bool(true),
+		},
+	}
+
+	wasmAny, err := anypb.New(wasmFilter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal Wasm filter to Any: %w", err)
+	}
+
+	return &ExtensionResources{
+		HTTPFilters: []*hcmv3.HttpFilter{
+			{
+				Name:       manifest.Name,
+				ConfigType: &hcmv3.HttpFilter_TypedConfig{TypedConfig: wasmAny},
+			},
+		},
+	}, nil
 }
 
 // GenerateFilterConfig generates the filter configuration for Dynamic Module extensions.

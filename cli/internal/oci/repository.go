@@ -138,6 +138,40 @@ func (r *repositoryClient) Pull(ctx context.Context, tag, destPath string, platf
 // ErrPlatformNotFound is returned when no manifest is found for the specified platform in a multi-arch artifact.
 var ErrPlatformNotFound = errors.New("no manifest found for specified platform")
 
+const (
+	// ociAnnotationExtensionType mirrors extensions.OCIAnnotationExtensionType. It is duplicated
+	// here because the extensions package depends on this oci package, so importing it back would
+	// create an import cycle.
+	ociAnnotationExtensionType = "io.tetratelabs.built-on-envoy.extension.type"
+	// extensionTypeWasm mirrors extensions.TypeWasm.
+	extensionTypeWasm = "wasm"
+	// platformUnknown is the placeholder platform used by attestation/provenance entries in an
+	// OCI index; such entries never carry a runnable artifact and are skipped.
+	platformUnknown = "unknown"
+)
+
+// selectIndexManifest picks the sub-manifest descriptor to pull from a multi-arch index for the
+// given platform. Wasm modules are architecture-independent, so for wasm artifacts the first real
+// (non-attestation) sub-manifest is returned regardless of the requested platform. Returns false
+// when no suitable manifest is found.
+func selectIndexManifest(index *ocispec.Index, platform *ocispec.Platform) (ocispec.Descriptor, bool) {
+	ignorePlatform := index.Annotations[ociAnnotationExtensionType] == extensionTypeWasm
+	for _, m := range index.Manifests {
+		// Skip attestation/provenance ("unknown/unknown") entries.
+		if m.Platform != nil && m.Platform.OS == platformUnknown && m.Platform.Architecture == platformUnknown {
+			continue
+		}
+		if ignorePlatform {
+			return m, true
+		}
+		if platform != nil && m.Platform != nil &&
+			m.Platform.OS == platform.OS && m.Platform.Architecture == platform.Architecture {
+			return m, true
+		}
+	}
+	return ocispec.Descriptor{}, false
+}
+
 // fetchManifest retrieves and decodes the manifest for the specified tag.
 func (r *repositoryClient) fetchManifest(ctx context.Context, tag string, platform *ocispec.Platform) (*ocispec.Manifest, ocispec.Descriptor, error) {
 	r.logger.Debug("resolving manifest for tag", "tag", tag, "platform", platformLogValue(platform))
@@ -171,14 +205,10 @@ func (r *repositoryClient) fetchManifest(ctx context.Context, tag string, platfo
 			return nil, ocispec.Descriptor{}, fmt.Errorf("failed to unmarshal index: %w", err)
 		}
 
-		found := false
-		for _, m := range index.Manifests {
-			if m.Platform != nil && m.Platform.OS == platform.OS && m.Platform.Architecture == platform.Architecture {
-				r.logger.Debug("found matching manifest in index", "digest", m.Digest.String(), "mediaType", m.MediaType)
-				desc = m
-				found = true
-				break
-			}
+		matched, found := selectIndexManifest(&index, platform)
+		if found {
+			r.logger.Debug("found matching manifest in index", "digest", matched.Digest.String(), "mediaType", matched.MediaType)
+			desc = matched
 		}
 
 		if !found {

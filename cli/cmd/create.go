@@ -27,7 +27,7 @@ var templateFS embed.FS
 
 // Create is a command to create a new extension template.
 type Create struct {
-	Type            string `help:"Type of the extension (go, rust, ext_proc)." default:"go" enum:"go,rust,ext_proc"`
+	Type            string `help:"Type of the extension (go, rust, ext_proc, wasm)." default:"go" enum:"go,rust,ext_proc,wasm"`
 	FilterType      string `help:"Filter type (http, network, listener, udp_listener). Network, listener, and udp_listener filters are only supported for rust." default:"http" enum:"http,network,listener,udp_listener"`
 	Name            string `arg:"" help:"Name of the extension."`
 	Path            string `help:"Output directory for the extension. Defaults to the extension name." type:"path"`
@@ -54,6 +54,9 @@ func (c *Create) Validate() error {
 	if c.Type == "ext_proc" && c.FilterType != "http" {
 		return fmt.Errorf("only http filter scaffolding is supported for %q extensions; use --type rust for other filter types", c.Type)
 	}
+	if c.Type == "wasm" && c.FilterType != "http" {
+		return fmt.Errorf("only http filter scaffolding is supported for %q extensions", c.Type)
+	}
 	return nil
 }
 
@@ -76,6 +79,8 @@ func (c *Create) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Lo
 		return createRustExtension(logger, c.Path, c.Name, c.FilterType)
 	case "ext_proc":
 		return createExtProcExtension(logger, c.Path, c.Name)
+	case "wasm":
+		return createWasmExtension(logger, dirs, c.Path, c.Name)
 	default:
 		return fmt.Errorf("unsupported extension type: %s", c.Type)
 	}
@@ -186,6 +191,43 @@ func createExtProcExtension(logger *slog.Logger, path, name string) error {
 	}
 
 	logger.Info("creating ext_proc extension", "name", name, "path", repoPath, "files", slices.Collect(maps.Keys(files)))
+
+	if err := createFilesFromTemplate(files, data, repoPath); err != nil {
+		return err
+	}
+
+	cmd := exec.Command("go", "mod", "tidy")
+	cmd.Dir = repoPath
+	logger.Info("running 'go mod tidy' to initialize the module dependencies")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to run 'go mod tidy': %w\n%s", err, string(output))
+	}
+	return nil
+}
+
+func createWasmExtension(logger *slog.Logger, dirs *xdg.Directories, path, name string) error {
+	repoPath := filepath.Join(path, name)
+
+	data := map[string]string{
+		"Name":      name,
+		"DataHome":  dirs.DataHome,
+		"GoVersion": internal.GoVersion,
+	}
+
+	files := map[string]string{
+		"main.go":            "templates/create/wasm/main.go.tmpl",
+		"main_test.go":       "templates/create/wasm/main_test.go.tmpl",
+		"manifest.yaml":      "templates/create/wasm/manifest.yaml.tmpl",
+		"config.schema.json": "templates/create/wasm/config.schema.json.tmpl",
+		"go.mod":             "templates/create/wasm/go.mod.tmpl",
+		"Makefile":           "templates/create/wasm/Makefile.tmpl",
+		"Dockerfile":         "templates/create/wasm/Dockerfile.tmpl",
+		"Dockerfile.code":    "templates/create/wasm/Dockerfile.code.tmpl",
+		".dockerignore":      "templates/create/wasm/dockerignore.tmpl",
+		".gitignore":         "templates/create/wasm/gitignore.tmpl",
+	}
+
+	logger.Info("creating Wasm extension", "name", name, "path", repoPath, "files", slices.Collect(maps.Keys(files)))
 
 	if err := createFilesFromTemplate(files, data, repoPath); err != nil {
 		return err
