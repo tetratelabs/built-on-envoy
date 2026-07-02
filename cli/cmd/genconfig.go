@@ -288,7 +288,7 @@ func printExportSummary(stdout io.Writer, outputPath string, files []string, lis
         -p %[5]s:%[5]s \
         -e ENVOY_DYNAMIC_MODULES_SEARCH_PATH=/boe \
         -e GODEBUG=cgocheck=0 \
-        -v /tmp/boe-export:/boe \
+        -v %[3]s:/boe \
         -w /boe \
         envoyproxy/envoy:%[7]s -c /boe/envoy.yaml --log-level info --component-log-level dynamic_modules:debug
 `, internal.ANSIBold, internal.ANSIReset, outputPath, listenPort, adminPortStr, funcEEnvoyVersion, dockerEnvoyTag)

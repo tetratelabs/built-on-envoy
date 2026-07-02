@@ -98,6 +98,60 @@ See the [Writing Go Extensions](/docs/writing-go-extensions) guide for a complet
 filter API, lifecycle callbacks, and build process.
 
 
+## WASM Go Extensions
+
+WASM extensions are HTTP filters written in Go and compiled to
+[WebAssembly](https://webassembly.org/). Rather than loading native code into the Envoy process, they
+run inside Envoy's built-in [WASM runtime](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/wasm_filter)
+as sandboxed modules that communicate with the host through the
+[proxy-wasm ABI](https://github.com/proxy-wasm/spec). Extensions use the
+[proxy-wasm Go SDK](https://github.com/proxy-wasm/proxy-wasm-go-sdk), and the compiled module is
+executed by Envoy's V8 runtime (`envoy.wasm.runtime.v8`), which ships in official Envoy builds.
+
+The WASM sandbox isolates extension code from the Envoy process: a crashing or misbehaving module
+cannot corrupt Envoy's memory. This makes WASM a good middle ground between the raw performance of
+native Go extensions and the process isolation of ExtProc, without the network latency of an
+out-of-process server.
+
+**Manifest type:** `wasm`
+
+```yaml
+name: my-wasm-extension
+version: 0.1.0
+type: wasm
+```
+
+### How it works
+
+1. Your extension registers a VM context with `proxywasm.SetVMContext()` and implements the
+   `VMContext`, `PluginContext`, and `HttpContext` interfaces from the proxy-wasm Go SDK.
+2. The module is compiled to WebAssembly with the standard Go toolchain, targeting WASI in
+   `c-shared` mode so it exports the proxy-wasm ABI functions the SDK relies on:
+
+   ```shell
+   env GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o plugin.wasm .
+   ```
+
+3. At runtime, Envoy loads the compiled module into a V8 VM and drives the plugin through the
+   proxy-wasm lifecycle callbacks (`OnPluginStart`, `OnHttpResponseHeaders`, and so on).
+
+### Filter Types
+
+WASM extensions support HTTP (L7) filters only.
+
+### When to Use WASM
+
+WASM extensions are a good fit when you need:
+
+- Sandboxed isolation so extension bugs cannot crash the Envoy process.
+- To run inside Envoy without the network round-trip of an ExtProc server.
+- Portability of a self-contained, runtime-agnostic module.
+
+**Limitations:** WASM modules run through the proxy-wasm ABI, which exposes a narrower API surface
+than the Dynamic Modules Go SDK, and the sandbox adds some overhead compared to native Go extensions.
+For advanced host integrations or maximum performance, consider a Dynamic Module extension instead.
+
+
 ## Lua Extensions
 
 Lua extensions use Envoy's built-in [Lua HTTP filter](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/lua_filter)
