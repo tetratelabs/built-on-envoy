@@ -20,11 +20,16 @@ import (
 type WAFMode int
 
 const (
-	// ModeRequestOnly processes only request phase
+	// ModeRequestOnly processes only the request phase.
 	ModeRequestOnly WAFMode = iota
-	// ModeFull processes both request and response phases
+	// ModeFull processes both the request and response phases.
 	ModeFull
-	// ModeResponseOnly processes only response phase
+	// ModeResponseOnly processes only the response phase.
+	//
+	// Deprecated: RESPONSE_ONLY is retained for backward compatibility and will be
+	// removed in a future release. It skips request-phase initialization, so rule
+	// sets whose response-phase rules depend on the request phase (such as OWASP
+	// CRS) can misbehave. Prefer FULL or REQUEST_ONLY.
 	ModeResponseOnly
 )
 
@@ -56,6 +61,8 @@ func NewWAFConfigFromBytes(configBytes []byte, l *zap.Logger) (coraza.WAF, WAFMo
 	case "REQUEST_ONLY":
 		mode = ModeRequestOnly
 	case "RESPONSE_ONLY":
+		// Deprecated: retained for backward compatibility. See ModeResponseOnly.
+		l.Warn("RESPONSE_ONLY mode is deprecated and will be removed in a future release; use FULL or REQUEST_ONLY instead")
 		mode = ModeResponseOnly
 	case "FULL":
 		mode = ModeFull

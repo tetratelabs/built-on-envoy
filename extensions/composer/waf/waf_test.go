@@ -182,7 +182,6 @@ func Test_DisableWaf(t *testing.T) {
 		assert.Equal(t, shared.TrailersStatusContinue, trailerStatus,
 			"expected trailer status to continue when WAF is disabled")
 
-		pluginHandle.EXPECT().RequestHeaders().Return(fakeHeaderMap)
 		responseHeaders := fake.NewFakeHeaderMap(map[string][]string{
 			":status":      {"200"},
 			"content-type": {"application/json"},
@@ -448,10 +447,13 @@ func Test_RequestOnlyWaf(t *testing.T) {
 	})
 
 	t.Run("Response should be no-op in request only mode", func(t *testing.T) {
-		// Response should be no-op in request only mode.
 		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
+			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(
+			pkg.UnsafeBufferFromString("127.0.0.1:8080"), true)
 
 		requestHeaders := fake.NewFakeHeaderMap(map[string][]string{
 			":authority":   {"example.com:8080"},
@@ -461,11 +463,15 @@ func Test_RequestOnlyWaf(t *testing.T) {
 			"user-agent":   {"ComposerTest/1.0"},
 			"accept":       {"*/*"},
 		})
-		pluginHandle.EXPECT().RequestHeaders().Return(requestHeaders)
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
 		require.True(t, ok, "failed to cast plugin to wafPlugin")
+
+		// Run the request phase so a transaction exists. The response phase must
+		// still be skipped because the mode is REQUEST_ONLY (not because the
+		// transaction is missing).
+		require.Equal(t, shared.HeadersStatusContinue, wafPlugin.OnRequestHeaders(requestHeaders, true))
 
 		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
 			":status":      {"200"},
@@ -492,10 +498,19 @@ func Test_RequestOnlyWaf(t *testing.T) {
 	})
 }
 
+// Test_ResponseOnlyWaf exercises the deprecated RESPONSE_ONLY mode. The request
+// phase is skipped (no request-phase rules run), but a transaction is still
+// created when the request traverses the filter, so the response phase can be
+// evaluated.
+// This differs from Test_ResponsePhaseWithoutRequestPhase, where the
+// request phase never runs at all and the WAF must fail open.
 func Test_ResponseOnlyWaf(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
+	// No SecRuleEngine On: the recommended @coraza.conf runs in DetectionOnly, so
+	// response-phase matches are logged but never interrupt. This keeps the test
+	// focused on phase routing rather than blocking behavior.
 	wafPluginFactory := newWAFFactory(t, ctrl, []string{
 		"Include @coraza.conf",
 		"Include @ftw.conf",
@@ -503,20 +518,8 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 		"Include @owasp_crs/*.conf",
 	}, "RESPONSE_ONLY")
 
-	t.Run("Request should be no-op in response only mode", func(t *testing.T) {
-		// Request should be no-op in response only mode.
-		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
-		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
-		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
-
-		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
-			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
-
-		plugin := wafPluginFactory.Create(pluginHandle)
-		wafPlugin, ok := plugin.(*wafPlugin)
-		require.True(t, ok, "failed to cast plugin to wafPlugin")
-
-		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
+	newRequestHeaders := func() shared.HeaderMap {
+		return fake.NewFakeHeaderMap(map[string][]string{
 			":authority":   {"example.com:8080"},
 			":method":      {"GET"},
 			":path":        {"/"},
@@ -524,42 +527,40 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 			"user-agent":   {"ComposerTest/1.0"},
 			"accept":       {"*/*"},
 		})
+	}
 
-		headerStatus := wafPlugin.OnRequestHeaders(fakeHeaderMap, false)
+	t.Run("Request phase is a no-op", func(t *testing.T) {
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
+		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+		// Only request.protocol is read: the response-only early return happens before source.address is looked up.
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
+			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+
+		plugin := wafPluginFactory.Create(pluginHandle)
+		wafPlugin, ok := plugin.(*wafPlugin)
+		require.True(t, ok, "failed to cast plugin to wafPlugin")
+
+		headerStatus := wafPlugin.OnRequestHeaders(newRequestHeaders(), false)
 		assert.Equal(t, shared.HeadersStatusContinue, headerStatus,
-			"expected header status to continue in response only mode")
+			"expected request headers to be no-op in response only mode")
+		require.NotNil(t, wafPlugin.txContext, "transaction must still be created so the response phase can run")
 
-		bodyBuffer := fake.NewFakeBodyBuffer([]byte(`{"name":"test","value":123}`))
-		bodyStatus := wafPlugin.OnRequestBody(bodyBuffer, false)
-		assert.Equal(t, shared.BodyStatusContinue, bodyStatus,
-			"expected body status to continue in response only mode")
+		bodyBuffer := fake.NewFakeBodyBuffer([]byte(`{"result":"success"}`))
+		bodyStatus := wafPlugin.OnResponseBody(bodyBuffer, false)
+		require.Equal(t, shared.BodyStatusContinue, bodyStatus, "expected request body to be no-op in response only mode")
 
-		trailers := fake.NewFakeHeaderMap(map[string][]string{
-			"grpc-status": {"0"},
-		})
+		trailers := fake.NewFakeHeaderMap(map[string][]string{"grpc-status": {"0"}})
 		trailerStatus := wafPlugin.OnRequestTrailers(trailers)
-		assert.Equal(t, shared.TrailersStatusContinue, trailerStatus,
-			"expected trailer status to continue in response only mode")
+		assert.Equal(t, shared.TrailersStatusContinue, trailerStatus, "expected request trailers to be no-op in response only mode")
 
-		// Ensure destroy is called.
 		wafPlugin.OnStreamComplete()
 	})
 
-	t.Run("Header only response", func(t *testing.T) {
-		// Header only response.
+	t.Run("Response phase is inspected", func(t *testing.T) {
 		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
-
-		requestHeaders := fake.NewFakeHeaderMap(map[string][]string{
-			":authority":   {"example.com:8080"},
-			":method":      {"GET"},
-			":path":        {"/"},
-			"x-request-id": {"req-12345"},
-			"user-agent":   {"ComposerTest/1.0"},
-			"accept":       {"*/*"},
-		})
-		pluginHandle.EXPECT().RequestHeaders().Return(requestHeaders)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
 			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 
@@ -567,198 +568,62 @@ func Test_ResponseOnlyWaf(t *testing.T) {
 		wafPlugin, ok := plugin.(*wafPlugin)
 		require.True(t, ok, "failed to cast plugin to wafPlugin")
 
-		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
+		// The request must traverse the filter first so the transaction exists.
+		require.Equal(t, shared.HeadersStatusContinue, wafPlugin.OnRequestHeaders(newRequestHeaders(), true))
+		require.NotNil(t, wafPlugin.txContext)
+
+		responseHeaders := fake.NewFakeHeaderMap(map[string][]string{
 			":status":      {"200"},
 			"content-type": {"application/json"},
 		})
-		headerStatus := wafPlugin.OnResponseHeaders(fakeHeaderMap, true)
+		headerStatus := wafPlugin.OnResponseHeaders(responseHeaders, true)
 		assert.Equal(t, shared.HeadersStatusContinue, headerStatus,
-			"expected response header status to continue for header only response")
+			"expected response headers to continue for a clean response in DetectionOnly")
 
-		// Ensure destroy is called.
 		wafPlugin.OnStreamComplete()
 	})
+}
 
-	t.Run("Handle response with upgrade", func(t *testing.T) {
-		// Handle response with upgrade.
-		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
-		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
-		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+// Test_ResponsePhaseWithoutRequestPhase is the regression test for the fail-open
+// guard. When Envoy runs the response/encode path without the request/decode path,
+// the WAF must not create a new transaction from scratch at response phase. This
+// would lead to false positives generated because of the CRS has not been initialized.
+func Test_ResponsePhaseWithoutRequestPhase(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-		requestHeaders := fake.NewFakeHeaderMap(map[string][]string{
-			":authority":   {"example.com:8080"},
-			":method":      {"GET"},
-			":path":        {"/"},
-			"x-request-id": {"req-12345"},
-			"user-agent":   {"ComposerTest/1.0"},
-			"connection":   {"keep-alive, Upgrade"},
-			"upgrade":      {"websocket"},
-		})
-		pluginHandle.EXPECT().RequestHeaders().Return(requestHeaders)
-		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
-			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+	// Full configuration with FULL mode, CRS and engine On
+	factory := newWAFFactory(t, ctrl, []string{
+		"Include @coraza.conf",
+		"SecRuleEngine On",
+		"Include @crs-setup.conf",
+		"Include @owasp_crs/*.conf",
+	}, "FULL")
 
-		plugin := wafPluginFactory.Create(pluginHandle)
-		wafPlugin, ok := plugin.(*wafPlugin)
-		require.True(t, ok, "failed to cast plugin to wafPlugin")
+	pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
+	plugin := factory.Create(pluginHandle)
+	wafPlugin, ok := plugin.(*wafPlugin)
+	require.True(t, ok, "failed to cast plugin to wafPlugin")
 
-		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
-			":status":      {"101"},
-			"content-type": {"application/json"},
-			"connection":   {"Upgrade"},
-			"upgrade":      {"websocket"},
-		})
-		headerStatus := wafPlugin.OnResponseHeaders(fakeHeaderMap, false)
-		require.Equal(t, shared.HeadersStatusContinue, headerStatus,
-			"expected response header status to continue for upgrade response")
-		require.True(t, wafPlugin.isUpgrade, "expected isUpgrade to be true for upgrade response")
-
-		bodyBuffer := fake.NewFakeBodyBuffer([]byte(`{"result":"success"}`))
-		bodyStatus := wafPlugin.OnResponseBody(bodyBuffer, false)
-		require.Equal(t, shared.BodyStatusContinue, bodyStatus,
-			"expected response body status to continue for upgrade response")
-
-		bodyBuffer2 := fake.NewFakeBodyBuffer([]byte{})
-		bodyStatus = wafPlugin.OnResponseBody(bodyBuffer2, true)
-		require.Equal(t, shared.BodyStatusContinue, bodyStatus,
-			"expected final response body status to continue for upgrade response")
-
-		// Ensure destroy is called.
-		wafPlugin.OnStreamComplete()
+	// OnRequestHeaders is never called, so there is no transaction from the request phase.
+	respHeaders := fake.NewFakeHeaderMap(map[string][]string{
+		":status":      {"431"},
+		"content-type": {"text/html"},
 	})
+	require.Equal(t, shared.HeadersStatusContinue, wafPlugin.OnResponseHeaders(respHeaders, false),
+		"response headers must fail open when the request phase never ran")
 
-	t.Run("Handle response with body", func(t *testing.T) {
-		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
-		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
-		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+	body := fake.NewFakeBodyBuffer([]byte("Request Header Fields Too Large"))
+	require.Equal(t, shared.BodyStatusContinue, wafPlugin.OnResponseBody(body, true),
+		"response body must fail open when the request phase never ran")
 
-		requestHeaders := fake.NewFakeHeaderMap(map[string][]string{
-			":authority":   {"example.com:8080"},
-			":method":      {"GET"},
-			":path":        {"/"},
-			"x-request-id": {"req-12345"},
-			"user-agent":   {"ComposerTest/1.0"},
-			"accept":       {"*/*"},
-		})
-		pluginHandle.EXPECT().RequestHeaders().Return(requestHeaders)
-		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
-			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+	trailers := fake.NewFakeHeaderMap(map[string][]string{"grpc-status": {"0"}})
+	require.Equal(t, shared.TrailersStatusContinue, wafPlugin.OnResponseTrailers(trailers),
+		"response trailers must fail open when the request phase never ran")
 
-		plugin := wafPluginFactory.Create(pluginHandle)
-		wafPlugin, ok := plugin.(*wafPlugin)
-		require.True(t, ok, "failed to cast plugin to wafPlugin")
-
-		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
-			":status":      {"200"},
-			"content-type": {"application/json"},
-		})
-		headerStatus := wafPlugin.OnResponseHeaders(fakeHeaderMap, false)
-		require.Equal(t, shared.HeadersStatusStop, headerStatus,
-			"expected response header status to stop for response with body")
-
-		bodyBuffer := fake.NewFakeBodyBuffer([]byte(`{"result":"success"}`))
-		bodyStatus := wafPlugin.OnResponseBody(bodyBuffer, false)
-		require.Equal(t, shared.BodyStatusStopAndBuffer, bodyStatus,
-			"expected response body status to stop and buffer for response body")
-
-		// Final body processing.
-		bodyBuffer2 := fake.NewFakeBodyBuffer([]byte{})
-		pluginHandle.EXPECT().ReceivedBufferedResponseBody().Return(true)
-		bodyStatus = wafPlugin.OnResponseBody(bodyBuffer2, true)
-		assert.Equal(t, shared.BodyStatusContinue, bodyStatus,
-			"expected no immediate response from WAF for simple response body")
-
-		// Ensure destroy is called.
-		wafPlugin.OnStreamComplete()
-	})
-
-	t.Run("Handle response with body and trailers", func(t *testing.T) {
-		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
-		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
-		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
-
-		requestHeaders := fake.NewFakeHeaderMap(map[string][]string{
-			":authority":   {"example.com:8080"},
-			":method":      {"GET"},
-			":path":        {"/"},
-			"x-request-id": {"req-12345"},
-			"user-agent":   {"ComposerTest/1.0"},
-			"accept":       {"*/*"},
-		})
-		pluginHandle.EXPECT().RequestHeaders().Return(requestHeaders)
-		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
-			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
-
-		plugin := wafPluginFactory.Create(pluginHandle)
-		wafPlugin, ok := plugin.(*wafPlugin)
-		require.True(t, ok, "failed to cast plugin to wafPlugin")
-
-		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
-			":status":      {"200"},
-			"content-type": {"application/json"},
-		})
-		headerStatus := wafPlugin.OnResponseHeaders(fakeHeaderMap, false)
-		require.Equal(t, shared.HeadersStatusStop, headerStatus,
-			"expected response header status to stop for response with body")
-
-		bodyBuffer := fake.NewFakeBodyBuffer([]byte(`{"result":"success"}`))
-		bodyStatus := wafPlugin.OnResponseBody(bodyBuffer, false)
-		require.Equal(t, shared.BodyStatusStopAndBuffer, bodyStatus,
-			"expected response body status to stop and buffer for response body")
-
-		trailers := fake.NewFakeHeaderMap(map[string][]string{
-			"grpc-status": {"0"},
-		})
-		trailerStatus := wafPlugin.OnResponseTrailers(trailers)
-		assert.Equal(t, shared.TrailersStatusContinue, trailerStatus,
-			"expected no immediate response from WAF for simple response trailers")
-
-		// Ensure destroy is called.
-		wafPlugin.OnStreamComplete()
-	})
-
-	t.Run("Handle response with SSE", func(t *testing.T) {
-		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
-		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
-		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
-
-		requestHeaders := fake.NewFakeHeaderMap(map[string][]string{
-			":authority":   {"example.com:8080"},
-			":method":      {"GET"},
-			":path":        {"/events"},
-			"x-request-id": {"req-12345"},
-			"user-agent":   {"ComposerTest/1.0"},
-			"accept":       {"text/event-stream"},
-		})
-		pluginHandle.EXPECT().RequestHeaders().Return(requestHeaders)
-		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
-			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
-
-		plugin := wafPluginFactory.Create(pluginHandle)
-		wafPlugin, ok := plugin.(*wafPlugin)
-		require.True(t, ok, "failed to cast plugin to wafPlugin")
-
-		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
-			":status":      {"200"},
-			"content-type": {"text/event-stream"},
-		})
-		headerStatus := wafPlugin.OnResponseHeaders(fakeHeaderMap, false)
-		require.Equal(t, shared.HeadersStatusContinue, headerStatus,
-			"expected response header status to continue for SSE response")
-
-		bodyBuffer := fake.NewFakeBodyBuffer([]byte("data: event1\n\n"))
-		bodyStatus := wafPlugin.OnResponseBody(bodyBuffer, false)
-		require.Equal(t, shared.BodyStatusContinue, bodyStatus,
-			"expected response body status to continue for SSE response")
-
-		bodyBuffer2 := fake.NewFakeBodyBuffer([]byte("data: event2\n\n"))
-		bodyStatus = wafPlugin.OnResponseBody(bodyBuffer2, false)
-		require.Equal(t, shared.BodyStatusContinue, bodyStatus,
-			"expected response body status to continue for SSE response")
-
-		// Ensure destroy is called.
-		wafPlugin.OnStreamComplete()
-	})
+	// No transaction must have been created in the response phase.
+	require.Nil(t, wafPlugin.txContext, "no transaction should be created in the response phase")
+	wafPlugin.OnStreamComplete()
 }
 
 func Test_WellKnownHttpFilterConfigFactories(t *testing.T) {
@@ -825,7 +690,6 @@ func Test_FullWaf(t *testing.T) {
 			"expected no immediate response from WAF for full request body")
 
 		// Response processing.
-		pluginHandle.EXPECT().RequestHeaders().Return(fakeRequestHeaders)
 		fakeResponseHeaders := fake.NewFakeHeaderMap(map[string][]string{
 			":status":      {"200"},
 			"content-type": {"application/json"},
@@ -987,7 +851,6 @@ func Test_BlockRequestWaf(t *testing.T) {
 			"expected request headers to continue for clean request")
 
 		// Process response headers.
-		pluginHandle.EXPECT().RequestHeaders().Return(fakeRequestHeaders)
 		fakeResponseHeaders := fake.NewFakeHeaderMap(map[string][]string{
 			":status":      {"200"},
 			"content-type": {"application/json"},
@@ -1439,7 +1302,6 @@ func Test_Phase4RulesOnHeaderOnlyResponse(t *testing.T) {
 			requestHeaders := fake.NewFakeHeaderMap(reqHeaders)
 			require.Equal(t, shared.HeadersStatusContinue, wafPlugin.OnRequestHeaders(requestHeaders, true))
 
-			pluginHandle.EXPECT().RequestHeaders().Return(requestHeaders)
 			headerStatus := wafPlugin.OnResponseHeaders(fake.NewFakeHeaderMap(tc.respHeaders), tc.respEndOfStream)
 			require.Equal(t, shared.HeadersStatusStop, headerStatus, "expected phase 4 block before releasing response headers")
 
@@ -1515,7 +1377,6 @@ func Test_SecResponseBodyAccessOff(t *testing.T) {
 			})
 			require.Equal(t, shared.HeadersStatusContinue, wafPlugin.OnRequestHeaders(requestHeaders, true))
 
-			pluginHandle.EXPECT().RequestHeaders().Return(requestHeaders)
 			require.Equal(t, shared.HeadersStatusStop, wafPlugin.OnResponseHeaders(fake.NewFakeHeaderMap(map[string][]string{
 				":status":      {"200"},
 				"content-type": {"application/json"},
@@ -1591,7 +1452,6 @@ func Test_Phase4ResponseHeadersRuleWithSecResponseBodyAccessOff(t *testing.T) {
 			})
 			require.Equal(t, shared.HeadersStatusContinue, wafPlugin.OnRequestHeaders(requestHeaders, true))
 
-			pluginHandle.EXPECT().RequestHeaders().Return(requestHeaders)
 			require.Equal(t, shared.HeadersStatusStop, wafPlugin.OnResponseHeaders(fake.NewFakeHeaderMap(map[string][]string{
 				":status":      {"200"},
 				"content-type": {"application/json"},
@@ -1683,7 +1543,6 @@ func Test_PerRouteConfigOverride(t *testing.T) {
 			"expected request to pass with benign request")
 
 		// Response should be skipped in REQUEST_ONLY mode.
-		pluginHandle.EXPECT().RequestHeaders().Return(fakeHeaders)
 		respHeaders := fake.NewFakeHeaderMap(map[string][]string{
 			":status":      {"200"},
 			"content-type": {"text/plain"},
@@ -1932,7 +1791,6 @@ func Test_ProcessPartialBodyLimit(t *testing.T) {
 		require.True(t, ok)
 
 		require.Equal(t, shared.HeadersStatusContinue, wafPlugin.OnRequestHeaders(respRequestHeaders, true))
-		pluginHandle.EXPECT().RequestHeaders().Return(respRequestHeaders)
 		require.Equal(t, shared.HeadersStatusStop, wafPlugin.OnResponseHeaders(fake.NewFakeHeaderMap(respHeaders), false))
 
 		// "hello" is in bytes 1-5, within the inspection window: 100030 matches and blocks.
@@ -1956,7 +1814,6 @@ func Test_ProcessPartialBodyLimit(t *testing.T) {
 		require.True(t, ok)
 
 		require.Equal(t, shared.HeadersStatusContinue, wafPlugin.OnRequestHeaders(respRequestHeaders, true))
-		pluginHandle.EXPECT().RequestHeaders().Return(respRequestHeaders)
 		require.Equal(t, shared.HeadersStatusStop, wafPlugin.OnResponseHeaders(fake.NewFakeHeaderMap(respHeaders), false))
 
 		// "hello" is outside the inspection window: 100030 does not match.
@@ -2003,7 +1860,6 @@ func Test_ProcessPartialBodyLimit(t *testing.T) {
 		require.True(t, ok)
 
 		require.Equal(t, shared.HeadersStatusContinue, wafPlugin.OnRequestHeaders(respRequestHeaders, true))
-		pluginHandle.EXPECT().RequestHeaders().Return(respRequestHeaders)
 		require.Equal(t, shared.HeadersStatusStop, wafPlugin.OnResponseHeaders(fake.NewFakeHeaderMap(respHeaders), false))
 
 		wafPlugin.OnResponseBody(fake.NewFakeBodyBuffer([]byte("worl")), false)
@@ -2040,7 +1896,6 @@ func Test_ProcessPartialBodyLimit(t *testing.T) {
 		require.True(t, ok)
 
 		require.Equal(t, shared.HeadersStatusContinue, wafPlugin.OnRequestHeaders(respRequestHeaders, true))
-		pluginHandle.EXPECT().RequestHeaders().Return(respRequestHeaders)
 		require.Equal(t, shared.HeadersStatusStop, wafPlugin.OnResponseHeaders(fake.NewFakeHeaderMap(respHeaders), false))
 
 		bodyStatus := wafPlugin.OnResponseBody(fake.NewFakeBodyBuffer([]byte("hello world")), false)
