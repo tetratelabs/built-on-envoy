@@ -7,6 +7,7 @@ package waf
 
 import (
 	"strconv"
+	"time"
 
 	ctypes "github.com/corazawaf/coraza/v3/types"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
@@ -16,22 +17,26 @@ import (
 
 // metrics contains the metrics definitions for the WAF extension. These metrics are
 type metrics struct {
-	txTotal   *pkg.Metric
-	txBlocked *pkg.Metric
+	txTotal    *pkg.Metric
+	txBlocked  *pkg.Metric
+	txDuration *pkg.Metric
 }
 
 // newMetrics initializes and registers the metrics for the WAF extension.
 func newMetrics(h shared.HttpFilterConfigHandle) *metrics {
 	return &metrics{
-		txTotal:   pkg.NewMetric(h, h.DefineCounter, "waf_tx_total"),
-		txBlocked: pkg.NewMetric(h, h.DefineCounter, "waf_tx_blocked", "authority", "phase", "rule_id"),
+		txTotal:    pkg.NewMetric(h, h.DefineCounter, "waf_tx_total"),
+		txBlocked:  pkg.NewMetric(h, h.DefineCounter, "waf_tx_blocked", "authority", "phase", "rule_id"),
+		txDuration: pkg.NewMetric(h, h.DefineHistogram, "waf_tx_duration"),
 	}
 }
 
-// RecordTx increments the total transaction counter.
+// RecordTx increments the total transaction counter and records the WAF transaction duration.
 // This should be called for every transaction processed by the WAF.
-func (m *metrics) RecordTx(h shared.HttpFilterHandle) {
+func (m *metrics) RecordTx(h shared.HttpFilterHandle, start time.Time) {
+	elapsed := time.Since(start).Milliseconds()
 	m.txTotal.Record(h, h.IncrementCounterValue, 1)
+	m.txDuration.Record(h, h.RecordHistogramValue, uint64(elapsed)) //nolint:gosec // G115: elapsed is a non-negative duration
 }
 
 // RecordBlockedByRule increments the blocked transaction counter with the appropriate labels.

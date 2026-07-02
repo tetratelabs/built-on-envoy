@@ -10,6 +10,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/corazawaf/coraza/v3"
 	ctypes "github.com/corazawaf/coraza/v3/types"
@@ -117,6 +118,7 @@ type wafPlugin struct {
 	metadataNamespace string
 
 	txContext             ctypes.Transaction
+	txStart               time.Time
 	protocol              string
 	isUpgrade             bool
 	isSSE                 bool
@@ -167,6 +169,7 @@ func (p *wafPlugin) mayInitializeTransaction(headers shared.HeaderMap) {
 	}
 	id := headers.GetOne("x-request-id").ToString()
 	p.txContext = p.config.NewTransactionWithID(id)
+	p.txStart = time.Now()
 	p.isUpgrade = p.checkUpgrade(headers)
 }
 
@@ -401,7 +404,7 @@ func (p *wafPlugin) OnResponseTrailers(_ shared.HeaderMap) shared.TrailersStatus
 func (p *wafPlugin) OnStreamComplete() {
 	if p.txContext != nil {
 		if !p.txContext.IsRuleEngineOff() {
-			p.metrics.RecordTx(p.handle)
+			p.metrics.RecordTx(p.handle, p.txStart)
 		}
 		p.txContext.ProcessLogging()
 		err := p.txContext.Close()
