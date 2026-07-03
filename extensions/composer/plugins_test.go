@@ -67,7 +67,9 @@ func validateManifest(t *testing.T, path string, knownExtensions map[string]bool
 	require.NotEmpty(t, manifest.Name, "name is required")
 	require.False(t, knownExtensions[manifest.Name], "duplicate extension name '%s'", manifest.Name)
 	knownExtensions[manifest.Name] = true
-	require.NotNil(t, sdk.GetHttpFilterConfigFactory(manifest.Name), "plugin '%s' is not registered into the binary, please ensure it is properly initialized or imported in the plugins.go", manifest.Name)
+	registered := sdk.GetHttpFilterConfigFactory(manifest.Name) != nil ||
+		sdk.GetNetworkFilterConfigFactory(manifest.Name) != nil
+	require.True(t, registered, "plugin '%s' is not registered into the binary, please ensure it is properly initialized or imported in the plugins.go", manifest.Name)
 
 	require.Equal(t, "go", manifest.Type, "type must be 'go'")
 	require.Empty(t, manifest.Version, "in-tree composer plugins should not have a version")

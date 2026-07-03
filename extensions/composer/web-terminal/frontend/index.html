@@ -1,0 +1,54 @@
+<!--
+  Copyright Built On Envoy
+  SPDX-License-Identifier: Apache-2.0
+  The full text of the Apache license is available in the LICENSE file at
+  the root of the repo.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>web-terminal</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+  <style>
+    html, body, #term { margin: 0; height: 100%; background: #111; }
+  </style>
+</head>
+<body>
+  <div id="term"></div>
+  <script>
+    const term = new Terminal({ cursorBlink: false, fontFamily: 'ui-monospace, monospace',
+                                theme: { background: '#111' } });
+    const fit = new FitAddon.FitAddon();
+    term.loadAddon(fit);
+    term.open(document.getElementById('term'));
+    fit.fit();
+    term.focus();
+
+    // Same host as this page, /ws on the same origin (works with serve_frontend).
+    const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
+    const ws = new WebSocket(WS_URL);
+    ws.binaryType = 'arraybuffer';
+
+    // Wire frame: opcode byte + payload. '0' = keystrokes, '1' = resize JSON.
+    const frame = (op, s) => {
+      const b = new TextEncoder().encode(s);
+      const f = new Uint8Array(b.length + 1);
+      f[0] = op.charCodeAt(0); f.set(b, 1);
+      return f;
+    };
+    const sendResize = () => ws.readyState === WebSocket.OPEN &&
+      ws.send(frame('1', JSON.stringify({ cols: term.cols, rows: term.rows })));
+
+    ws.onopen = () => { fit.fit(); sendResize(); };
+    ws.onmessage = (e) => term.write(new Uint8Array(e.data)); // xterm interprets ANSI
+    ws.onclose = () => term.write('\r\n[disconnected]\r\n');
+
+    // xterm emits the correct bytes for every key + pasted text.
+    term.onData((d) => ws.readyState === WebSocket.OPEN && ws.send(frame('0', d)));
+    addEventListener('resize', () => { fit.fit(); sendResize(); });
+  </script>
+</body>
+</html>

@@ -1,0 +1,133 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: web-terminal
+parent: composer
+categories:
+  - Misc
+author: Anton Kanugalawattage
+description: Interactive browser terminal, hosted inside Envoy
+longDescription: |
+  An interactive shell in the browser, delivered as an Envoy dynamic module over a
+  WebSocket. The filter bridges the WebSocket to a PTY running a configured shell.
+
+  ## Use cases
+
+  * Give operators a browser shell into a host or pod that already fronts its
+    traffic with Envoy, without deploying a separate terminal server
+  * Expose a scoped, single-command console (a REPL, an admin CLI) behind Envoy's
+    own listener and TLS
+  * Explore Envoy dynamic modules that own a raw connection end to end
+
+  ## How it works
+
+  This is an L4 **network filter**. An HTTP filter cannot terminate a WebSocket,
+  but a network filter owns the raw TCP bytes, so it can: on each connection the
+  filter completes the WebSocket handshake in-process, starts the configured
+  command in a PTY, and bridges the two — client frames become terminal input and
+  PTY output becomes server frames — until either side closes. Because a session
+  is a single long-lived WebSocket, one check at the upgrade authorizes it for its
+  whole lifetime.
+
+  ## Wire protocol
+
+  Client → server messages are WebSocket **binary** frames, each prefixed with a
+  one-byte opcode:
+
+  | Opcode | Meaning | Payload |
+  |--------|---------|---------|
+  | `'0'`  | Keystroke input | raw bytes written to the PTY |
+  | `'1'`  | Resize | JSON `{"cols": <n>, "rows": <n>}` |
+
+  Server → client frames are raw PTY output, unprefixed. A browser client
+  (xterm.js, or a dependency-free page) sends a resize frame on open and then
+  streams keystrokes.
+
+  ## Configuration
+
+  | Field | Type | Required | Default | Description |
+  |-------|------|----------|---------|-------------|
+  | `command` | string | no | `/bin/bash` | Executable to run in the PTY |
+  | `args` | array | no | `[]` | Arguments passed to `command` |
+  | `serve_frontend` | bool | no | `true` | Serve the bundled browser client on plain GET requests |
+
+  ## Wiring with Envoy
+
+  web-terminal is an L4 network filter provided by the `composer` dynamic module,
+  so it goes in a listener's `filters` chain. Envoy requires the last network
+  filter to be terminal; this filter returns `Stop` and owns the connection, so
+  pair it with `envoy.filters.network.echo` (which then never runs) to satisfy
+  that rule:
+
+  ```yaml
+  filter_chains:
+    - filters:
+        - name: envoy.filters.network.dynamic_modules
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.network.dynamic_modules.v3.DynamicModuleNetworkFilter
+            dynamic_module_config: { name: composer }
+            filter_name: web-terminal
+            filter_config:
+              "@type": type.googleapis.com/google.protobuf.StringValue
+              value: '{"command":"/bin/bash"}'
+        - name: envoy.filters.network.echo
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.network.echo.v3.Echo
+  ```
+
+  ## Serving the browser client
+
+  By default, plain GET requests are answered with a bundled xterm.js page
+  (`frontend/index.html`) on the same listener. WebSocket connections open a
+  terminal. Set `serve_frontend: false` to disable.
+
+  ## Requirements
+
+  The filter uses the newer dynamic-modules ABI, so it needs an Envoy build that
+  matches it (the `dev` channel): pass `--envoy-version dev`. It listens on its
+  own TCP port; the browser page that connects to it is served separately.
+
+  ## Authorization
+
+  This filter has no built-in auth. To authenticate connections, front it with an
+  HTTP Connection Manager and gate the WebSocket upgrades using
+  `ext_authz` or `jwt_authn` HTTP filters.
+type: go
+filterType:
+  - network
+tags:
+  - go
+  - network
+  - terminal
+  - pty
+  - websocket
+license: Apache-2.0
+examples:
+  - title: Default Shell
+    description: |
+      Run the terminal with the default `/bin/bash` on Envoy's dev channel, then
+      point a WebSocket client at ws://localhost:10000/.
+    code: |
+      boe run --extension web-terminal --envoy-version dev
+  - title: Custom Command
+    description: |
+      Launch a specific program in the PTY instead of a login shell — here a quiet
+      Python REPL. Entries in `args` are passed straight to the command.
+    code: |
+      boe run --extension web-terminal --envoy-version dev --config '
+        {
+          "command": "python3",
+          "args": ["-q"]
+        }'
+  - title: Terminal + page on one port
+    description: |
+      Serve the bundled browser client on the same listener as the terminal: open
+      http://localhost:10000/ for the page, which connects back to /ws for the
+      session.
+    code: |
+      boe run --extension web-terminal --envoy-version dev --config '
+        {
+          "serve_frontend": true
+        }'
