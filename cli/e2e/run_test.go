@@ -333,6 +333,7 @@ func testLocalGoExtension(t *testing.T, removeCSharedMain bool) {
 	ports := internaltesting.FreePorts(t, 2)
 	proxyPort := ports[0]
 	internaltesting.RunEnvoy(t, cliBin, proxyPort, ports[1],
+		"--envoy-version", "dev-latest",
 		"--local", dataDir+"/go-e2e",
 		"--local", dataDir+"/go-e2e",
 		"--config", "{}",
@@ -519,6 +520,7 @@ func TestComposerBundleExtension(t *testing.T) {
 	proxyPort := ports[0]
 	args := []string{
 		"--log-level", "dynamic_modules:debug",
+		"--envoy-version", "dev-latest",
 		"--extension", "composer/example-go:" + version,
 	}
 	if strings.HasSuffix(version, "-dev") {
