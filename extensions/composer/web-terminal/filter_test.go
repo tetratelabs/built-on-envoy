@@ -6,6 +6,8 @@
 package webterminal
 
 import (
+	"os"
+	"os/exec"
 	"testing"
 	"time"
 	"unsafe"
@@ -43,6 +45,42 @@ func TestFilterLifecycle(t *testing.T) {
 	time.Sleep(150 * time.Millisecond) // let serve() consume the request and close
 	f.OnEvent(shared.NetworkConnectionEventRemoteClose)
 	f.OnDestroy() // idempotent
+}
+
+// TestOnReadEndOfStream: an end-of-stream read closes the adapter (no data path).
+func TestOnReadEndOfStream(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	sch := mocks.NewMockScheduler(ctrl)
+	sch.EXPECT().Schedule(gomock.Any()).Do(func(fn func()) { fn() }).AnyTimes()
+	h := mocks.NewMockNetworkFilterHandle(ctrl)
+	h.EXPECT().GetScheduler().Return(sch).AnyTimes()
+	h.EXPECT().Write(gomock.Any(), gomock.Any()).AnyTimes()
+	h.EXPECT().Close(gomock.Any()).AnyTimes()
+	h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	f := (&filterFactory{cfg: &config{Command: "cat"}}).Create(h).(*terminalFilter)
+	f.OnNewConnection()
+
+	buf := mocks.NewMockNetworkBuffer(ctrl)
+	buf.EXPECT().GetSize().Return(uint64(0))
+	require.Equal(t, shared.NetworkFilterStatusStop, f.OnRead(buf, true))
+	f.OnDestroy()
+}
+
+// TestShutdownReapsPTY: shutdown closes the PTY and kills the command, and is
+// idempotent (guarded by sync.Once).
+func TestShutdownReapsPTY(t *testing.T) {
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	defer func() { _ = w.Close() }()
+	cmd := exec.Command("sleep", "30")
+	require.NoError(t, cmd.Start())
+
+	f := &terminalFilter{ptmx: r, cmd: cmd}
+	f.shutdown()
+	f.shutdown() // idempotent
+
+	require.Error(t, cmd.Wait()) // process was killed
 }
 
 func TestConfigFactory(t *testing.T) {

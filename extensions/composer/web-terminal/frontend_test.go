@@ -6,8 +6,10 @@
 package webterminal
 
 import (
+	"bufio"
 	"io"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -70,4 +72,15 @@ func TestServeFrontendDisabled(t *testing.T) {
 func TestHeaderIsUpgrade(t *testing.T) {
 	require.True(t, headerIsUpgrade([]byte("GET /ws HTTP/1.1\r\nUpgrade: websocket\r\n")))
 	require.False(t, headerIsUpgrade([]byte("GET / HTTP/1.1\r\nHost: x\r\n")))
+}
+
+func TestPeekIsWebSocket(t *testing.T) {
+	peek := func(s string) bool {
+		return peekIsWebSocket(bufio.NewReaderSize(strings.NewReader(s), maxRequestHead))
+	}
+	require.False(t, peek(""))                                              // closed before any bytes
+	require.True(t, peek("GET /ws HTTP/1.1\r\nUpgrade: websocket\r\n\r\n")) // upgrade
+	require.False(t, peek("GET / HTTP/1.1\r\nHost: x\r\n\r\n"))             // page GET
+	require.False(t, peek("GET / HTTP/1.1\r\nHost: x\r\n"))                 // closed mid-headers
+	require.False(t, peek(strings.Repeat("a", maxRequestHead+64)))          // no terminator, bail at cap
 }

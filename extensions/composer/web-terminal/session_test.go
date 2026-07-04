@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"github.com/stretchr/testify/require"
@@ -71,6 +72,33 @@ func TestRunSessionFrontendWebSocket(t *testing.T) {
 		msg, _, rerr := wsutil.ReadServerData(conn)
 		require.NoError(t, rerr)
 		out = append(out, msg...)
+	}
+}
+
+// TestRunSessionPTYStartError: after a successful upgrade, a bad command makes
+// pty.Start fail, which is logged via logf.
+func TestRunSessionPTYStartError(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer func() { _ = ln.Close() }()
+
+	logs := make(chan string, 4)
+	go func() {
+		if c, aerr := ln.Accept(); aerr == nil {
+			runSession(c, &config{Command: "/nonexistent/boe-xyz"}, nil,
+				func(_ shared.LogLevel, format string, _ ...any) { logs <- format })
+		}
+	}()
+
+	conn, _, _, err := ws.Dial(context.Background(), "ws://"+ln.Addr().String()+"/")
+	require.NoError(t, err) // handshake succeeds, then pty start fails
+	defer func() { _ = conn.Close() }()
+
+	select {
+	case msg := <-logs:
+		require.Contains(t, msg, "pty start")
+	case <-time.After(3 * time.Second):
+		t.Fatal("expected a pty start error to be logged")
 	}
 }
 
