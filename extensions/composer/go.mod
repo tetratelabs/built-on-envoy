@@ -21,7 +21,7 @@ require (
 	github.com/google/go-containerregistry v0.21.7
 	github.com/jcchavezs/mergefs v0.1.1
 	github.com/lestrrat-go/jwx/v3 v3.1.1
-	github.com/open-policy-agent/opa v1.18.0
+	github.com/open-policy-agent/opa v1.18.2
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/stretchr/testify v1.11.1
 	go.uber.org/mock v0.6.0
