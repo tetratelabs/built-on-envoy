@@ -228,12 +228,12 @@ func (c *cedarHttpFilter) buildContext(headers shared.HeaderMap) cedarlib.Record
 		sourceAddr, _ = c.handle.GetAttributeString(shared.AttributeIDSourceAddress)
 		destAddr, _   = c.handle.GetAttributeString(shared.AttributeIDDestinationAddress)
 		// Extract connection/TLS attributes for mTLS-aware policies.
-		uriSanPeer, _   = c.handle.GetAttributeString(shared.AttributeIDConnectionUriSanPeerCertificate)
-		dnsSanPeer, _   = c.handle.GetAttributeString(shared.AttributeIDConnectionDnsSanPeerCertificate)
+		uriSanPeer, _   = c.handle.GetAttributeString(shared.AttributeIDConnectionURISanPeerCertificate)
+		dnsSanPeer, _   = c.handle.GetAttributeString(shared.AttributeIDConnectionDNSSanPeerCertificate)
 		subjectPeer, _  = c.handle.GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate)
-		tlsVersion, _   = c.handle.GetAttributeString(shared.AttributeIDConnectionTlsVersion)
+		tlsVersion, _   = c.handle.GetAttributeString(shared.AttributeIDConnectionTLSVersion)
 		sha256Digest, _ = c.handle.GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest)
-		mtls, _         = c.handle.GetAttributeBool(shared.AttributeIDConnectionMtls)
+		mtls, _         = c.handle.GetAttributeBool(shared.AttributeIDConnectionMTLS)
 	)
 
 	// Build parsed_path as a Cedar Set of Strings.

@@ -159,7 +159,6 @@ jobs:
       matrix:
         envoy_version:
           - dev
-          - 1.38.0
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6

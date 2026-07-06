@@ -2275,4 +2275,46 @@ Token exchange endpoint URL. Must contain a host and path (e.g. "https://idp.exa
 | **Type** | `string` |
 | **Required** | Yes |
 
-[↑ Top](#) | [↑ Token Exchange Configuration](#token-exchange) {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */} {/* range . */}
+[↑ Top](#) | [↑ Token Exchange Configuration](#token-exchange) {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */}
+
+
+
+
+<a id="web-terminal"></a>
+## Web Terminal Configuration
+
+Configuration for the web-terminal network filter. Bridges a WebSocket to a PTY running the configured command. A browser terminal is remote code execution by design; restrict access to the listener.
+
+### args
+
+Arguments passed to the command.
+
+| | |
+|---|---|
+| **Type** | `[]string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Web Terminal Configuration](#web-terminal) {/* if .SubProperties */}
+
+### command
+
+Executable to run inside the PTY (e.g. "/bin/bash").
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+| **Min length** | 1 |
+
+[↑ Top](#) | [↑ Web Terminal Configuration](#web-terminal) {/* if .SubProperties */}
+
+### serve_frontend
+
+Answer plain GET requests on the same listener with the bundled browser client (WebSocket requests still open a terminal). Set false to disable.
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Web Terminal Configuration](#web-terminal) {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */} {/* range . */}

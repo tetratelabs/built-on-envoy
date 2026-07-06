@@ -253,12 +253,12 @@ func (o *opaHttpFilter) buildInput(headers shared.HeaderMap, parsedBody any) map
 		sourceAddr, _ = o.handle.GetAttributeString(shared.AttributeIDSourceAddress)
 		destAddr, _   = o.handle.GetAttributeString(shared.AttributeIDDestinationAddress)
 		// Extract connection/TLS attributes for mTLS-aware policies.
-		uriSanPeer, _   = o.handle.GetAttributeString(shared.AttributeIDConnectionUriSanPeerCertificate)
-		dnsSanPeer, _   = o.handle.GetAttributeString(shared.AttributeIDConnectionDnsSanPeerCertificate)
+		uriSanPeer, _   = o.handle.GetAttributeString(shared.AttributeIDConnectionURISanPeerCertificate)
+		dnsSanPeer, _   = o.handle.GetAttributeString(shared.AttributeIDConnectionDNSSanPeerCertificate)
 		subjectPeer, _  = o.handle.GetAttributeString(shared.AttributeIDConnectionSubjectPeerCertificate)
-		tlsVersion, _   = o.handle.GetAttributeString(shared.AttributeIDConnectionTlsVersion)
+		tlsVersion, _   = o.handle.GetAttributeString(shared.AttributeIDConnectionTLSVersion)
 		sha256Digest, _ = o.handle.GetAttributeString(shared.AttributeIDConnectionSha256PeerCertificateDigest)
-		mtls, _         = o.handle.GetAttributeBool(shared.AttributeIDConnectionMtls)
+		mtls, _         = o.handle.GetAttributeBool(shared.AttributeIDConnectionMTLS)
 	)
 
 	result := map[string]any{

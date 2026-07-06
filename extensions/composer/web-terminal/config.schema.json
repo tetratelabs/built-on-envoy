@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/web-terminal/config.schema.json",
+  "title": "Web Terminal Configuration",
+  "description": "Configuration for the web-terminal network filter. Bridges a WebSocket to a PTY running the configured command. A browser terminal is remote code execution by design; restrict access to the listener.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "command": {
+      "type": "string",
+      "description": "Executable to run inside the PTY (e.g. \"/bin/bash\").",
+      "minLength": 1,
+      "default": "/bin/bash"
+    },
+    "args": {
+      "type": "array",
+      "description": "Arguments passed to the command.",
+      "items": { "type": "string" }
+    },
+    "serve_frontend": {
+      "type": "boolean",
+      "description": "Answer plain GET requests on the same listener with the bundled browser client (WebSocket requests still open a terminal). Set false to disable.",
+      "default": true
+    }
+  }
+}
