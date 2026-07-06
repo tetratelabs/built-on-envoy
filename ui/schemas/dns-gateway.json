@@ -36,7 +36,7 @@
               },
               "metadata": {
                 "type": "object",
-                "description": "String key-value pairs exposed in Envoy filter state as io.builtonenvoy.dns_gateway.metadata.<key>.",
+                "description": "String key-value pairs exposed in Envoy filter state as io.builtonenvoy.dns_gateway.metadata.\\<key\\>.",
                 "additionalProperties": {
                   "type": "string"
                 },
