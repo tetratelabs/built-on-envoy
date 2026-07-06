@@ -395,19 +395,19 @@
     "configReferencePath": "/docs/reference/extensions#coraza-waf"
   },
   {
-    "name": "dns-gateway",
+    "name": "dns-gateway-lookup",
     "version": "0.1.0",
+    "parent": "dns-gateway",
     "categories": [
       "Network",
       "Security"
     ],
     "author": "Palantir Technologies",
     "featured": true,
-    "description": "Transparent egress routing — intercept DNS and route TCP by domain",
-    "longDescription": "Transparent egress routing for Envoy. Applications make normal DNS lookups and TCP\nconnections — this extension intercepts both so Envoy can control which upstream cluster\nhandles each domain, attach metadata (auth tokens, policy IDs), and enforce routing\npolicy, all without any application changes.\n\n## Use cases\n\n* Route outbound traffic through different upstream proxies based on destination domain\n* Attach per-domain credentials or policy metadata to proxied connections\n* Enforce egress access control by selectively intercepting DNS for specific domains\n\n![img](/extensions/dns-gateway.png)\n\n## How it works\n\nThe extension is a pair of filters that work together. Both are provided by the same\n`dns-gateway` dynamic module; enable each by its filter type (`udp_listener` and `network`).\n\n1. **UDP listener filter** — Intercepts DNS queries for configured domain\n   patterns. For each matched query, allocates a virtual IP from a dedicated CIDR range and\n   responds with an A record. The application receives this virtual IP and connects to it\n   as if it were the real destination. Non-matching queries pass through to upstream resolvers.\n\n2. **Network filter** — When the application opens a TCP connection to a\n   virtual IP, this filter looks up the original domain and its configured metadata from a\n   shared cache and sets them as Envoy\n   [filter state](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/data_sharing_between_filters#primitives).\n   Downstream filters (e.g. `tcp_proxy`, `set_filter_state`) can then use this to select\n   the upstream cluster, set headers, or apply policy.\n\n## Configuration\n\n### UDP listener filter\n\n| Field | Type | Required | Description |\n|-------|------|----------|-------------|\n| `domains` | array | yes | List of domain patterns to intercept |\n| `domains[].domain` | string | yes | Exact (`example.com`) or single-level wildcard (`*.aws.com`) |\n| `domains[].base_ip` | string | yes | Base IPv4 address of the virtual IP CIDR range (e.g. `10.0.0.0`) |\n| `domains[].prefix_len` | integer | yes | CIDR prefix length (1–32). A /24 gives 256 virtual IPs |\n| `domains[].metadata` | object | no | String key-value pairs propagated to filter state |\n| `fail_open` | boolean | no | If `true`, forward queries upstream when a CIDR range is exhausted. Default: `false` (return NODATA) |\n\n### Network filter\n\n| Field | Type | Required | Description |\n|-------|------|----------|-------------|\n| `filter_state_prefix` | string | no | Prefix for filter state keys. Default: `io.builtonenvoy.dns_gateway` |\n\n## Filter State\n\nThe network filter writes the following keys to Envoy\n[filter state](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/data_sharing_between_filters#primitives),\nreadable by downstream filters via `%FILTER_STATE(\u003ckey\u003e:PLAIN)%`:\n\n| Key | Example | Description |\n|-----|---------|-------------|\n| `\u003cprefix\u003e.domain` | `bucket-1.aws.com` | The matched domain from the DNS query |\n| `\u003cprefix\u003e.metadata.\u003ckey\u003e` | `aws_cluster` | Per-domain metadata values from config |\n\nThe default prefix is `io.builtonenvoy.dns_gateway`.\n\n## Prerequisites\n\nRequires iptables/nftables rules to redirect application traffic to Envoy:\n- **DNS**: UDP port 53 redirected to Envoy's DNS listener\n- **TCP**: Outbound connections to virtual IP ranges redirected to Envoy's TCP listener\n",
+    "description": "Resolve virtual IPs back to domain and metadata as filter state",
+    "longDescription": "The network filter half of the [dns-gateway](dns-gateway) extension set. When an application\nopens a TCP connection to a virtual IP previously allocated by the\n[dns-gateway-resolver](dns-gateway-resolver) UDP listener filter, this filter looks up the\noriginal domain and its configured metadata from the shared, process-wide cache and sets them\nas Envoy\n[filter state](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/data_sharing_between_filters#primitives).\n\nDownstream filters (e.g. `tcp_proxy`, `set_filter_state`) can then use this to select the\nupstream cluster, set headers, or apply policy. Both filters ship in the same `dns-gateway`\ndynamic module, so the cache is shared in-process.\n\n\u003e Backward compatibility: this filter is also reachable under the legacy name\n\u003e `dns-gateway` via `--extension dns-gateway --filter-type network`.\n\n## Configuration\n\n| Field | Type | Required | Description |\n|-------|------|----------|-------------|\n| `filter_state_prefix` | string | no | Prefix for filter state keys. Default: `io.builtonenvoy.dns_gateway` |\n\n## Filter State\n\nThis filter writes the following keys to Envoy filter state, readable by downstream filters\nvia `%FILTER_STATE(\u003ckey\u003e:PLAIN)%`:\n\n| Key | Example | Description |\n|-----|---------|-------------|\n| `\u003cprefix\u003e.domain` | `bucket-1.aws.com` | The matched domain from the DNS query |\n| `\u003cprefix\u003e.metadata.\u003ckey\u003e` | `aws_cluster` | Per-domain metadata values from config |\n\nThe default prefix is `io.builtonenvoy.dns_gateway`.\n\n## Prerequisites\n\nRequires iptables/nftables rules to redirect outbound connections to virtual IP ranges to\nEnvoy's TCP listener.\n",
     "type": "rust",
     "filterType": [
-      "udp_listener",
       "network"
     ],
     "tags": [
@@ -424,20 +424,67 @@
     "license": "Apache-2.0",
     "examples": [
       {
-        "title": "Single Wildcard Domain",
-        "description": "Intercept DNS queries for `*.aws.com` and route TCP connections to virtual IPs via the\nshared cache. Both filter types are required: specify the extension twice, once per\nfilter type. The `udp_listener` filter carries the domain config; the `network` filter\nrequires no configuration.\n",
-        "code": "boe run \\\n  --extension dns-gateway --filter-type udp_listener --config '\n    {\n      \"domains\": [\n        {\n          \"domain\": \"*.aws.com\",\n          \"base_ip\": \"10.0.0.0\",\n          \"prefix_len\": 24,\n          \"metadata\": {\n            \"cluster\": \"aws_cluster\"\n          }\n        }\n      ]\n    }' \\\n  --extension dns-gateway --filter-type network\n"
+        "title": "Resolve virtual IPs to filter state",
+        "description": "The `dns-gateway-lookup` network filter requires no configuration. Pair it with the\n`dns-gateway-resolver` UDP listener filter, which allocates the virtual IPs and populates\nthe shared cache this filter reads from.\n",
+        "code": "boe run \\\n  --extension dns-gateway-resolver --config '\n    {\n      \"domains\": [\n        {\n          \"domain\": \"*.aws.com\",\n          \"base_ip\": \"10.0.0.0\",\n          \"prefix_len\": 24,\n          \"metadata\": {\n            \"cluster\": \"aws_cluster\"\n          }\n        }\n      ]\n    }' \\\n  --extension dns-gateway-lookup\n"
       },
       {
-        "title": "Multiple Domains with Routing Metadata",
-        "description": "Route different domain patterns to different upstream clusters using per-domain metadata.\nDownstream filters can read the domain and metadata from Envoy filter state, e.g.\n`%FILTER_STATE(io.builtonenvoy.dns_gateway.domain:PLAIN)%` in a `tcp_proxy` route.\n",
-        "code": "boe run \\\n  --extension dns-gateway --filter-type udp_listener --config '\n    {\n      \"domains\": [\n        {\n          \"domain\": \"*.aws.com\",\n          \"base_ip\": \"10.0.0.0\",\n          \"prefix_len\": 24,\n          \"metadata\": {\n            \"cluster\": \"aws_cluster\",\n            \"token\": \"abc123\"\n          }\n        },\n        {\n          \"domain\": \"example.com\",\n          \"base_ip\": \"10.0.1.0\",\n          \"prefix_len\": 24,\n          \"metadata\": {\n            \"cluster\": \"example_cluster\",\n            \"token\": \"def456\"\n          }\n        }\n      ]\n    }' \\\n  --extension dns-gateway --filter-type network\n"
+        "title": "Custom filter state prefix",
+        "description": "Override the default `io.builtonenvoy.dns_gateway` prefix used for the filter state keys\nwritten by this filter.\n",
+        "code": "boe run \\\n  --extension dns-gateway-resolver --config '\n    {\n      \"domains\": [\n        { \"domain\": \"*.aws.com\", \"base_ip\": \"10.0.0.0\", \"prefix_len\": 24 }\n      ]\n    }' \\\n  --extension dns-gateway-lookup --config '{\"filter_state_prefix\": \"egress.dns\"}'\n"
       }
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "sourcePath": "dns-gateway",
-    "configReferencePath": "/docs/reference/extensions#dns-gateway"
+    "composerVersion": "0.1.0",
+    "sourcePath": "dns-gateway/manifests/dns-gateway-lookup",
+    "configReferencePath": "/docs/reference/extensions#dns-gateway-lookup"
+  },
+  {
+    "name": "dns-gateway-resolver",
+    "version": "0.1.0",
+    "parent": "dns-gateway",
+    "categories": [
+      "Network",
+      "Security"
+    ],
+    "author": "Palantir Technologies",
+    "featured": true,
+    "description": "Intercept DNS queries and allocate virtual IPs per domain",
+    "longDescription": "The UDP listener half of the [dns-gateway](dns-gateway) extension set. It intercepts DNS\nqueries for configured domain patterns, allocates a virtual IP from each domain's dedicated\nCIDR range, and responds with an A record. The application receives this virtual IP and\nconnects to it as if it were the real destination. Non-matching queries pass through to\nupstream resolvers.\n\nEach allocated virtual IP, its domain, and per-domain metadata are written to a process-wide\ncache that the companion [dns-gateway-lookup](dns-gateway-lookup) network filter reads on the\nsubsequent TCP connection. Both filters ship in the same `dns-gateway` dynamic module, so the\ncache is shared in-process.\n\n\u003e Backward compatibility: this filter is also reachable under the legacy name\n\u003e `dns-gateway` via `--extension dns-gateway --filter-type udp_listener`.\n\n## Configuration\n\n| Field | Type | Required | Description |\n|-------|------|----------|-------------|\n| `domains` | array | yes | List of domain patterns to intercept |\n| `domains[].domain` | string | yes | Exact (`example.com`) or single-level wildcard (`*.aws.com`) |\n| `domains[].base_ip` | string | yes | Base IPv4 address of the virtual IP CIDR range (e.g. `10.0.0.0`) |\n| `domains[].prefix_len` | integer | yes | CIDR prefix length (1–32). A /24 gives 256 virtual IPs |\n| `domains[].metadata` | object | no | String key-value pairs propagated to filter state |\n| `fail_open` | boolean | no | If `true`, forward queries upstream when a CIDR range is exhausted. Default: `false` (return NODATA) |\n\n## Prerequisites\n\nRequires iptables/nftables rules to redirect DNS (UDP port 53) to Envoy's DNS listener.\n",
+    "type": "rust",
+    "filterType": [
+      "udp_listener"
+    ],
+    "tags": [
+      "access-control",
+      "dns",
+      "egress",
+      "networking",
+      "routing",
+      "rust",
+      "security",
+      "transparent-proxy",
+      "virtual-ip"
+    ],
+    "license": "Apache-2.0",
+    "examples": [
+      {
+        "title": "Single Wildcard Domain",
+        "description": "Intercept DNS queries for `*.aws.com`, allocating virtual IPs from a dedicated /24 range.\nPair with the `dns-gateway-lookup` network filter so TCP connections to those virtual IPs\nresolve back to the original domain and metadata via the shared cache.\n",
+        "code": "boe run \\\n  --extension dns-gateway-resolver --config '\n    {\n      \"domains\": [\n        {\n          \"domain\": \"*.aws.com\",\n          \"base_ip\": \"10.0.0.0\",\n          \"prefix_len\": 24,\n          \"metadata\": {\n            \"cluster\": \"aws_cluster\"\n          }\n        }\n      ]\n    }' \\\n  --extension dns-gateway-lookup\n"
+      },
+      {
+        "title": "Multiple Domains with Routing Metadata",
+        "description": "Route different domain patterns to different upstream clusters using per-domain metadata.\nDownstream filters can read the domain and metadata from Envoy filter state (written by\n`dns-gateway-lookup`), e.g. `%FILTER_STATE(io.builtonenvoy.dns_gateway.domain:PLAIN)%` in a\n`tcp_proxy` route.\n",
+        "code": "boe run \\\n  --extension dns-gateway-resolver --config '\n    {\n      \"domains\": [\n        {\n          \"domain\": \"*.aws.com\",\n          \"base_ip\": \"10.0.0.0\",\n          \"prefix_len\": 24,\n          \"metadata\": {\n            \"cluster\": \"aws_cluster\",\n            \"token\": \"abc123\"\n          }\n        },\n        {\n          \"domain\": \"example.com\",\n          \"base_ip\": \"10.0.1.0\",\n          \"prefix_len\": 24,\n          \"metadata\": {\n            \"cluster\": \"example_cluster\",\n            \"token\": \"def456\"\n          }\n        }\n      ]\n    }' \\\n  --extension dns-gateway-lookup\n"
+      }
+    ],
+    "minEnvoyVersion": "1.38.0",
+    "maxEnvoyVersion": "1.39.0",
+    "composerVersion": "0.1.0",
+    "sourcePath": "dns-gateway/manifests/dns-gateway-resolver",
+    "configReferencePath": "/docs/reference/extensions#dns-gateway-resolver"
   },
   {
     "name": "example-ext-proc",

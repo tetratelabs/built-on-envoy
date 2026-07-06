@@ -1,0 +1,99 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: dns-gateway-lookup
+parent: dns-gateway
+categories:
+  - Network
+  - Security
+author: Palantir Technologies
+featured: true
+description: Resolve virtual IPs back to domain and metadata as filter state
+longDescription: |
+  The network filter half of the [dns-gateway](dns-gateway) extension set. When an application
+  opens a TCP connection to a virtual IP previously allocated by the
+  [dns-gateway-resolver](dns-gateway-resolver) UDP listener filter, this filter looks up the
+  original domain and its configured metadata from the shared, process-wide cache and sets them
+  as Envoy
+  [filter state](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/data_sharing_between_filters#primitives).
+
+  Downstream filters (e.g. `tcp_proxy`, `set_filter_state`) can then use this to select the
+  upstream cluster, set headers, or apply policy. Both filters ship in the same `dns-gateway`
+  dynamic module, so the cache is shared in-process.
+
+  > Backward compatibility: this filter is also reachable under the legacy name
+  > `dns-gateway` via `--extension dns-gateway --filter-type network`.
+
+  ## Configuration
+
+  | Field | Type | Required | Description |
+  |-------|------|----------|-------------|
+  | `filter_state_prefix` | string | no | Prefix for filter state keys. Default: `io.builtonenvoy.dns_gateway` |
+
+  ## Filter State
+
+  This filter writes the following keys to Envoy filter state, readable by downstream filters
+  via `%FILTER_STATE(<key>:PLAIN)%`:
+
+  | Key | Example | Description |
+  |-----|---------|-------------|
+  | `<prefix>.domain` | `bucket-1.aws.com` | The matched domain from the DNS query |
+  | `<prefix>.metadata.<key>` | `aws_cluster` | Per-domain metadata values from config |
+
+  The default prefix is `io.builtonenvoy.dns_gateway`.
+
+  ## Prerequisites
+
+  Requires iptables/nftables rules to redirect outbound connections to virtual IP ranges to
+  Envoy's TCP listener.
+tags:
+  - access-control
+  - dns
+  - egress
+  - networking
+  - routing
+  - rust
+  - security
+  - transparent-proxy
+  - virtual-ip
+license: Apache-2.0
+type: rust
+filterType:
+  - network
+examples:
+  - title: Resolve virtual IPs to filter state
+    description: |
+      The `dns-gateway-lookup` network filter requires no configuration. Pair it with the
+      `dns-gateway-resolver` UDP listener filter, which allocates the virtual IPs and populates
+      the shared cache this filter reads from.
+    code: |
+      boe run \
+        --extension dns-gateway-resolver --config '
+          {
+            "domains": [
+              {
+                "domain": "*.aws.com",
+                "base_ip": "10.0.0.0",
+                "prefix_len": 24,
+                "metadata": {
+                  "cluster": "aws_cluster"
+                }
+              }
+            ]
+          }' \
+        --extension dns-gateway-lookup
+  - title: Custom filter state prefix
+    description: |
+      Override the default `io.builtonenvoy.dns_gateway` prefix used for the filter state keys
+      written by this filter.
+    code: |
+      boe run \
+        --extension dns-gateway-resolver --config '
+          {
+            "domains": [
+              { "domain": "*.aws.com", "base_ip": "10.0.0.0", "prefix_len": 24 }
+            ]
+          }' \
+        --extension dns-gateway-lookup --config '{"filter_state_prefix": "egress.dns"}'

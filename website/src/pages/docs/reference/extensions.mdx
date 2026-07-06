@@ -693,35 +693,31 @@ WAF inspection mode. Defaults to "REQUEST_ONLY" if not set. "RESPONSE_ONLY" is d
 
 
 
-<a id="dns-gateway"></a>
-## DNS Gateway Configuration
+<a id="dns-gateway-lookup"></a>
+## DNS Gateway Lookup Configuration
 
-Configuration for the dns-gateway extension. Pass with --filter-type udp_listener for the dns_gateway filter, or --filter-type network for the cache_lookup filter. {/* range .Properties */}
+Configuration for the dns-gateway-lookup network filter, the virtual-IP resolution half of the dns-gateway extension set.
 
+### filter_state_prefix
 
-
-<a id="dns-gateway-CacheLookupConfig"></a>
-### Custom type: CacheLookupConfig
-
-
-
-#### filter_state_prefix
-
-Prefix for filter state keys written by the cache_lookup filter. Downstream filters read domain and metadata under this prefix. Default: "io.builtonenvoy.dns_gateway".
+Prefix for filter state keys written by the dns-gateway-lookup filter. Downstream filters read domain and metadata under this prefix. Default: "io.builtonenvoy.dns_gateway".
 
 | | |
 |---|---|
 | **Type** | `string` |
 | **Required** | No |
 
-[↑ Top](#) | [↑ DNS Gateway Configuration](#dns-gateway) {/* range .Properties */}
-
-<a id="dns-gateway-DnsGatewayConfig"></a>
-### Custom type: DnsGatewayConfig
+[↑ Top](#) | [↑ DNS Gateway Lookup Configuration](#dns-gateway-lookup) {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */}
 
 
 
-#### domains
+
+<a id="dns-gateway-resolver"></a>
+## DNS Gateway Resolver Configuration
+
+Configuration for the dns-gateway-resolver UDP listener filter, the DNS-interception half of the dns-gateway extension set.
+
+### domains
 
 Domain matchers, each with its own CIDR range for virtual IP allocation.
 
@@ -731,9 +727,65 @@ Domain matchers, each with its own CIDR range for virtual IP allocation.
 | **Required** | Yes |
 | **Min items** | 1 |
 
-[↑ Top](#) | [↑ DNS Gateway Configuration](#dns-gateway)
+[↑ Top](#) | [↑ DNS Gateway Resolver Configuration](#dns-gateway-resolver)
 
-#### fail_open
+
+
+#### domains.base_ip
+
+Base IPv4 address for virtual IP allocation (e.g. "10.0.0.0").
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Pattern** | `^(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)$` |
+
+[↑ Top](#) | [↑ DNS Gateway Resolver Configuration](#dns-gateway-resolver)
+
+
+
+#### domains.domain
+
+Exact domain ("example.com") or single-level wildcard pattern ("*.example.com").
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Min length** | 1 |
+
+[↑ Top](#) | [↑ DNS Gateway Resolver Configuration](#dns-gateway-resolver)
+
+
+
+#### domains.metadata
+
+String key-value pairs exposed in Envoy filter state as io.builtonenvoy.dns_gateway.metadata.<key>.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ DNS Gateway Resolver Configuration](#dns-gateway-resolver)
+
+
+
+#### domains.prefix_len
+
+CIDR prefix length (1-32). A /24 gives 256 virtual IPs.
+
+| | |
+|---|---|
+| **Type** | `integer` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ DNS Gateway Resolver Configuration](#dns-gateway-resolver)
+
+   {/* range .SubProperties */} {/* if .SubProperties */}
+
+### fail_open
 
 If true, forward queries to upstream resolvers when a CIDR range is exhausted. Default: false (return NODATA, preventing matched domains from leaking to upstream resolvers).
 
@@ -742,7 +794,7 @@ If true, forward queries to upstream resolvers when a CIDR range is exhausted. D
 | **Type** | `boolean` |
 | **Required** | No |
 
-[↑ Top](#) | [↑ DNS Gateway Configuration](#dns-gateway) {/* range .Properties */} {/* range .CustomTypes */} {/* if .CustomTypes */}
+[↑ Top](#) | [↑ DNS Gateway Resolver Configuration](#dns-gateway-resolver) {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */}
 
 
 

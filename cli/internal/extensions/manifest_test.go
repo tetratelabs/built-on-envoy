@@ -394,11 +394,10 @@ func TestValidateParentManifest(t *testing.T) {
 		wantErr bool
 	}{
 		{"parent_valid.yaml", false},
-		// NOTE(general-bundle): resolveVersions now lets non-Go children inherit from a bundle
-		// parent (see TestResolveVersionsForBundleChildren), but manifest.schema.json still
-		// requires a child's `type` to be `go`, so a Rust child currently fails schema
-		// validation. Flip to `false` once the schema allows non-Go bundle children.
-		{"parent_rust_valid.yaml", true},
+		// A Rust child of an extension set is valid: manifest.schema.json permits a bundle
+		// child's `type` to be `go` or `rust` (see TestResolveVersionsForBundleChildren).
+		{"parent_rust_valid.yaml", false},
+		// A type outside {go, rust} (here wasm) is still rejected for a bundle child.
 		{"parent_invalid_type.yaml", true},
 		{"parent_missing.yaml", true},
 		{"parent_with_version.yaml", true},
