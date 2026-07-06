@@ -25,4 +25,5 @@ import (
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/saml/embedded"              // SAML SP plugin.
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/token-exchange/embedded"    // OAuth2 Token Exchange plugin.
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/waf/embedded"               // WAF plugin.
+	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/web-terminal/embedded"      // Web Terminal plugin.
 )

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/composer/web-terminal/config.schema.json",
+  "title": "Web Terminal Configuration",
+  "description": "Configuration for the web-terminal extension. Streams a PTY to the browser over SSE and takes input via POST. A browser terminal is remote code execution by design: set a token unless the listener is otherwise protected.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "command": {
+      "type": "string",
+      "description": "Executable to run inside the PTY (e.g. \"/bin/bash\").",
+      "minLength": 1,
+      "default": "/bin/bash"
+    },
+    "args": {
+      "type": "array",
+      "description": "Arguments passed to the command.",
+      "items": { "type": "string" }
+    },
+    "writable": {
+      "type": "boolean",
+      "description": "Whether client keystrokes are written to the PTY. Set to false for a read-only terminal.",
+      "default": true
+    },
+    "serve_frontend": {
+      "type": "boolean",
+      "description": "Whether to serve the bundled xterm.js client at \"/\". Disabled by default; the /stream, /input and /resize endpoints are the primary interface. Set to true to serve the bundled client.",
+      "default": false
+    }
+  }
+}

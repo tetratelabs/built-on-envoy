@@ -1,0 +1,70 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: web-terminal
+parent: composer
+categories:
+  - Misc
+author: Anton Kanugalawattage
+description: Host an interactive terminal inside Envoy, streamed over SSE.
+longDescription: |
+  Hosts an interactive shell (default `/bin/bash`) inside Envoy and exposes it to
+  the browser without any backend server. The PTY runs in the Envoy process; its
+  output is streamed to the client over a never-closing HTTP response as
+  Server-Sent Events, and input and resize events come back as short POST
+  requests correlated by a session id. Because it runs as a composer HTTP filter,
+  no upstream cluster or extra port is required — Envoy hosts the session directly.
+
+  ## Protocol
+
+  The transport is plain HTTP and client-agnostic — any client can implement it:
+
+  - `GET /stream?sid=<id>&cols=<n>&rows=<n>`
+    A `text/event-stream` where each `data:` event is a base64-encoded chunk of
+    PTY output. Opening the stream spawns the PTY for `sid`; closing it (client
+    disconnect) tears the PTY down. A final `event: exit` is sent on shell exit.
+  - `POST /input?sid=<id>`
+    The request body is written to the PTY.
+  - `POST /resize?sid=<id>&cols=<n>&rows=<n>`
+    Resizes the PTY.
+
+  ## Frontend
+
+  A small `xterm.js` client is bundled but is not served by default — the
+  endpoints above are the primary interface, so bring your own client (e.g. an
+  application's own terminal view). Set `serve_frontend: true` to serve the
+  bundled client at `/`.
+
+  ## Security
+
+  A browser terminal is remote code execution by design, and this extension has
+  no built-in authentication — restrict access to the listener (network policy or
+  an auth filter earlier in the chain) before exposing it.
+type: go
+tags:
+  - go
+  - http
+  - terminal
+  - pty
+  - sse
+license: Apache-2.0
+examples:
+  - title: API only (default), bring your own client
+    description: |
+      Drive the /stream, /input and /resize endpoints from your own client. The
+      bundled frontend is not served.
+    code: |
+      boe run --extension web-terminal --config '{
+        "command": "/bin/bash"
+      }'
+  - title: Serve the bundled xterm.js client
+    description: |
+      Enable the bundled frontend, then open it in the browser at
+      http://localhost:10000/
+    code: |
+      boe run --extension web-terminal --config '{
+        "command": "/bin/bash",
+        "serve_frontend": true
+      }'

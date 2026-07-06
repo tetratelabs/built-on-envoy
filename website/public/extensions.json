@@ -1129,5 +1129,45 @@
     "composerVersion": "0.10.0-dev",
     "sourcePath": "composer/token-exchange",
     "configReferencePath": "/docs/reference/extensions#token-exchange"
+  },
+  {
+    "name": "web-terminal",
+    "version": "0.10.0-dev",
+    "parent": "composer",
+    "categories": [
+      "Misc"
+    ],
+    "author": "Anton Kanugalawattage",
+    "description": "Host an interactive terminal inside Envoy, streamed over SSE.",
+    "longDescription": "Hosts an interactive shell (default `/bin/bash`) inside Envoy and exposes it to\nthe browser without any backend server. The PTY runs in the Envoy process; its\noutput is streamed to the client over a never-closing HTTP response as\nServer-Sent Events, and input and resize events come back as short POST\nrequests correlated by a session id. Because it runs as a composer HTTP filter,\nno upstream cluster or extra port is required — Envoy hosts the session directly.\n\n## Protocol\n\nThe transport is plain HTTP and client-agnostic — any client can implement it:\n\n- `GET /stream?sid=\u003cid\u003e\u0026cols=\u003cn\u003e\u0026rows=\u003cn\u003e`\n  A `text/event-stream` where each `data:` event is a base64-encoded chunk of\n  PTY output. Opening the stream spawns the PTY for `sid`; closing it (client\n  disconnect) tears the PTY down. A final `event: exit` is sent on shell exit.\n- `POST /input?sid=\u003cid\u003e`\n  The request body is written to the PTY.\n- `POST /resize?sid=\u003cid\u003e\u0026cols=\u003cn\u003e\u0026rows=\u003cn\u003e`\n  Resizes the PTY.\n\n## Frontend\n\nA small `xterm.js` client is bundled but is not served by default — the\nendpoints above are the primary interface, so bring your own client (e.g. an\napplication's own terminal view). Set `serve_frontend: true` to serve the\nbundled client at `/`.\n\n## Security\n\nA browser terminal is remote code execution by design, and this extension has\nno built-in authentication — restrict access to the listener (network policy or\nan auth filter earlier in the chain) before exposing it.\n",
+    "type": "go",
+    "filterType": [
+      "http"
+    ],
+    "tags": [
+      "go",
+      "http",
+      "terminal",
+      "pty",
+      "sse"
+    ],
+    "license": "Apache-2.0",
+    "examples": [
+      {
+        "title": "API only (default), bring your own client",
+        "description": "Drive the /stream, /input and /resize endpoints from your own client. The\nbundled frontend is not served.\n",
+        "code": "boe run --extension web-terminal --config '{\n  \"command\": \"/bin/bash\"\n}'\n"
+      },
+      {
+        "title": "Serve the bundled xterm.js client",
+        "description": "Enable the bundled frontend, then open it in the browser at\nhttp://localhost:10000/\n",
+        "code": "boe run --extension web-terminal --config '{\n  \"command\": \"/bin/bash\",\n  \"serve_frontend\": true\n}'\n"
+      }
+    ],
+    "minEnvoyVersion": "1.38.0",
+    "maxEnvoyVersion": "1.39.0",
+    "composerVersion": "0.10.0-dev",
+    "sourcePath": "composer/web-terminal",
+    "configReferencePath": "/docs/reference/extensions#web-terminal"
   }
 ]

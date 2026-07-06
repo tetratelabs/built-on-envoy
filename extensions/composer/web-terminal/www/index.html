@@ -1,0 +1,72 @@
+<!--
+  Copyright Built On Envoy
+  SPDX-License-Identifier: Apache-2.0
+  The full text of the Apache license is available in the LICENSE file at
+  the root of the repo.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>web-terminal</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
+  <style>
+    html, body { margin: 0; height: 100%; background: #000; }
+    #terminal { height: 100%; width: 100%; }
+  </style>
+</head>
+<body>
+  <div id="terminal"></div>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+  <script>
+    (function () {
+      // Output is streamed from the Envoy filter as base64-encoded SSE events;
+      // input and resize are sent as short POSTs correlated by a session id.
+      var sid = Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+      var term = new Terminal({ cursorBlink: true, fontFamily: 'monospace', fontSize: 14 });
+      var fit = new FitAddon.FitAddon();
+      term.loadAddon(fit);
+      term.open(document.getElementById('terminal'));
+      fit.fit();
+
+      function qs(extra) {
+        var p = new URLSearchParams({ sid: sid });
+        for (var k in (extra || {})) p.set(k, extra[k]);
+        return p.toString();
+      }
+
+      var es = new EventSource('stream?' + qs({ cols: term.cols, rows: term.rows }));
+      es.onmessage = function (e) {
+        if (!e.data) return;
+        var bin = atob(e.data);
+        var bytes = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        term.write(bytes);
+      };
+      es.addEventListener('exit', function () {
+        term.write('\r\n\x1b[31m[process exited]\x1b[0m\r\n');
+        es.close();
+      });
+      es.onerror = function () {
+        // Our sessions are per-connection; don't let EventSource silently
+        // reconnect and spawn a second shell. Surface it and stop.
+        term.write('\r\n\x1b[31m[connection closed]\x1b[0m\r\n');
+        es.close();
+      };
+
+      term.onData(function (d) {
+        fetch('input?' + qs(), { method: 'POST', body: d });
+      });
+      term.onResize(function (size) {
+        fetch('resize?' + qs({ cols: size.cols, rows: size.rows }), { method: 'POST' });
+      });
+
+      new ResizeObserver(function () { fit.fit(); }).observe(document.getElementById('terminal'));
+      term.focus();
+    })();
+  </script>
+</body>
+</html>

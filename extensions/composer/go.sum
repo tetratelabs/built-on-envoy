@@ -20,6 +20,8 @@ github.com/corazawaf/coraza/v3 v3.7.0 h1:LIQqu1r+l6e/U/gyiZeykWaNNBY1TzRLz+aaI+Q
 github.com/corazawaf/coraza/v3 v3.7.0/go.mod h1:dOSt5evqC7EstouEv6ghhui01+oVUwp9X1vybWwqTlo=
 github.com/corazawaf/libinjection-go v0.3.2 h1:9rrKt0lpg4WvUXt+lwS06GywfqRXXsa/7JcOw5cQLwI=
 github.com/corazawaf/libinjection-go v0.3.2/go.mod h1:Ik/+w3UmTWH9yn366RgS9D95K3y7Atb5m/H/gXzzPCk=
+github.com/creack/pty v1.1.24 h1:bJrF4RRfyJnbTJqzRLHzcGaZK1NeM5kTC9jGgovnR1s=
+github.com/creack/pty v1.1.24/go.mod h1:08sCNb52WyoAwi2QDyzUCTgcvVFhUzewun7wtTfvcwE=
 github.com/crewjam/saml v0.5.1 h1:g+mfp0CrLuLRZCK793PgJcZeg5dS/0CDwoeAX2zcwNI=
 github.com/crewjam/saml v0.5.1/go.mod h1:r0fDkmFe5URDgPrmtH0IYokva6fac3AUdstiPhyEolQ=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
