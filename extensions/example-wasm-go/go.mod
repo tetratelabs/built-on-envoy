@@ -1,6 +1,6 @@
 module github.com/tetratelabs/built-on-envoy/extensions/example-wasm-go
 
-go 1.26.4
+go 1.26.5
 
 require (
 	github.com/proxy-wasm/proxy-wasm-go-sdk v0.0.0-20260105142703-44c7d5847745

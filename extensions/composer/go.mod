@@ -5,7 +5,7 @@
 
 module github.com/tetratelabs/built-on-envoy/extensions/composer
 
-go 1.26.4
+go 1.26.5
 
 require (
 	github.com/beevik/etree v1.6.0
