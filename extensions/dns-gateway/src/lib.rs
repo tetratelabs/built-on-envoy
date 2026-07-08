@@ -31,9 +31,9 @@ fn new_network_filter_config_fn<EC: EnvoyNetworkFilterConfig, ENF: EnvoyNetworkF
     match filter_name {
         // "dns-gateway" is the legacy combined name kept for backward compatibility;
         // "lookup" is the split network-filter extension (referenced as "dns-gateway/lookup").
-        "lookup" | "dns-gateway" => Some(Box::new(
-            cache_lookup::CacheLookupFilterConfig::new(filter_config),
-        )),
+        "lookup" | "dns-gateway" => Some(Box::new(cache_lookup::CacheLookupFilterConfig::new(
+            filter_config,
+        ))),
         _ => panic!("Unknown network filter name: {filter_name}"),
     }
 }
