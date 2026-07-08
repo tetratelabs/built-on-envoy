@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/dns-gateway/manifests/lookup/config.schema.json",
+  "title": "DNS Gateway Lookup Configuration",
+  "description": "Configuration for the dns-gateway lookup network filter, the virtual-IP resolution half of the dns-gateway extension set.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "filter_state_prefix": {
+      "type": "string",
+      "description": "Prefix for filter state keys written by the dns-gateway lookup filter. Downstream filters read domain and metadata under this prefix. Default: \"io.builtonenvoy.dns_gateway\".",
+      "default": "io.builtonenvoy.dns_gateway"
+    }
+  }
+}

@@ -3,7 +3,7 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-name: dns-gateway-resolver
+name: resolver
 parent: dns-gateway
 categories:
   - Network
@@ -19,7 +19,7 @@ longDescription: |
   upstream resolvers.
 
   Each allocated virtual IP, its domain, and per-domain metadata are written to a process-wide
-  cache that the companion [dns-gateway-lookup](dns-gateway-lookup) network filter reads on the
+  cache that the companion [lookup](lookup) network filter reads on the
   subsequent TCP connection. Both filters ship in the same `dns-gateway` dynamic module, so the
   cache is shared in-process.
 
@@ -58,11 +58,11 @@ examples:
   - title: Single Wildcard Domain
     description: |
       Intercept DNS queries for `*.aws.com`, allocating virtual IPs from a dedicated /24 range.
-      Pair with the `dns-gateway-lookup` network filter so TCP connections to those virtual IPs
+      Pair with the `lookup` network filter so TCP connections to those virtual IPs
       resolve back to the original domain and metadata via the shared cache.
     code: |
       boe run \
-        --extension dns-gateway-resolver --config '
+        --extension dns-gateway/resolver --config '
           {
             "domains": [
               {
@@ -75,16 +75,16 @@ examples:
               }
             ]
           }' \
-        --extension dns-gateway-lookup
+        --extension dns-gateway/lookup
   - title: Multiple Domains with Routing Metadata
     description: |
       Route different domain patterns to different upstream clusters using per-domain metadata.
       Downstream filters can read the domain and metadata from Envoy filter state (written by
-      `dns-gateway-lookup`), e.g. `%FILTER_STATE(io.builtonenvoy.dns_gateway.domain:PLAIN)%` in a
+      `lookup`), e.g. `%FILTER_STATE(io.builtonenvoy.dns_gateway.domain:PLAIN)%` in a
       `tcp_proxy` route.
     code: |
       boe run \
-        --extension dns-gateway-resolver --config '
+        --extension dns-gateway/resolver --config '
           {
             "domains": [
               {
@@ -107,4 +107,4 @@ examples:
               }
             ]
           }' \
-        --extension dns-gateway-lookup
+        --extension dns-gateway/lookup

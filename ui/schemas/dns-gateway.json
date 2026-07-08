@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/dns-gateway/config.schema.json",
   "title": "DNS Gateway Configuration",
-  "description": "Configuration for the legacy combined dns-gateway extension. Pass with --filter-type udp_listener for the resolver filter (see dns-gateway-resolver), or --filter-type network for the lookup filter (see dns-gateway-lookup).",
+  "description": "Configuration for the legacy combined dns-gateway extension. Pass with --filter-type udp_listener for the resolver filter (see dns-gateway/resolver), or --filter-type network for the lookup filter (see dns-gateway/lookup).",
   "$defs": {
     "DnsGatewayConfig": {
       "type": "object",

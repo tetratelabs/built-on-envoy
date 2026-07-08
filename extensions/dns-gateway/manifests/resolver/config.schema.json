@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/dns-gateway/manifests/dns-gateway-resolver/config.schema.json",
+  "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/dns-gateway/manifests/resolver/config.schema.json",
   "title": "DNS Gateway Resolver Configuration",
-  "description": "Configuration for the dns-gateway-resolver UDP listener filter, the DNS-interception half of the dns-gateway extension set.",
+  "description": "Configuration for the dns-gateway resolver UDP listener filter, the DNS-interception half of the dns-gateway extension set.",
   "type": "object",
   "required": ["domains"],
   "additionalProperties": false,

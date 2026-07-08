@@ -3,7 +3,7 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-name: dns-gateway-lookup
+name: lookup
 parent: dns-gateway
 categories:
   - Network
@@ -14,7 +14,7 @@ description: Resolve virtual IPs back to domain and metadata as filter state
 longDescription: |
   The network filter half of the [dns-gateway](dns-gateway) extension set. When an application
   opens a TCP connection to a virtual IP previously allocated by the
-  [dns-gateway-resolver](dns-gateway-resolver) UDP listener filter, this filter looks up the
+  [resolver](resolver) UDP listener filter, this filter looks up the
   original domain and its configured metadata from the shared, process-wide cache and sets them
   as Envoy
   [filter state](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/data_sharing_between_filters#primitives).
@@ -65,12 +65,12 @@ filterType:
 examples:
   - title: Resolve virtual IPs to filter state
     description: |
-      The `dns-gateway-lookup` network filter requires no configuration. Pair it with the
-      `dns-gateway-resolver` UDP listener filter, which allocates the virtual IPs and populates
+      The `lookup` network filter requires no configuration. Pair it with the
+      `resolver` UDP listener filter, which allocates the virtual IPs and populates
       the shared cache this filter reads from.
     code: |
       boe run \
-        --extension dns-gateway-resolver --config '
+        --extension dns-gateway/resolver --config '
           {
             "domains": [
               {
@@ -83,17 +83,17 @@ examples:
               }
             ]
           }' \
-        --extension dns-gateway-lookup
+        --extension dns-gateway/lookup
   - title: Custom filter state prefix
     description: |
       Override the default `io.builtonenvoy.dns_gateway` prefix used for the filter state keys
       written by this filter.
     code: |
       boe run \
-        --extension dns-gateway-resolver --config '
+        --extension dns-gateway/resolver --config '
           {
             "domains": [
               { "domain": "*.aws.com", "base_ip": "10.0.0.0", "prefix_len": 24 }
             ]
           }' \
-        --extension dns-gateway-lookup --config '{"filter_state_prefix": "egress.dns"}'
+        --extension dns-gateway/lookup --config '{"filter_state_prefix": "egress.dns"}'

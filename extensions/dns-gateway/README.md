@@ -11,8 +11,8 @@ child extensions under [`manifests/`](manifests) expose its two filters independ
 
 | Extension | Filter type | Role |
 | --------- | ----------- | ---- |
-| [`dns-gateway-resolver`](manifests/dns-gateway-resolver) | `udp_listener` | Intercept DNS queries, allocate virtual IPs |
-| [`dns-gateway-lookup`](manifests/dns-gateway-lookup) | `network` | Resolve virtual IPs back to domain + metadata as filter state |
+| [`resolver`](manifests/resolver) | `udp_listener` | Intercept DNS queries, allocate virtual IPs |
+| [`lookup`](manifests/lookup) | `network` | Resolve virtual IPs back to domain + metadata as filter state |
 
 Both filters are compiled into the same `libdns_gateway.so` and share a process-wide virtual-IP
 cache, so they must run in the same Envoy instance.
@@ -38,16 +38,16 @@ Requires iptables/nftables rules to redirect application traffic to Envoy:
 ## How it works
 
 Both filters are provided by the same `dns-gateway` dynamic module; enable each via its own
-extension (`dns-gateway-resolver` for the `udp_listener` filter, `dns-gateway-lookup` for the
-`network` filter).
+extension (`resolver` for the `udp_listener` filter, `lookup` for the
+`network` filter), referenced as `dns-gateway/resolver` and `dns-gateway/lookup`.
 
-1. **`dns-gateway-resolver` (UDP listener filter)** — Intercepts DNS queries. If the queried domain matches
+1. **`resolver` (UDP listener filter)** — Intercepts DNS queries. If the queried domain matches
    a configured pattern, allocates a virtual IP from that domain's dedicated CIDR range and responds
    with an A record. Each domain pattern gets its own IP range, so `*.aws.com` and `*.google.com`
    allocate from separate subnets. Caches the mapping from virtual IP to domain and metadata.
    Non-matching queries pass through.
 
-2. **`dns-gateway-lookup` (Network filter)** — On new TCP connections, looks up the destination virtual IP
+2. **`lookup` (Network filter)** — On new TCP connections, looks up the destination virtual IP
    in the shared cache and sets the resolved domain and metadata as Envoy
    [filter state](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/data_sharing_between_filters#primitives)
    for use in routing.
@@ -56,13 +56,13 @@ extension (`dns-gateway-resolver` for the `udp_listener` filter, `dns-gateway-lo
  Application
      |  DNS query: "bucket-1.aws.com"
      v
- dns-gateway-resolver (UDP listener filter)
+ resolver (UDP listener filter)
      |  matches "*.aws.com", allocates 10.0.0.0 from *.aws.com's range, responds with A record
      v
  Application
      |  TCP connect to 10.0.0.0:443
      v
- dns-gateway-lookup (network filter)
+ lookup (network filter)
      |  resolves 10.0.0.0 -> domain="bucket-1.aws.com", metadata.cluster="aws"
      v
  tcp_proxy
@@ -73,9 +73,9 @@ extension (`dns-gateway-resolver` for the `udp_listener` filter, `dns-gateway-lo
 
 ## Filter state
 
-The `dns-gateway-lookup` network filter sets Envoy filter state keys readable via `%FILTER_STATE(<key>:PLAIN)%`.
+The `lookup` network filter sets Envoy filter state keys readable via `%FILTER_STATE(<key>:PLAIN)%`.
 The default prefix is `io.builtonenvoy.dns_gateway` and is configurable via `filter_state_prefix`.
-See the [extension page](https://builtonenvoy.io/extensions/dns-gateway-lookup) for the full key reference.
+See the [extension page](https://builtonenvoy.io/extensions/lookup) for the full key reference.
 
 ## Domain matching
 
@@ -84,7 +84,7 @@ See the [extension page](https://builtonenvoy.io/extensions/dns-gateway-lookup) 
 
 ## Configuration
 
-### `dns-gateway-resolver` (UDP listener filter)
+### `resolver` (UDP listener filter)
 
 | Field                   | Type    | Description                                                        |
 | ----------------------- | ------- | ------------------------------------------------------------------ |
@@ -95,7 +95,7 @@ See the [extension page](https://builtonenvoy.io/extensions/dns-gateway-lookup) 
 | `domains[].metadata`    | object  | String key-value pairs exposed via filter state                    |
 | `fail_open`             | boolean | If `true`, forward queries upstream when a CIDR range is exhausted. Default: `false` (return NODATA) |
 
-### `dns-gateway-lookup` (network filter)
+### `lookup` (network filter)
 
 | Field                  | Type   | Description                                                                          |
 | ---------------------- | ------ | ------------------------------------------------------------------------------------ |
