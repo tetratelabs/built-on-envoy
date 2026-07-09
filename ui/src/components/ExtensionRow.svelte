@@ -283,6 +283,9 @@
                 {:else}
                     <span class="ext-row-name">{displayLabel}</span>
                 {/if}
+                {#if ext.parent}
+                    <div class="ext-row-bundle">bundle: {ext.parent}</div>
+                {/if}
                 <div class="ext-row-desc">{ext.description}</div>
             </div>
 

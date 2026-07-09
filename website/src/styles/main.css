@@ -589,6 +589,14 @@ header nav a:focus {
 	font-family: 'Monaco', 'Menlo', monospace;
 }
 
+.extension-parent {
+	display: block;
+	font-size: 12px;
+	color: var(--text-light);
+	font-family: 'Monaco', 'Menlo', monospace;
+	margin-top: 2px;
+}
+
 .extension-badges {
 	display: flex;
 	gap: 4px;

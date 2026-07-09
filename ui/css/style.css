@@ -1036,6 +1036,16 @@ a.ext-row-name:hover {
     text-underline-offset: 2px;
 }
 
+.ext-row-bundle {
+    font-size: 11px;
+    color: var(--text-light);
+    font-family: var(--font-mono);
+    margin-top: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .ext-row-desc {
     font-size: 12px;
     color: var(--text-muted);
