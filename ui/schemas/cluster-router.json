@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/cluster-router/config.schema.json",
-  "title": "cluster-router configuration",
+  "title": "Cluster Router Configuration",
   "type": "object",
   "additionalProperties": false,
   "required": ["envoy_id", "advertise_listen"],
