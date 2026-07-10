@@ -358,7 +358,7 @@
       },
       "then": {
         "properties": {
-          "type": { "const": "go" },
+          "type": { "enum": ["go", "rust"] },
           "version": false,
           "composerVersion": false
         }
