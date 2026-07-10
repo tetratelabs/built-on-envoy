@@ -246,8 +246,11 @@ func loadSchema(schemaPath string) (*JSONSchema, error) {
 func generateJSONSchemaReference(schemas map[string]*JSONSchema, outputPath string) error {
 	var data []TemplateData
 
+	// sort by title, as this is how they're shown in the reference docs
 	sortedKeys := slices.Collect(maps.Keys(schemas))
-	sort.Strings(sortedKeys)
+	sort.Slice(sortedKeys, func(i, j int) bool {
+		return schemas[sortedKeys[i]].Title < schemas[sortedKeys[j]].Title
+	})
 
 	for _, name := range sortedKeys {
 		data = append(data, convertSchema(name, name, schemas[name]))

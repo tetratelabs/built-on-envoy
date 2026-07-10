@@ -496,7 +496,7 @@ Filter metadata namespace for decoded fields. Defaults to "io.builtonenvoy.opena
 
 
 <a id="cluster-router"></a>
-## cluster-router configuration
+## Cluster Router Configuration
 
 
 
@@ -510,7 +510,7 @@ host:port to serve /advertisements on for peer cluster-router processes.
 | **Required** | Yes |
 | **Min length** | 1 |
 
-[↑ Top](#) | [↑ cluster-router configuration](#cluster-router) {/* if .SubProperties */}
+[↑ Top](#) | [↑ Cluster Router Configuration](#cluster-router) {/* if .SubProperties */}
 
 ### envoy_id
 
@@ -522,7 +522,7 @@ Stable identifier for this Envoy in the federation. Appears in AS-PATH.
 | **Required** | Yes |
 | **Min length** | 1 |
 
-[↑ Top](#) | [↑ cluster-router configuration](#cluster-router) {/* if .SubProperties */}
+[↑ Top](#) | [↑ Cluster Router Configuration](#cluster-router) {/* if .SubProperties */}
 
 ### metadata_namespace
 
@@ -533,7 +533,7 @@ Filter metadata namespace the plugin writes routing decisions (next_hop_cluster,
 | **Type** | `string` |
 | **Required** | No |
 
-[↑ Top](#) | [↑ cluster-router configuration](#cluster-router) {/* if .SubProperties */}
+[↑ Top](#) | [↑ Cluster Router Configuration](#cluster-router) {/* if .SubProperties */}
 
 ### next_hop_header
 
@@ -544,7 +544,7 @@ Header name written by the filter for `cluster_header` routes.
 | **Type** | `string` |
 | **Required** | No |
 
-[↑ Top](#) | [↑ cluster-router configuration](#cluster-router) {/* if .SubProperties */}
+[↑ Top](#) | [↑ Cluster Router Configuration](#cluster-router) {/* if .SubProperties */}
 
 ### peers
 
@@ -555,7 +555,7 @@ Outbound peers this Envoy pulls advertisements from and routes traffic to.
 | **Type** | `[]object` |
 | **Required** | No |
 
-[↑ Top](#) | [↑ cluster-router configuration](#cluster-router)
+[↑ Top](#) | [↑ Cluster Router Configuration](#cluster-router)
 
 
 
@@ -568,7 +568,7 @@ Outbound peers this Envoy pulls advertisements from and routes traffic to.
 | **Type** | `string` |
 | **Required** | Yes |
 
-[↑ Top](#) | [↑ cluster-router configuration](#cluster-router)
+[↑ Top](#) | [↑ Cluster Router Configuration](#cluster-router)
 
 
 
@@ -582,7 +582,7 @@ Outbound peers this Envoy pulls advertisements from and routes traffic to.
 | **Required** | Yes |
 | **Min length** | 1 |
 
-[↑ Top](#) | [↑ cluster-router configuration](#cluster-router)
+[↑ Top](#) | [↑ Cluster Router Configuration](#cluster-router)
 
 
 
@@ -596,7 +596,7 @@ Name of the local Envoy cluster that routes data-plane traffic to this peer.
 | **Required** | Yes |
 | **Min length** | 1 |
 
-[↑ Top](#) | [↑ cluster-router configuration](#cluster-router)
+[↑ Top](#) | [↑ Cluster Router Configuration](#cluster-router)
 
    {/* range .SubProperties */} {/* if .SubProperties */}
 
@@ -609,7 +609,7 @@ How often to pull peer advertisements (Go duration). Must be >= 100ms.
 | **Type** | `string` |
 | **Required** | No |
 
-[↑ Top](#) | [↑ cluster-router configuration](#cluster-router) {/* if .SubProperties */}
+[↑ Top](#) | [↑ Cluster Router Configuration](#cluster-router) {/* if .SubProperties */}
 
 ### stale_after
 
@@ -620,7 +620,7 @@ Drop routes from a peer whose last successful sync is older than this (Go durati
 | **Type** | `string` |
 | **Required** | No |
 
-[↑ Top](#) | [↑ cluster-router configuration](#cluster-router) {/* if .SubProperties */}
+[↑ Top](#) | [↑ Cluster Router Configuration](#cluster-router) {/* if .SubProperties */}
 
 ### target_cluster_header
 
@@ -631,7 +631,7 @@ Request header name when target_cluster_source is `header`.
 | **Type** | `string` |
 | **Required** | No |
 
-[↑ Top](#) | [↑ cluster-router configuration](#cluster-router) {/* if .SubProperties */}
+[↑ Top](#) | [↑ Cluster Router Configuration](#cluster-router) {/* if .SubProperties */}
 
 ### target_cluster_source
 
@@ -643,7 +643,7 @@ Where to read the target cluster name from on each request. The `metadata` sourc
 | **Required** | No |
 | **Allowed values** | `header` |
 
-[↑ Top](#) | [↑ cluster-router configuration](#cluster-router) {/* if .SubProperties */}
+[↑ Top](#) | [↑ Cluster Router Configuration](#cluster-router) {/* if .SubProperties */}
 
 ### terminals
 
@@ -655,7 +655,7 @@ Local cluster names this Envoy fronts as terminal destinations and advertises to
 | **Required** | No |
 | **Item min length** | 1 |
 
-[↑ Top](#) | [↑ cluster-router configuration](#cluster-router) {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */}
+[↑ Top](#) | [↑ Cluster Router Configuration](#cluster-router) {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */}
 
 
 
@@ -693,21 +693,108 @@ WAF inspection mode. Defaults to "REQUEST_ONLY" if not set. "RESPONSE_ONLY" is d
 
 
 
-<a id="example-wasm-go"></a>
-## example-wasm-go Configuration
+<a id="lookup"></a>
+## DNS Gateway Lookup Configuration
 
-Configuration for the example-wasm-go extension.
+Configuration for the dns-gateway lookup network filter, the virtual-IP resolution half of the dns-gateway extension set.
 
-### header_value
+### filter_state_prefix
 
-Custom value for the header to add. Defaults to "example" if not set.
+Prefix for filter state keys written by the dns-gateway lookup filter. Downstream filters read domain and metadata under this prefix. Default: "io.builtonenvoy.dns_gateway".
 
 | | |
 |---|---|
 | **Type** | `string` |
 | **Required** | No |
 
-[↑ Top](#) | [↑ example-wasm-go Configuration](#example-wasm-go) {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */}
+[↑ Top](#) | [↑ DNS Gateway Lookup Configuration](#lookup) {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */}
+
+
+
+
+<a id="resolver"></a>
+## DNS Gateway Resolver Configuration
+
+Configuration for the dns-gateway resolver UDP listener filter, the DNS-interception half of the dns-gateway extension set.
+
+### domains
+
+Domain matchers, each with its own CIDR range for virtual IP allocation.
+
+| | |
+|---|---|
+| **Type** | `[]object` |
+| **Required** | Yes |
+| **Min items** | 1 |
+
+[↑ Top](#) | [↑ DNS Gateway Resolver Configuration](#resolver)
+
+
+
+#### domains.base_ip
+
+Base IPv4 address for virtual IP allocation (e.g. "10.0.0.0").
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Pattern** | `^(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)$` |
+
+[↑ Top](#) | [↑ DNS Gateway Resolver Configuration](#resolver)
+
+
+
+#### domains.domain
+
+Exact domain ("example.com") or single-level wildcard pattern ("*.example.com").
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Min length** | 1 |
+
+[↑ Top](#) | [↑ DNS Gateway Resolver Configuration](#resolver)
+
+
+
+#### domains.metadata
+
+String key-value pairs exposed in Envoy filter state as io.builtonenvoy.dns_gateway.metadata.\<key\>.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ DNS Gateway Resolver Configuration](#resolver)
+
+
+
+#### domains.prefix_len
+
+CIDR prefix length (1-32). A /24 gives 256 virtual IPs.
+
+| | |
+|---|---|
+| **Type** | `integer` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ DNS Gateway Resolver Configuration](#resolver)
+
+   {/* range .SubProperties */} {/* if .SubProperties */}
+
+### fail_open
+
+If true, forward queries to upstream resolvers when a CIDR range is exhausted. Default: false (return NODATA, preventing matched domains from leaking to upstream resolvers).
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ DNS Gateway Resolver Configuration](#resolver) {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */}
 
 
 
@@ -1131,25 +1218,6 @@ Match strings ending with this value.
 | **Required** | No |
 
 [↑ Top](#) | [↑ LLM Proxy Configuration](#llm-proxy) {/* range .Properties */} {/* range .CustomTypes */} {/* if .CustomTypes */}
-
-
-
-
-<a id="lookup"></a>
-## DNS Gateway Lookup Configuration
-
-Configuration for the dns-gateway lookup network filter, the virtual-IP resolution half of the dns-gateway extension set.
-
-### filter_state_prefix
-
-Prefix for filter state keys written by the dns-gateway lookup filter. Downstream filters read domain and metadata under this prefix. Default: "io.builtonenvoy.dns_gateway".
-
-| | |
-|---|---|
-| **Type** | `string` |
-| **Required** | No |
-
-[↑ Top](#) | [↑ DNS Gateway Lookup Configuration](#lookup) {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */}
 
 
 
@@ -1789,93 +1857,6 @@ Static value used as-is.
 
 
 
-<a id="resolver"></a>
-## DNS Gateway Resolver Configuration
-
-Configuration for the dns-gateway resolver UDP listener filter, the DNS-interception half of the dns-gateway extension set.
-
-### domains
-
-Domain matchers, each with its own CIDR range for virtual IP allocation.
-
-| | |
-|---|---|
-| **Type** | `[]object` |
-| **Required** | Yes |
-| **Min items** | 1 |
-
-[↑ Top](#) | [↑ DNS Gateway Resolver Configuration](#resolver)
-
-
-
-#### domains.base_ip
-
-Base IPv4 address for virtual IP allocation (e.g. "10.0.0.0").
-
-| | |
-|---|---|
-| **Type** | `string` |
-| **Required** | Yes |
-| **Pattern** | `^(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)$` |
-
-[↑ Top](#) | [↑ DNS Gateway Resolver Configuration](#resolver)
-
-
-
-#### domains.domain
-
-Exact domain ("example.com") or single-level wildcard pattern ("*.example.com").
-
-| | |
-|---|---|
-| **Type** | `string` |
-| **Required** | Yes |
-| **Min length** | 1 |
-
-[↑ Top](#) | [↑ DNS Gateway Resolver Configuration](#resolver)
-
-
-
-#### domains.metadata
-
-String key-value pairs exposed in Envoy filter state as io.builtonenvoy.dns_gateway.metadata.\<key\>.
-
-| | |
-|---|---|
-| **Type** | `object` |
-| **Required** | No |
-
-[↑ Top](#) | [↑ DNS Gateway Resolver Configuration](#resolver)
-
-
-
-#### domains.prefix_len
-
-CIDR prefix length (1-32). A /24 gives 256 virtual IPs.
-
-| | |
-|---|---|
-| **Type** | `integer` |
-| **Required** | Yes |
-
-[↑ Top](#) | [↑ DNS Gateway Resolver Configuration](#resolver)
-
-   {/* range .SubProperties */} {/* if .SubProperties */}
-
-### fail_open
-
-If true, forward queries to upstream resolvers when a CIDR range is exhausted. Default: false (return NODATA, preventing matched domains from leaking to upstream resolvers).
-
-| | |
-|---|---|
-| **Type** | `boolean` |
-| **Required** | No |
-
-[↑ Top](#) | [↑ DNS Gateway Resolver Configuration](#resolver) {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */}
-
-
-
-
 <a id="saml"></a>
 ## SAML Configuration
 
@@ -2327,4 +2308,23 @@ Token exchange endpoint URL. Must contain a host and path (e.g. "https://idp.exa
 | **Type** | `string` |
 | **Required** | Yes |
 
-[↑ Top](#) | [↑ Token Exchange Configuration](#token-exchange) {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */} {/* range . */}
+[↑ Top](#) | [↑ Token Exchange Configuration](#token-exchange) {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */}
+
+
+
+
+<a id="example-wasm-go"></a>
+## example-wasm-go Configuration
+
+Configuration for the example-wasm-go extension.
+
+### header_value
+
+Custom value for the header to add. Defaults to "example" if not set.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ example-wasm-go Configuration](#example-wasm-go) {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */} {/* range . */}
