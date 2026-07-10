@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/dns-gateway/config.schema.json",
   "title": "DNS Gateway Configuration",
-  "description": "Configuration for the dns-gateway extension. Pass with --filter-type udp_listener for the dns_gateway filter, or --filter-type network for the cache_lookup filter.",
+  "description": "Configuration for the legacy combined dns-gateway extension. Pass with --filter-type udp_listener for the resolver filter (see dns-gateway/resolver), or --filter-type network for the lookup filter (see dns-gateway/lookup).",
   "$defs": {
     "DnsGatewayConfig": {
       "type": "object",
@@ -36,7 +36,7 @@
               },
               "metadata": {
                 "type": "object",
-                "description": "String key-value pairs exposed in Envoy filter state as io.builtonenvoy.dns_gateway.metadata.<key>.",
+                "description": "String key-value pairs exposed in Envoy filter state as io.builtonenvoy.dns_gateway.metadata.\\<key\\>.",
                 "additionalProperties": {
                   "type": "string"
                 },
@@ -58,7 +58,7 @@
       "properties": {
         "filter_state_prefix": {
           "type": "string",
-          "description": "Prefix for filter state keys written by the cache_lookup filter. Downstream filters read domain and metadata under this prefix. Default: \"io.builtonenvoy.dns_gateway\".",
+          "description": "Prefix for filter state keys written by the lookup filter. Downstream filters read domain and metadata under this prefix. Default: \"io.builtonenvoy.dns_gateway\".",
           "default": "io.builtonenvoy.dns_gateway"
         }
       }

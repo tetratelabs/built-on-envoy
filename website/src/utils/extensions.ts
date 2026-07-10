@@ -19,6 +19,7 @@ export interface Extension {
 	longDescription: string;
 	tags: string[];
 	license: string;
+	parent?: string;
 	featured?: boolean;
 	composerVersion?: string;
 	minEnvoyVersion?: string;

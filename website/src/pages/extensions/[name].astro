@@ -89,6 +89,12 @@ function formatTypeName(type: string): string {
 									<span class="meta-label">Version</span>
 									<span class="meta-value">{extension.version}</span>
 								</div>
+								{extension.parent && (
+									<div class="meta-item">
+										<span class="meta-label">Bundle</span>
+										<span class="meta-value">{extension.parent}</span>
+									</div>
+								)}
 								{(extension.minEnvoyVersion || extension.maxEnvoyVersion) && (
 									<div class="meta-item">
 										<span class="meta-label">Envoy Version</span>
