@@ -4,7 +4,7 @@ go 1.26.5
 
 require (
 	github.com/tetratelabs/built-on-envoy v0.0.0
-	golang.org/x/text v0.38.0
+	golang.org/x/text v0.40.0
 )
 
 require (
