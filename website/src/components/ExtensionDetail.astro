@@ -1,0 +1,183 @@
+---
+import type { Extension } from '../utils/extensions';
+import { marked } from 'marked';
+import { createHighlighter } from 'shiki';
+import '../styles/extension-detail.css';
+
+interface Props {
+	extension: Extension;
+}
+
+const { extension } = Astro.props;
+
+const highlighter = await createHighlighter({
+	themes: ['github-dark'],
+	langs: ['shell', 'bash', 'yaml', 'json', 'javascript', 'typescript', 'go', 'rust', 'plaintext'],
+});
+
+// Custom marked renderer that uses Shiki for code blocks
+const renderer = new marked.Renderer();
+renderer.code = function ({ text, lang }: { text: string; lang?: string }) {
+	const language = lang || 'shell';
+	try {
+		return highlighter.codeToHtml(text, { lang: language, theme: 'github-dark' });
+	} catch {
+		// Fallback for unsupported languages
+		return highlighter.codeToHtml(text, { lang: 'plaintext', theme: 'github-dark' });
+	}
+};
+marked.use({ renderer });
+
+// Helper function to format type names (snake_case to Title Case)
+function formatTypeName(type: string): string {
+	return type
+		.split('_')
+		.map(word => word.charAt(0).toUpperCase() + word.slice(1))
+		.join(' ');
+}
+---
+
+<main>
+	<section class="extension-hero">
+		<div class="container">
+			<nav class="breadcrumb">
+				<a href="/">Home</a>
+				<span class="separator">→</span>
+				<a href="/extensions">Extensions</a>
+				<span class="separator">→</span>
+				<span>{extension.name}</span>
+			</nav>
+
+			<div class="extension-header">
+				<div class="extension-header-left">
+					<h1>{extension.name}</h1>
+					<div class="extension-meta">
+						<div class="meta-item">
+							<span class="meta-label">Code</span>
+							<a href={`${extension.sourceUrl}`} target="_blank" rel="noopener noreferrer" class="meta-github-link" aria-label="View source on GitHub">
+								<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+									<path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+								</svg>
+							</a>
+						</div>
+						<div class="meta-item">
+							<span class="meta-label">Type</span>
+							<span class="meta-value capitalize">{formatTypeName(extension.type)}</span>
+						</div>
+						<div class="meta-item">
+							<span class="meta-label">Version</span>
+							<span class="meta-value">{extension.version}</span>
+						</div>
+						{extension.parent && (
+							<div class="meta-item">
+								<span class="meta-label">Bundle</span>
+								<a href={`/extensions/sets/${extension.parent}`} class="meta-value meta-bundle-link">{extension.parent}</a>
+							</div>
+						)}
+						{(extension.minEnvoyVersion || extension.maxEnvoyVersion) && (
+							<div class="meta-item">
+								<span class="meta-label">Envoy Version</span>
+								<span class="meta-value">
+									{extension.minEnvoyVersion && `>= ${extension.minEnvoyVersion}`}
+									{extension.minEnvoyVersion && extension.maxEnvoyVersion && <br/>}
+									{extension.maxEnvoyVersion && `<= ${extension.maxEnvoyVersion}`}
+									{(extension.minEnvoyVersion || extension.maxEnvoyVersion) && (
+										<a href="https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/dynamic_modules#compatibility" target="_blank" rel="noopener noreferrer" title="Envoy compatibility" style="font-size: 0.75em; vertical-align: super; text-decoration: none;">?</a>
+									)}
+								</span>
+							</div>
+						)}
+						<div class="meta-item">
+							<span class="meta-label">Author</span>
+							<span class="meta-value">{extension.author}</span>
+						</div>
+						<div class="meta-item">
+							<span class="meta-label">License</span>
+							<span class="meta-value">{extension.license}</span>
+						</div>
+					</div>
+				</div>
+				<p class="extension-description">{extension.description}</p>
+			</div>
+		</div>
+	</section>
+
+	<section class="extension-content">
+		<div class="container">
+			<div class="content-grid">
+				<div class="main-content">
+					<section class="content-section">
+						<h2>About</h2>
+						<div class="long-description prose" set:html={marked.parse(extension.longDescription)} />
+					</section>
+
+					{extension.examples && extension.examples.length > 0 && (
+						<section class="content-section">
+							<h2>Usage Examples</h2>
+							{extension.examples.map(example => (
+								<div class="example-block">
+									<h3>{example.title}</h3>
+									<div class="example-description prose" set:html={marked.parse(example.description)} />
+									<div class="code-block-wrapper">
+										<Fragment set:html={highlighter.codeToHtml(example.code.trim(), { lang: 'shell', theme: 'github-dark' })} />
+										<button class="copy-btn" aria-label="Copy code">
+											<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+												<path d="M5.5 2.5h-3v11h7v-3m-4-8h7v7h-7v-7z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+											</svg>
+										</button>
+									</div>
+								</div>
+							))}
+						</section>
+					)}
+				</div>
+
+				<aside class="sidebar">
+					<div class="sidebar-section">
+						<h3>Categories</h3>
+						<div class="categories">
+							{[...extension.categories].sort((a, b) => a.localeCompare(b)).map(category => (
+								<span class={`extension-badge extension-badge--${category.toLowerCase().replace(/\s+/g, '-')}`}>{category}</span>
+							))}
+						</div>
+					</div>
+					<div class="sidebar-section">
+						<h3>Tags</h3>
+						<div class="tags">
+							{[...extension.tags].sort((a, b) => a.localeCompare(b)).map(tag => (
+								<span class="tag">{tag}</span>
+							))}
+						</div>
+					</div>
+					<div class="sidebar-section">
+						<h3>Resources</h3>
+						{extension.configReferencePath && (
+							<a href={extension.configReferencePath} class="sidebar-ref-link">Configuration Reference →</a><br/>
+						)}
+						<a href={extension.sourceUrl} target="_blank" class="sidebar-ref-link">Source Code →</a>
+					</div>
+				</aside>
+			</div>
+		</div>
+	</section>
+</main>
+
+<script>
+	// Prevent FOUC
+	document.body.classList.add('loaded');
+
+	// Copy button functionality
+	document.querySelectorAll('.copy-btn').forEach(btn => {
+		btn.addEventListener('click', async () => {
+			const codeBlock = btn.previousElementSibling;
+			if (codeBlock) {
+				await navigator.clipboard.writeText(codeBlock.textContent || '');
+				const originalHTML = btn.innerHTML;
+				btn.innerHTML = '✓';
+				setTimeout(() => {
+					btn.innerHTML = originalHTML;
+				}, 2000);
+			}
+		});
+	});
+</script>

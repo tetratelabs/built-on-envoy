@@ -117,6 +117,7 @@ gen-docs:  ## Generate documentation
 		-schema=../extensions/manifest.schema.json \
 		-docs-output=../website/src/pages/docs \
 		-extension-index=../website/public/extensions.json \
+		-extension-set-index=../website/public/extension-sets.json \
 		-extensions=../extensions
 
 ##@ Docker

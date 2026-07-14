@@ -561,6 +561,7 @@ header nav a:focus {
 }
 
 .extension-card {
+	position: relative;
 	background: var(--bg);
 	border: 1px solid var(--border-muted);
 	border-radius: 12px;
@@ -595,6 +596,39 @@ header nav a:focus {
 	color: var(--text-light);
 	font-family: 'Monaco', 'Menlo', monospace;
 	margin-top: 2px;
+}
+
+/* The primary card link is stretched to cover the whole card so the entire
+   card remains clickable, while nested links (e.g. the bundle) sit above it. */
+.extension-card-primary-link {
+	color: inherit;
+	text-decoration: none;
+}
+
+.extension-card-primary-link::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	border-radius: 12px;
+	z-index: 1;
+}
+
+.extension-parent-link {
+	position: relative;
+	z-index: 2;
+	color: var(--text-light);
+	text-decoration: none;
+	width: fit-content;
+}
+
+.extension-parent-link:hover {
+	color: var(--primary);
+	text-decoration: underline;
+}
+
+.extension-card:has(.extension-card-primary-link:focus-visible) {
+	box-shadow: var(--focus-ring), 0 8px 24px rgba(124, 58, 237, 0.15), 0 4px 12px rgba(6, 182, 212, 0.1);
+	border-color: var(--primary-light);
 }
 
 .extension-badges {
@@ -679,28 +713,6 @@ header nav a:focus {
 	padding: 3px 8px;
 	border-radius: 4px;
 	font-weight: 500;
-}
-
-.extension-card-link {
-	text-decoration: none;
-	color: inherit;
-	display: block;
-}
-
-.extension-card-link:hover .extension-card {
-	transform: translateY(-4px);
-	box-shadow: 0 8px 24px rgba(124, 58, 237, 0.15), 0 4px 12px rgba(6, 182, 212, 0.1);
-	border-color: var(--primary-light);
-}
-
-.extension-card-link:focus {
-	outline: none;
-	border-radius: 12px;
-}
-
-.extension-card-link:focus .extension-card {
-	box-shadow: var(--focus-ring), 0 8px 24px rgba(124, 58, 237, 0.15), 0 4px 12px rgba(6, 182, 212, 0.1);
-	border-color: var(--primary-light);
 }
 
 .browse-all {

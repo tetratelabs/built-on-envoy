@@ -97,6 +97,15 @@
 	font-weight: 500;
 }
 
+.meta-bundle-link {
+	color: var(--primary);
+	text-decoration: none;
+}
+
+.meta-bundle-link:hover {
+	text-decoration: underline;
+}
+
 .capitalize {
 	text-transform: capitalize;
 }

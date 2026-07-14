@@ -155,6 +155,18 @@ func TestManifestsForCatalog(t *testing.T) {
 	}
 }
 
+func TestExtensionSetsIndex(t *testing.T) {
+	all, err := LoadManifests(internaltesting.ExtensionsFS(t), ".", false)
+	require.NoError(t, err)
+	sets := ExtensionSetsIndex(all)
+	require.NotEmpty(t, sets)
+	for _, m := range sets {
+		require.Truef(t, m.ExtensionSet, "manifest %s should be an extension set", m.Name)
+	}
+	// The catalog and the extension sets partition the loaded manifests.
+	require.Equal(t, len(all), len(ManifestsIndex(all))+len(sets))
+}
+
 func TestSupportsEnvoyVersion(t *testing.T) {
 	tests := []struct {
 		name            string
