@@ -1,0 +1,34 @@
+---
+import { PROJECT_NAME } from '../../../constants';
+import Head from '../../../components/Head.astro';
+import Header from '../../../components/Header.astro';
+import Footer from '../../../components/Footer.astro';
+import ExtensionDetail from '../../../components/ExtensionDetail.astro';
+import { loadExtensionSets } from '../../../utils/extensions';
+import type { Extension } from '../../../utils/extensions';
+
+export async function getStaticPaths() {
+	const sets = loadExtensionSets();
+
+	return sets.map(set => ({
+		params: { name: set.name },
+		props: { set }
+	}));
+}
+
+const { set } = Astro.props as { set: Extension };
+---
+
+<!DOCTYPE html>
+<html lang="en">
+	<Head
+		title={`${set.name} - ${PROJECT_NAME}`}
+		description={set.description}
+		preventFOUC={true}
+	/>
+	<body>
+		<Header />
+		<ExtensionDetail extension={set} />
+		<Footer />
+	</body>
+</html>

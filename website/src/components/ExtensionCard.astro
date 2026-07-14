@@ -15,26 +15,24 @@ const sortedCategories = [...categories].sort((a, b) => a.localeCompare(b));
 const sortedTags = [...tags].sort((a, b) => a.localeCompare(b));
 ---
 
-<a href={href} class="extension-card-link">
-	<div class="extension-card" data-type={type} data-tags={tags.join(',')} data-filter-types={filterTypes.join(',')}>
-		<div class="extension-header">
-			<div class="extension-title">
-				<h3>{name}</h3>
-				{parent && <span class="extension-parent">bundle: {parent}</span>}
-			</div>
-			<div class="extension-badges">
-				{sortedCategories.map(category => (
-					<span class={`extension-badge extension-badge--${category.toLowerCase().replace(/\s+/g, '-')}`}>{category}</span>
-				))}
-			</div>
+<div class="extension-card" data-type={type} data-tags={tags.join(',')} data-filter-types={filterTypes.join(',')}>
+	<div class="extension-header">
+		<div class="extension-title">
+			<h3><a href={href} class="extension-card-primary-link">{name}</a></h3>
+			{parent && <a href={`/extensions/sets/${parent}`} class="extension-parent extension-parent-link">bundle: {parent}</a>}
 		</div>
-		<p>{description}</p>
-		{tags.length > 0 && (
-			<div class="extension-tags">
-				{sortedTags.map(tag => (
-					<span class="extension-tag">{tag}</span>
-				))}
-			</div>
-		)}
+		<div class="extension-badges">
+			{sortedCategories.map(category => (
+				<span class={`extension-badge extension-badge--${category.toLowerCase().replace(/\s+/g, '-')}`}>{category}</span>
+			))}
+		</div>
 	</div>
-</a>
+	<p>{description}</p>
+	{tags.length > 0 && (
+		<div class="extension-tags">
+			{sortedTags.map(tag => (
+				<span class="extension-tag">{tag}</span>
+			))}
+		</div>
+	)}
+</div>

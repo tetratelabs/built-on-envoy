@@ -143,20 +143,22 @@ type TemplateData struct {
 
 func main() {
 	var (
-		schemaPath         string
-		docsOutputPath     string
-		extensionIndexPath string
-		extensionsDir      string
+		schemaPath            string
+		docsOutputPath        string
+		extensionIndexPath    string
+		extensionSetIndexPath string
+		extensionsDir         string
 	)
 
 	flag.StringVar(&schemaPath, "schema", "", "Path to the JSON schema file (required)")
 	flag.StringVar(&docsOutputPath, "docs-output", "", "Output path for the docs (required)")
 	flag.StringVar(&extensionIndexPath, "extension-index", "", "Output path for the extension index file (required)")
+	flag.StringVar(&extensionSetIndexPath, "extension-set-index", "", "Output path for the extension set index file (required)")
 	flag.StringVar(&extensionsDir, "extensions", "", "Path to the extensions directory (required)")
 	flag.Parse()
 
-	if schemaPath == "" || docsOutputPath == "" || extensionIndexPath == "" || extensionsDir == "" {
-		fmt.Fprintln(os.Stderr, "Usage: gen-manifest-reference -schema <path> -docs-output <path> -extension-index <path> -extensions <path>")
+	if schemaPath == "" || docsOutputPath == "" || extensionIndexPath == "" || extensionSetIndexPath == "" || extensionsDir == "" {
+		fmt.Fprintln(os.Stderr, "Usage: gen-manifest-reference -schema <path> -docs-output <path> -extension-index <path> -extension-set-index <path> -extensions <path>")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
@@ -172,7 +174,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	configSchemas, err := generateExtensionIndex(extensionIndexPath, extensionsDir)
+	all, err := extensions.LoadManifests(os.DirFS(extensionsDir), ".", false)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load manifests from %s: %v\n", extensionsDir, err)
+		os.Exit(1)
+	}
+
+	configSchemas, err := generateExtensionIndex(all, extensionIndexPath, extensionsDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to generate extension index: %v\n", err)
 		os.Exit(1)
@@ -183,14 +191,16 @@ func main() {
 			os.Exit(1)
 		}
 	}
+
+	// Extension sets are excluded from the catalog above; they get their own index
+	// so the website can render a documentation page for each one.
+	if err = generateExtensionSetIndex(all, extensionSetIndexPath); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to generate extension set index: %v\n", err)
+		os.Exit(1)
+	}
 }
 
-func generateExtensionIndex(path string, extensionsDir string) (map[string]*JSONSchema, error) {
-	fs := os.DirFS(extensionsDir)
-	all, err := extensions.LoadManifests(fs, ".", false)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load manifests from %s: %w", extensionsDir, err)
-	}
+func generateExtensionIndex(all map[string]*extensions.Manifest, path string, extensionsDir string) (map[string]*JSONSchema, error) {
 	extensionIndex := extensions.ManifestsIndex(all)
 
 	type ManifestWithConfigSchema struct {
@@ -204,8 +214,7 @@ func generateExtensionIndex(path string, extensionsDir string) (map[string]*JSON
 		entry := &ManifestWithConfigSchema{ManifestIndexEntry: ext}
 		entries = append(entries, entry)
 
-		var configSchema *JSONSchema
-		configSchema, err = loadSchema(filepath.Join(extensionsDir, ext.SourcePath, "config.schema.json"))
+		configSchema, err := loadSchema(filepath.Join(extensionsDir, ext.SourcePath, "config.schema.json"))
 		if err == nil {
 			entry.ConfigReferencePath = "/docs/reference/extensions#" + ext.Name
 			schemas[ext.Name] = configSchema
@@ -228,6 +237,23 @@ func generateExtensionIndex(path string, extensionsDir string) (map[string]*JSON
 	}
 	fmt.Printf("Generated: %s\n", path)
 	return schemas, nil
+}
+
+// generateExtensionSetIndex writes the index of extension sets (bundles) to path.
+// Unlike the catalog, extension sets are not listed in the marketplace grid; each
+// entry backs a standalone documentation page linked from its child extensions.
+func generateExtensionSetIndex(all map[string]*extensions.Manifest, path string) error {
+	sets := extensions.ExtensionSetsIndex(all)
+
+	index, err := json.MarshalIndent(sets, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal extension set index: %w", err)
+	}
+	if err := os.WriteFile(path, index, 0o600); err != nil {
+		return fmt.Errorf("failed to write extension set index to %s: %w", path, err)
+	}
+	fmt.Printf("Generated: %s\n", path)
+	return nil
 }
 
 func loadSchema(schemaPath string) (*JSONSchema, error) {

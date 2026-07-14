@@ -389,11 +389,25 @@ func ResolveVersionsWithParent(m *Manifest, parent *Manifest) {
 }
 
 // ManifestsIndex returns a list of manifests that should be included in the catalog.
-// This filters out manifests that are only used as parents for version inheritance.
+// This filters out extension sets, which are only used as parents for version
+// inheritance and get their own documentation pages instead (see ExtensionSetsIndex).
 func ManifestsIndex(all map[string]*Manifest) []*ManifestIndexEntry {
+	return manifestsIndex(all, false)
+}
+
+// ExtensionSetsIndex returns the manifests that define extension sets (bundles).
+// These are excluded from the catalog by ManifestsIndex but are surfaced as their
+// own documentation pages, linked from the "bundle" field of their child extensions.
+func ExtensionSetsIndex(all map[string]*Manifest) []*ManifestIndexEntry {
+	return manifestsIndex(all, true)
+}
+
+// manifestsIndex returns the manifests whose ExtensionSet flag matches wantSet,
+// sorted by name.
+func manifestsIndex(all map[string]*Manifest, wantSet bool) []*ManifestIndexEntry {
 	manifests := make([]*ManifestIndexEntry, 0, len(all))
 	for _, m := range all {
-		if !m.ExtensionSet {
+		if m.ExtensionSet == wantSet {
 			manifests = append(manifests, &ManifestIndexEntry{
 				Manifest:   m,
 				SourcePath: filepath.Dir(m.Path),

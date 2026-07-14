@@ -30,10 +30,10 @@ longDescription: |
   The DNS Gateway is a pair of filters that work together, both provided by the same
   `dns-gateway` dynamic module and sharing a process-wide virtual-IP cache:
 
-  * **[resolver](resolver)** — a UDP listener filter that intercepts DNS
+  * **[resolver](/extensions/resolver)** — a UDP listener filter that intercepts DNS
     queries for configured domain patterns, allocates a virtual IP from a dedicated CIDR range,
     and responds with an A record.
-  * **[lookup](lookup)** — a network filter that, when the application
+  * **[lookup](/extensions/lookup)** — a network filter that, when the application
     opens a TCP connection to a virtual IP, looks up the original domain and its configured
     metadata from the shared cache and exposes them as Envoy filter state.
 
