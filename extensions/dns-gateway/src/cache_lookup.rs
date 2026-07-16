@@ -10,7 +10,7 @@
 
 use envoy_proxy_dynamic_modules_rust_sdk::*;
 use serde::Deserialize;
-use std::net::Ipv4Addr;
+use std::net::IpAddr;
 
 use crate::virtual_ip_cache::get_cache;
 
@@ -87,7 +87,8 @@ impl<ENF: EnvoyNetworkFilter> NetworkFilter<ENF> for CacheLookupFilter {
         let (ip_str, port) = envoy_filter.get_local_address();
         envoy_log_debug!("New connection, local_address={}:{}", ip_str, port);
 
-        let ip: Ipv4Addr = match ip_str.parse() {
+        // Parse as a generic IpAddr so both IPv4 and IPv6 virtual IPs resolve.
+        let ip: IpAddr = match ip_str.parse() {
             Ok(ip) => ip,
             Err(_) => {
                 envoy_log_warn!("Failed to parse destination IP: {}", ip_str);
@@ -158,7 +159,7 @@ mod tests {
             .allocate(
                 "cache-hit-test.example.com".into(),
                 metadata,
-                0x0B0B_0000, // 11.11.0.0
+                "11.11.0.0".parse().unwrap(),
                 24,
             )
             .unwrap();
@@ -199,7 +200,7 @@ mod tests {
             .allocate(
                 "custom-prefix-test.example.com".into(),
                 metadata,
-                0x0C0C_0000, // 12.12.0.0
+                "12.12.0.0".parse().unwrap(),
                 24,
             )
             .unwrap();
@@ -231,12 +232,54 @@ mod tests {
     }
 
     #[test]
+    fn test_on_new_connection_cache_hit_v6() {
+        // A v6 virtual IP must reverse-map to its domain and publish filter state.
+        let mut metadata = HashMap::new();
+        metadata.insert("cluster".to_string(), "v6_cluster".to_string());
+        let ip = get_cache()
+            .allocate(
+                "v6-cache-hit.example.com".into(),
+                metadata,
+                "fd00:cafe::".parse().unwrap(),
+                64,
+            )
+            .unwrap();
+        assert!(ip.is_ipv6(), "expected a v6 virtual IP, got {ip}");
+
+        let config = CacheLookupFilterConfig::new(b"");
+        let mut mock = MockEnvoyNetworkFilter::new();
+        let mut filter = config.new_network_filter(&mut mock);
+
+        let mut mock = MockEnvoyNetworkFilter::new();
+        mock.expect_get_local_address()
+            .returning(move || (ip.to_string(), 8080));
+        mock.expect_set_filter_state_bytes()
+            .withf(|key, value| {
+                key == b"io.builtonenvoy.dns_gateway.domain" && value == b"v6-cache-hit.example.com"
+            })
+            .times(1)
+            .returning(|_, _| true);
+        mock.expect_set_filter_state_bytes()
+            .withf(|key, value| {
+                key == b"io.builtonenvoy.dns_gateway.metadata.cluster" && value == b"v6_cluster"
+            })
+            .times(1)
+            .returning(|_, _| true);
+
+        let status = filter.on_new_connection(&mut mock);
+        assert_eq!(
+            status,
+            abi::envoy_dynamic_module_type_on_network_filter_data_status::Continue
+        );
+    }
+
+    #[test]
     fn test_on_new_connection_publishes_dynamic_metadata() {
         let ip = get_cache()
             .allocate(
                 "dyn-meta-test.example.com".into(),
                 HashMap::new(),
-                0x0D0D_0000, // 13.13.0.0
+                "13.13.0.0".parse().unwrap(),
                 24,
             )
             .unwrap();
@@ -273,7 +316,7 @@ mod tests {
             .allocate(
                 "no-dyn-meta-test.example.com".into(),
                 HashMap::new(),
-                0x0E0E_0000, // 14.14.0.0
+                "14.14.0.0".parse().unwrap(),
                 24,
             )
             .unwrap();

@@ -15,7 +15,7 @@ use envoy_proxy_dynamic_modules_rust_sdk::*;
 use hickory_proto::op::{Message, MessageType, ResponseCode};
 use hickory_proto::rr::{Name, RData, Record, RecordType};
 use hickory_proto::serialize::binary::{BinDecodable, BinDecoder};
-use std::net::Ipv4Addr;
+use std::net::IpAddr;
 use std::sync::Arc;
 
 /// Matches a domain against a pattern.
@@ -76,15 +76,24 @@ impl DnsGatewayFilterConfig {
                 }
             }
 
-            d.base_ip
-                .parse::<Ipv4Addr>()
+            // Accept both IPv4 (A) and IPv6 (AAAA) base addresses. The address family of
+            // base_ip determines which record type the gateway answers for this domain.
+            let base = d
+                .parse_base_ip()
                 .map_err(|e| {
                     envoy_log_error!("Invalid base_ip '{}' for '{}': {e}", d.base_ip, d.domain)
                 })
                 .ok()?;
 
-            if !(1..=32).contains(&d.prefix_len) {
-                envoy_log_error!("Invalid prefix_len {} for '{}'", d.prefix_len, d.domain);
+            // prefix_len upper bound depends on the family: 32 for IPv4, 128 for IPv6.
+            let max = config::DomainMatcher::max_prefix_len(&base);
+            if !(1..=max).contains(&d.prefix_len) {
+                envoy_log_error!(
+                    "Invalid prefix_len {} for '{}' (must be 1..={})",
+                    d.prefix_len,
+                    d.domain,
+                    max
+                );
                 return None;
             }
         }
@@ -133,27 +142,51 @@ impl DnsGatewayFilter {
         // Strip it so our wildcard patterns like "*.aws.com" match correctly.
         let domain = question.name().to_utf8().trim_end_matches('.').to_string();
 
-        let matcher = self
+        // Establish precedence first: the first matcher (in config order) whose pattern matches
+        // this domain "owns" it — exactly as before dual-stack. A non-matching domain passes
+        // through (None) to upstream resolvers.
+        let owner = self
             .config
             .domains
             .iter()
             .find(|m| matches_domain(&m.domain, &domain))?;
 
-        match question.query_type() {
-            RecordType::A => {
-                let base_ip: u32 = matcher.base_ip.parse::<Ipv4Addr>().ok()?.into();
-                match get_cache().allocate(
-                    domain,
-                    matcher.metadata.clone(),
-                    base_ip,
-                    matcher.prefix_len as u8,
-                ) {
-                    Some(ip) => build_dns_response(&query, question.name(), ip).ok(),
-                    None if self.config.fail_open => None,
-                    None => build_nodata_response(&query).ok(),
-                }
-            }
-            _ => build_nodata_response(&query).ok(),
+        // We only mint virtual IPs for A/AAAA. Any other query type on an intercepted domain
+        // returns NODATA (never pass-through, so it can't leak to upstream resolvers).
+        let want_v6 = match question.query_type() {
+            RecordType::A => false,
+            RecordType::AAAA => true,
+            _ => return build_nodata_response(&query).ok(),
+        };
+
+        // Dual-stack pairs families only within the SAME matcher pattern: a domain may be listed
+        // twice with an identical pattern, once with an IPv4 base_ip and once with an IPv6 base_ip,
+        // so A resolves from the v4 range and AAAA from the v6 range. Restricting the family search
+        // to the winning pattern preserves first-match precedence — a later, broader matcher (e.g.
+        // a "*" catch-all) is never selected ahead of an earlier, more specific one just because it
+        // carries the queried family. If the winning pattern has no matcher of the requested
+        // family, return NODATA (fail closed) — never forward, so a client can't obtain a real
+        // address of the other family and bypass the winning matcher's routing/authorization.
+        let matcher = self.config.domains.iter().find(|m| {
+            m.domain == owner.domain
+                && m.parse_base_ip()
+                    .map(|ip| ip.is_ipv6() == want_v6)
+                    .unwrap_or(false)
+        });
+        let Some(matcher) = matcher else {
+            return build_nodata_response(&query).ok();
+        };
+        let base_ip = matcher.parse_base_ip().ok()?;
+
+        match get_cache().allocate(
+            domain,
+            matcher.metadata.clone(),
+            base_ip,
+            matcher.prefix_len as u8,
+        ) {
+            Some(ip) => build_dns_response(&query, question.name(), ip).ok(),
+            None if self.config.fail_open => None,
+            None => build_nodata_response(&query).ok(),
         }
     }
 }
@@ -189,7 +222,7 @@ impl<ELF: EnvoyUdpListenerFilter> UdpListenerFilter<ELF> for DnsGatewayFilter {
 fn build_dns_response(
     query_message: &Message,
     name: &Name,
-    ip: Ipv4Addr,
+    ip: IpAddr,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut response = query_message.clone();
 
@@ -198,7 +231,12 @@ fn build_dns_response(
     response.set_recursion_available(true);
     response.set_authoritative(true);
 
-    let record = Record::from_rdata(name.clone(), 600, RData::A(ip.into()));
+    // Emit an A record for IPv4 virtual IPs and an AAAA record for IPv6 virtual IPs.
+    let rdata = match ip {
+        IpAddr::V4(v4) => RData::A(v4.into()),
+        IpAddr::V6(v6) => RData::AAAA(v6.into()),
+    };
+    let record = Record::from_rdata(name.clone(), 600, rdata);
 
     response.add_answer(record);
 
@@ -371,7 +409,7 @@ mod tests {
         query.set_recursion_desired(true);
 
         let name = Name::from_utf8("test.example.com").unwrap();
-        let ip = Ipv4Addr::new(10, 10, 0, 1);
+        let ip = IpAddr::V4(std::net::Ipv4Addr::new(10, 10, 0, 1));
 
         let result = build_dns_response(&query, &name, ip);
         assert!(result.is_ok());
@@ -387,6 +425,28 @@ mod tests {
         assert_eq!(response.response_code(), ResponseCode::NoError);
         assert!(response.recursion_available());
         assert_eq!(response.answers().len(), 1);
+        assert!(matches!(response.answers()[0].data(), RData::A(_)));
+    }
+
+    #[test]
+    fn test_dns_response_building_v6_emits_aaaa() {
+        let mut query = Message::new();
+        query.set_id(2222);
+        query.set_message_type(MessageType::Query);
+        query.set_recursion_desired(true);
+
+        let name = Name::from_utf8("test.example.com").unwrap();
+        let ip = IpAddr::V6("fd00::1".parse::<std::net::Ipv6Addr>().unwrap());
+
+        let response_bytes = build_dns_response(&query, &name, ip).unwrap();
+        let response = Message::read(&mut BinDecoder::new(&response_bytes)).unwrap();
+
+        assert_eq!(response.message_type(), MessageType::Response);
+        assert_eq!(response.answers().len(), 1);
+        match response.answers()[0].data() {
+            RData::AAAA(a) => assert_eq!(a.0, "fd00::1".parse::<std::net::Ipv6Addr>().unwrap()),
+            other => panic!("expected AAAA, got {:?}", other),
+        }
     }
 
     #[test]
@@ -518,6 +578,208 @@ mod tests {
     }
 
     #[test]
+    fn test_process_dns_query_aaaa_record_matched_v6_matcher() {
+        // An IPv6 base_ip answers AAAA queries with an AAAA record from its range.
+        let filter = DnsGatewayFilter {
+            config: Arc::new(config::DnsGateway {
+                domains: vec![config::DomainMatcher {
+                    domain: "*.v6-data-test.com".to_string(),
+                    base_ip: "fd00:100::".to_string(),
+                    prefix_len: 64,
+                    metadata: HashMap::new(),
+                }],
+                fail_open: false,
+            }),
+        };
+
+        let query = make_dns_query("api.v6-data-test.com", RecordType::AAAA);
+        let response = filter.process_dns_query(&query);
+        assert!(
+            response.is_some(),
+            "expected an AAAA response for matched AAAA query on a v6 matcher"
+        );
+
+        let msg = parse_response(&response.unwrap());
+        assert_eq!(msg.answers().len(), 1);
+        match msg.answers()[0].data() {
+            RData::AAAA(ip) => {
+                assert_eq!(&ip.0.octets()[..6], &[0xfd, 0x00, 0x01, 0x00, 0x00, 0x00])
+            }
+            other => panic!("expected AAAA record in response, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_process_dns_query_a_on_v6_matcher_returns_nodata() {
+        // An IPv6 base_ip answers only AAAA; an A query returns NODATA.
+        let filter = DnsGatewayFilter {
+            config: Arc::new(config::DnsGateway {
+                domains: vec![config::DomainMatcher {
+                    domain: "*.v6-data-test.com".to_string(),
+                    base_ip: "fd00:200::".to_string(),
+                    prefix_len: 64,
+                    metadata: HashMap::new(),
+                }],
+                fail_open: false,
+            }),
+        };
+
+        let query = make_dns_query("api.v6-data-test.com", RecordType::A);
+        let msg = parse_response(&filter.process_dns_query(&query).unwrap());
+        assert_eq!(
+            msg.answers().len(),
+            0,
+            "A query against a v6 matcher must return NODATA"
+        );
+    }
+
+    #[test]
+    fn test_process_dns_query_dual_stack_answers_both_families() {
+        // A domain configured with both an IPv4 and an IPv6 matcher answers A from the v4
+        // range and AAAA from the v6 range (dual-stack).
+        let filter = DnsGatewayFilter {
+            config: Arc::new(config::DnsGateway {
+                domains: vec![
+                    config::DomainMatcher {
+                        domain: "*.dual-test.com".to_string(),
+                        base_ip: "10.140.0.0".to_string(),
+                        prefix_len: 24,
+                        metadata: HashMap::new(),
+                    },
+                    config::DomainMatcher {
+                        domain: "*.dual-test.com".to_string(),
+                        base_ip: "fd00:d00a::".to_string(),
+                        prefix_len: 64,
+                        metadata: HashMap::new(),
+                    },
+                ],
+                fail_open: false,
+            }),
+        };
+
+        let a = parse_response(
+            &filter
+                .process_dns_query(&make_dns_query("api.dual-test.com", RecordType::A))
+                .unwrap(),
+        );
+        assert_eq!(a.answers().len(), 1);
+        match a.answers()[0].data() {
+            RData::A(ip) => assert_eq!(&ip.0.octets()[..3], &[10, 140, 0]),
+            other => panic!("expected A record from the v4 matcher, got {:?}", other),
+        }
+
+        let aaaa = parse_response(
+            &filter
+                .process_dns_query(&make_dns_query("api.dual-test.com", RecordType::AAAA))
+                .unwrap(),
+        );
+        assert_eq!(aaaa.answers().len(), 1);
+        match aaaa.answers()[0].data() {
+            RData::AAAA(ip) => {
+                assert_eq!(&ip.0.octets()[..6], &[0xfd, 0x00, 0xd0, 0x0a, 0x00, 0x00])
+            }
+            other => panic!("expected AAAA record from the v6 matcher, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_process_dns_query_family_selection_preserves_matcher_precedence() {
+        // An earlier, more specific IPv4 matcher must not be bypassed by a later IPv6 catch-all.
+        // Before dual-stack, an AAAA query for the specific domain returned NODATA; it must still
+        // do so (the specific v4 rule owns the domain) rather than answering from the "*" rule.
+        let filter = DnsGatewayFilter {
+            config: Arc::new(config::DnsGateway {
+                domains: vec![
+                    config::DomainMatcher {
+                        domain: "api.aws.com".to_string(),
+                        base_ip: "10.150.0.0".to_string(),
+                        prefix_len: 24,
+                        metadata: HashMap::new(),
+                    },
+                    config::DomainMatcher {
+                        domain: "*".to_string(),
+                        base_ip: "fd00:cafe::".to_string(),
+                        prefix_len: 64,
+                        metadata: HashMap::new(),
+                    },
+                ],
+                fail_open: false,
+            }),
+        };
+
+        // AAAA for the specific domain: the v4 exact rule owns it and has no v6 pair -> NODATA;
+        // must NOT fall through to the later v6 catch-all.
+        let aaaa = parse_response(
+            &filter
+                .process_dns_query(&make_dns_query("api.aws.com", RecordType::AAAA))
+                .unwrap(),
+        );
+        assert_eq!(
+            aaaa.answers().len(),
+            0,
+            "AAAA on a v4-only specific rule must NODATA, not use the later catch-all"
+        );
+
+        // A for the specific domain still answers from its own v4 range.
+        let a = parse_response(
+            &filter
+                .process_dns_query(&make_dns_query("api.aws.com", RecordType::A))
+                .unwrap(),
+        );
+        assert_eq!(a.answers().len(), 1);
+        match a.answers()[0].data() {
+            RData::A(ip) => assert_eq!(&ip.0.octets()[..3], &[10, 150, 0]),
+            other => panic!("expected A from the specific v4 rule, got {:?}", other),
+        }
+
+        // A domain only matched by "*" is served by the catch-all (AAAA), and its A query
+        // NODATAs (the "*" pattern only has a v6 entry).
+        let other_aaaa = parse_response(
+            &filter
+                .process_dns_query(&make_dns_query("other.example.net", RecordType::AAAA))
+                .unwrap(),
+        );
+        assert_eq!(other_aaaa.answers().len(), 1);
+        assert!(matches!(other_aaaa.answers()[0].data(), RData::AAAA(_)));
+
+        let other_a = parse_response(
+            &filter
+                .process_dns_query(&make_dns_query("other.example.net", RecordType::A))
+                .unwrap(),
+        );
+        assert_eq!(
+            other_a.answers().len(),
+            0,
+            "the catch-all pattern only has a v6 entry, so A must NODATA"
+        );
+    }
+
+    #[test]
+    fn test_process_dns_query_single_family_other_family_nodata_not_passthrough() {
+        // A domain with only a v4 matcher must return NODATA (not pass-through) for AAAA, so a
+        // client can't resolve a real v6 address and bypass the gateway.
+        let filter = DnsGatewayFilter {
+            config: Arc::new(config::DnsGateway {
+                domains: vec![config::DomainMatcher {
+                    domain: "*.single-test.com".to_string(),
+                    base_ip: "10.141.0.0".to_string(),
+                    prefix_len: 24,
+                    metadata: HashMap::new(),
+                }],
+                fail_open: false,
+            }),
+        };
+
+        let resp =
+            filter.process_dns_query(&make_dns_query("api.single-test.com", RecordType::AAAA));
+        assert!(
+            resp.is_some(),
+            "intercepted domain must return NODATA for the unconfigured family, not pass through"
+        );
+        assert_eq!(parse_response(&resp.unwrap()).answers().len(), 0);
+    }
+
+    #[test]
     fn test_process_dns_query_non_matched_domain() {
         let filter = DnsGatewayFilter {
             config: Arc::new(config::DnsGateway {
@@ -573,14 +835,14 @@ mod tests {
     fn test_process_dns_query_exhausted_fail_open_false_returns_nodata() {
         // Use a /30 CIDR (4 IPs) to exhaust quickly
         let base_ip = "10.200.0.0";
-        let base_ip_u32: u32 = base_ip.parse::<Ipv4Addr>().unwrap().into();
+        let base_addr: IpAddr = base_ip.parse().unwrap();
 
         for i in 0..4 {
             get_cache()
                 .allocate(
                     format!("exhaust-{}.fail-closed-test.com", i),
                     HashMap::new(),
-                    base_ip_u32,
+                    base_addr,
                     30,
                 )
                 .unwrap_or_else(|| panic!("failed to pre-allocate IP {}", i));
@@ -615,14 +877,14 @@ mod tests {
     fn test_process_dns_query_exhausted_fail_open_true_returns_none() {
         // Use a /30 CIDR (4 IPs) to exhaust quickly
         let base_ip = "10.201.0.0";
-        let base_ip_u32: u32 = base_ip.parse::<Ipv4Addr>().unwrap().into();
+        let base_addr: IpAddr = base_ip.parse().unwrap();
 
         for i in 0..4 {
             get_cache()
                 .allocate(
                     format!("exhaust-{}.fail-open-test.com", i),
                     HashMap::new(),
-                    base_ip_u32,
+                    base_addr,
                     30,
                 )
                 .unwrap_or_else(|| panic!("failed to pre-allocate IP {}", i));
