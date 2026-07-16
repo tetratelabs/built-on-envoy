@@ -1386,12 +1386,12 @@ func Test_SecResponseBodyAccessOff(t *testing.T) {
 			require.Equal(t, tc.expectedStatus, bodyStatus)
 
 			if tc.expectedStatus == shared.BodyStatusContinue {
-				// Ensure the body was not buffered at all when SecResponseBodyAccess is Off or MIME type does not match.
-				respBodyReader, err := wafPlugin.txContext.ResponseBodyReader()
-				require.NoError(t, err)
-				bodyBytes, err := io.ReadAll(respBodyReader)
-				require.NoError(t, err)
-				require.Empty(t, string(bodyBytes), "expected response body to not be buffered when SecResponseBodyAccess is Off or MIME type does not match")
+				// Phase 4 ran with no accessible/processable body, so the WAF has
+				// finished and finalized the transaction (returned to Coraza's pool),
+				// leaving txContext nil. The response body was therefore never buffered
+				// — proven independently by the fact that the "leaked-secret" payload did
+				// not trigger rule 100003 (no SendLocalResponse was expected or called).
+				require.Nil(t, wafPlugin.txContext, "transaction must be finalized once phase 4 completes")
 			}
 			wafPlugin.OnStreamComplete()
 		})

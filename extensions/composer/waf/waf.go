@@ -118,7 +118,8 @@ type wafPlugin struct {
 	metadataNamespace string
 
 	txContext             ctypes.Transaction
-	txStart               time.Time
+	wafElapsed            time.Duration // summed time spent in the waf callbacks (WAF-added latency)
+	txDone                bool          // set once the WAF is done and metrics and audit logging has to be emitted.
 	protocol              string
 	isUpgrade             bool
 	isSSE                 bool
@@ -169,7 +170,6 @@ func (p *wafPlugin) initializeTransaction(headers shared.HeaderMap) {
 	}
 	id := headers.GetOne("x-request-id").ToString()
 	p.txContext = p.config.NewTransactionWithID(id)
-	p.txStart = time.Now()
 	p.isUpgrade = p.checkUpgrade(headers)
 }
 
@@ -186,6 +186,7 @@ func (p *wafPlugin) checkSSE(headers shared.HeaderMap) bool {
 }
 
 func (p *wafPlugin) OnRequestHeaders(headers shared.HeaderMap, endOfStream bool) shared.HeadersStatus {
+	defer p.trackAndFinalizeTx(time.Now())
 	// Save for later use in response processing.
 	host := headers.GetOne(":authority").ToString()
 	p.protocol = p.getRequestProtocol()
@@ -242,6 +243,7 @@ func (p *wafPlugin) OnRequestHeaders(headers shared.HeaderMap, endOfStream bool)
 }
 
 func (p *wafPlugin) OnRequestBody(body shared.BodyBuffer, endOfStream bool) shared.BodyStatus {
+	defer p.trackAndFinalizeTx(time.Now())
 	if p.txContext == nil {
 		p.handle.Log(shared.LogLevelDebug,
 			"Request body phase reached without a previously initialized context. Passing through")
@@ -294,6 +296,7 @@ func (p *wafPlugin) OnRequestBody(body shared.BodyBuffer, endOfStream bool) shar
 }
 
 func (p *wafPlugin) OnRequestTrailers(_ shared.HeaderMap) shared.TrailersStatus {
+	defer p.trackAndFinalizeTx(time.Now())
 	if p.txContext == nil {
 		p.handle.Log(shared.LogLevelDebug,
 			"Request trailers phase reached without a previously initialized context. Passing through")
@@ -313,6 +316,7 @@ func (p *wafPlugin) OnRequestTrailers(_ shared.HeaderMap) shared.TrailersStatus 
 }
 
 func (p *wafPlugin) OnResponseHeaders(headers shared.HeaderMap, endOfStream bool) shared.HeadersStatus {
+	defer p.trackAndFinalizeTx(time.Now())
 	// Nil check is performed because the transaction is created only in OnRequestHeaders.
 	// A nil txContext here means the request/decode path never ran. It happens when Envoy
 	// produces the response without the request traversing this filter (e.g. a downstream
@@ -368,6 +372,7 @@ func (p *wafPlugin) OnResponseHeaders(headers shared.HeaderMap, endOfStream bool
 }
 
 func (p *wafPlugin) OnResponseBody(body shared.BodyBuffer, endOfStream bool) shared.BodyStatus {
+	defer p.trackAndFinalizeTx(time.Now())
 	// txContext is nil when the request phase never ran (see OnResponseHeaders).
 	if p.txContext == nil {
 		p.handle.Log(shared.LogLevelDebug,
@@ -420,6 +425,7 @@ func (p *wafPlugin) OnResponseBody(body shared.BodyBuffer, endOfStream bool) sha
 }
 
 func (p *wafPlugin) OnResponseTrailers(_ shared.HeaderMap) shared.TrailersStatus {
+	defer p.trackAndFinalizeTx(time.Now())
 	// txContext is nil when the request phase never ran (see OnResponseHeaders).
 	if p.txContext == nil {
 		p.handle.Log(shared.LogLevelDebug,
@@ -440,16 +446,53 @@ func (p *wafPlugin) OnResponseTrailers(_ shared.HeaderMap) shared.TrailersStatus
 }
 
 func (p *wafPlugin) OnStreamComplete() {
+	// The transaction is expected to be finalized at the end of the last filter callback.
+	// (on interruption or once the WAF's last phase for the mode has run).
+	// This final call covers any path that skipped it, such as aborted/reset connections.
+	// It is a no-op if the transaction is already done.
 	if p.txContext != nil {
-		if !p.txContext.IsRuleEngineOff() {
-			p.metrics.RecordTx(p.handle, p.txStart)
-		}
-		p.txContext.ProcessLogging()
-		err := p.txContext.Close()
-		if err != nil {
-			p.handle.Log(shared.LogLevelDebug, "Failed to close WAF transaction: %v", err.Error())
-		}
+		p.handle.Log(shared.LogLevelDebug, "OnStreamComplete reached with transaction not finalized. Finalizing now")
+		p.transactionDone()
 	}
+}
+
+// maybeMarkTxDone marks the transaction as done once the WAF has no more phases
+// to run for the configured mode: phase 2 for request-only, phase 4 otherwise.
+// It only sets the flag; the actual finalization runs at the end of the callback
+// via trackAndFinalizeTx so the recorded duration covers the whole
+// callback.
+// It is a no-op until the mode's last phase has run.
+func (p *wafPlugin) maybeMarkTxDone() {
+	if p.responseBodyProcessed || (p.mode == waf.ModeRequestOnly && p.requestBodyProcessed) {
+		p.txDone = true
+	}
+}
+
+// trackAndFinalizeTx is deferred at the top of every filter callback. It accumulates
+// the time spent in each callback. This includes the full overhead introduced by the WAF.
+// Also, if the transaction is marked as done, it runs its finalization.
+func (p *wafPlugin) trackAndFinalizeTx(start time.Time) {
+	p.wafElapsed += time.Since(start)
+	if p.txDone {
+		p.transactionDone()
+	}
+}
+
+// transactionDone finalizes the WAF transaction: it records the duration metrics,
+// triggers audit logging processing (phase 5), and closes the transaction.
+func (p *wafPlugin) transactionDone() {
+	if p.txContext == nil {
+		return
+	}
+	if !p.txContext.IsRuleEngineOff() {
+		p.metrics.RecordTx(p.handle, p.wafElapsed)
+	}
+	p.txContext.ProcessLogging()
+	if err := p.txContext.Close(); err != nil {
+		p.handle.Log(shared.LogLevelDebug, "Failed to close WAF transaction: %v", err.Error())
+	}
+	// Once the tx is closed, we nil it to avoid any further use.
+	p.txContext = nil
 }
 
 func (p *wafPlugin) writeRequestBody(body shared.BodyBuffer) bool {
@@ -484,6 +527,7 @@ func (p *wafPlugin) writeRequestBody(body shared.BodyBuffer) bool {
 			// and ran Process*Body internally with no rule match. Mark the body as processed so
 			// the remaining data streams through without further buffering.
 			p.requestBodyProcessed = true
+			p.maybeMarkTxDone()
 			return true
 		}
 	}
@@ -544,6 +588,10 @@ func (p *wafPlugin) handleRequestBody() bool {
 		p.blockRequest(interruption, ctypes.PhaseRequestBody, "waf_request_body_blocked")
 		return false
 	}
+	// In request-only mode phase 2 is the WAF's last phase, so the transaction is
+	// finished here. In other modes maybeMarkTxDone is a no-op until phase 4 is
+	// executed.
+	p.maybeMarkTxDone()
 	return true
 }
 
@@ -578,6 +626,7 @@ func (p *wafPlugin) writeResponseBody(body shared.BodyBuffer) bool {
 			// and ran Process*Body internally with no rule match. Mark the body as processed so
 			// the remaining data streams through without further buffering.
 			p.responseBodyProcessed = true
+			p.maybeMarkTxDone()
 			return true
 		}
 	}
@@ -598,6 +647,9 @@ func (p *wafPlugin) handleResponseBody() bool {
 		return false
 	}
 
+	// Phase 4 is the WAF's last phase: finish now instead of waiting for the
+	// stream to complete, which for SSE/upgrade responses may be far later.
+	p.maybeMarkTxDone()
 	return true
 }
 
@@ -626,6 +678,9 @@ func (p *wafPlugin) blockRequest(interruption *ctypes.Interruption, phase ctypes
 		nil,
 		reason,
 	)
+
+	// The tx is done once it interrupts.
+	p.txDone = true
 }
 
 // ExtensionName is the name of the extension that will be used in the `run` command to refer to this embedded plugin.
