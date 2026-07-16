@@ -19,6 +19,10 @@ longDescription: |
   connects to it as if it were the real destination. Non-matching queries pass through to
   upstream resolvers.
 
+  Each matcher answers a single address family; to serve a domain dual-stack (both A and AAAA),
+  list it twice, once with an IPv4 `base_ip` and once with an IPv6 `base_ip`. A domain that is
+  intercepted but has no matcher of the queried family returns NODATA (never pass-through).
+
   Each allocated virtual IP, its domain, and per-domain metadata are written to a process-wide
   cache that the companion [lookup](lookup) network filter reads on the
   subsequent TCP connection. Both filters ship in the same `dns-gateway` dynamic module, so the
