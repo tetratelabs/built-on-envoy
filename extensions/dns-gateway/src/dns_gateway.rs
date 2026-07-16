@@ -19,10 +19,17 @@ use std::net::Ipv4Addr;
 use std::sync::Arc;
 
 /// Matches a domain against a pattern.
-/// Supports exact matches and wildcard patterns like "*.aws.com".
-/// Wildcard patterns match exactly one subdomain level, e.g. "*.aws.com"
+/// Supports exact matches, single-level wildcards like "*.aws.com", and a bare "*"
+/// catch-all. A "*.aws.com" wildcard matches exactly one subdomain level, e.g. it
 /// matches "api.aws.com" but not "sub.api.aws.com".
 fn matches_domain(pattern: &str, domain: &str) -> bool {
+    // A bare "*" is a catch-all that matches every queried domain, minting a virtual IP
+    // for each. Use it as a low-priority final matcher when you want to intercept all DNS
+    // and defer routing/authorization to downstream filters (e.g. tcp_proxy route selection
+    // on the filter state, or an ext_authz check) rather than enumerating every domain here.
+    if pattern == "*" {
+        return true;
+    }
     let Some(base) = pattern.strip_prefix("*.") else {
         return domain == pattern;
     };
@@ -52,15 +59,21 @@ impl DnsGatewayFilterConfig {
             .ok()?;
 
         for d in &gateway_config.domains {
-            let name = Name::from_utf8(&d.domain)
-                .map_err(|e| envoy_log_error!("Invalid domain '{}': {e}", d.domain))
-                .ok()?;
-            if name.is_wildcard() && name.num_labels() < 2 {
-                envoy_log_error!(
-                    "Bare wildcard '{}' is not allowed, use '*.example.com' instead",
-                    d.domain
-                );
-                return None;
+            // A bare "*" is an accepted catch-all (it matches every queried domain at runtime
+            // via matches_domain). Skip the DNS-name parse and the bare-wildcard rejection for
+            // it — those reject "*" as an invalid host — but still validate its base_ip and
+            // prefix_len below like any other matcher.
+            if d.domain != "*" {
+                let name = Name::from_utf8(&d.domain)
+                    .map_err(|e| envoy_log_error!("Invalid domain '{}': {e}", d.domain))
+                    .ok()?;
+                if name.is_wildcard() && name.num_labels() < 2 {
+                    envoy_log_error!(
+                        "Bare wildcard '{}' is not allowed, use '*.example.com' or a bare \"*\" catch-all instead",
+                        d.domain
+                    );
+                    return None;
+                }
             }
 
             d.base_ip
@@ -222,6 +235,16 @@ mod tests {
         assert!(!matches_domain("*.aws.com", "xaws.com"));
         assert!(!matches_domain("*.aws.com", "aws.com.evil.com"));
         assert!(!matches_domain("*.aws.com", "api.aws.org"));
+    }
+
+    #[test]
+    fn test_domain_matcher_catchall() {
+        // A bare "*" matches every queried domain, at any label depth.
+        assert!(matches_domain("*", "aws.com"));
+        assert!(matches_domain("*", "api.aws.com"));
+        assert!(matches_domain("*", "deep.sub.api.aws.com"));
+        assert!(matches_domain("*", "example.org"));
+        assert!(matches_domain("*", "localhost"));
     }
 
     #[test]
@@ -390,14 +413,51 @@ mod tests {
     }
 
     #[test]
-    fn test_config_parsing_rejects_bare_wildcard() {
+    fn test_config_parsing_accepts_catchall_wildcard() {
+        // A bare "*" is an accepted catch-all; its base_ip/prefix_len are still validated.
         let config = r#"{
             "domains": [
                 {"domain": "*", "base_ip": "10.0.0.0", "prefix_len": 24, "metadata": {}}
             ]
         }"#;
 
+        assert!(DnsGatewayFilterConfig::new(config.as_bytes()).is_some());
+    }
+
+    #[test]
+    fn test_config_parsing_catchall_still_validates_base_ip() {
+        // The name-parse is skipped for "*", but base_ip is still validated.
+        let config = r#"{
+            "domains": [
+                {"domain": "*", "base_ip": "not-an-ip", "prefix_len": 24, "metadata": {}}
+            ]
+        }"#;
+
         assert!(DnsGatewayFilterConfig::new(config.as_bytes()).is_none());
+    }
+
+    #[test]
+    fn test_process_dns_query_catchall_matches_any_domain() {
+        let filter = DnsGatewayFilter {
+            config: Arc::new(config::DnsGateway {
+                domains: vec![config::DomainMatcher {
+                    domain: "*".to_string(),
+                    base_ip: "10.123.0.0".to_string(),
+                    prefix_len: 24,
+                    metadata: HashMap::new(),
+                }],
+                fail_open: false,
+            }),
+        };
+
+        // An arbitrary domain not enumerated anywhere still resolves via the catch-all.
+        let query = make_dns_query("anything.example.net", RecordType::A);
+        let msg = parse_response(&filter.process_dns_query(&query).unwrap());
+        assert_eq!(msg.answers().len(), 1);
+        match msg.answers()[0].data() {
+            RData::A(ip) => assert_eq!(&ip.0.octets()[..3], &[10, 123, 0]),
+            other => panic!("expected A record from catch-all, got {:?}", other),
+        }
     }
 
     // ── process_dns_query tests ──────────────────────────────────────────────
