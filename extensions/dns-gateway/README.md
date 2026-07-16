@@ -87,7 +87,8 @@ See the [extension page](https://builtonenvoy.io/extensions/lookup) for the full
 
 Each matcher answers a single address family (`A` for an IPv4 `base_ip`, `AAAA` for an IPv6
 `base_ip`); the other query type returns NODATA. To serve a domain **dual-stack** (both `A` and
-`AAAA`), list it twice — once with an IPv4 `base_ip` and once with an IPv6 `base_ip`:
+`AAAA`), list it twice **with the same pattern** — once with an IPv4 `base_ip` and once with an
+IPv6 `base_ip`:
 
 ```json
 "domains": [
@@ -96,10 +97,12 @@ Each matcher answers a single address family (`A` for an IPv4 `base_ip`, `AAAA` 
 ]
 ```
 
-`A` queries then resolve from the IPv4 range and `AAAA` from the IPv6 range. A domain that
-matches some matcher but has none of the queried family still returns NODATA (never
-pass-through), so a client can't resolve a real address of the other family and bypass the
-gateway.
+`A` queries then resolve from the IPv4 range and `AAAA` from the IPv6 range. Families are paired
+only within a single pattern, and matcher precedence is first-match by config order: the first
+matcher whose pattern matches the domain wins, and if that pattern has no entry of the queried
+family the resolver returns NODATA (never pass-through) rather than falling through to a later,
+broader matcher — so a client can't resolve a real address of the other family and bypass the
+winning matcher's routing/authorization.
 
 ## Configuration
 

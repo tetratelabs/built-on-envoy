@@ -20,8 +20,10 @@ longDescription: |
   upstream resolvers.
 
   Each matcher answers a single address family; to serve a domain dual-stack (both A and AAAA),
-  list it twice, once with an IPv4 `base_ip` and once with an IPv6 `base_ip`. A domain that is
-  intercepted but has no matcher of the queried family returns NODATA (never pass-through).
+  list it twice with the same pattern, once with an IPv4 `base_ip` and once with an IPv6 `base_ip`.
+  Matcher precedence is first-match by config order: the first pattern that matches wins, and if it
+  has no entry of the queried family the resolver returns NODATA (never pass-through) rather than
+  falling through to a later, broader matcher.
 
   Each allocated virtual IP, its domain, and per-domain metadata are written to a process-wide
   cache that the companion [lookup](lookup) network filter reads on the

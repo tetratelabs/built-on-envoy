@@ -142,16 +142,14 @@ impl DnsGatewayFilter {
         // Strip it so our wildcard patterns like "*.aws.com" match correctly.
         let domain = question.name().to_utf8().trim_end_matches('.').to_string();
 
-        // A domain is "intercepted" if any matcher's pattern matches it, regardless of family.
-        // Non-intercepted domains pass through (None) to upstream resolvers.
-        if !self
+        // Establish precedence first: the first matcher (in config order) whose pattern matches
+        // this domain "owns" it — exactly as before dual-stack. A non-matching domain passes
+        // through (None) to upstream resolvers.
+        let owner = self
             .config
             .domains
             .iter()
-            .any(|m| matches_domain(&m.domain, &domain))
-        {
-            return None;
-        }
+            .find(|m| matches_domain(&m.domain, &domain))?;
 
         // We only mint virtual IPs for A/AAAA. Any other query type on an intercepted domain
         // returns NODATA (never pass-through, so it can't leak to upstream resolvers).
@@ -161,14 +159,16 @@ impl DnsGatewayFilter {
             _ => return build_nodata_response(&query).ok(),
         };
 
-        // Pick a matcher for this domain whose base_ip family matches the query type. A domain
-        // may be configured with both an IPv4 matcher and an IPv6 matcher (dual-stack), in which
-        // case A resolves from the IPv4 range and AAAA from the IPv6 range. If the domain is
-        // intercepted but has no matcher of the requested family, return NODATA (fail closed) —
-        // never forward, so an untrusted client can't obtain a real address of the other family
-        // and bypass the gateway.
+        // Dual-stack pairs families only within the SAME matcher pattern: a domain may be listed
+        // twice with an identical pattern, once with an IPv4 base_ip and once with an IPv6 base_ip,
+        // so A resolves from the v4 range and AAAA from the v6 range. Restricting the family search
+        // to the winning pattern preserves first-match precedence — a later, broader matcher (e.g.
+        // a "*" catch-all) is never selected ahead of an earlier, more specific one just because it
+        // carries the queried family. If the winning pattern has no matcher of the requested
+        // family, return NODATA (fail closed) — never forward, so a client can't obtain a real
+        // address of the other family and bypass the winning matcher's routing/authorization.
         let matcher = self.config.domains.iter().find(|m| {
-            matches_domain(&m.domain, &domain)
+            m.domain == owner.domain
                 && m.parse_base_ip()
                     .map(|ip| ip.is_ipv6() == want_v6)
                     .unwrap_or(false)
@@ -680,6 +680,78 @@ mod tests {
             }
             other => panic!("expected AAAA record from the v6 matcher, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn test_process_dns_query_family_selection_preserves_matcher_precedence() {
+        // An earlier, more specific IPv4 matcher must not be bypassed by a later IPv6 catch-all.
+        // Before dual-stack, an AAAA query for the specific domain returned NODATA; it must still
+        // do so (the specific v4 rule owns the domain) rather than answering from the "*" rule.
+        let filter = DnsGatewayFilter {
+            config: Arc::new(config::DnsGateway {
+                domains: vec![
+                    config::DomainMatcher {
+                        domain: "api.aws.com".to_string(),
+                        base_ip: "10.150.0.0".to_string(),
+                        prefix_len: 24,
+                        metadata: HashMap::new(),
+                    },
+                    config::DomainMatcher {
+                        domain: "*".to_string(),
+                        base_ip: "fd00:cafe::".to_string(),
+                        prefix_len: 64,
+                        metadata: HashMap::new(),
+                    },
+                ],
+                fail_open: false,
+            }),
+        };
+
+        // AAAA for the specific domain: the v4 exact rule owns it and has no v6 pair -> NODATA;
+        // must NOT fall through to the later v6 catch-all.
+        let aaaa = parse_response(
+            &filter
+                .process_dns_query(&make_dns_query("api.aws.com", RecordType::AAAA))
+                .unwrap(),
+        );
+        assert_eq!(
+            aaaa.answers().len(),
+            0,
+            "AAAA on a v4-only specific rule must NODATA, not use the later catch-all"
+        );
+
+        // A for the specific domain still answers from its own v4 range.
+        let a = parse_response(
+            &filter
+                .process_dns_query(&make_dns_query("api.aws.com", RecordType::A))
+                .unwrap(),
+        );
+        assert_eq!(a.answers().len(), 1);
+        match a.answers()[0].data() {
+            RData::A(ip) => assert_eq!(&ip.0.octets()[..3], &[10, 150, 0]),
+            other => panic!("expected A from the specific v4 rule, got {:?}", other),
+        }
+
+        // A domain only matched by "*" is served by the catch-all (AAAA), and its A query
+        // NODATAs (the "*" pattern only has a v6 entry).
+        let other_aaaa = parse_response(
+            &filter
+                .process_dns_query(&make_dns_query("other.example.net", RecordType::AAAA))
+                .unwrap(),
+        );
+        assert_eq!(other_aaaa.answers().len(), 1);
+        assert!(matches!(other_aaaa.answers()[0].data(), RData::AAAA(_)));
+
+        let other_a = parse_response(
+            &filter
+                .process_dns_query(&make_dns_query("other.example.net", RecordType::A))
+                .unwrap(),
+        );
+        assert_eq!(
+            other_a.answers().len(),
+            0,
+            "the catch-all pattern only has a v6 entry, so A must NODATA"
+        );
     }
 
     #[test]
