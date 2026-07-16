@@ -32,7 +32,7 @@ longDescription: |
 
   * **[resolver](/extensions/resolver)** — a UDP listener filter that intercepts DNS
     queries for configured domain patterns, allocates a virtual IP from a dedicated CIDR range,
-    and responds with an A record.
+    and responds with an A record (IPv4 base_ip) or AAAA record (IPv6 base_ip).
   * **[lookup](/extensions/lookup)** — a network filter that, when the application
     opens a TCP connection to a virtual IP, looks up the original domain and its configured
     metadata from the shared cache and exposes them as Envoy filter state.

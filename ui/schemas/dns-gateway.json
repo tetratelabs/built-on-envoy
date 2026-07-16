@@ -25,14 +25,24 @@
               },
               "base_ip": {
                 "type": "string",
-                "description": "Base IPv4 address for virtual IP allocation (e.g. \"10.0.0.0\").",
-                "pattern": "^(?:(?:25[0-5]|2[0-4]\\d|[01]?\\d\\d?)\\.){3}(?:25[0-5]|2[0-4]\\d|[01]?\\d\\d?)$"
+                "description": "Base address for virtual IP allocation. May be IPv4 (e.g. \"10.0.0.0\", answered as an A record) or IPv6 (e.g. \"fd00::\", answered as an AAAA record). The address family of base_ip determines which DNS record type this domain answers.",
+                "anyOf": [
+                  {
+                    "description": "IPv4 base address (answered as an A record).",
+                    "pattern": "^(?:(?:25[0-5]|2[0-4]\\d|[01]?\\d\\d?)\\.){3}(?:25[0-5]|2[0-4]\\d|[01]?\\d\\d?)$"
+                  },
+                  {
+                    "description": "IPv6 base address (answered as an AAAA record).",
+                    "format": "ipv6",
+                    "pattern": "^(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:)+:([0-9a-fA-F]{1,4}:)*[0-9a-fA-F]{0,4}|::([0-9a-fA-F]{1,4}:)*[0-9a-fA-F]{1,4}|::)$"
+                  }
+                ]
               },
               "prefix_len": {
                 "type": "integer",
-                "description": "CIDR prefix length (1-32). A /24 gives 256 virtual IPs.",
+                "description": "CIDR prefix length. For an IPv4 base_ip the valid range is 1-32 (a /24 gives 256 virtual IPs); for an IPv6 base_ip it is 1-128 (a /64 gives 2^64 virtual IPs). Prefixes beyond the base_ip's family bound are rejected at config load.",
                 "minimum": 1,
-                "maximum": 32
+                "maximum": 128
               },
               "metadata": {
                 "type": "object",
