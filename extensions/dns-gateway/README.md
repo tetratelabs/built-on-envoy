@@ -43,7 +43,9 @@ extension (`resolver` for the `udp_listener` filter, `lookup` for the
 
 1. **`resolver` (UDP listener filter)** — Intercepts DNS queries. If the queried domain matches
    a configured pattern, allocates a virtual IP from that domain's dedicated CIDR range and responds
-   with an A record. Each domain pattern gets its own IP range, so `*.aws.com` and `*.google.com`
+   with an A record (for an IPv4 `base_ip`) or an AAAA record (for an IPv6 `base_ip`). The address
+   family of the domain's `base_ip` determines which query type it answers; the other type returns
+   NODATA. Each domain pattern gets its own IP range, so `*.aws.com` and `*.google.com`
    allocate from separate subnets. Caches the mapping from virtual IP to domain and metadata.
    Non-matching queries pass through.
 
@@ -90,8 +92,8 @@ See the [extension page](https://builtonenvoy.io/extensions/lookup) for the full
 | ----------------------- | ------- | ------------------------------------------------------------------ |
 | `domains`               | array   | Domain matchers, each with its own CIDR range                      |
 | `domains[].domain`      | string  | Exact (`"example.com"`) or wildcard (`"*.example.com"`) pattern    |
-| `domains[].base_ip`     | string  | Base IPv4 address for virtual IP allocation (e.g. `"10.0.0.0"`) |
-| `domains[].prefix_len`  | integer | CIDR prefix length (1-32). A `/24` gives 256 IPs.                 |
+| `domains[].base_ip`     | string  | Base address for virtual IP allocation. IPv4 (e.g. `"10.0.0.0"`, answered as an A record) or IPv6 (e.g. `"fd00::"`, answered as an AAAA record). |
+| `domains[].prefix_len`  | integer | CIDR prefix length. IPv4: 1-32 (a `/24` gives 256 IPs). IPv6: 1-128 (a `/64` gives 2^64 IPs). |
 | `domains[].metadata`    | object  | String key-value pairs exposed via filter state                    |
 | `fail_open`             | boolean | If `true`, forward queries upstream when a CIDR range is exhausted. Default: `false` (return NODATA) |
 
@@ -100,6 +102,23 @@ See the [extension page](https://builtonenvoy.io/extensions/lookup) for the full
 | Field                  | Type   | Description                                                                          |
 | ---------------------- | ------ | ------------------------------------------------------------------------------------ |
 | `filter_state_prefix`  | string | Prefix for filter state keys. Default: `io.builtonenvoy.dns_gateway`                |
+
+## Virtual-IP cache hardening
+
+Allocation is driven by untrusted DNS queries, so the shared virtual-IP cache is bounded and
+fails closed:
+
+- **Max-entries cap** — once the cache holds its maximum number of live mappings (default
+  65,536) new domains are refused: `allocate` mints nothing, so with `fail_open: false` the
+  resolver returns NODATA rather than growing without bound.
+- **Idle-TTL eviction** — mappings unused for the idle TTL (default 1h) are reclaimed, both
+  opportunistically when the cache is full and on demand, freeing space for live traffic without
+  ever reassigning a still-in-use IP.
+- **Per-allocation rate limit** — at most a fixed number of *new* allocations are minted per
+  window (default 1,000/s); bursts beyond that are refused. Connections to already-known virtual
+  IPs are never rate limited.
+
+These bounds have sensible defaults and require no configuration.
 
 ## Building
 
