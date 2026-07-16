@@ -698,6 +698,47 @@ WAF inspection mode. Defaults to "REQUEST_ONLY" if not set. "RESPONSE_ONLY" is d
 
 Configuration for the dns-gateway lookup network filter, the virtual-IP resolution half of the dns-gateway extension set.
 
+### domain_metadata
+
+If set, also publish the resolved domain as Envoy connection dynamic metadata under the given namespace/key. Useful for consumers that read dynamic metadata rather than filter state (e.g. a network ext_authz filter with metadata_context_namespaces). Omit to publish filter state only.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ DNS Gateway Lookup Configuration](#lookup)
+
+
+
+#### domain_metadata.key
+
+Key within the namespace whose string value is the resolved domain (e.g. "domain").
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Min length** | 1 |
+
+[↑ Top](#) | [↑ DNS Gateway Lookup Configuration](#lookup)
+
+
+
+#### domain_metadata.namespace
+
+Dynamic-metadata namespace to write under (e.g. "io.builtonenvoy.dns_gateway").
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Min length** | 1 |
+
+[↑ Top](#) | [↑ DNS Gateway Lookup Configuration](#lookup)
+
+   {/* range .SubProperties */} {/* if .SubProperties */}
+
 ### filter_state_prefix
 
 Prefix for filter state keys written by the dns-gateway lookup filter. Downstream filters read domain and metadata under this prefix. Default: "io.builtonenvoy.dns_gateway".
@@ -746,7 +787,7 @@ Base address for virtual IP allocation. May be IPv4 (e.g. "10.0.0.0", answered a
 
 #### domains.domain
 
-Exact domain ("example.com") or single-level wildcard pattern ("*.example.com").
+Exact domain ("example.com"), single-level wildcard pattern ("*.example.com"), or a bare "*" catch-all that matches every queried domain.
 
 | | |
 |---|---|

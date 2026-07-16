@@ -83,6 +83,7 @@ See the [extension page](https://builtonenvoy.io/extensions/lookup) for the full
 
 - **Exact**: `"example.com"` — matches only `example.com`
 - **Wildcard**: `"*.aws.com"` — matches one subdomain level (e.g. `api.aws.com`) but not `aws.com` itself or nested subdomains like `sub.api.aws.com`
+- **Catch-all**: `"*"` — matches every queried domain, minting a virtual IP for each. Use it as a low-priority final matcher to intercept all DNS and defer routing/authorization to downstream filters (e.g. `tcp_proxy` route selection on the filter state, or an `ext_authz` check) instead of enumerating every domain
 
 ## Configuration
 
@@ -102,6 +103,7 @@ See the [extension page](https://builtonenvoy.io/extensions/lookup) for the full
 | Field                  | Type   | Description                                                                          |
 | ---------------------- | ------ | ------------------------------------------------------------------------------------ |
 | `filter_state_prefix`  | string | Prefix for filter state keys. Default: `io.builtonenvoy.dns_gateway`                |
+| `domain_metadata`      | object | Optional. If set (`{"namespace": "...", "key": "..."}`), also publish the resolved domain as connection **dynamic metadata** under that namespace/key, for consumers that read dynamic metadata rather than filter state (e.g. a network `ext_authz` filter with `metadata_context_namespaces`). |
 
 ## Building
 

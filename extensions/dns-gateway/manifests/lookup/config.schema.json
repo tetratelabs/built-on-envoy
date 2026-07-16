@@ -10,6 +10,24 @@
       "type": "string",
       "description": "Prefix for filter state keys written by the dns-gateway lookup filter. Downstream filters read domain and metadata under this prefix. Default: \"io.builtonenvoy.dns_gateway\".",
       "default": "io.builtonenvoy.dns_gateway"
+    },
+    "domain_metadata": {
+      "type": "object",
+      "description": "If set, also publish the resolved domain as Envoy connection dynamic metadata under the given namespace/key. Useful for consumers that read dynamic metadata rather than filter state (e.g. a network ext_authz filter with metadata_context_namespaces). Omit to publish filter state only.",
+      "additionalProperties": false,
+      "required": ["namespace", "key"],
+      "properties": {
+        "namespace": {
+          "type": "string",
+          "description": "Dynamic-metadata namespace to write under (e.g. \"io.builtonenvoy.dns_gateway\").",
+          "minLength": 1
+        },
+        "key": {
+          "type": "string",
+          "description": "Key within the namespace whose string value is the resolved domain (e.g. \"domain\").",
+          "minLength": 1
+        }
+      }
     }
   }
 }
