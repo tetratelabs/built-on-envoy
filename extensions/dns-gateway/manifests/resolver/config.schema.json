@@ -18,7 +18,7 @@
         "properties": {
           "domain": {
             "type": "string",
-            "description": "Exact domain (\"example.com\") or single-level wildcard pattern (\"*.example.com\").",
+            "description": "Exact domain (\"example.com\"), single-level wildcard pattern (\"*.example.com\"), or a bare \"*\" catch-all that matches every queried domain.",
             "minLength": 1
           },
           "base_ip": {
