@@ -55,13 +55,16 @@ fn cidr_capacity(base: &IpAddr, prefix_len: u8) -> u128 {
 /// Thread-safe cache for virtual IP allocation and lookup.
 ///
 /// Allocates sequential IPs from per-domain CIDR ranges. Works for both IPv4 and IPv6.
-/// Deduplicates allocations by domain name.
+/// Deduplicates allocations by `(domain, address family)`, so a single domain can hold both
+/// an IPv4 (A) and an IPv6 (AAAA) virtual IP simultaneously (dual-stack).
 pub struct VirtualIpCache {
     // Maps between an allocated virtual IP and its associated domain and metadata.
     ip_to_dest: DashMap<IpAddr, (String, HashMap<String, String>)>,
 
-    // Maps between a domain and its allocated virtual IP. Used to prevent repeat allocations for the same domain.
-    domain_to_ip: DashMap<String, IpAddr>,
+    // Maps between a (domain, is_ipv6) pair and its allocated virtual IP. Used to prevent repeat
+    // allocations for the same domain within an address family, while still allowing the same
+    // domain to hold one IPv4 and one IPv6 virtual IP (dual-stack).
+    domain_to_ip: DashMap<(String, bool), IpAddr>,
 
     // Tracks the next available offset for each CIDR range.
     // Virtual IPs are allocated incrementally, so this number monotonically increases until the range is exhausted.
@@ -80,7 +83,8 @@ impl VirtualIpCache {
     /// Allocates a virtual IP for the given destination within the specified CIDR range.
     ///
     /// The address family of `base_ip` selects the family of the allocated virtual IP.
-    /// Returns the same IP if the domain was previously allocated.
+    /// Returns the same IP if the domain was previously allocated *in this address family*
+    /// (so a domain can hold one IPv4 and one IPv6 virtual IP).
     /// Returns `None` if the range is exhausted.
     pub fn allocate(
         &self,
@@ -89,11 +93,14 @@ impl VirtualIpCache {
         base_ip: IpAddr,
         prefix_len: u8,
     ) -> Option<IpAddr> {
-        if let Some(ip) = self.domain_to_ip.get(&domain) {
+        // Dedup per (domain, address family): the same FQDN may hold both an A and an AAAA
+        // virtual IP, but repeat queries within one family reuse the existing allocation.
+        let key = (domain.clone(), base_ip.is_ipv6());
+        if let Some(ip) = self.domain_to_ip.get(&key) {
             return Some(*ip);
         }
 
-        match self.domain_to_ip.entry(domain.clone()) {
+        match self.domain_to_ip.entry(key) {
             Entry::Occupied(entry) => Some(*entry.get()),
             Entry::Vacant(entry) => {
                 let capacity = cidr_capacity(&base_ip, prefix_len);
@@ -289,5 +296,50 @@ mod tests {
         assert!(v4ip.is_ipv4());
         assert_eq!(cache.lookup(v6ip).unwrap().0, "v6.example.com");
         assert_eq!(cache.lookup(v4ip).unwrap().0, "v4.example.com");
+    }
+
+    #[test]
+    fn test_dual_stack_same_domain_holds_both_families() {
+        let cache = VirtualIpCache::new();
+
+        // The same FQDN allocates independently in each address family.
+        let v4ip = cache
+            .allocate(
+                "dual.example.com".into(),
+                HashMap::new(),
+                v4("10.0.0.0"),
+                24,
+            )
+            .unwrap();
+        let v6ip = cache
+            .allocate("dual.example.com".into(), HashMap::new(), v6("fd00::"), 64)
+            .unwrap();
+
+        assert!(v4ip.is_ipv4());
+        assert!(v6ip.is_ipv6());
+        assert_ne!(v4ip, v6ip);
+
+        // Both virtual IPs reverse-map to the same domain.
+        assert_eq!(cache.lookup(v4ip).unwrap().0, "dual.example.com");
+        assert_eq!(cache.lookup(v6ip).unwrap().0, "dual.example.com");
+
+        // Repeat queries within a family are deduped to the existing IP (not a new allocation).
+        assert_eq!(
+            cache
+                .allocate(
+                    "dual.example.com".into(),
+                    HashMap::new(),
+                    v4("10.0.0.0"),
+                    24
+                )
+                .unwrap(),
+            v4ip
+        );
+        assert_eq!(
+            cache
+                .allocate("dual.example.com".into(), HashMap::new(), v6("fd00::"), 64)
+                .unwrap(),
+            v6ip
+        );
     }
 }

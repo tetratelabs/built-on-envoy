@@ -85,6 +85,22 @@ See the [extension page](https://builtonenvoy.io/extensions/lookup) for the full
 - **Wildcard**: `"*.aws.com"` — matches one subdomain level (e.g. `api.aws.com`) but not `aws.com` itself or nested subdomains like `sub.api.aws.com`
 - **Catch-all**: `"*"` — matches every queried domain, minting a virtual IP for each. Use it as a low-priority final matcher to intercept all DNS and defer routing/authorization to downstream filters (e.g. `tcp_proxy` route selection on the filter state, or an `ext_authz` check) instead of enumerating every domain
 
+Each matcher answers a single address family (`A` for an IPv4 `base_ip`, `AAAA` for an IPv6
+`base_ip`); the other query type returns NODATA. To serve a domain **dual-stack** (both `A` and
+`AAAA`), list it twice — once with an IPv4 `base_ip` and once with an IPv6 `base_ip`:
+
+```json
+"domains": [
+  {"domain": "*.aws.com", "base_ip": "10.0.0.0", "prefix_len": 24},
+  {"domain": "*.aws.com", "base_ip": "fd00::",   "prefix_len": 64}
+]
+```
+
+`A` queries then resolve from the IPv4 range and `AAAA` from the IPv6 range. A domain that
+matches some matcher but has none of the queried family still returns NODATA (never
+pass-through), so a client can't resolve a real address of the other family and bypass the
+gateway.
+
 ## Configuration
 
 ### `resolver` (UDP listener filter)
