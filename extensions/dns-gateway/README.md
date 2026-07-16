@@ -103,6 +103,23 @@ See the [extension page](https://builtonenvoy.io/extensions/lookup) for the full
 | ---------------------- | ------ | ------------------------------------------------------------------------------------ |
 | `filter_state_prefix`  | string | Prefix for filter state keys. Default: `io.builtonenvoy.dns_gateway`                |
 
+## Virtual-IP cache hardening
+
+Allocation is driven by untrusted DNS queries, so the shared virtual-IP cache is bounded and
+fails closed:
+
+- **Max-entries cap** — once the cache holds its maximum number of live mappings (default
+  65,536) new domains are refused: `allocate` mints nothing, so with `fail_open: false` the
+  resolver returns NODATA rather than growing without bound.
+- **Idle-TTL eviction** — mappings unused for the idle TTL (default 1h) are reclaimed, both
+  opportunistically when the cache is full and on demand, freeing space for live traffic without
+  ever reassigning a still-in-use IP.
+- **Per-allocation rate limit** — at most a fixed number of *new* allocations are minted per
+  window (default 1,000/s); bursts beyond that are refused. Connections to already-known virtual
+  IPs are never rate limited.
+
+These bounds have sensible defaults and require no configuration.
+
 ## Building
 
 ```bash
