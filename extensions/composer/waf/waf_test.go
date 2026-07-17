@@ -469,10 +469,11 @@ func Test_RequestOnlyWaf(t *testing.T) {
 		wafPlugin, ok := plugin.(*wafPlugin)
 		require.True(t, ok, "failed to cast plugin to wafPlugin")
 
-		// Run the request phase so a transaction exists. The response phase must
-		// still be skipped because the mode is REQUEST_ONLY (not because the
-		// transaction is missing).
+		// Run the request phase to completion. In REQUEST_ONLY mode the transaction
+		// is finalized at the end of OnRequestHeaders and the response callbacks pass
+		// through on the nil (already finalized) transaction.
 		require.Equal(t, shared.HeadersStatusContinue, wafPlugin.OnRequestHeaders(requestHeaders, true))
+		require.Nil(t, wafPlugin.txContext, "transaction must be finalized once phase 2 completes in REQUEST_ONLY mode")
 
 		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
 			":status":      {"200"},
@@ -2074,6 +2075,9 @@ func Test_TxFinalizedBeforeStreamComplete(t *testing.T) {
 				require.Equal(t, shared.HeadersStatusContinue, p.OnRequestHeaders(newReq(nil), true))
 				require.NotNil(t, p.txContext, "clean request: must not finalize before response phases in FULL mode")
 				require.Equal(t, shared.HeadersStatusContinue, p.OnResponseHeaders(newResp(nil), true))
+				// Data arriving after finalization (e.g. SSE chunks) must stream through
+				// without reviving the transaction or re-emitting metrics (Times(1) guard).
+				require.Equal(t, shared.BodyStatusContinue, p.OnResponseBody(fake.NewFakeBodyBuffer([]byte("data: tick\n\n")), false))
 			},
 		},
 		{
