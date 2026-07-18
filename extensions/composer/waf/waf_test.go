@@ -469,11 +469,12 @@ func Test_RequestOnlyWaf(t *testing.T) {
 		wafPlugin, ok := plugin.(*wafPlugin)
 		require.True(t, ok, "failed to cast plugin to wafPlugin")
 
-		// Run the request phase to completion. In REQUEST_ONLY mode the transaction
-		// is finalized at the end of OnRequestHeaders and the response callbacks pass
-		// through on the nil (already finalized) transaction.
+		// Run the request phase so a transaction exists. The response phase must
+		// still be skipped because the mode is REQUEST_ONLY (not because the
+		// transaction is missing).
 		require.Equal(t, shared.HeadersStatusContinue, wafPlugin.OnRequestHeaders(requestHeaders, true))
-		require.Nil(t, wafPlugin.txContext, "transaction must be finalized once phase 2 completes in REQUEST_ONLY mode")
+		require.NotNil(t, wafPlugin.txContext, "transaction must stay live until OnStreamComplete")
+		require.True(t, wafPlugin.txDone, "analysis must be done once phase 2 completes in REQUEST_ONLY mode")
 
 		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
 			":status":      {"200"},
@@ -1388,12 +1389,12 @@ func Test_SecResponseBodyAccessOff(t *testing.T) {
 			require.Equal(t, tc.expectedStatus, bodyStatus)
 
 			if tc.expectedStatus == shared.BodyStatusContinue {
-				// Phase 4 ran with no accessible/processable body, so the WAF has
-				// finished and finalized the transaction (returned to Coraza's pool),
-				// leaving txContext nil. The response body was therefore never buffered
-				// — proven independently by the fact that the "leaked-secret" payload did
-				// not trigger rule 100003 (no SendLocalResponse was expected or called).
-				require.Nil(t, wafPlugin.txContext, "transaction must be finalized once phase 4 completes")
+				// Ensure the body was not buffered at all when SecResponseBodyAccess is Off or MIME type does not match.
+				respBodyReader, err := wafPlugin.txContext.ResponseBodyReader()
+				require.NoError(t, err)
+				bodyBytes, err := io.ReadAll(respBodyReader)
+				require.NoError(t, err)
+				require.Empty(t, string(bodyBytes), "expected response body to not be buffered when SecResponseBodyAccess is Off or MIME type does not match")
 			}
 			wafPlugin.OnStreamComplete()
 		})
@@ -1966,12 +1967,14 @@ func Test_PerRouteConfigBlocksRequest(t *testing.T) {
 	wafPlugin.OnStreamComplete()
 }
 
-// Test_TxFinalizedBeforeStreamComplete drives, in FULL mode, every callback path
-// that can terminate a transaction and asserts the transaction is finalized at the
-// callback boundary before OnStreamComplete runs. Reaching OnStreamComplete with a live
-// tx would mean the metric/close were deferred to stream end, which for long-lived streams
-// can be far later.
-func Test_TxFinalizedBeforeStreamComplete(t *testing.T) {
+// Test_TxDoneBeforeStreamComplete drives, in FULL mode, every callback path that
+// can terminate the WAF analysis and asserts the transaction is marked done and
+// its metrics are emitted at the callback boundary, before OnStreamComplete that
+// for long-lived streams might be far later. The transaction itself stays
+// live until OnStreamComplete, which runs audit logging (phase 5) outside the
+// data path, so responses are never delayed by the audit log writers, and then
+// closes it.
+func Test_TxDoneBeforeStreamComplete(t *testing.T) {
 	directives := []string{
 		"SecRuleEngine On",
 		"SecRequestBodyAccess On",
@@ -1991,15 +1994,13 @@ func Test_TxFinalizedBeforeStreamComplete(t *testing.T) {
 	}
 	newResp := func(extra map[string][]string) shared.HeaderMap {
 		m := map[string][]string{":status": {"200"}, "content-type": {"application/json"}}
-		for k, v := range extra {
-			m[k] = v
-		}
+		maps.Copy(m, extra)
 		return fake.NewFakeHeaderMap(m)
 	}
 
 	// expectTxFinalized sets the metrics + attribute lookups that every processed
 	// FULL-mode tx performs exactly once. Times(1) (gomock default) means a second
-	// emission from OnStreamComplete would fail the test.
+	// emission (e.g. from the OnStreamComplete fallback) would fail the test.
 	expectTxFinalized := func(h *mocks.MockHttpFilterHandle) {
 		h.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 		h.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
@@ -2032,7 +2033,7 @@ func Test_TxFinalizedBeforeStreamComplete(t *testing.T) {
 			setup: blockAt(ctypes.PhaseRequestBody, 100002, "waf_request_body_blocked"),
 			drive: func(t *testing.T, p *wafPlugin) {
 				require.Equal(t, shared.HeadersStatusStop, p.OnRequestHeaders(newReq(map[string][]string{":method": {"POST"}, ":path": {"/submit"}}), false))
-				require.NotNil(t, p.txContext, "request body pending: must not finalize yet in FULL mode")
+				require.False(t, p.txDone, "request body pending: analysis must not be done yet in FULL mode")
 				require.Equal(t, shared.BodyStatusStopNoBuffer, p.OnRequestBody(fake.NewFakeBodyBuffer([]byte(`{"d":"malicious-payload"}`)), true))
 			},
 		},
@@ -2041,7 +2042,7 @@ func Test_TxFinalizedBeforeStreamComplete(t *testing.T) {
 			setup: blockAt(ctypes.PhaseResponseHeaders, 100003, "waf_response_headers_blocked"),
 			drive: func(t *testing.T, p *wafPlugin) {
 				require.Equal(t, shared.HeadersStatusContinue, p.OnRequestHeaders(newReq(nil), true))
-				require.NotNil(t, p.txContext, "clean request: must not finalize before response phases in FULL mode")
+				require.False(t, p.txDone, "clean request: analysis must not be done before the response phases in FULL mode")
 				require.Equal(t, shared.HeadersStatusStop, p.OnResponseHeaders(newResp(map[string][]string{"x-block-test": {"block-me"}}), false))
 			},
 		},
@@ -2051,12 +2052,12 @@ func Test_TxFinalizedBeforeStreamComplete(t *testing.T) {
 			drive: func(t *testing.T, p *wafPlugin) {
 				require.Equal(t, shared.HeadersStatusContinue, p.OnRequestHeaders(newReq(nil), true))
 				require.Equal(t, shared.HeadersStatusStop, p.OnResponseHeaders(newResp(nil), false))
-				require.NotNil(t, p.txContext, "response body pending: must not finalize yet")
+				require.False(t, p.txDone, "response body pending: analysis must not be done yet")
 				require.Equal(t, shared.BodyStatusStopNoBuffer, p.OnResponseBody(fake.NewFakeBodyBuffer([]byte(`{"x":"leaked-secret"}`)), true))
 			},
 		},
 		{
-			name: "clean pass, finalize at response body end-of-stream",
+			name: "clean pass, analysis done at response body end-of-stream",
 			// The buffered response-body path runs enlargeResponseBufferLimitIfNeeded;
 			// short-circuit it — buffer sizing is incidental to finalization here.
 			setup: func(h *mocks.MockHttpFilterHandle) {
@@ -2065,28 +2066,28 @@ func Test_TxFinalizedBeforeStreamComplete(t *testing.T) {
 			drive: func(t *testing.T, p *wafPlugin) {
 				require.Equal(t, shared.HeadersStatusContinue, p.OnRequestHeaders(newReq(nil), true))
 				require.Equal(t, shared.HeadersStatusStop, p.OnResponseHeaders(newResp(nil), false))
-				require.NotNil(t, p.txContext, "response body pending: must not finalize yet")
+				require.False(t, p.txDone, "response body pending: analysis must not be done yet")
 				require.Equal(t, shared.BodyStatusContinue, p.OnResponseBody(fake.NewFakeBodyBuffer([]byte(`{"ok":true}`)), true))
 			},
 		},
 		{
-			name: "clean pass, finalize at response headers end-of-stream",
+			name: "clean pass, analysis done at response headers end-of-stream",
 			drive: func(t *testing.T, p *wafPlugin) {
 				require.Equal(t, shared.HeadersStatusContinue, p.OnRequestHeaders(newReq(nil), true))
-				require.NotNil(t, p.txContext, "clean request: must not finalize before response phases in FULL mode")
 				require.Equal(t, shared.HeadersStatusContinue, p.OnResponseHeaders(newResp(nil), true))
-				// Data arriving after finalization (e.g. SSE chunks) must stream through
-				// without reviving the transaction or re-emitting metrics (Times(1) guard).
+				require.True(t, p.txDone, "analysis must be done once phase 4 ran at response headers end-of-stream")
+				// Data arriving after the analysis is done (e.g. SSE chunks) must stream
+				// through without re-processing or re-emitting metrics (Times(1) guard).
 				require.Equal(t, shared.BodyStatusContinue, p.OnResponseBody(fake.NewFakeBodyBuffer([]byte("data: tick\n\n")), false))
 			},
 		},
 		{
-			name: "clean pass, finalize at response trailers",
+			name: "clean pass, analysis done at response trailers",
 			drive: func(t *testing.T, p *wafPlugin) {
 				require.Equal(t, shared.HeadersStatusContinue, p.OnRequestHeaders(newReq(nil), true))
 				require.Equal(t, shared.HeadersStatusStop, p.OnResponseHeaders(newResp(nil), false))
 				require.Equal(t, shared.BodyStatusStopAndBuffer, p.OnResponseBody(fake.NewFakeBodyBuffer([]byte(`{"ok":true}`)), false))
-				require.NotNil(t, p.txContext, "buffering response body: must not finalize yet")
+				require.False(t, p.txDone, "buffering response body: analysis must not be done yet")
 				require.Equal(t, shared.TrailersStatusContinue, p.OnResponseTrailers(fake.NewFakeHeaderMap(map[string][]string{"grpc-status": {"0"}})))
 			},
 		},
@@ -2106,12 +2107,15 @@ func Test_TxFinalizedBeforeStreamComplete(t *testing.T) {
 
 			tc.drive(t, p)
 
-			// Core invariant: the transaction is finalized at the callback boundary,
-			// so it is already gone before OnStreamComplete runs.
-			require.Nil(t, p.txContext, "transaction must be finalized before OnStreamComplete")
+			// Core invariant: the analysis is done and the metrics are already
+			// emitted at the callback boundary (Times(1) guards a re-emission),
+			// while the transaction stays live so audit logging can run at stream
+			// completion, outside the data path.
+			require.True(t, p.txDone, "tx must be done, with its metrics emitted, at the callback boundary")
+			require.NotNil(t, p.txContext, "transaction must stay live until OnStreamComplete for audit logging")
 
-			// OnStreamComplete must be a pure no-op backstop: no second metric emission
-			// (guarded by the Times(1) expectations) and txContext stays nil.
+			// OnStreamComplete runs audit logging and closes the transaction,
+			// without re-emitting the metrics (Times(1) guard).
 			p.OnStreamComplete()
 			require.Nil(t, p.txContext)
 		})
