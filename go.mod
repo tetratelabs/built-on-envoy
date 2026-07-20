@@ -3,10 +3,10 @@ module github.com/tetratelabs/built-on-envoy
 go 1.26.5
 
 require (
-	github.com/alecthomas/kong v1.15.0
+	github.com/alecthomas/kong v1.16.0
 	github.com/envoyproxy/go-control-plane/envoy v1.37.1-0.20260427194735-8b4b133fe2a5
 	github.com/joho/godotenv v1.5.1
-	github.com/mccutchen/go-httpbin/v2 v2.23.1
+	github.com/mccutchen/go-httpbin/v2 v2.24.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/stretchr/testify v1.11.1
