@@ -4,8 +4,8 @@
 # the root of the repo.
 
 name: composer
-version: 0.10.0-dev
-composerVersion: 0.10.0-dev
+version: 0.10.0
+composerVersion: 0.10.0
 minEnvoyVersion: 1.38.0
 categories:
   - Misc
@@ -30,8 +30,8 @@ tags:
   - plugin-loader
 license: Apache-2.0
 examples:
-  - title: Run with the example plugin
-    description: Start Envoy with the composer dynamic module and example plugin
+  - title: Run with the composer example extension
+    description: Start Envoy with the composer dynamic module and example extension
     code: |
-      boe run --extension example
+      boe run --extension example-go
 extensionSet: true
