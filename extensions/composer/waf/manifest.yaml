@@ -103,7 +103,7 @@ longDescription: |
   |--------|------|------|-------------|
   | `waf_tx_total` | - | Counter | Total amount of transactions processed by the WAF. |
   | `waf_tx_blocked` | `authority`, `phase`, `rule_id` | Counter | Total amount of transactions blocked by the WAF. The `rule_id` will not be set if the request is not blocked by a concrete rule but by a WAF internal error. |
-  | `waf_tx_duration` | - | Histogram | Duration of WAF transaction processing, in milliseconds. |
+  | `waf_tx_duration` | - | Histogram | Duration of WAF processing the transaction, in milliseconds. |
 
   ## Per Route Configuration
 
