@@ -1,7 +1,7 @@
 [
   {
     "name": "composer",
-    "version": "0.10.0",
+    "version": "0.11.0-dev",
     "extensionSet": true,
     "categories": [
       "Misc"
@@ -29,7 +29,7 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.10.0",
+    "composerVersion": "0.11.0-dev",
     "sourcePath": "composer"
   },
   {
