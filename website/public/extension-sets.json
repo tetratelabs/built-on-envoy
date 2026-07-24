@@ -1,7 +1,7 @@
 [
   {
     "name": "composer",
-    "version": "0.10.0-dev",
+    "version": "0.11.0-dev",
     "extensionSet": true,
     "categories": [
       "Misc"
@@ -22,14 +22,14 @@
     "license": "Apache-2.0",
     "examples": [
       {
-        "title": "Run with the example plugin",
-        "description": "Start Envoy with the composer dynamic module and example plugin",
-        "code": "boe run --extension example\n"
+        "title": "Run with the composer example extension",
+        "description": "Start Envoy with the composer dynamic module and example extension",
+        "code": "boe run --extension example-go\n"
       }
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.10.0-dev",
+    "composerVersion": "0.11.0-dev",
     "sourcePath": "composer"
   },
   {

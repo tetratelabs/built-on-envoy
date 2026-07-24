@@ -8,6 +8,7 @@ package waf
 import (
 	"encoding/json"
 	"io"
+	"maps"
 	"strconv"
 	"testing"
 
@@ -472,6 +473,8 @@ func Test_RequestOnlyWaf(t *testing.T) {
 		// still be skipped because the mode is REQUEST_ONLY (not because the
 		// transaction is missing).
 		require.Equal(t, shared.HeadersStatusContinue, wafPlugin.OnRequestHeaders(requestHeaders, true))
+		require.NotNil(t, wafPlugin.txContext, "transaction must stay live until OnStreamComplete")
+		require.True(t, wafPlugin.txDone, "analysis must be done once phase 2 completes in REQUEST_ONLY mode")
 
 		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
 			":status":      {"200"},
@@ -1962,4 +1965,159 @@ func Test_PerRouteConfigBlocksRequest(t *testing.T) {
 		"expected per-route WAF to block request")
 
 	wafPlugin.OnStreamComplete()
+}
+
+// Test_TxDoneBeforeStreamComplete drives, in FULL mode, every callback path that
+// can terminate the WAF analysis and asserts the transaction is marked done and
+// its metrics are emitted at the callback boundary, before OnStreamComplete that
+// for long-lived streams might be far later. The transaction itself stays
+// live until OnStreamComplete, which runs audit logging (phase 5) outside the
+// data path, so responses are never delayed by the audit log writers, and then
+// closes it.
+func Test_TxDoneBeforeStreamComplete(t *testing.T) {
+	directives := []string{
+		"SecRuleEngine On",
+		"SecRequestBodyAccess On",
+		"SecResponseBodyAccess On",
+		"SecResponseBodyMimeType text/plain application/json",
+		`SecRule REQUEST_HEADERS:X-Block-Test "@streq block-me" "id:100001,phase:1,deny,status:403,msg:'blocked req headers'"`,
+		`SecAction "id:100010,phase:1,pass,nolog,ctl:forceRequestBodyVariable=on"`,
+		`SecRule REQUEST_BODY "@contains malicious-payload" "id:100002,phase:2,deny,status:403,msg:'blocked req body'"`,
+		`SecRule RESPONSE_HEADERS:X-Block-Test "@streq block-me" "id:100003,phase:3,deny,status:403,msg:'blocked resp headers'"`,
+		`SecRule RESPONSE_BODY "@contains leaked-secret" "id:100004,phase:4,deny,status:403,msg:'blocked resp body'"`,
+	}
+
+	newReq := func(extra map[string][]string) shared.HeaderMap {
+		m := map[string][]string{":authority": {"example.com:8080"}, ":method": {"GET"}, ":path": {"/"}, "x-request-id": {"req-fin"}}
+		maps.Copy(m, extra)
+		return fake.NewFakeHeaderMap(m)
+	}
+	newResp := func(extra map[string][]string) shared.HeaderMap {
+		m := map[string][]string{":status": {"200"}, "content-type": {"application/json"}}
+		maps.Copy(m, extra)
+		return fake.NewFakeHeaderMap(m)
+	}
+
+	// expectTxFinalized sets the metrics + attribute lookups that every processed
+	// FULL-mode tx performs exactly once. Times(1) (gomock default) means a second
+	// emission (e.g. from the OnStreamComplete fallback) would fail the test.
+	expectTxFinalized := func(h *mocks.MockHttpFilterHandle) {
+		h.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		h.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+		h.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+		h.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
+	}
+	blockAt := func(phase ctypes.RulePhase, ruleID int, reason string) func(*mocks.MockHttpFilterHandle) {
+		return func(h *mocks.MockHttpFilterHandle) {
+			h.EXPECT().IncrementCounterValue(shared.MetricID(2), uint64(1), "example.com", strconv.Itoa(int(phase)), strconv.Itoa(ruleID)).Return(shared.MetricsSuccess)
+			h.EXPECT().SetMetadata(defaultMetadataNamespace, metadataKeyBlockRule, ruleID)
+			h.EXPECT().SetMetadata(defaultMetadataNamespace, metadataKeyBlockPhase, int(phase))
+			h.EXPECT().SendLocalResponse(uint32(403), nil, nil, reason)
+		}
+	}
+
+	for _, tc := range []struct {
+		name  string
+		setup func(*mocks.MockHttpFilterHandle)
+		drive func(t *testing.T, p *wafPlugin)
+	}{
+		{
+			name:  "block on request headers (phase 1)",
+			setup: blockAt(ctypes.PhaseRequestHeaders, 100001, "waf_request_headers_blocked"),
+			drive: func(t *testing.T, p *wafPlugin) {
+				require.Equal(t, shared.HeadersStatusStop, p.OnRequestHeaders(newReq(map[string][]string{"x-block-test": {"block-me"}}), true))
+			},
+		},
+		{
+			name:  "block on request body (phase 2)",
+			setup: blockAt(ctypes.PhaseRequestBody, 100002, "waf_request_body_blocked"),
+			drive: func(t *testing.T, p *wafPlugin) {
+				require.Equal(t, shared.HeadersStatusStop, p.OnRequestHeaders(newReq(map[string][]string{":method": {"POST"}, ":path": {"/submit"}}), false))
+				require.False(t, p.txDone, "request body pending: analysis must not be done yet in FULL mode")
+				require.Equal(t, shared.BodyStatusStopNoBuffer, p.OnRequestBody(fake.NewFakeBodyBuffer([]byte(`{"d":"malicious-payload"}`)), true))
+			},
+		},
+		{
+			name:  "block on response headers (phase 3)",
+			setup: blockAt(ctypes.PhaseResponseHeaders, 100003, "waf_response_headers_blocked"),
+			drive: func(t *testing.T, p *wafPlugin) {
+				require.Equal(t, shared.HeadersStatusContinue, p.OnRequestHeaders(newReq(nil), true))
+				require.False(t, p.txDone, "clean request: analysis must not be done before the response phases in FULL mode")
+				require.Equal(t, shared.HeadersStatusStop, p.OnResponseHeaders(newResp(map[string][]string{"x-block-test": {"block-me"}}), false))
+			},
+		},
+		{
+			name:  "block on response body (phase 4)",
+			setup: blockAt(ctypes.PhaseResponseBody, 100004, "waf_response_body_blocked"),
+			drive: func(t *testing.T, p *wafPlugin) {
+				require.Equal(t, shared.HeadersStatusContinue, p.OnRequestHeaders(newReq(nil), true))
+				require.Equal(t, shared.HeadersStatusStop, p.OnResponseHeaders(newResp(nil), false))
+				require.False(t, p.txDone, "response body pending: analysis must not be done yet")
+				require.Equal(t, shared.BodyStatusStopNoBuffer, p.OnResponseBody(fake.NewFakeBodyBuffer([]byte(`{"x":"leaked-secret"}`)), true))
+			},
+		},
+		{
+			name: "clean pass, analysis done at response body end-of-stream",
+			// The buffered response-body path runs enlargeResponseBufferLimitIfNeeded;
+			// short-circuit it — buffer sizing is incidental to finalization here.
+			setup: func(h *mocks.MockHttpFilterHandle) {
+				h.EXPECT().ReceivedBufferedResponseBody().Return(true)
+			},
+			drive: func(t *testing.T, p *wafPlugin) {
+				require.Equal(t, shared.HeadersStatusContinue, p.OnRequestHeaders(newReq(nil), true))
+				require.Equal(t, shared.HeadersStatusStop, p.OnResponseHeaders(newResp(nil), false))
+				require.False(t, p.txDone, "response body pending: analysis must not be done yet")
+				require.Equal(t, shared.BodyStatusContinue, p.OnResponseBody(fake.NewFakeBodyBuffer([]byte(`{"ok":true}`)), true))
+			},
+		},
+		{
+			name: "clean pass, analysis done at response headers end-of-stream",
+			drive: func(t *testing.T, p *wafPlugin) {
+				require.Equal(t, shared.HeadersStatusContinue, p.OnRequestHeaders(newReq(nil), true))
+				require.Equal(t, shared.HeadersStatusContinue, p.OnResponseHeaders(newResp(nil), true))
+				require.True(t, p.txDone, "analysis must be done once phase 4 ran at response headers end-of-stream")
+				// Data arriving after the analysis is done (e.g. SSE chunks) must stream
+				// through without re-processing or re-emitting metrics (Times(1) guard).
+				require.Equal(t, shared.BodyStatusContinue, p.OnResponseBody(fake.NewFakeBodyBuffer([]byte("data: tick\n\n")), false))
+			},
+		},
+		{
+			name: "clean pass, analysis done at response trailers",
+			drive: func(t *testing.T, p *wafPlugin) {
+				require.Equal(t, shared.HeadersStatusContinue, p.OnRequestHeaders(newReq(nil), true))
+				require.Equal(t, shared.HeadersStatusStop, p.OnResponseHeaders(newResp(nil), false))
+				require.Equal(t, shared.BodyStatusStopAndBuffer, p.OnResponseBody(fake.NewFakeBodyBuffer([]byte(`{"ok":true}`)), false))
+				require.False(t, p.txDone, "buffering response body: analysis must not be done yet")
+				require.Equal(t, shared.TrailersStatusContinue, p.OnResponseTrailers(fake.NewFakeHeaderMap(map[string][]string{"grpc-status": {"0"}})))
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			h := newPluginHandleWithoutPerRouteConfig(ctrl)
+			expectTxFinalized(h)
+			if tc.setup != nil {
+				tc.setup(h)
+			}
+
+			p, ok := newWAFFactory(t, ctrl, directives, "FULL").Create(h).(*wafPlugin)
+			require.True(t, ok, "failed to cast plugin to wafPlugin")
+
+			tc.drive(t, p)
+
+			// Core invariant: the analysis is done and the metrics are already
+			// emitted at the callback boundary (Times(1) guards a re-emission),
+			// while the transaction stays live so audit logging can run at stream
+			// completion, outside the data path.
+			require.True(t, p.txDone, "tx must be done, with its metrics emitted, at the callback boundary")
+			require.NotNil(t, p.txContext, "transaction must stay live until OnStreamComplete for audit logging")
+
+			// OnStreamComplete runs audit logging and closes the transaction,
+			// without re-emitting the metrics (Times(1) guard).
+			p.OnStreamComplete()
+			require.Nil(t, p.txContext)
+		})
+	}
 }
