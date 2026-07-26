@@ -17,7 +17,7 @@ require (
 	// This SDK is come from Envoy 1.39-dev but it's compatible with Envoy 1.38 because there is no API change
 	// between Envoy 1.38 and this SDK version.
 	github.com/envoyproxy/envoy/source/extensions/dynamic_modules v0.0.0-20260425100846-90594f45b3ed
-	github.com/getkin/kin-openapi v0.144.0
+	github.com/getkin/kin-openapi v0.145.0
 	github.com/google/go-containerregistry v0.21.7
 	github.com/jcchavezs/mergefs v0.1.1
 	github.com/lestrrat-go/jwx/v3 v3.1.1
