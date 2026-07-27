@@ -6,6 +6,7 @@
 package fault
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -464,6 +465,68 @@ func TestTotalResolution(t *testing.T) {
 	if total != 100 {
 		t.Errorf("expected total resolution 100, got %d", total)
 	}
+}
+
+func TestMutuallyExclusiveConfigurationOfStandardAndLoadBasedConfig(t *testing.T) {
+	input := `
+endpoints:
+  - match:
+      prefix: "/api/"
+    responses:
+      - status: 200
+        resolution: 90
+        distribution:
+          p0.0: "1ms"
+          p50.0: "10ms"
+          p99.0: "200ms"
+      - status: 503
+        resolution: 10
+        distribution:
+          p0.0: "50ms"
+          p50.0: "100ms"
+          p99.0: "500ms"
+    load_based:
+      healthy:
+        threshold_rps: 100
+        responses:
+        - status: 200
+          resolution: 100
+          distribution:
+            p0.0: "1ms"
+            p50.0: "5ms"
+            p99.0: "50ms"
+      tipping_point:
+          threshold_rps: 500
+          responses:
+          - status: 200
+            resolution: 50
+            distribution:
+              p0.0: "50ms"
+              p50.0: "200ms"
+              p99.0: "2s"
+          - status: 503
+            resolution: 50
+            distribution:
+              p0.0: "10ms"
+              p50.0: "50ms"
+              p99.0: "100ms"
+          grey_zone:
+            penalty_base: "10ms"
+            spike_threshold: 0.8
+            spike_penalty_duration: "5s"
+            spike_penalty_multiplier: 2.0
+            recovery_rate: 0.1
+`
+
+	_, err := ParseConfig([]byte(input))
+	if err == nil {
+		t.Fatalf("unexpected successfull load of config: %v", err)
+	}
+
+	if !strings.Contains(err.Error(), "either one") {
+		t.Fatalf("Expected config loading to fail with a message about the fields `responses` and `load_based` being mutually exclusive. %v", err)
+	}
+
 }
 
 func TestParseConfig_JSONFromStruct(t *testing.T) {

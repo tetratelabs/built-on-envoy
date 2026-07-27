@@ -74,6 +74,11 @@ func ParseConfig(data []byte) (*FilterConfig, error) {
 		if len(ep.Responses) == 0 && ep.LoadBased == nil {
 			validationErrors = append(validationErrors, fmt.Errorf("endpoint %d: must have at least 'responses' or 'load_based' configured", i))
 		}
+
+		if len(ep.Responses) > 0 && ep.LoadBased != nil {
+			validationErrors = append(validationErrors, fmt.Errorf("endpoint %d: must have *either one* 'responses' or 'load_based' configured", i))
+		}
+
 		for j, resp := range ep.Responses {
 			if err := validateStatusDistribution(resp, fmt.Sprintf("endpoint %d response %d", i, j)); err != nil {
 				validationErrors = append(validationErrors, err)
@@ -121,19 +126,22 @@ func validateLoadBased(lb *LoadBasedConfig, endpointIdx int) error {
 	if lb.Healthy.ThresholdRPS <= 0 {
 		validationErrors = append(validationErrors, fmt.Errorf("endpoint %d: load_based.healthy.threshold_rps must be positive", endpointIdx))
 	}
-	if lb.TippingPoint.ThresholdRPS <= lb.Healthy.ThresholdRPS {
-		validationErrors = append(validationErrors, fmt.Errorf("endpoint %d: load_based.tipping_point.threshold_rps must be greater than healthy.threshold_rps", endpointIdx))
-	}
-	for j, resp := range lb.Healthy.Responses {
-		if err := validateStatusDistribution(resp, fmt.Sprintf("endpoint %d healthy response %d", endpointIdx, j)); err != nil {
-			validationErrors = append(validationErrors, err)
+	if lb.TippingPoint != nil && lb.Healthy != nil {
+		if lb.TippingPoint.ThresholdRPS <= lb.Healthy.ThresholdRPS {
+			validationErrors = append(validationErrors, fmt.Errorf("endpoint %d: load_based.tipping_point.threshold_rps must be greater than healthy.threshold_rps", endpointIdx))
+		}
+		for j, resp := range lb.Healthy.Responses {
+			if err := validateStatusDistribution(resp, fmt.Sprintf("endpoint %d healthy response %d", endpointIdx, j)); err != nil {
+				validationErrors = append(validationErrors, err)
+			}
+		}
+		for j, resp := range lb.TippingPoint.Responses {
+			if err := validateStatusDistribution(resp, fmt.Sprintf("endpoint %d tipping_point response %d", endpointIdx, j)); err != nil {
+				validationErrors = append(validationErrors, err)
+			}
 		}
 	}
-	for j, resp := range lb.TippingPoint.Responses {
-		if err := validateStatusDistribution(resp, fmt.Sprintf("endpoint %d tipping_point response %d", endpointIdx, j)); err != nil {
-			validationErrors = append(validationErrors, err)
-		}
-	}
+
 	if lb.GreyZone != nil {
 		if _, err := time.ParseDuration(lb.GreyZone.PenaltyBase); err != nil {
 			validationErrors = append(validationErrors, fmt.Errorf("endpoint %d: grey_zone.penalty_base: %w", endpointIdx, err))
