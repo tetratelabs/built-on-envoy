@@ -109,10 +109,7 @@ func (f *latencyFaultFilter) OnResponseHeaders(headers shared.HeaderMap, _ bool)
 	}
 
 	elapsed := time.Since(f.requestStart)
-	remainingDelay := f.sample.Duration - elapsed
-	if remainingDelay < 0 {
-		remainingDelay = 0
-	}
+	remainingDelay := max(f.sample.Duration-elapsed, 0)
 
 	// If the sampled status is an error (4xx/5xx), override the upstream response.
 	if f.sample.Status >= 400 {
