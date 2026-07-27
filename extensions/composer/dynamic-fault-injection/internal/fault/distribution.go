@@ -73,8 +73,9 @@ func (pd *ProbabilityDistribution) SampleWithValue(r float64) time.Duration {
 // and cycles through them in shuffled order. Over N samples, this guarantees
 // an exact match to the configured percentile distribution.
 type StatefulProbabilityDistribution struct {
-	values []time.Duration
-	index  int
+	values    []time.Duration
+	index     int
+	indexLock sync.Mutex
 }
 
 // NewStatefulProbabilityDistribution creates a new stateful distribution with
@@ -118,6 +119,9 @@ func NewStatefulProbabilityDistribution(percentiles []Percentile, resolution int
 
 // Sample returns the next pre-computed duration, reshuffling when the cycle completes.
 func (spd *StatefulProbabilityDistribution) Sample() time.Duration {
+	spd.indexLock.Lock()
+	defer spd.indexLock.Unlock()
+
 	if spd.index >= len(spd.values) {
 		cryptoShuffle(len(spd.values), func(i, j int) {
 			spd.values[i], spd.values[j] = spd.values[j], spd.values[i]
