@@ -829,6 +829,46 @@
     "configReferencePath": "/docs/reference/extensions#lookup"
   },
   {
+    "name": "multicast-relay",
+    "version": "0.11.0-dev",
+    "parent": "composer",
+    "categories": [
+      "Network"
+    ],
+    "author": "Anton Kanugalawattage",
+    "description": "Join IPv4 multicast groups and relay the traffic through Envoy",
+    "longDescription": "Envoy cannot receive multicast traffic. Nothing in Envoy joins an IGMP group, so a UDP\nlistener bound to a `239.0.0.0/8` address receives nothing, and the UDP dynamic-module\nABI exposes no socket, file descriptor, or `setsockopt` callback an extension could use\nto join one.\n\nThis extension joins the configured groups on sockets it owns and re-emits every\ndatagram as unicast UDP to Envoy's own UDP listener, where a `udp_proxy` filter forwards\nit to an upstream cluster.\n\n## Configuration\n\n| Field | Type | Required | Description |\n|-------|------|----------|-------------|\n| `groups` | array | yes | Multicast groups to join |\n| `groups[].address` | string | yes | IPv4 multicast group address (e.g. `239.1.1.1`) |\n| `groups[].port` | integer | yes | UDP port the group sends on. Groups sharing a port share one socket |\n| `groups[].interface` | string | no | Interface name to join on (e.g. `en0`). Pin this explicitly; leaving it empty lets the routing table choose, which is rarely correct on a multi-homed host |\n| `target` | object | yes | The local Envoy UDP listener that relayed datagrams are sent to |\n| `target.address` | string | no | Unicast address to forward to. Keep this on loopback: a unicast source is what makes `udp_proxy`'s reply path valid. Default: `127.0.0.1` |\n| `target.port` | integer | yes | Port of Envoy's UDP listener. Under BOE this is the same port number as the main TCP listener |\n| `read_buffer_size` | integer | no | Receive buffer and maximum datagram size in bytes. Default: `65535` |\n\n## Wiring the UDP listener\n\nAdd a `udp_proxy` as the upstream for multicast relay filter:\n\n```yaml\nstatic_resources:\n  listeners:\n    - name: udp\n      address:\n        socket_address: { protocol: UDP, address: 0.0.0.0, port_value: 10000 }\n      udp_listener_config: {}\n      listener_filters:\n        - name: envoy.filters.udp_listener.udp_proxy\n          typed_config:\n            \"@type\": type.googleapis.com/envoy.extensions.filters.udp.udp_proxy.v3.UdpProxyConfig\n            stat_prefix: multicast_relay\n            cluster: multicast_upstream\n  clusters:\n    - name: multicast_upstream\n      type: STATIC\n      load_assignment:\n        cluster_name: multicast_upstream\n        endpoints:\n          - lb_endpoints:\n              - endpoint:\n                  address:\n                    socket_address: { protocol: UDP, address: 127.0.0.1, port_value: 19999 }\n```\n`target.port` must match that listener's `port_value`. A UDP listener may share a port\nnumber with the TCP listener; they are distinct sockets.\n\n## Prerequisites\n\nJoining a group needs no elevated privileges, but it does need access to a network that\ncarries the traffic. Run with host networking (`--docker-network host` under `--docker`).\n\n\u003e On Docker Desktop for macOS, host networking binds inside the Linux VM rather than on\n\u003e the macOS host, so host-LAN multicast will not arrive. Use a local `boe run` there.\n",
+    "type": "go",
+    "filterType": [
+      "http"
+    ],
+    "tags": [
+      "go",
+      "igmp",
+      "multicast",
+      "networking",
+      "udp"
+    ],
+    "license": "Apache-2.0",
+    "examples": [
+      {
+        "title": "Single Group",
+        "description": "Join `239.1.1.1:5000` on `en0` and forward each datagram to Envoy's UDP listener on\nport 10000, where `udp_proxy` carries it upstream.\n",
+        "code": "boe run \\\n  --extension multicast-relay --config '\n    {\n      \"groups\": [\n        {\n          \"address\": \"239.1.1.1\",\n          \"port\": 5000,\n          \"interface\": \"en0\"\n        }\n      ],\n      \"target\": {\n        \"port\": 10000\n      }\n    }'\n"
+      },
+      {
+        "title": "One Instance Per Group",
+        "description": "Two groups that must reach different upstreams need one instance each, so every group\ngets its own `target.port`, its own `udp_proxy` listener, and its own cluster. Groups\nlisted together in a single instance all share one target.\n",
+        "code": "boe run \\\n  --extension multicast-relay --config '\n    {\n      \"groups\": [{ \"address\": \"239.1.1.1\", \"port\": 5000, \"interface\": \"en0\" }],\n      \"target\": { \"port\": 10001 }\n    }' \\\n  --extension multicast-relay --config '\n    {\n      \"groups\": [{ \"address\": \"239.1.1.2\", \"port\": 5000, \"interface\": \"en0\" }],\n      \"target\": { \"port\": 10002 }\n    }'\n"
+      }
+    ],
+    "minEnvoyVersion": "1.38.0",
+    "maxEnvoyVersion": "1.39.0",
+    "composerVersion": "0.11.0-dev",
+    "sourcePath": "composer/multicast-relay",
+    "configReferencePath": "/docs/reference/extensions#multicast-relay"
+  },
+  {
     "name": "opa",
     "version": "0.11.0-dev",
     "parent": "composer",

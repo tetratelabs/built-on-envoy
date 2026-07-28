@@ -305,6 +305,78 @@ func TestDockerRunArgs_RunID(t *testing.T) {
 	}
 }
 
+func TestDockerRunArgs_Network(t *testing.T) {
+	originalArgs := os.Args
+	os.Args = []string{"boe", "run", "--docker"}
+	t.Cleanup(func() { os.Args = originalArgs })
+
+	// -p is rejected alongside --network host.
+	r := &RunnerDocker{
+		Logger:        internaltesting.NewTLogger(t),
+		ListenPort:    10000,
+		AdminPort:     9901,
+		Arch:          "arm64",
+		Pull:          "missing",
+		DockerNetwork: "host",
+	}
+	require.Equal(t, []string{
+		"run", "--rm",
+		"--pull", "missing",
+		"--platform", "linux/arm64",
+		"--network", "host",
+		"-v", "boe-cache:" + containerVolumeDir,
+		"-e", "BOE_ADMIN_ADDRESS=0.0.0.0:9901",
+		"-e", "BOE_CONFIG_HOME=" + containerConfigHome,
+		"-e", "BOE_DATA_HOME=" + containerDataHome,
+		"-e", "BOE_STATE_HOME=" + containerStateHome,
+		"-e", "BOE_RUNTIME_DIR=" + containerRuntimeDir,
+		"ghcr.io/test/boe:latest", "/boe",
+		"run",
+	}, r.dockerRunArgs("ghcr.io/test/boe:latest", nil))
+}
+
+func TestDockerRunArgs_BridgePublishesPorts(t *testing.T) {
+	originalArgs := os.Args
+	os.Args = []string{"boe", "run", "--docker"}
+	t.Cleanup(func() { os.Args = originalArgs })
+
+	// An explicit "bridge" must behave exactly like the unset default.
+	r := &RunnerDocker{
+		Logger:        internaltesting.NewTLogger(t),
+		ListenPort:    10000,
+		AdminPort:     9901,
+		Arch:          "arm64",
+		Pull:          "missing",
+		DockerNetwork: "bridge",
+	}
+	args := r.dockerRunArgs("ghcr.io/test/boe:latest", nil)
+	require.Contains(t, strings.Join(args, " "), "-p 10000:10000/udp")
+	require.NotContains(t, strings.Join(args, " "), "--network")
+}
+
+// The --docker prefix filter drops the flag name, so a space-separated value would
+// otherwise survive as a stray positional argument to the container's boe.
+func TestProcessCommandArgsStripsDockerFlagValues(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{{
+		name: "docker-network space separated",
+		args: []string{"boe", "run", "--docker", "--docker-network", "host", "--listen-port", "10000"},
+	}, {
+		name: "docker-network equals form",
+		args: []string{"boe", "run", "--docker", "--docker-network=host", "--listen-port", "10000"},
+	}, {
+		name: "docker-image-version space separated",
+		args: []string{"boe", "run", "--docker", "--docker-image-version", "latest", "--listen-port", "10000"},
+	}} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := &RunnerDocker{Logger: internaltesting.NewTLogger(t)}
+			require.Equal(t, []string{"run", "--listen-port", "10000"}, r.processCommandArgs(tc.args))
+		})
+	}
+}
+
 func TestPassthroughEnvVars(t *testing.T) {
 	// Save and restore the original environment.
 	originalEnv := os.Environ()

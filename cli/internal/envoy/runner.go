@@ -377,6 +377,8 @@ const (
 	containerRuntimeDir = containerVolumeDir + "/run"
 	// containerLocalExtensionsDir is the directory inside the container where local extensions are mounted.
 	containerLocalExtensionsDir = containerRuntimeDir + "/extensions"
+	// dockerNetworkBridge is Docker's default network mode, in which ports are published.
+	dockerNetworkBridge = "bridge"
 )
 
 // RunnerDocker handles running Envoy as a Docker container.
@@ -391,6 +393,9 @@ type RunnerDocker struct {
 	LocalExtensions []string
 	Pull            string
 	ImageVersion    string
+	// DockerNetwork is the container network mode. Anything other than the default
+	// bridge is passed to `docker run --network` and suppresses port publishing.
+	DockerNetwork string
 }
 
 // Run starts Envoy in a Docker container.
@@ -434,16 +439,26 @@ func (r *RunnerDocker) dockerRunArgs(image string, localExtArgs []string) []stri
 		"run", "--rm",
 		"--pull", r.Pull,
 		"--platform", "linux/" + r.Arch,
-		"-p", fmt.Sprintf("%d:%d/tcp", r.ListenPort, r.ListenPort),
-		"-p", fmt.Sprintf("%d:%d/udp", r.ListenPort, r.ListenPort),
-		"-p", adminPort + ":" + adminPort,
-		"-v", ContainerCacheVolumeName + ":" + containerVolumeDir,
-		"-e", "BOE_ADMIN_ADDRESS=" + containerAdminAddress,
-		"-e", "BOE_CONFIG_HOME=" + containerConfigHome,
-		"-e", "BOE_DATA_HOME=" + containerDataHome,
-		"-e", "BOE_STATE_HOME=" + containerStateHome,
-		"-e", "BOE_RUNTIME_DIR=" + containerRuntimeDir,
 	}
+	// Publishing ports is meaningless, and rejected by Docker, when the container
+	// shares the host network namespace.
+	if r.DockerNetwork != "" && r.DockerNetwork != dockerNetworkBridge {
+		args = append(args, "--network", r.DockerNetwork)
+	} else {
+		args = append(args,
+			"-p", fmt.Sprintf("%d:%d/tcp", r.ListenPort, r.ListenPort),
+			"-p", fmt.Sprintf("%d:%d/udp", r.ListenPort, r.ListenPort),
+			"-p", adminPort+":"+adminPort,
+		)
+	}
+	args = append(args,
+		"-v", ContainerCacheVolumeName+":"+containerVolumeDir,
+		"-e", "BOE_ADMIN_ADDRESS="+containerAdminAddress,
+		"-e", "BOE_CONFIG_HOME="+containerConfigHome,
+		"-e", "BOE_DATA_HOME="+containerDataHome,
+		"-e", "BOE_STATE_HOME="+containerStateHome,
+		"-e", "BOE_RUNTIME_DIR="+containerRuntimeDir,
+	)
 	if r.RunID != "" {
 		args = append(args, "-e", "BOE_RUN_ID="+r.RunID)
 	}
@@ -529,9 +544,11 @@ func (r *RunnerDocker) processCommandArgs(args []string) []string {
 		// and should not be passed to the container.
 		// Need to do prefix match not equality because flags could be in the form of --docker=true or --pull=always.
 
-		// Handle --docker-image-version value
-		if arg == "--docker-image-version" && i+1 < len(args) {
-			i++ // skip next arg (the value for --docker-image-version)
+		// Handle the space-separated form of --docker flags that take a value. The
+		// --docker prefix check below drops the flag itself, so without this the value
+		// would survive as a stray positional argument to the container's boe.
+		if slices.Contains([]string{"--docker-image-version", "--docker-network"}, arg) && i+1 < len(args) {
+			i++ // skip next arg (the flag's value)
 			continue
 		}
 		if strings.HasPrefix(arg, "--docker") {
