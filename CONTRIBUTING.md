@@ -63,7 +63,7 @@ All of the following are required:
 
 ### Ensure `make check` passes
 
-lease run `make check` locally before opening a PR and ensure that it passes.
+Please run `make check` locally before opening a PR and ensure that it passes.
 If anything goes wrong, please do not open a PR or at least mark it as a draft PR. This is helpful to save time for the reviewers.
 
 ### Write Tests

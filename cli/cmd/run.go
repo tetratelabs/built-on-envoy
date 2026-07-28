@@ -155,7 +155,7 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 		} else {
 			logger.Debug("validating Envoy version compatibility for extensions", "envoy_version", r.Envoy.Version)
 			if err = validateEnvoyCompat(r.Envoy.Version, extensionsToRun); err != nil {
-				return err
+				logger.Warn("some extensions may not be compatible with the specified Envoy version", "envoy_version", r.Envoy.Version, "error", err)
 			}
 		}
 	}
