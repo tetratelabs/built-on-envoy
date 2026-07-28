@@ -42,48 +42,53 @@ Start the web UI
 
 %s
 Flags:
-  -h, --help                     Show context-sensitive help.
+  -h, --help                       Show context-sensitive help.
 
-      --port=18000               HTTP server port.
-      --log-level="all:error"    Envoy component log level ($ENVOY_LOG_LEVEL).
-      --envoy-version=STRING     Envoy version to use (e.g., 1.31.0, dev,
-                                 dev-latest) ($ENVOY_VERSION)
-      --envoy-path=STRING        Path to a custom Envoy binary. Skips Envoy
-                                 download and version selection ($ENVOY_PATH).
-      --local=LOCAL              Path to a directory containing a local
-                                 Extension to enable.
-      --dev                      Whether to allow downloading dev versions of
-                                 extensions (with -dev suffix). By default,
-                                 only stable versions are allowed.
-      --cluster=CLUSTER,...      Optional additional Envoy cluster provided in
-                                 the host:tlsPort pattern.
+      --port=18000                 HTTP server port.
+      --log-level="all:error"      Envoy component log level ($ENVOY_LOG_LEVEL).
+      --envoy-version=STRING       Envoy version to use (e.g., 1.31.0, dev,
+                                   dev-latest) ($ENVOY_VERSION)
+      --envoy-path=STRING          Path to a custom Envoy binary. Skips Envoy
+                                   download and version selection ($ENVOY_PATH).
+      --local=LOCAL                Path to a directory containing a local
+                                   Extension to enable.
+      --dev                        Whether to allow downloading dev versions of
+                                   extensions (with -dev suffix). By default,
+                                   only stable versions are allowed.
+      --cluster=CLUSTER,...        Optional additional Envoy cluster provided in
+                                   the host:tlsPort pattern.
       --cluster-insecure=CLUSTER-INSECURE,...
-                                 Optional additional Envoy cluster (with TLS
-                                 transport disabled) provided in the host:port
-                                 pattern.
+                                   Optional additional Envoy cluster (with TLS
+                                   transport disabled) provided in the host:port
+                                   pattern.
       --cluster-json=CLUSTER-JSON
-                                 Optional additional Envoy cluster providing the
-                                 complete cluster config in JSON format.
+                                   Optional additional Envoy cluster providing
+                                   the complete cluster config in JSON format.
       --test-upstream-host=STRING
-                                 Hostname for the test upstream
-                                 cluster. Mutually exclusive with
-                                 --test-upstream-cluster. Defaults to
-                                 "httpbin.org".
+                                   Hostname for the test upstream
+                                   cluster. Mutually exclusive with
+                                   --test-upstream-cluster. Defaults to
+                                   "httpbin.org".
       --test-upstream-cluster=STRING
-                                 Name of an existing configured cluster to
-                                 use as the test upstream. The cluster must be
-                                 configured via --cluster, --cluster-insecure,
-                                 or --cluster-json. Mutually exclusive with
-                                 --test-upstream-host.
-      --docker                   Run Envoy as a Docker container instead of
-                                 using func-e ($BOE_RUN_DOCKER).
-      --pull="missing"           Pull policy for the BOE Docker image (missing,
-                                 always, never). Only applicable when running
-                                 with --docker.
+                                   Name of an existing configured cluster to
+                                   use as the test upstream. The cluster must be
+                                   configured via --cluster, --cluster-insecure,
+                                   or --cluster-json. Mutually exclusive with
+                                   --test-upstream-host.
+      --docker                     Run Envoy as a Docker container instead of
+                                   using func-e ($BOE_RUN_DOCKER).
+      --pull="missing"             Pull policy for the BOE Docker image
+                                   (missing, always, never). Only applicable
+                                   when running with --docker.
       --docker-image-version=STRING
-                                 Override the BOE Docker image tag to use when
-                                 running with --docker. By default, the image
-                                 version matches the BOE version.
+                                   Override the BOE Docker image tag to use
+                                   when running with --docker. By default,
+                                   the image version matches the BOE version.
+      --docker-network="bridge"    Container network mode when running with
+                                   --docker. With 'host' the container shares
+                                   the host network namespace and no ports are
+                                   published, which removes container network
+                                   isolation.
 `, wrapHelp(uiHelp))
 
 	require.Equal(t, expected, buf.String())

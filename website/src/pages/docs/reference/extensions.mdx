@@ -1262,6 +1262,118 @@ Match strings ending with this value.
 
 
 
+<a id="multicast-relay"></a>
+## Multicast Relay Configuration
+
+
+
+### groups
+
+IPv4 multicast groups to join. Groups sharing a port share one socket.
+
+| | |
+|---|---|
+| **Type** | `[]object` |
+| **Required** | Yes |
+| **Min items** | 1 |
+
+[↑ Top](#) | [↑ Multicast Relay Configuration](#multicast-relay)
+
+
+
+#### groups.address
+
+IPv4 multicast group address, e.g. 239.1.1.1.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Min length** | 1 |
+
+[↑ Top](#) | [↑ Multicast Relay Configuration](#multicast-relay)
+
+
+
+#### groups.interface
+
+Interface name to join on, e.g. en0 or lo0. Pin this explicitly; leaving it empty lets the routing table choose, which is rarely what you want on a multi-homed host.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Multicast Relay Configuration](#multicast-relay)
+
+
+
+#### groups.port
+
+UDP port the group sends on.
+
+| | |
+|---|---|
+| **Type** | `integer` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ Multicast Relay Configuration](#multicast-relay)
+
+   {/* range .SubProperties */} {/* if .SubProperties */}
+
+### read_buffer_size
+
+Receive buffer and maximum datagram size in bytes.
+
+| | |
+|---|---|
+| **Type** | `integer` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Multicast Relay Configuration](#multicast-relay) {/* if .SubProperties */}
+
+### target
+
+The local Envoy UDP listener that relayed datagrams are sent to.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ Multicast Relay Configuration](#multicast-relay)
+
+
+
+#### target.address
+
+Unicast address to forward to. Keep this on loopback: a unicast source address is what makes udp_proxy's reply path valid.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Multicast Relay Configuration](#multicast-relay)
+
+
+
+#### target.port
+
+Port of Envoy's UDP listener. With BOE this is the same port number as the main TCP listener.
+
+| | |
+|---|---|
+| **Type** | `integer` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ Multicast Relay Configuration](#multicast-relay)
+
+   {/* range .SubProperties */} {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */}
+
+
+
+
 <a id="opa"></a>
 ## OPA Authorization Configuration
 

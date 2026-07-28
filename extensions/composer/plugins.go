@@ -19,6 +19,7 @@ import (
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/goplugin-loader"
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/jwe-decrypt/embedded"       // JWE decryption plugin.
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/llm-proxy/embedded"         // LLM Proxy plugin.
+	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/multicast-relay/embedded"   // Multicast Relay plugin.
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/opa/embedded"               // OPA authorization plugin.
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/openapi-validator/embedded" // OpenAPI validator plugin.
 	_ "github.com/tetratelabs/built-on-envoy/extensions/composer/openfga/embedded"           // OpenFGA authorization plugin.

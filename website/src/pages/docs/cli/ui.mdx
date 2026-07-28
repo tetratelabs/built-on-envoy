@@ -72,4 +72,5 @@ boe ui --help
 | `--docker` | Run Envoy as a Docker container instead of using func-e. | `bool` | `false` | `BOE_RUN_DOCKER` | No |
 | `--pull` | Pull policy for the BOE Docker image (missing, always, never). Only applicable when running with --docker. | `string` | `missing` | - | No |
 | `--docker-image-version` | Override the BOE Docker image tag to use when running with --docker. By default, the image version matches the BOE version. | `string` | - | - | No |
+| `--docker-network` | Container network mode when running with --docker. With 'host' the container shares the host network namespace and no ports are published, which removes container network isolation. | `string` | `bridge` | - | No |
 

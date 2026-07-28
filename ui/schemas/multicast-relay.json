@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/multicast-relay/config.schema.json",
+  "title": "Multicast Relay Configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["groups", "target"],
+  "properties": {
+    "groups": {
+      "type": "array",
+      "description": "IPv4 multicast groups to join. Groups sharing a port share one socket.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["address", "port"],
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "IPv4 multicast group address, e.g. 239.1.1.1.",
+            "minLength": 1
+          },
+          "port": {
+            "type": "integer",
+            "description": "UDP port the group sends on.",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "interface": {
+            "type": "string",
+            "description": "Interface name to join on, e.g. en0 or lo0. Pin this explicitly; leaving it empty lets the routing table choose, which is rarely what you want on a multi-homed host."
+          }
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "description": "The local Envoy UDP listener that relayed datagrams are sent to.",
+      "additionalProperties": false,
+      "required": ["port"],
+      "properties": {
+        "address": {
+          "type": "string",
+          "description": "Unicast address to forward to. Keep this on loopback: a unicast source address is what makes udp_proxy's reply path valid.",
+          "default": "127.0.0.1"
+        },
+        "port": {
+          "type": "integer",
+          "description": "Port of Envoy's UDP listener. With BOE this is the same port number as the main TCP listener.",
+          "minimum": 1,
+          "maximum": 65535
+        }
+      }
+    },
+    "read_buffer_size": {
+      "type": "integer",
+      "description": "Receive buffer and maximum datagram size in bytes.",
+      "minimum": 512,
+      "maximum": 65536,
+      "default": 65535
+    }
+  }
+}

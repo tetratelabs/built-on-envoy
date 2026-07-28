@@ -42,6 +42,7 @@ type DockerFlags struct {
 	Enabled      bool   `name:"docker" help:"Run Envoy as a Docker container instead of using func-e." default:"false" env:"BOE_RUN_DOCKER"`
 	Pull         string `name:"pull" help:"Pull policy for the BOE Docker image (missing, always, never). Only applicable when running with --docker." enum:"missing,always,never" default:"missing"`
 	ImageVersion string `name:"docker-image-version" help:"Override the BOE Docker image tag to use when running with --docker. By default, the image version matches the BOE version."`
+	Network      string `name:"docker-network" help:"Container network mode when running with --docker. With 'host' the container shares the host network namespace and no ports are published, which removes container network isolation." enum:"bridge,host" default:"bridge"`
 }
 
 // extensionPositions keeps track of the original position of extensions specified via --extension and --local flags.

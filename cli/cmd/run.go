@@ -103,6 +103,7 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 			LocalExtensions: r.Local,
 			Pull:            r.Docker.Pull,
 			ImageVersion:    r.Docker.ImageVersion,
+			DockerNetwork:   r.Docker.Network,
 		}
 		return runner.Run(ctx)
 	}

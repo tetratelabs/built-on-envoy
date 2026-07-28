@@ -112,6 +112,11 @@ Flags:
                                    Override the BOE Docker image tag to use
                                    when running with --docker. By default,
                                    the image version matches the BOE version.
+      --docker-network="bridge"    Container network mode when running with
+                                   --docker. With 'host' the container shares
+                                   the host network namespace and no ports are
+                                   published, which removes container network
+                                   isolation.
       --registry="%s"
                                    OCI registry URL for the extensions
                                    ($BOE_REGISTRY).
