@@ -19,90 +19,82 @@ If the upstream is already slower than the target, no additional delay is added.
 - **First-match routing**: Endpoints are evaluated in order; first match wins
 - **Upstream-aware timing**: Measures actual upstream latency and only adds the remaining delay to reach the target — avoids over-delaying when the upstream is naturally slow
 
-## Usage 
-
-### Delay all success responses and introduce a 1% failure rate that returns quickly
-
-```sh
-CONFIG=$(cat <<-END
-{
-	"endpoints": [
-		{
-			"match": {"prefix": "/"},
-			"responses": [
-				{
-					"status": 200,
-					"resolution": 1000,
-					"distribution": {
-						"p0.0": "30ms",
-						"p100.0": "500ms"
-					}
-				},
-				{
-				  "status": 503,
-				  "resolution": 10,
-				  "distribution": {
-			      "p0.0": "3ms",
-					  "p100.0": "5ms"
-					}
-				}
-			]
-		}
-	]
-}
-END
-)
-boe run \
-    --extension dynamic-fault-injection \
-    --log-level dynamic_modules:debug \
-    --config "${CONFIG}"
-
-❯ curl -v http://localhost:10000/status/200
-> GET /status/200 HTTP/1.1
-> Host: localhost:10000
-> User-Agent: curl/8.21.0
-> Accept: */*
->
-* Request completely sent off
-< HTTP/1.1 200 OK
-< server: envoy
-< date: Mon, 03 Aug 2026 12:22:42 GMT
-< content-type: text/html; charset=utf-8
-< access-control-allow-origin: *
-< access-control-allow-credentials: true
-< content-length: 0
-< x-envoy-upstream-service-time: 0
-< x-fault-injected-delay: 213.77ms
-< x-fault-actual-upstream: 953.946µs
-< x-fault-status: 200
-< x-fault-added-delay: 212.816054ms
-
-$> curl -v http://localhost:10000/status/503
-> GET /status/503 HTTP/1.1
-> Host: localhost:10000
-> User-Agent: curl/8.21.0
-> Accept: */*
->
-* Request completely sent off
-< HTTP/1.1 503 Service Unavailable
-< server: envoy
-< date: Mon, 03 Aug 2026 12:20:30 GMT
-< content-type: text/html; charset=utf-8
-< access-control-allow-origin: *
-< access-control-allow-credentials: true
-< content-length: 0
-< x-envoy-upstream-service-time: 0
-< x-fault-injected-delay: 414.14ms
-< x-fault-actual-upstream: 896.86µs
-< x-fault-status: 503
-< x-fault-added-delay: 413ms
-```
-
 ## Configuration
 
-The filter is configured as native YAML in the Envoy config using `google.protobuf.StringValue` as the `filter_config` type.
-Envoy parses the YAML natively and serializes it as JSON to the module — no string escaping or `value: |` indirection needed.
-Please find an overview of the possible fields below, followed by an actual example of how to configure the filter as a per cluster http filter.
+The filter is configured as native YAML in the Envoy config using `google.protobuf.Struct` as the `filter_config` type. Envoy parses the YAML natively and serializes it as JSON to the module — no string escaping or `value: |` indirection needed.
+
+### Configuration Schema
+
+```yaml
+$schema: https://github.com/spockz/built-on-envoy/blob/cea69ebebebc25a7f172724abc2697655ec08674/extensions/composer/dynamic-fault-injection/config.schema.json
+endpoints:
+  # Simple endpoint with weighted status codes
+  - match:
+      prefix: "/api/v1/users"
+      headers:
+        - name: "x-env"
+          exact_match: "staging"
+    responses:
+      - status: 200
+        resolution: 900          # 90% of responses are 200 OK
+        distribution:
+          p0.0: "1ms"
+          p50.0: "10ms"
+          p99.0: "200ms"
+          p99.9: "500ms"
+          p100.0: "1s"
+      - status: 503
+        resolution: 100          # 10% of responses are 503
+        distribution:
+          p0.0: "100ms"
+          p50.0: "500ms"
+          p100.0: "2s"
+
+  # Load-based endpoint with grey zone behavior
+  - match:
+      prefix: "/api/v1/heavy"
+    responses:
+      - status: 200
+        resolution: 1000
+        distribution:
+          p0.0: "5ms"
+          p100.0: "50ms"
+    load_based:
+      healthy:
+        threshold_rps: 100
+        responses:
+          - status: 200
+            resolution: 950
+            distribution:
+              p0.0: "1ms"
+              p50.0: "5ms"
+              p100.0: "20ms"
+          - status: 500
+            resolution: 50
+            distribution:
+              p0.0: "10ms"
+              p100.0: "50ms"
+      tipping_point:
+        threshold_rps: 500
+        responses:
+          - status: 200
+            resolution: 500
+            distribution:
+              p0.0: "50ms"
+              p50.0: "500ms"
+              p100.0: "5s"
+          - status: 503
+            resolution: 500
+            distribution:
+              p0.0: "10ms"
+              p100.0: "1s"
+      grey_zone:
+        penalty_base: "50ms"
+        spike_threshold: 0.8
+        spike_penalty_duration: "2s"
+        spike_penalty_multiplier: 3.0
+        recovery_rate: 0.5
+```
 
 ### Configuration Fields
 
@@ -152,10 +144,9 @@ Distribution values must be non-decreasing (a higher percentile cannot have a sh
 
 ### Envoy Configuration Example
 
-Tyically, the filter is configured as an **upstream HTTP filter** on the cluster, not on the listener.
-The filter would be configured on each cluster as the behaviours for each cluster could differ even on serving the same resource.
-However, for straightforward testing setups where each resource is uniquely served by a single cluster the configuration can be simplified by 
-adding the filter to the listener and configurig all behaviour using specific matchers.
+The filter is configured as an **upstream HTTP filter** on the cluster, not on the listener.
+
+Note: `filter_config` uses `google.protobuf.Struct` — Envoy parses the YAML natively and passes it as JSON to the module. No string-wrapping required.
 
 ```yaml
 static_resources:
@@ -253,8 +244,6 @@ For example, with `resolution: 900` for status 200 and `resolution: 100` for sta
 - 90% of requests will get a 200 response with latency from the 200 distribution
 - 10% of requests will get a 503 abort with latency from the 503 distribution
 
-This status code rewriting assumes that the upstream responses are always "good" (e.g. 200) responses and will overwrite them with one of the  bad responses (e.g. 503). 
-
 ### Latency Distribution
 
 The stateful probability distribution is inspired by [distribution-calculator](https://github.com/spockz/distribution-calculator). Given a set of percentiles, it:
@@ -264,10 +253,6 @@ The stateful probability distribution is inspired by [distribution-calculator](h
 3. Over a full cycle of `resolution` requests, the actual percentile distribution exactly matches the configured one
 
 ### Load-Based Behavior
-
-[!IMPORTANT]
-As of yet the load-based behaviour needs to be implemented still.
-
 
 When `load_based` is configured:
 - Below `healthy.threshold_rps`: Uses the healthy response distribution
@@ -294,6 +279,37 @@ The filter adds response headers to indicate what was injected:
 | `x-fault-added-delay` | Additional delay injected (target - upstream, only if > 0) |
 | `x-fault-injected` | Set to "abort" when a non-2xx status was injected |
 | `x-fault-status` | The status code selected by the distribution |
+
+## Development
+
+### Prerequisites
+
+- Go 1.23+
+- Envoy v1.37.0 (or compatible version)
+
+### Build
+
+```bash
+cd "built-on-envoy/extensions"
+EXTENSION_PATH="composer/dynamic-fault-injection" make build-go
+```
+
+This produces `liblatency_fault_module.so` which can be loaded by Envoy.
+
+### Unit Tests
+
+```bash
+EXTENSION_PATH="composer/dynamic-fault-injection" make test-go
+```
+
+### Integration Tests
+
+```bash
+cd "built-on-envoy/extensions/tests/e2e"
+GO_TEST_ARGS="-run TestDistributionDelay" make test
+```
+
+This builds the module, starts an Envoy instance with the filter configured, and runs tests against it using the boe built-in test harness.
 
 ## Comparison with Envoy's Built-in Fault Filter
 
