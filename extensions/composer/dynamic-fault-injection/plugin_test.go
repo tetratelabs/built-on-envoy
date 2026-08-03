@@ -17,7 +17,7 @@ import (
 )
 
 // Valid YAML config for testing.
-var validConfig = []byte(`
+var ValidConfig = []byte(`
 endpoints:
   - match:
       prefix: "/api/"
@@ -46,7 +46,7 @@ func TestConfigFactory_Create_ValidConfig(t *testing.T) {
 	mockHandle := mocks.NewMockHttpFilterConfigHandle(ctrl)
 	mockHandle.EXPECT().Log(gomock.Any(), gomock.Any()).AnyTimes()
 
-	filterFactory, err := factory.Create(mockHandle, validConfig)
+	filterFactory, err := factory.Create(mockHandle, ValidConfig)
 	require.NoError(t, err)
 	require.NotNil(t, filterFactory)
 
@@ -114,7 +114,7 @@ endpoints:
 func TestConfigFactory_CreatePerRoute_ValidConfig(t *testing.T) {
 	factory := &CustomHttpFilterConfigFactory{}
 
-	result, err := factory.CreatePerRoute(validConfig)
+	result, err := factory.CreatePerRoute(ValidConfig)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
@@ -138,7 +138,7 @@ func TestPerRouteConfigOverride(t *testing.T) {
 	defer ctrl.Finish()
 
 	// Build a base factory.
-	baseFactory, err := buildFilterFactory(validConfig)
+	baseFactory, err := buildFilterFactory(ValidConfig)
 	require.NoError(t, err)
 
 	t.Run("per-route config overrides factory", func(t *testing.T) {
@@ -182,7 +182,7 @@ func TestOnRequestHeaders_MatchingRoute(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	factory, err := buildFilterFactory(validConfig)
+	factory, err := buildFilterFactory(ValidConfig)
 	require.NoError(t, err)
 
 	handle := newFilterHandleWithoutPerRouteConfig(ctrl)
@@ -202,7 +202,7 @@ func TestOnRequestHeaders_NonMatchingRoute(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	factory, err := buildFilterFactory(validConfig)
+	factory, err := buildFilterFactory(ValidConfig)
 	require.NoError(t, err)
 
 	handle := newFilterHandleWithoutPerRouteConfig(ctrl)
@@ -223,7 +223,7 @@ func TestOnResponseHeaders_NotMatched(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	factory, err := buildFilterFactory(validConfig)
+	factory, err := buildFilterFactory(ValidConfig)
 	require.NoError(t, err)
 
 	handle := newFilterHandleWithoutPerRouteConfig(ctrl)

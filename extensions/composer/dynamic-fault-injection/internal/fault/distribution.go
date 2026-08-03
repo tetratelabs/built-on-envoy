@@ -182,12 +182,12 @@ func (rd *ResponseDistribution) Sample() ResponseSample {
 	// Select status by weighted random choice.
 	r := cryptoIntn(rd.totalWeight)
 	cumulative := 0
-	for i := range rd.entries {
-		cumulative += rd.entries[i].weight
+	for _, entry := range rd.entries {
+		cumulative += entry.weight
 		if r < cumulative {
 			return ResponseSample{
-				Status:   rd.entries[i].status,
-				Duration: rd.entries[i].distribution.Sample(),
+				Status:   entry.status,
+				Duration: entry.distribution.Sample(),
 			}
 		}
 	}
