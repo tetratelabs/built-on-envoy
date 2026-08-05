@@ -8,7 +8,7 @@ if ! command -v yq >/dev/null 2>&1; then
 fi
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-README_PATH="$SCRIPT_DIR/README.md"
+README_PATH="$SCRIPT_DIR/README.catalog.md"
 MANIFEST_PATH="$SCRIPT_DIR/manifest.yaml"
 
 if [ ! -f "$README_PATH" ]; then
@@ -22,9 +22,10 @@ if [ ! -f "$MANIFEST_PATH" ]; then
   exit 1
 fi
 
-README_CONTENT=$(cat "$README_PATH")
+sed -i -e 's/[[:space:]]*$//g' "${README_PATH}"
 
-# Support either manifest key style.
-README_CONTENT="$README_CONTENT" yq eval -i '.longDescription |= strenv(README_CONTENT)' "$MANIFEST_PATH"
+yq eval -i 'del(.longDescription)' "$MANIFEST_PATH"
+yq eval -i '.longDescription |= (load_str("'${README_PATH}'"))' "$MANIFEST_PATH"
 
 echo "Updated long description in $MANIFEST_PATH from $README_PATH"
+cat $MANIFEST_PATH
