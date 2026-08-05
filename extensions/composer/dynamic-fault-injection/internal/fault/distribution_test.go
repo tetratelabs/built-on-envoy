@@ -24,7 +24,7 @@ func TestProbabilityDistribution_Sample(t *testing.T) {
 
 	const numSamples = 100000
 	var samples []time.Duration
-	for i := 0; i < numSamples; i++ {
+	for range numSamples {
 		samples = append(samples, dist.Sample())
 	}
 
@@ -95,7 +95,7 @@ func TestStatefulProbabilityDistribution_Sample(t *testing.T) {
 	dist := NewStatefulProbabilityDistribution(percentiles, resolution)
 
 	var samples []time.Duration
-	for i := 0; i < resolution; i++ {
+	for range resolution {
 		samples = append(samples, dist.Sample())
 	}
 
@@ -125,7 +125,7 @@ func TestStatefulProbabilityDistribution_Reshuffle(t *testing.T) {
 	dist := NewStatefulProbabilityDistribution(percentiles, resolution)
 
 	// Sample more than resolution to trigger reshuffle.
-	for i := 0; i < resolution+50; i++ {
+	for range resolution+50 {
 		s := dist.Sample()
 		if s < 0 {
 			t.Fatal("negative duration sampled")
@@ -160,7 +160,7 @@ func TestResponseDistribution_StatusWeighting(t *testing.T) {
 
 	const numSamples = 10000
 	statusCounts := make(map[int]int)
-	for i := 0; i < numSamples; i++ {
+	for range numSamples {
 		sample := rd.Sample()
 		statusCounts[sample.Status]++
 	}
@@ -199,7 +199,7 @@ func TestResponseDistribution_DurationRanges(t *testing.T) {
 	}
 
 	const numSamples = 1000
-	for i := 0; i < numSamples; i++ {
+	for range numSamples {
 		sample := rd.Sample()
 		if sample.Status != 200 {
 			t.Errorf("expected status 200, got %d", sample.Status)
@@ -229,7 +229,7 @@ func TestResponseDistribution_FlatDistribution(t *testing.T) {
 	}
 
 	const numSamples = 100
-	for i := 0; i < numSamples; i++ {
+	for range numSamples {
 		sample := rd.Sample()
 		if sample.Duration != 50*time.Millisecond {
 			t.Errorf("flat distribution should always return 50ms, got %v", sample.Duration)
@@ -266,7 +266,7 @@ func TestLoadBasedResponseDistribution_Healthy(t *testing.T) {
 
 	// Sample at healthy RPS — should get all 200s.
 	const numSamples = 100
-	for i := 0; i < numSamples; i++ {
+	for range numSamples {
 		sample := lb.Sample(50) // below healthy threshold
 		if sample.Status != 200 {
 			t.Errorf("at healthy RPS, expected status 200, got %d", sample.Status)
@@ -306,7 +306,7 @@ func TestLoadBasedResponseDistribution_TippingPoint(t *testing.T) {
 
 	// Sample at tipping point RPS — should get all 503s.
 	const numSamples = 100
-	for i := 0; i < numSamples; i++ {
+	for range numSamples {
 		sample := lb.Sample(600) // above tipping point
 		if sample.Status != 503 {
 			t.Errorf("at tipping RPS, expected status 503, got %d", sample.Status)
@@ -345,7 +345,7 @@ func TestLoadBasedResponseDistribution_GreyZone(t *testing.T) {
 	const numSamples = 1000
 	got200 := 0
 	got503 := 0
-	for i := 0; i < numSamples; i++ {
+	for range numSamples {
 		sample := lb.Sample(300) // middle of grey zone (50% position)
 		switch sample.Status {
 		case 200:
@@ -404,7 +404,7 @@ func TestLoadBasedResponseDistribution_GreyZoneWithPenalty(t *testing.T) {
 	// Sample in grey zone with penalty — durations should be increased.
 	const numSamples = 100
 	var totalDuration time.Duration
-	for i := 0; i < numSamples; i++ {
+	for range numSamples {
 		sample := lb.Sample(300) // 50% grey zone position
 		totalDuration += sample.Duration
 	}
@@ -430,7 +430,7 @@ func TestProbabilityDistribution_AllSamplesPositive(t *testing.T) {
 
 	dist := NewProbabilityDistribution(percentiles)
 
-	for i := 0; i < 10000; i++ {
+	for i := range 10000 {
 		s := dist.Sample()
 		if s < 0 {
 			t.Fatalf("negative sample at iteration %d: %v", i, s)

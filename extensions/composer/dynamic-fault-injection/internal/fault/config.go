@@ -119,14 +119,19 @@ func validateLoadBased(lb *LoadBasedConfig, endpointIdx int) error {
 	validationErrors := []error{}
 	if lb.Healthy == nil {
 		validationErrors = append(validationErrors, fmt.Errorf("endpoint %d: load_based.healthy is required", endpointIdx))
+	} else {
+		if lb.Healthy.ThresholdRPS <= 0 {
+			validationErrors = append(validationErrors, fmt.Errorf("endpoint %d: load_based.healthy.threshold_rps must be positive", endpointIdx))
+		}
 	}
+
+
 	if lb.TippingPoint == nil {
 		validationErrors = append(validationErrors, fmt.Errorf("endpoint %d: load_based.tipping_point is required", endpointIdx))
 	}
-	if lb.Healthy.ThresholdRPS <= 0 {
-		validationErrors = append(validationErrors, fmt.Errorf("endpoint %d: load_based.healthy.threshold_rps must be positive", endpointIdx))
-	}
+
 	if lb.TippingPoint != nil && lb.Healthy != nil {
+
 		if lb.TippingPoint.ThresholdRPS <= lb.Healthy.ThresholdRPS {
 			validationErrors = append(validationErrors, fmt.Errorf("endpoint %d: load_based.tipping_point.threshold_rps must be greater than healthy.threshold_rps", endpointIdx))
 		}
