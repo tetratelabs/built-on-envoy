@@ -2353,6 +2353,66 @@ Token exchange endpoint URL. Must contain a host and path (e.g. "https://idp.exa
 
 
 
+<a id="dynamic-fault-injection"></a>
+## dynamic-fault-injection Configuration
+
+Configuration for the dynamic fault injection filter. Defines endpoints with route matching, response distributions, and optional load-based behavior.
+
+### endpoints
+
+List of endpoint configurations, each defining fault behavior for matched routes.
+
+| | |
+|---|---|
+| **Type** | `[]object` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ dynamic-fault-injection Configuration](#dynamic-fault-injection)
+
+
+
+#### endpoints.load_based
+
+Load-based response distribution that switches behavior based on RPS.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ dynamic-fault-injection Configuration](#dynamic-fault-injection)
+
+
+
+#### endpoints.match
+
+Route matching configuration.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ dynamic-fault-injection Configuration](#dynamic-fault-injection)
+
+
+
+#### endpoints.responses
+
+Response distributions. Resolution acts as both relative weight and sample count.
+
+| | |
+|---|---|
+| **Type** | `[]object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ dynamic-fault-injection Configuration](#dynamic-fault-injection)
+
+   {/* range .SubProperties */} {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */}
+
+
+
+
 <a id="example-wasm-go"></a>
 ## example-wasm-go Configuration
 
