@@ -19,6 +19,7 @@ tags:
   - testing
 license: Apache-2.0
 examples: []
+type: go
 longDescription: |
   # Envoy Latency and Fault Distribution Simulation
 

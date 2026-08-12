@@ -264,7 +264,7 @@ endpoints:
 
 func countErrorsRecursively(err error) int {
 	for {
-		switch x := err.(type) {
+		switch x := err.(type) { //nolint:errorlint
 		case interface{ Unwrap() error }:
 			err = x.Unwrap()
 			if err == nil {
@@ -520,13 +520,12 @@ endpoints:
 
 	_, err := ParseConfig([]byte(input))
 	if err == nil {
-		t.Fatalf("unexpected successfull load of config: %v", err)
+		t.Fatalf("unexpected successful load of config: %v", err)
 	}
 
 	if !strings.Contains(err.Error(), "either one") {
 		t.Fatalf("Expected config loading to fail with a message about the fields `responses` and `load_based` being mutually exclusive. %v", err)
 	}
-
 }
 
 func TestParseConfig_JSONFromStruct(t *testing.T) {
