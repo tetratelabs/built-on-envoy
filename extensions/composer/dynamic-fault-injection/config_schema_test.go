@@ -12,8 +12,6 @@ import (
 )
 
 func TestConfigSchema(t *testing.T) {
-
-
 	t.Run("valid full config", func(t *testing.T) {
 		internaltesting.AssertSchemaValid(t, "config.schema.json", `
 			{
@@ -51,26 +49,25 @@ func TestConfigSchema(t *testing.T) {
 	// any effect.
 	//
 	//    "if": {
-    //      "anyOf": [
-    //        {"required": ["responses"]}
-    //      ]
-    //    },
-    //    "then": {
-    //      "not": {
-    //        "required": ["load_based"]
-    //      }
-    //    },
-    //    "if": {
-    //      "anyOf": [
-    //        {"required": ["load_based"]}
-    //      ]
-    //    },
-    //    "then": {
-    //      "not": {
-    //        "required": ["responses"]
-    //      }
-    //    },
-
+	//      "anyOf": [
+	//        {"required": ["responses"]}
+	//      ]
+	//    },
+	//    "then": {
+	//      "not": {
+	//        "required": ["load_based"]
+	//      }
+	//    },
+	//    "if": {
+	//      "anyOf": [
+	//        {"required": ["load_based"]}
+	//      ]
+	//    },
+	//    "then": {
+	//      "not": {
+	//        "required": ["responses"]
+	//      }
+	//    },
 
 	// t.Run("responses and load_based should be mutually exclusive", func(t *testing.T) {
 	// 	internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{
@@ -149,5 +146,4 @@ func TestConfigSchema(t *testing.T) {
 	// 	  ]
 	// 	}`)
 	// })
-
 }

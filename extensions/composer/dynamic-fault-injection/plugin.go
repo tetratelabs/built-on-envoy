@@ -112,11 +112,9 @@ func (f *latencyFaultFilter) OnResponseHeaders(headers shared.HeaderMap, _ bool)
 	elapsed := time.Since(f.requestStart)
 	remainingDelay := max(f.sample.Duration-elapsed, 0)
 
-
-
- 	status := headers.GetOne(":status").ToUnsafeString()
-  	fmt.Println(f.sample, status)
-   	// If the sampled status is an "error" case and different from the upstream response rewrite the response
+	status := headers.GetOne(":status").ToUnsafeString()
+	fmt.Println(f.sample, status)
+	// If the sampled status is an "error" case and different from the upstream response rewrite the response
 	if f.sample.Status >= 400 && strconv.Itoa(f.sample.Status) != status { // not happy about the string comparison
 		if remainingDelay > 0 {
 			// Delay, then send local error response.
@@ -168,8 +166,7 @@ func (f *latencyFaultFilter) OnResponseHeaders(headers shared.HeaderMap, _ bool)
 		headers.Set("x-fault-added-delay", remainingDelay.String())
 	}
 
-
-    // Is it worth saving the additional schedule in the case `remainingDelay == 0`?
+	// Is it worth saving the additional schedule in the case `remainingDelay == 0`?
 	if remainingDelay > 0 {
 		// Delay the response before continuing to downstream.
 		scheduler := f.handle.GetScheduler()

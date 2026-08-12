@@ -125,7 +125,7 @@ func TestStatefulProbabilityDistribution_Reshuffle(t *testing.T) {
 	dist := NewStatefulProbabilityDistribution(percentiles, resolution)
 
 	// Sample more than resolution to trigger reshuffle.
-	for range resolution+50 {
+	for range resolution + 50 {
 		s := dist.Sample()
 		if s < 0 {
 			t.Fatal("negative duration sampled")
