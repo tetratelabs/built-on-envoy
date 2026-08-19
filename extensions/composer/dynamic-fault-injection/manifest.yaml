@@ -136,7 +136,6 @@ longDescription: |
   | Runtime configuration | ✅ | ❌ |
   | Exact distribution over N requests | ❌ | ✅ (stateful distribution) |
 
-
   ## Configuration
   Please find an overview of the possible fields below, followed by an actual example of how to configure the filter as a per cluster http filter.
 
