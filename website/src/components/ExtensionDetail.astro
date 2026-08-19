@@ -2,7 +2,9 @@
 import type { Extension } from '../utils/extensions';
 import { marked } from 'marked';
 import { createHighlighter } from 'shiki';
+import { markedAlerts } from '../utils/markdown-alerts';
 import '../styles/extension-detail.css';
+import '../styles/markdown-alerts.css';
 
 interface Props {
 	extension: Extension;
@@ -26,7 +28,7 @@ renderer.code = function ({ text, lang }: { text: string; lang?: string }) {
 		return highlighter.codeToHtml(text, { lang: 'plaintext', theme: 'github-dark' });
 	}
 };
-marked.use({ renderer });
+marked.use({ renderer }, markedAlerts);
 
 // Helper function to format type names (snake_case to Title Case)
 function formatTypeName(type: string): string {

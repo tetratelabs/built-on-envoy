@@ -1,0 +1,50 @@
+/* GitHub-flavored alerts (admonitions) rendered from manifest markdown. */
+
+.prose .markdown-alert {
+	--alert-color: var(--info);
+
+	border-left: 4px solid var(--alert-color);
+	background: color-mix(in srgb, var(--alert-color) 6%, transparent);
+	border-radius: 0 8px 8px 0;
+	padding: 12px 16px;
+	margin: 16px 0;
+}
+
+.prose .markdown-alert > *:last-child {
+	margin-bottom: 0;
+}
+
+.prose .markdown-alert-title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--alert-color);
+	font-weight: 600;
+	font-size: 14px;
+	line-height: 1.4;
+	margin-bottom: 8px;
+}
+
+.prose .markdown-alert-icon {
+	flex-shrink: 0;
+}
+
+.prose .markdown-alert-note {
+	--alert-color: var(--info);
+}
+
+.prose .markdown-alert-tip {
+	--alert-color: var(--success);
+}
+
+.prose .markdown-alert-important {
+	--alert-color: var(--primary-light);
+}
+
+.prose .markdown-alert-warning {
+	--alert-color: var(--warning);
+}
+
+.prose .markdown-alert-caution {
+	--alert-color: var(--danger);
+}

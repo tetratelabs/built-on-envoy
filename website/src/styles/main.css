@@ -37,6 +37,8 @@ html {
 	/* Semantic colors */
 	--success: #10b981;
 	--info: #3b82f6;
+	--warning: #d97706;
+	--danger: #dc2626;
 
 	/* Additional text colors */
 	--text-secondary: #475569;
