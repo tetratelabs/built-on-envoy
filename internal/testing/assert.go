@@ -77,7 +77,7 @@ func checkGet(ctx context.Context, url string, condition func(r *http.Response) 
 	if err != nil {
 		return err
 	}
-	return checkRequest(req, condition)
+	return checkRequest(req, liftConditionToConditionWithDuration(condition))
 }
 
 // checkPost performs an HTTP POST request to the given URL and checks if it satisfies the provided condition.
@@ -86,26 +86,41 @@ func checkPost(ctx context.Context, url string, condition func(r *http.Response)
 	if err != nil {
 		return err
 	}
-	return checkRequest(req, condition)
+	return checkRequest(req, liftConditionToConditionWithDuration(condition))
 }
 
 // RequireEventuallyRequest performs the given HTTP request and checks if it satisfies the provided condition,
 // retrying until it does or a timeout is reached.
 func RequireEventuallyRequest(t *testing.T, req *http.Request, condition func(r *http.Response) bool) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.NoError(c, checkRequest(req, liftConditionToConditionWithDuration(condition)))
+	}, time.Minute, 200*time.Millisecond)
+}
+
+// Similar to [RequireEventuallyRequest] with the condition also depending on the time it took the get the response.
+func RequireEventuallyRequestWithTiming(t *testing.T, req *http.Request, condition func(r *http.Response, duration time.Duration) bool) {
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.NoError(c, checkRequest(req, condition))
 	}, time.Minute, 200*time.Millisecond)
 }
 
 // checkRequest checks if the given HTTP request succeeds according to the provided condition.
-func checkRequest(req *http.Request, condition func(r *http.Response) bool) error {
+func checkRequest(req *http.Request, condition func(r *http.Response, duration time.Duration) bool) error {
+	start := time.Now()
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close() // nolint:errcheck
-	if !condition(resp) {
+	duration := time.Since(start)
+	if !condition(resp, duration) {
 		return fmt.Errorf("condition not met (status: %d)", resp.StatusCode)
 	}
 	return nil
+}
+
+func liftConditionToConditionWithDuration(condition func(r *http.Response) bool) func(r *http.Response, duration time.Duration) bool {
+	return func(r *http.Response, duration time.Duration) bool {
+		return condition(r)
+	}
 }
