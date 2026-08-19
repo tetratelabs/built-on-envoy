@@ -18,7 +18,85 @@ tags:
   - latency
   - testing
 license: Apache-2.0
-examples: []
+examples:
+  - title: Delay all success responses and introduce a 1% failure rate that returns quickly
+    description: |
+      Wrap a succesfully and fast responding mock or stub service and make it a one matching the production performance and error ratio.
+    code: |
+      CONFIG=$(cat <<-END
+      {
+        "endpoints": [
+          {
+            "match": {
+              "prefix": "/"
+            },
+            "responses": [
+              {
+                "status": 200,
+                "resolution": 1000,
+                "distribution": {
+                  "p0.0": "30ms",
+                  "p100.0": "500ms"
+                }
+              },
+              {
+                "status": 503,
+                "resolution": 10,
+                "distribution": {
+                  "p0.0": "3ms",
+                  "p100.0": "5ms"
+                }
+              }
+            ]
+          }
+        ]
+      }
+      END
+      )
+      boe run \
+          --extension dynamic-fault-injection \
+          --log-level dynamic_modules:debug \
+          --config "${CONFIG}"
+
+      ❯ curl -v http://localhost:10000/status/200
+      > GET /status/200 HTTP/1.1
+      > Host: localhost:10000
+      > User-Agent: curl/8.21.0
+      > Accept: */*
+      >
+      * Request completely sent off
+      < HTTP/1.1 200 OK
+      < server: envoy
+      < date: Mon, 03 Aug 2026 12:22:42 GMT
+      < content-type: text/html; charset=utf-8
+      < access-control-allow-origin: *
+      < access-control-allow-credentials: true
+      < content-length: 0
+      < x-envoy-upstream-service-time: 0
+      < x-fault-injected-delay: 213.77ms
+      < x-fault-actual-upstream: 953.946µs
+      < x-fault-status: 200
+      < x-fault-added-delay: 212.816054ms
+
+      $> curl -v http://localhost:10000/status/503
+      > GET /status/503 HTTP/1.1
+      > Host: localhost:10000
+      > User-Agent: curl/8.21.0
+      > Accept: */*
+      >
+      * Request completely sent off
+      < HTTP/1.1 503 Service Unavailable
+      < server: envoy
+      < date: Mon, 03 Aug 2026 12:20:30 GMT
+      < content-type: text/html; charset=utf-8
+      < access-control-allow-origin: *
+      < access-control-allow-credentials: true
+      < content-length: 0
+      < x-envoy-upstream-service-time: 0
+      < x-fault-injected-delay: 414.14ms
+      < x-fault-actual-upstream: 896.86µs
+      < x-fault-status: 503
+      < x-fault-added-delay: 413ms
 type: go
 longDescription: |
   # Envoy Latency and Fault Distribution Simulation
@@ -42,86 +120,22 @@ longDescription: |
   - **First-match routing**: Endpoints are evaluated in order; first match wins
   - **Upstream-aware timing**: Measures actual upstream latency and only adds the remaining delay to reach the target — avoids over-delaying when the upstream is naturally slow
 
-  ## Usage
+  ## Comparison with Envoy's Built-in Fault Filter
 
-  ### Delay all success responses and introduce a 1% failure rate that returns quickly
+  | Feature | Built-in Fault Filter | This Module |
+  |---------|----------------------|-------------|
+  | Fixed delay | ✅ | ✅ (flat distribution) |
+  | Percentile distributions | ❌ | ✅ |
+  | Per-status-code distributions | ❌ | ✅ |
+  | Load-based degradation | ❌ | ✅ |
+  | HTTP abort | ✅ | ✅ |
+  | gRPC abort | ✅ | (planned) |
+  | Header-controlled faults | ✅ | ❌ (route-based instead) |
+  | Response rate limiting | ✅ | ❌ |
+  | Per-route configuration | Via per-route config | Built-in route matching |
+  | Runtime configuration | ✅ | ❌ |
+  | Exact distribution over N requests | ❌ | ✅ (stateful distribution) |
 
-  ```sh
-  CONFIG=$(cat <<-END
-  {
-    "endpoints": [
-      {
-        "match": {
-          "prefix": "/"
-        },
-        "responses": [
-          {
-            "status": 200,
-            "resolution": 1000,
-            "distribution": {
-              "p0.0": "30ms",
-              "p100.0": "500ms"
-            }
-          },
-          {
-            "status": 503,
-            "resolution": 10,
-            "distribution": {
-              "p0.0": "3ms",
-              "p100.0": "5ms"
-            }
-          }
-        ]
-      }
-    ]
-  }
-  END
-  )
-  boe run \
-      --extension dynamic-fault-injection \
-      --log-level dynamic_modules:debug \
-      --config "${CONFIG}"
-
-  ❯ curl -v http://localhost:10000/status/200
-  > GET /status/200 HTTP/1.1
-  > Host: localhost:10000
-  > User-Agent: curl/8.21.0
-  > Accept: */*
-  >
-  * Request completely sent off
-  < HTTP/1.1 200 OK
-  < server: envoy
-  < date: Mon, 03 Aug 2026 12:22:42 GMT
-  < content-type: text/html; charset=utf-8
-  < access-control-allow-origin: *
-  < access-control-allow-credentials: true
-  < content-length: 0
-  < x-envoy-upstream-service-time: 0
-  < x-fault-injected-delay: 213.77ms
-  < x-fault-actual-upstream: 953.946µs
-  < x-fault-status: 200
-  < x-fault-added-delay: 212.816054ms
-
-  $> curl -v http://localhost:10000/status/503
-  > GET /status/503 HTTP/1.1
-  > Host: localhost:10000
-  > User-Agent: curl/8.21.0
-  > Accept: */*
-  >
-  * Request completely sent off
-  < HTTP/1.1 503 Service Unavailable
-  < server: envoy
-  < date: Mon, 03 Aug 2026 12:20:30 GMT
-  < content-type: text/html; charset=utf-8
-  < access-control-allow-origin: *
-  < access-control-allow-credentials: true
-  < content-length: 0
-  < x-envoy-upstream-service-time: 0
-  < x-fault-injected-delay: 414.14ms
-  < x-fault-actual-upstream: 896.86µs
-  < x-fault-status: 503
-  < x-fault-added-delay: 413ms
-  ```
 
   ## Configuration
   Please find an overview of the possible fields below, followed by an actual example of how to configure the filter as a per cluster http filter.
@@ -224,20 +238,3 @@ longDescription: |
   | `x-fault-added-delay` | Additional delay injected (target - upstream, only if > 0) |
   | `x-fault-injected` | Set to "abort" when a non-2xx status was injected |
   | `x-fault-status` | The status code selected by the distribution |
-
-  ## Comparison with Envoy's Built-in Fault Filter
-
-  | Feature | Built-in Fault Filter | This Module |
-  |---------|----------------------|-------------|
-  | Fixed delay | ✅ | ✅ (flat distribution) |
-  | Percentile distributions | ❌ | ✅ |
-  | Per-status-code distributions | ❌ | ✅ |
-  | Load-based degradation | ❌ | ✅ |
-  | Grey zone transitions | ❌ | ✅ |
-  | HTTP abort | ✅ | ✅ |
-  | gRPC abort | ✅ | (planned) |
-  | Header-controlled faults | ✅ | ❌ (route-based instead) |
-  | Response rate limiting | ✅ | ❌ |
-  | Per-route configuration | Via per-route config | Built-in route matching |
-  | Runtime configuration | ✅ | ❌ |
-  | Exact distribution over N requests | ❌ | ✅ (stateful distribution) |

@@ -19,6 +19,22 @@ If the upstream is already slower than the target, no additional delay is added.
 - **First-match routing**: Endpoints are evaluated in order; first match wins
 - **Upstream-aware timing**: Measures actual upstream latency and only adds the remaining delay to reach the target — avoids over-delaying when the upstream is naturally slow
 
+## Comparison with Envoy's Built-in Fault Filter
+
+| Feature | Built-in Fault Filter | This Module |
+|---------|----------------------|-------------|
+| Fixed delay | ✅ | ✅ (flat distribution) |
+| Percentile distributions | ❌ | ✅ |
+| Per-status-code distributions | ❌ | ✅ |
+| Load-based degradation | ❌ | ✅ |
+| HTTP abort | ✅ | ✅ |
+| gRPC abort | ✅ | 🚧 (planned) |
+| Header-controlled faults | ✅ | ❌ (route-based instead) |
+| Response rate limiting | ✅ | ❌ |
+| Per-route configuration | Via per-route config | Built-in route matching |
+| Runtime configuration | ✅ | ❌ |
+| Exact distribution over N requests | ❌ | ✅ (stateful distribution) |
+
 ## Usage 
 
 ### Delay all success responses and introduce a 1% failure rate that returns quickly
@@ -294,20 +310,3 @@ The filter adds response headers to indicate what was injected:
 | `x-fault-added-delay` | Additional delay injected (target - upstream, only if > 0) |
 | `x-fault-injected` | Set to "abort" when a non-2xx status was injected |
 | `x-fault-status` | The status code selected by the distribution |
-
-## Comparison with Envoy's Built-in Fault Filter
-
-| Feature | Built-in Fault Filter | This Module |
-|---------|----------------------|-------------|
-| Fixed delay | ✅ | ✅ (flat distribution) |
-| Percentile distributions | ❌ | ✅ |
-| Per-status-code distributions | ❌ | ✅ |
-| Load-based degradation | ❌ | ✅ |
-| Grey zone transitions | ❌ | ✅ |
-| HTTP abort | ✅ | ✅ |
-| gRPC abort | ✅ | 🚧 (planned) |
-| Header-controlled faults | ✅ | ❌ (route-based instead) |
-| Response rate limiting | ✅ | ❌ |
-| Per-route configuration | Via per-route config | Built-in route matching |
-| Runtime configuration | ✅ | ❌ |
-| Exact distribution over N requests | ❌ | ✅ (stateful distribution) |
