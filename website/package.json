@@ -10,10 +10,10 @@
     "astro": "astro"
   },
   "dependencies": {
-    "@astrojs/mdx": "^7.0.5",
-    "astro": "^7.2.1",
+    "@astrojs/mdx": "^7.0.7",
+    "astro": "^7.2.4",
     "astro-mermaid": "^2.1.0",
-    "marked": "^18.0.9",
+    "marked": "^18.0.10",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
