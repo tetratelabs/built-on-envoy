@@ -40,6 +40,9 @@ longDescription: |
   - `url`: where to fetch the plugin binary (`file://` for local paths, `oci://` for OCI registries)
   - `config`: optional plugin-specific configuration passed through to the loaded plugin
   - `strict_check`: whether to enforce strict host/plugin compatibility checks (defaults to `true`)
+  - `versioned_url_suffix`: whether to append the composer version to the tag of the `oci://` URL
+    before fetching the plugin image, so that a single configuration keeps selecting the plugin
+    build that matches the composer shipped with the proxy (defaults to `false`)
 
   ## Runtime environment variables
 

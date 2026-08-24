@@ -25,6 +25,10 @@
     "strict_check": {
       "type": "boolean",
       "description": "Whether to enforce strict host/plugin compatibility checks (Go version, build flags, and shared dependency versions/checksums) before loading. Defaults to true."
+    },
+    "versioned_url_suffix": {
+      "type": "boolean",
+      "description": "Whether to append the composer version to the tag of \"url\" before fetching the plugin, so \"oci://repo/plugin:1.0.0\" is fetched as \"oci://repo/plugin:1.0.0-\\<composer version\\>\". This keeps the configuration valid across proxy upgrades: a proxy shipping a newer libcomposer.so fetches the plugin image built for that composer version. Only applies to \"oci://\" URLs. Defaults to false."
     }
   }
 }

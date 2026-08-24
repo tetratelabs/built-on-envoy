@@ -972,6 +972,17 @@ Location of the plugin binary. Supports "file://" URLs for local paths and "oci:
 | **Required** | Yes |
 | **Min length** | 1 |
 
+[↑ Top](#) | [↑ Go Plugin Loader Configuration](#goplugin-loader) {/* if .SubProperties */}
+
+### versioned_url_suffix
+
+Whether to append the composer version to the tag of "url" before fetching the plugin, so "oci://repo/plugin:1.0.0" is fetched as "oci://repo/plugin:1.0.0-\<composer version\>". This keeps the configuration valid across proxy upgrades: a proxy shipping a newer libcomposer.so fetches the plugin image built for that composer version. Only applies to "oci://" URLs. Defaults to false.
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+
 [↑ Top](#) | [↑ Go Plugin Loader Configuration](#goplugin-loader) {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */}
 
 

@@ -22,6 +22,7 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 
 	"github.com/tetratelabs/built-on-envoy/extensions/composer/goplugin-loader/imagefetcher"
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/version"
 )
 
 var (
@@ -151,6 +152,16 @@ func loadGoPlugin(moduleConfig []byte) (Config, []byte, error) {
 		goPlugin.StrictCheck = &strictCheck
 	}
 
+	// Resolve the URL the plugin is actually fetched from before anyone uses it.
+	// The emptiness of the URL is reported by the callers.
+	if goPlugin.VersionedURLSuffix && goPlugin.URL != "" {
+		pluginURL, err := versionedURL(goPlugin.URL)
+		if err != nil {
+			return Config{}, nil, err
+		}
+		goPlugin.URL = pluginURL
+	}
+
 	// Marshal the inner plugin config back to JSON for the plugin factory.
 	var innerConfigJSON []byte
 	if goPlugin.Config != nil {
@@ -162,6 +173,40 @@ func loadGoPlugin(moduleConfig []byte) (Config, []byte, error) {
 		}
 	}
 	return goPlugin, innerConfigJSON, nil
+}
+
+// versionedURL appends the composer version to the tag of the given plugin URL, so that
+// "oci://repo/plugin:1.0.0" is fetched as "oci://repo/plugin:1.0.0-0.12.0-dev". A Go plugin
+// can only be loaded by the composer version it was built against, so this keeps a single
+// configuration valid across proxy upgrades: a proxy shipping a newer libcomposer.so fetches
+// the plugin image built for that newer composer version.
+//
+// URLs of other schemes are returned unchanged, because the suffix only selects an image tag
+// while, for example, a file:// URL already points at a concrete plugin binary. Digest-pinned
+// references are returned unchanged as well, since a digest already pins an exact image.
+func versionedURL(pluginURL string) (string, error) {
+	if !strings.HasPrefix(pluginURL, "oci://") {
+		return pluginURL, nil
+	}
+	if version.Composer == "" {
+		// Should never happen: the composer package parses the version from its embedded
+		// manifest before Envoy loads any configuration.
+		return "", fmt.Errorf("failed to append the composer version to plugin URL %q: "+
+			"the composer version is unknown", pluginURL)
+	}
+
+	ref := strings.TrimPrefix(pluginURL, "oci://")
+	if strings.Contains(ref, "@") {
+		// Digest-pinned reference, there is no tag to version.
+		return pluginURL, nil
+	}
+	// The tag is what follows the last colon, but only when that colon comes after the last
+	// slash: an earlier one is the port of the registry host.
+	if i := strings.LastIndex(ref, ":"); i < 0 || i < strings.LastIndex(ref, "/") {
+		return "", fmt.Errorf("failed to append the composer version to plugin URL %q: "+
+			"the URL has no tag", pluginURL)
+	}
+	return pluginURL + "-" + version.Composer, nil
 }
 
 func fetchGoPluginPath(pluginURL string, pluginName string) (string, error) {

@@ -13,6 +13,7 @@ The Go Plugin Loader is a built-in Envoy Dynamic Module that enables loading ext
    - `name`: The plugin name to load
    - `url`: The location of the plugin binary (currently supports `file://` URLs)
    - `config`: The configuration to pass to the loaded plugin
+   - `versioned_url_suffix`: Whether to append the composer version to the tag of `url` before fetching the plugin
 3. Before loading a plugin, the loader validates:
    - The Go version matches between host and plugin
    - The plugin was built with `-buildmode=plugin`
@@ -68,6 +69,29 @@ The following environment variables configure OCI plugin fetching at runtime:
 - `GOPLUGIN_CACHE_DIR` — Directory to cache downloaded plugin binaries
 - `GOPLUGIN_PULL_SECRET` — Credentials for authenticating to the OCI registry
 - `GOPLUGIN_INSECURE` — Set to `true` to allow insecure (HTTP) registry connections
+
+## Versioned URL Suffix
+
+A Go plugin can only be loaded by the composer version it was built against, so upgrading the
+proxy (and the `libcomposer.so` inside it) requires a plugin binary rebuilt for the new composer
+version. Setting `versioned_url_suffix` to `true` makes the loader append the composer version to
+the tag of the configured `url` before fetching the image:
+
+```json
+{
+  "name": "my-plugin",
+  "url": "oci://ghcr.io/tetratelabs/built-on-envoy/extension-my-plugin:1.0.0",
+  "versioned_url_suffix": true
+}
+```
+
+With composer `0.12.0` this fetches
+`oci://ghcr.io/tetratelabs/built-on-envoy/extension-my-plugin:1.0.0-0.12.0`, and the very same
+configuration fetches the `1.0.0-0.13.0` image once the proxy ships composer `0.13.0`. The
+registry is therefore expected to hold one plugin image tag per composer version.
+
+The suffix only applies to `oci://` URLs; URLs of other schemes, and `oci://` references pinned
+by digest, are fetched as configured. The flag defaults to `false`.
 
 ## Limitations
 
