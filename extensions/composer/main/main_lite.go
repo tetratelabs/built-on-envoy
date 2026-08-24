@@ -11,6 +11,10 @@ package main
 import (
 	_ "github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/abi"
 
+	// The composer package embeds the composer manifest and publishes the composer
+	// version. Under the 'lite' build tag it registers no embedded plugins, so the
+	// lite module stays lite.
+	_ "github.com/tetratelabs/built-on-envoy/extensions/composer"
 	// Register built-in plugins into the binary. Because only one golang shared library
 	// can be loaded into a process, we need to register all built-in plugins here and
 	// build them into the same binary.

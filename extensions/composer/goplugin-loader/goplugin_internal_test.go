@@ -28,6 +28,8 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tetratelabs/built-on-envoy/extensions/composer/version"
 )
 
 func TestCheckVersionCompatibility(t *testing.T) {
@@ -297,3 +299,98 @@ func (r *testLayer) Uncompressed() (io.ReadCloser, error) {
 	return io.NopCloser(bytes.NewBuffer(r.raw)), nil
 }
 func (r *testLayer) MediaType() (types.MediaType, error) { return r.mediaType, nil }
+
+func TestVersionedURL(t *testing.T) {
+	// The composer version is published by the parent composer package, which is not
+	// linked into this test binary.
+	version.Composer = "0.12.0-dev"
+	t.Cleanup(func() { version.Composer = "" })
+
+	tests := []struct {
+		name    string
+		url     string
+		want    string
+		wantErr string
+	}{
+		{
+			name: "OCI URL with tag",
+			url:  "oci://ghcr.io/tetratelabs/built-on-envoy/extension-my-plugin:1.0.0",
+			want: "oci://ghcr.io/tetratelabs/built-on-envoy/extension-my-plugin:1.0.0-0.12.0-dev",
+		},
+		{
+			name: "OCI URL with registry port",
+			url:  "oci://localhost:5000/extension-my-plugin:1.0.0",
+			want: "oci://localhost:5000/extension-my-plugin:1.0.0-0.12.0-dev",
+		},
+		{
+			name: "OCI URL pinned by digest is unchanged",
+			url:  "oci://ghcr.io/tetratelabs/extension-my-plugin@sha256:abc123",
+			want: "oci://ghcr.io/tetratelabs/extension-my-plugin@sha256:abc123",
+		},
+		{
+			name:    "OCI URL without tag",
+			url:     "oci://ghcr.io/tetratelabs/extension-my-plugin",
+			wantErr: "the URL has no tag",
+		},
+		{
+			name:    "OCI URL with a port but no tag",
+			url:     "oci://localhost:5000/extension-my-plugin",
+			wantErr: "the URL has no tag",
+		},
+		{
+			name: "File URL is unchanged",
+			url:  "file:///path/to/plugin.so",
+			want: "file:///path/to/plugin.so",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := versionedURL(tt.url)
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+				assert.Equal(t, tt.want, got)
+			} else {
+				require.ErrorContains(t, err, tt.wantErr)
+			}
+		})
+	}
+
+	t.Run("Unknown composer version", func(t *testing.T) {
+		version.Composer = ""
+		_, err := versionedURL("oci://ghcr.io/tetratelabs/extension-my-plugin:1.0.0")
+		require.ErrorContains(t, err, "the composer version is unknown")
+	})
+}
+
+func TestLoadGoPlugin_VersionedURLSuffix(t *testing.T) {
+	version.Composer = "0.12.0-dev"
+	t.Cleanup(func() { version.Composer = "" })
+
+	t.Run("Disabled by default", func(t *testing.T) {
+		goPlugin, _, err := loadGoPlugin([]byte(`{"name":"p","url":"oci://ex/p:v1"}`))
+		require.NoError(t, err)
+		assert.False(t, goPlugin.VersionedURLSuffix)
+		assert.Equal(t, "oci://ex/p:v1", goPlugin.URL)
+	})
+
+	t.Run("Enabled", func(t *testing.T) {
+		goPlugin, _, err := loadGoPlugin(
+			[]byte(`{"name":"p","url":"oci://ex/p:v1","versioned_url_suffix":true}`))
+		require.NoError(t, err)
+		assert.Equal(t, "oci://ex/p:v1-0.12.0-dev", goPlugin.URL)
+	})
+
+	t.Run("Enabled with an empty URL", func(t *testing.T) {
+		// The empty URL is reported by the callers of loadGoPlugin, not here.
+		goPlugin, _, err := loadGoPlugin([]byte(`{"name":"p","versioned_url_suffix":true}`))
+		require.NoError(t, err)
+		assert.Empty(t, goPlugin.URL)
+	})
+
+	t.Run("Enabled with an untagged URL", func(t *testing.T) {
+		_, _, err := loadGoPlugin(
+			[]byte(`{"name":"p","url":"oci://ex/p","versioned_url_suffix":true}`))
+		require.ErrorContains(t, err, "the URL has no tag")
+	})
+}

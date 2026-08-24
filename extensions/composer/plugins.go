@@ -3,7 +3,8 @@
 // The full text of the Apache license is available in the LICENSE file at
 // the root of the repo.
 
-// Package composer provides built-in plugins for the composer binary.
+//go:build !lite
+
 package composer
 
 import (
