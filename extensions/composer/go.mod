@@ -17,11 +17,11 @@ require (
 	// This SDK is come from Envoy 1.39-dev but it's compatible with Envoy 1.38 because there is no API change
 	// between Envoy 1.38 and this SDK version.
 	github.com/envoyproxy/envoy/source/extensions/dynamic_modules v0.0.0-20260425100846-90594f45b3ed
-	github.com/getkin/kin-openapi v0.147.0
-	github.com/google/go-containerregistry v0.21.9
+	github.com/getkin/kin-openapi v0.148.0
+	github.com/google/go-containerregistry v0.22.0
 	github.com/jcchavezs/mergefs v0.1.1
 	github.com/lestrrat-go/jwx/v3 v3.2.0
-	github.com/open-policy-agent/opa v1.19.1
+	github.com/open-policy-agent/opa v1.20.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/stretchr/testify v1.12.1
 	go.uber.org/mock v0.6.0
@@ -48,7 +48,7 @@ require (
 	github.com/jonboulle/clockwork v0.5.0 // indirect
 	github.com/kaptinlin/go-i18n v0.1.4 // indirect
 	github.com/kaptinlin/jsonschema v0.4.6 // indirect
-	github.com/klauspost/compress v1.19.1 // indirect
+	github.com/klauspost/compress v1.19.2 // indirect
 	github.com/lestrrat-go/blackmagic v1.0.4 // indirect
 	github.com/lestrrat-go/dsig v1.3.0 // indirect
 	github.com/lestrrat-go/dsig-secp256k1 v1.0.0 // indirect
@@ -82,7 +82,7 @@ require (
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.54.0 // indirect
 	golang.org/x/exp v0.0.0-20260212183809-81e46e3db34a // indirect
-	golang.org/x/net v0.56.0 // indirect
+	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
