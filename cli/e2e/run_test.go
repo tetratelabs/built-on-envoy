@@ -153,6 +153,7 @@ func TestRustLocalExtension(t *testing.T) {
 	require.NoError(t, err)
 	cargoToml = regexp.MustCompile(`rev = "[0-9a-f]+"`).
 		ReplaceAll(cargoToml, []byte(`rev = "f1dd21b16c244bda00edfb5ffce577e12d0d2ec2"`))
+	// #nosec G703 -- cargoTomlPath is rooted at the test's own data dir
 	require.NoError(t, os.WriteFile(cargoTomlPath, cargoToml, 0o600))
 
 	// Run the newly created extension

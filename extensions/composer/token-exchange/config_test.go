@@ -18,6 +18,7 @@ import (
 
 // baseConfig returns a valid config with all required fields populated.
 func baseConfig() tokenExchangeConfig {
+	// #nosec G101 -- dummy credentials for a test fixture
 	return tokenExchangeConfig{
 		Cluster:          "sts_cluster",
 		TokenExchangeURL: "sts.example.com/oauth2/token",

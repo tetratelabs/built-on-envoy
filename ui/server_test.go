@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -96,11 +97,41 @@ func TestHandleRun_EmptyExtensions(t *testing.T) {
 }
 
 // flushingRecorder wraps httptest.ResponseRecorder and implements http.Flusher.
+//
+// httptest.ResponseRecorder is not safe for concurrent use, and the SSE handlers under test write
+// from a separate goroutine while assertions poll the accumulated body. Writes are therefore
+// mutex-guarded, and the body must be read via body() rather than the embedded Body buffer.
 type flushingRecorder struct {
 	*httptest.ResponseRecorder
+
+	mu sync.Mutex
+}
+
+func newFlushingRecorder() *flushingRecorder {
+	return &flushingRecorder{ResponseRecorder: httptest.NewRecorder()}
 }
 
 func (f *flushingRecorder) Flush() {}
+
+func (f *flushingRecorder) Write(p []byte) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.ResponseRecorder.Write(p)
+}
+
+// WriteString is overridden so that writers reaching for io.StringWriter cannot bypass the mutex.
+func (f *flushingRecorder) WriteString(str string) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.ResponseRecorder.WriteString(str)
+}
+
+// body returns the response body written so far. Safe to call while a handler is still writing.
+func (f *flushingRecorder) body() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.Body.String()
+}
 
 func TestHandleRun_OK(t *testing.T) {
 	mock := &mockExecutor{}
@@ -108,7 +139,7 @@ func TestHandleRun_OK(t *testing.T) {
 	body := `{"extensions":[{"name":"opa","config":""}]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/run", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	w := &flushingRecorder{httptest.NewRecorder()}
+	w := newFlushingRecorder()
 
 	s.ServeHTTP(w, req)
 

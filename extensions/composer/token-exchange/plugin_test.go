@@ -25,6 +25,7 @@ import (
 // precomputed fields (e.g. calloutHeaders) are populated.
 func mustParseConfig(t *testing.T, cfg *tokenExchangeConfig) *tokenExchangeConfig {
 	t.Helper()
+	// #nosec G117 -- cfg holds dummy test credentials
 	b, err := json.Marshal(cfg)
 	require.NoError(t, err)
 	parsed, err := parseConfig(b)
@@ -77,6 +78,7 @@ func TestOnRequestHeaders(t *testing.T) {
 		defer ctrl.Finish()
 		mockHandle := newMockFilterHandle(ctrl)
 
+		// #nosec G101 -- dummy credentials for a test fixture
 		cfg := mustParseConfig(t, &tokenExchangeConfig{
 			Cluster:          "sts_cluster",
 			TokenExchangeURL: "sts.example.com/oauth2/token",
@@ -142,6 +144,7 @@ func TestOnRequestHeaders(t *testing.T) {
 		defer ctrl.Finish()
 		mockHandle := newMockFilterHandle(ctrl)
 
+		// #nosec G101 -- dummy credentials for a test fixture
 		cfg := mustParseConfig(t, &tokenExchangeConfig{
 			Cluster:            "sts_cluster",
 			TokenExchangeURL:   "sts.example.com/oauth2/token",
@@ -407,12 +410,14 @@ func Test_CreatePerRoute(t *testing.T) {
 	f := &tokenExchangeHttpFilterConfigFactory{}
 
 	t.Run("valid config", func(t *testing.T) {
+		// #nosec G101 -- dummy credentials for a test fixture
 		cfg := &tokenExchangeConfig{
 			Cluster:          "sts_cluster",
 			TokenExchangeURL: "sts.example.com/token",
 			ClientID:         "client",
 			ClientSecret:     "secret",
 		}
+		// #nosec G117 -- cfg holds dummy test credentials
 		b, _ := json.Marshal(cfg)
 		result, err := f.CreatePerRoute(b)
 		require.NoError(t, err)

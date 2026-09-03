@@ -44,6 +44,7 @@ test-coverage: compiled/bundle.js  ## Run the UI tests with coverage check.
 		-count=1 \
 		-coverpkg=github.com/tetratelabs/built-on-envoy/ui/... \
 		-coverprofile=src/coverage/go-test-coverage.out \
+		$(GO_TEST_ARGS) \
 		./
 	@$(GO_TOOL) go-test-coverage --config=.testcoverage.yml
 

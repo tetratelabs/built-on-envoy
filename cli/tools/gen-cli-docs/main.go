@@ -277,14 +277,14 @@ func getTypeName(v reflect.Value) string {
 	t := v.Type()
 
 	// Handle pointer types
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 
 	switch t.Kind() {
 	case reflect.Slice:
 		elemType := t.Elem()
-		if elemType.Kind() == reflect.Ptr {
+		if elemType.Kind() == reflect.Pointer {
 			elemType = elemType.Elem()
 		}
 		return "[]" + elemType.Name()
