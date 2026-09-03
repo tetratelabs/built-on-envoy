@@ -61,7 +61,7 @@ jobs:
       run:
         working-directory: ./ui
     env:
-      TEST_OPTS: -race
+      GO_TEST_ARGS: -race
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7

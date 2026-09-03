@@ -151,6 +151,7 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	// #nosec G306 -- dynamic module library needs executable permissions
+	// #nosec G306 G703 -- dynamic module library needs executable permissions, and dst is
+	// built from filepath.Rel over a walk of the build output, so it cannot escape dstDir.
 	return os.WriteFile(dst, data, 0o755)
 }

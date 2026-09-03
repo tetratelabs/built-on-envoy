@@ -354,6 +354,7 @@ func TestDownloadComposerExtensionLoadsParentManifest(t *testing.T) {
 	// - mock extension binary
 	// - manifest.yaml file as packaged by the old composer individual extensions
 	require.NoError(t, os.MkdirAll(cacheDir, 0o750))
+	// #nosec G703 -- cachedManifestPath is rooted at t.TempDir()
 	require.NoError(t, os.WriteFile(cachedManifestPath, cachedManifest, 0o600))
 	require.NoError(t, os.WriteFile(LocalCacheExtension(dirs, m), []byte("cached"), 0o600))
 
@@ -394,6 +395,7 @@ func TestDownloadComposerExtensionLoadsParentManifest(t *testing.T) {
 		parentManifest, err := os.ReadFile("testdata/composer_test.yaml")
 		require.NoError(t, err)
 		parentManifestPath := filepath.Join(cacheDir, "manifest-composer.yaml")
+		// #nosec G703 -- parentManifestPath is rooted at t.TempDir()
 		require.NoError(t, os.WriteFile(parentManifestPath, parentManifest, 0o600))
 
 		ext, err := d.DownloadExtension(t.Context(), "parent-valid", "parent-valid", "1.0.0")
