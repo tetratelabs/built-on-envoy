@@ -18,6 +18,19 @@ endif
 BOE_DATA_HOME ?= $(HOME)/.local/share/boe
 
 EXTENSION_PATH ?=
+# Try to automatically detect the EXTENSION_PATH if PWD is set from the shell
+ifneq ($(PWD),)
+	MAKEFILE_DIR = $(realpath $(dir $(firstword $(MAKEFILE_LIST))))
+	CWD          = $(realpath $(PWD))
+	ifneq ($(CWD), $(MAKEFILE_DIR)) # check that we are in a subdirectory and not the extension directory itself
+	ifneq ($(filter $(MAKEFILE_DIR)/%,$(CWD)), )
+	ifneq ($(wildcard $(CWD)/manifest.yaml),) # Check whether manifest.yaml exists by resolves to a file which yields the path or empty string
+		EXTENSION_PATH := $(patsubst $(MAKEFILE_DIR)/%,%,$(CWD))
+	endif
+	endif
+	endif
+endif
+
 # Ensure the EXTENSION_PATH always be set
 ifeq ($(EXTENSION_PATH),)
   $(error "EXTENSION_PATH is not set. Please set it to the path of the extension.")
@@ -36,6 +49,8 @@ TIMESTAMP        := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 COMMIT_SHA       := $(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
 AUTHOR           := $(shell $(GO_TOOL) yq '.author' manifest.yaml)
 LICENSE          := Apache-2.0
+HAS_GOLANG       := $(if $(strip $(shell find "$(EXTENSION_PATH)" -type f -name '*.go' -print -quit 2>/dev/null)),true,false)
+HAS_RUST         := $(if $(strip $(shell find "$(EXTENSION_PATH)" -type f -name '*.rs' -print -quit 2>/dev/null)),true,false)
 
 HUB    := $(or $(BOE_REGISTRY),$(OCI_REGISTRY)/built-on-envoy)
 IMAGE  := $(HUB)/extension-$(NAME):$(VERSION)$(IMAGE_NONCE)
@@ -85,6 +100,56 @@ build-extproc:
 build-wasm:
 	@GOOS=wasip1 GOARCH=wasm CGO_ENABLED=0 go -C $(EXTENSION_PATH) build -buildmode=c-shared -o ./out/plugin.wasm .
 
+.PHONY: check
+check: format lint test-coverage
+	# In addition to checking the extension code also generate the datasource files for the portal
+	# to ensure that the manifest.yaml is filled in "correctly".
+	$(MAKE) -C ../cli check
+
+.PHONY: format
+format:
+	@if [ "$(HAS_GOLANG)" = "true" ]; then \
+		$(MAKE) format-go EXTENSION_PATH=$(EXTENSION_PATH); \
+	elif [ "$(HAS_RUST)" = "true" ]; then \
+		$(MAKE) format-rust EXTENSION_PATH=$(EXTENSION_PATH); \
+	else \
+		echo "Unable to detect Go or Rust sources under $(EXTENSION_PATH). Use 'make format-go' or 'make format-rust' explicitly."; \
+		exit 1; \
+	fi
+
+.PHONY: lint
+lint:
+	@if [ "$(HAS_GOLANG)" = "true" ]; then \
+		$(MAKE) lint-go EXTENSION_PATH=$(EXTENSION_PATH); \
+	elif [ "$(HAS_RUST)" = "true" ]; then \
+		$(MAKE) lint-rust EXTENSION_PATH=$(EXTENSION_PATH); \
+	else \
+		echo "Unable to detect Go or Rust sources under $(EXTENSION_PATH). Use 'make lint-go' or 'make lint-rust' explicitly."; \
+		exit 1; \
+	fi
+
+.PHONY: test
+test:
+	@if [ "$(HAS_GOLANG)" = "true" ]; then \
+		$(MAKE) test-go EXTENSION_PATH=$(EXTENSION_PATH); \
+	elif [ "$(HAS_RUST)" = "true" ]; then \
+		$(MAKE) test-rust EXTENSION_PATH=$(EXTENSION_PATH); \
+	else \
+		echo "Unable to detect Go or Rust sources under $(EXTENSION_PATH). Use 'make test-go' or 'make test-rust' explicitly."; \
+		exit 1; \
+	fi
+
+.PHONY: test-coverage
+test-coverage:
+	@if [ "$(HAS_GOLANG)" = "true" ]; then \
+		$(MAKE) test-go-coverage EXTENSION_PATH=$(EXTENSION_PATH); \
+	elif [ "$(HAS_RUST)" = "true" ]; then \
+		$(MAKE) test-rust-coverage EXTENSION_PATH=$(EXTENSION_PATH); \
+	else \
+		echo "Unable to detect Go or Rust sources under $(EXTENSION_PATH). Use 'make test-go-coverage' or 'make test-rust-coverage' explicitly."; \
+		exit 1; \
+	fi
+
 .PHONY: format-go
 format-go:
 	@echo "format => ./$(EXTENSION_PATH)/..."
@@ -102,7 +167,7 @@ GO_TEST_ARGS ?=
 test-go:
 	@go test -C $(EXTENSION_PATH) $(GO_TEST_ARGS) ./...
 
-.PHONY: test-coverage
+.PHONY: test-go-coverage
 test-go-coverage:
 	@mkdir -p ./$(EXTENSION_PATH)/out
 	@$(MAKE) test-go GO_TEST_ARGS="-coverprofile=./out/go-test-coverage.out \
@@ -178,7 +243,6 @@ push_rust: create_builder
 		--file Dockerfile.rust ./$(EXTENSION_PATH)
 
 .PHONY: push_extproc
-push_extproc:
 push_extproc: create_builder
 	@echo "Building and pushing ExtProc extension image for multiple architectures: $(IMAGE)"
 	@GO_VERSION=$$(sed -ne 's/^go //gp' $(EXTENSION_PATH)/go.mod); \
