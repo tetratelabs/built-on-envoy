@@ -231,6 +231,8 @@ func (s *Server) handleGetSchema(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	// #nosec G705 -- served as application/json from a config schema on disk or the embedded FS,
+	// so it is not interpreted as markup.
 	_, _ = w.Write(data)
 }
 

@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -45,6 +46,15 @@ var outputConfigWithTestUpstreamClusterYAML []byte
 
 //go:embed testdata/output_config_admin_all_interfaces.yaml
 var outputConfigAdminAllInterfacesYAML []byte
+
+// errUnmarshalFilterList is the error parseNativeHTTPFilters* returns for input that is valid YAML
+// but not a list. The type name is derived rather than hardcoded because json.RawMessage is an alias
+// for jsontext.Value under the jsonv2 experiment (on by default as of Go 1.27), and the standard
+// library renders whichever name reflect reports.
+var errUnmarshalFilterList = fmt.Sprintf(
+	"unmarshal filter list: json: cannot unmarshal string into Go value of type %s",
+	reflect.TypeFor[[]json.RawMessage](),
+)
 
 func TestRenderConfig(t *testing.T) {
 	manifest, err := extensions.LoadLocalManifest("testdata/input_lua_inline.yaml")
@@ -535,7 +545,7 @@ func TestParseNativeHTTPFiltersBeforeOverride(t *testing.T) {
 		{
 			name:        "invalid YAML",
 			input:       invalidYAML,
-			expectedErr: "unmarshal filter list: json: cannot unmarshal string into Go value of type []json.RawMessage",
+			expectedErr: errUnmarshalFilterList,
 		},
 		{
 			name:        "rejects terminal dynamic module",
@@ -1095,7 +1105,7 @@ func TestParseNativeHTTPFiltersAfterOverride(t *testing.T) {
 		{
 			name:        "invalid YAML",
 			input:       invalidYAML,
-			expectedErr: "unmarshal filter list: json: cannot unmarshal string into Go value of type []json.RawMessage",
+			expectedErr: errUnmarshalFilterList,
 		},
 		{
 			name:        "rejects terminal dynamic module",

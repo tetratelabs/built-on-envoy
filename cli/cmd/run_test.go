@@ -976,10 +976,12 @@ func TestDownloadExtensions(t *testing.T) {
 
 		composerManifest, err := os.ReadFile("testdata/composer_test.yaml")
 		require.NoError(t, err)
+		// #nosec G703 -- composerDir is rooted at t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(composerDir, "manifest.yaml"), composerManifest, 0o600))
 
 		childManifest, err := os.ReadFile("testdata/composer_child.yaml")
 		require.NoError(t, err)
+		// #nosec G703 -- childDir is rooted at t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(childDir, "manifest.yaml"), childManifest, 0o600))
 
 		mock := &mockOCIClient{

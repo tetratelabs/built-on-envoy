@@ -80,7 +80,9 @@ func (u *UI) Run(ctx context.Context, logger *slog.Logger) error {
 		fmt.Println("Open the URL above in your browser to get started.")
 	}
 
-	// Shut down gracefully when the context is cancelled
+	// Shut down gracefully when the context is cancelled.
+	// #nosec G118 -- this goroutine runs only after ctx is cancelled, so handing ctx to Shutdown
+	// would abort the graceful drain immediately. A fresh context is required here.
 	go func() {
 		<-ctx.Done()
 		logger.Info("shutting down web UI server")

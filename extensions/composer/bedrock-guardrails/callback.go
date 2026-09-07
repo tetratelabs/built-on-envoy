@@ -207,6 +207,7 @@ func (a *applyGuardrailCallback) OnHttpCalloutDone(_ uint64, result shared.HttpC
 // when there is only one chunk which always returns a copy.
 func joinBody(body []shared.UnsafeEnvoyBuffer) []byte {
 	if len(body) == 1 {
+		// #nosec G602 -- guarded by the length check above, so index 0 is always valid.
 		return body[0].ToUnsafeBytes()
 	}
 	chunks := make([][]byte, len(body))

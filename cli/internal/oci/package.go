@@ -86,6 +86,8 @@ func PackageDirectory(dir string) (io.Reader, error) {
 			return nil
 		}
 
+		// #nosec G122 -- this walks a local directory the user asked to package; there is no
+		// privilege boundary here for a symlink swap to cross.
 		file, err := os.Open(filepath.Clean(path))
 		if err != nil {
 			return err

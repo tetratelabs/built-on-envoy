@@ -152,7 +152,7 @@ func TestFTW(t *testing.T) {
 		cmdArgs = append(cmdArgs, "-i", include)
 	}
 
-	// #nosec G204
+	// #nosec G204 G702 -- fixed "go" binary with args built from this test's own env vars
 	cmd := exec.Command("go", cmdArgs...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

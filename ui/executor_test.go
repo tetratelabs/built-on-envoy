@@ -10,7 +10,6 @@ import (
 	"context"
 	"io"
 	"log/slog"
-	"net/http/httptest"
 	"os/exec"
 	"strings"
 	"sync"
@@ -204,14 +203,14 @@ func TestBuildArgs_FilterType(t *testing.T) {
 
 func TestRunStreaming_FilterType(t *testing.T) {
 	e := &Executor{logger: discardLogger(), exe: "/bin/echo"}
-	w := &flushingRecorder{httptest.NewRecorder()}
+	w := newFlushingRecorder()
 
 	e.RunStreaming(context.Background(), []*ExtensionConfig{
 		{Name: "dns-gateway", Config: "", FilterType: "network"},
 		{Name: "opa", Config: ""},
 	}, w, w)
 
-	body := w.Body.String()
+	body := w.body()
 	// The echo output contains the full arg list; verify filter-type flags are present.
 	require.Contains(t, body, "--filter-type network")
 	require.Equal(t, 2, strings.Count(body, "--filter-type"),
@@ -291,14 +290,14 @@ func TestKillProcessGroup_NilProcess(t *testing.T) {
 
 func TestRunStreaming(t *testing.T) {
 	e := &Executor{logger: discardLogger(), exe: "/bin/echo"}
-	w := &flushingRecorder{httptest.NewRecorder()}
+	w := newFlushingRecorder()
 
 	e.RunStreaming(context.Background(), []*ExtensionConfig{
 		{Name: "opa", Config: ""},
 		{Name: "local", Config: "", LocalPath: "/tmp/local"},
 	}, w, w)
 
-	body := w.Body.String()
+	body := w.body()
 	require.Contains(t, body, "event: status\ndata: started")
 	require.Contains(t, body, "--extension opa")
 	require.Contains(t, body, "--local /tmp/local")
@@ -307,11 +306,11 @@ func TestRunStreaming(t *testing.T) {
 
 func TestStreamCommand_Success(t *testing.T) {
 	e := &Executor{logger: discardLogger(), exe: "/bin/echo"}
-	w := &flushingRecorder{httptest.NewRecorder()}
+	w := newFlushingRecorder()
 
 	e.streamCommand(context.Background(), []string{"hello"}, w, w)
 
-	body := w.Body.String()
+	body := w.body()
 	require.Contains(t, body, "event: status\ndata: started")
 	require.Contains(t, body, "event: output")
 	require.Contains(t, body, "event: status\ndata: completed")
@@ -319,18 +318,18 @@ func TestStreamCommand_Success(t *testing.T) {
 
 func TestStreamCommand_ExitError(t *testing.T) {
 	e := &Executor{logger: discardLogger(), exe: "/usr/bin/false"}
-	w := &flushingRecorder{httptest.NewRecorder()}
+	w := newFlushingRecorder()
 
 	e.streamCommand(context.Background(), []string{}, w, w)
 
-	body := w.Body.String()
+	body := w.body()
 	require.Contains(t, body, "event: status\ndata: started")
 	require.Contains(t, body, "event: error")
 }
 
 func TestStreamCommand_Stopped(t *testing.T) {
 	e := &Executor{logger: discardLogger(), exe: "/bin/sleep"}
-	w := &flushingRecorder{httptest.NewRecorder()}
+	w := newFlushingRecorder()
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -341,11 +340,11 @@ func TestStreamCommand_Stopped(t *testing.T) {
 
 	// Wait until the process has started (SSE "started" is written).
 	require.Eventually(t, func() bool {
-		return strings.Contains(w.Body.String(), "event: status\ndata: started")
+		return strings.Contains(w.body(), "event: status\ndata: started")
 	}, 2*time.Second, 10*time.Millisecond)
 
 	require.NoError(t, e.Stop())
 	wg.Wait()
 
-	require.Contains(t, w.Body.String(), "event: status\ndata: stopped")
+	require.Contains(t, w.body(), "event: status\ndata: stopped")
 }

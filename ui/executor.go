@@ -184,7 +184,9 @@ func (e *Executor) streamCommand(ctx context.Context, args []string, w http.Resp
 	if exePath == "" {
 		exePath = e.selfExe()
 	}
-	cmd := exec.CommandContext(ctx, exePath, args...) // #nosec G204
+	// #nosec G204 G702 -- exePath is this binary (or a test stub), never caller-supplied, and
+	// args are passed to boe directly rather than through a shell.
+	cmd := exec.CommandContext(ctx, exePath, args...)
 
 	// Create a new process group so we can kill boe and all its children (Envoy, etc.)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
