@@ -14,24 +14,17 @@ permissions:
 
 jobs:
   retest:
-    name: Retest
     if: |
       github.event.issue.pull_request
       && github.repository == 'tetratelabs/built-on-envoy'
       && github.event.issue.state == 'open'
       && github.actor != 'dependabot[bot]'
+    name: Retest
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      actions: write
-      checks: read
-      issues: write
       pull-requests: write
+      actions: write
     steps:
-      - name: Retest
-        uses: envoyproxy/toolshed/actions/retest@actions-v0.4.24
+      - uses: envoyproxy/toolshed/gh-actions/retest@actions-v0.0.2
         with:
-          token: ${{ github.token }}
-          comment-id: ${{ github.event.comment.id }}
-          pr-url: ${{ github.event.issue.pull_request.html_url }}
-          app-owner: github-actions
+          token: ${{ secrets.GITHUB_TOKEN }}          
