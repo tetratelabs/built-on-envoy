@@ -1,0 +1,28 @@
+name: Retest Action on PR Comment
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+jobs:
+  retest:
+    name: Retest
+    if: |
+      github.event.issue.pull_request
+      && github.repository == 'tetratelabs/built-on-envoy'
+      && github.event.issue.state == 'open'
+      && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      actions: write
+    steps:
+      - name: Retest
+        uses: envoyproxy/toolshed/actions/retest@actions-v0.4.24
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          comment-id: ${{ github.event.comment.id }}
+          pr-url: ${{ github.event.issue.pull_request.html_url }}
