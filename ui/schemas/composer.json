@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "dynamic-fault-injection/config.schema.json",
+  "title": "dynamic-fault-injection Configuration",
+  "description": "Configuration for the dynamic fault injection filter. Defines endpoints with route matching, response distributions, and optional load-based behavior.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["endpoints"],
+  "properties": {
+    "endpoints": {
+      "type": "array",
+      "description": "List of endpoint configurations, each defining fault behavior for matched routes.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["match"],
+        "properties": {
+          "match": {
+            "type": "object",
+            "description": "Route matching configuration.",
+            "additionalProperties": false,
+            "properties": {
+              "prefix": {
+                "type": "string",
+                "description": "Path prefix to match."
+              },
+              "exact": {
+                "type": "string",
+                "description": "Exact path to match (query string is stripped before matching)."
+              },
+              "headers": {
+                "type": "array",
+                "description": "Header matching conditions (all must match).",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["name"],
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "Header name to match."
+                    },
+                    "exact_match": {
+                      "type": "string",
+                      "description": "Exact header value to match."
+                    },
+                    "present_match": {
+                      "type": "boolean",
+                      "description": "If true, only checks that the header is present."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "responses": {
+            "type": "array",
+            "description": "Response distributions. Resolution acts as both relative weight and sample count.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["status", "resolution", "distribution"],
+              "properties": {
+                "status": {
+                  "type": "integer",
+                  "minimum": 100,
+                  "maximum": 599,
+                  "description": "HTTP status code for this response class."
+                },
+                "resolution": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Relative weight and number of pre-computed samples."
+                },
+                "distribution": {
+                  "type": "object",
+                  "description": "Percentile-to-duration mapping (e.g., \"p50.0\": \"10ms\").",
+                  "additionalProperties": {
+                    "type": "string",
+                    "pattern": "^[0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h)$"
+                  }
+                }
+              }
+            }
+          },
+          "load_based": {
+            "type": "object",
+            "description": "Load-based response distribution that switches behavior based on RPS.",
+            "additionalProperties": false,
+            "required": ["healthy", "tipping_point"],
+            "properties": {
+              "healthy": {
+                "type": "object",
+                "description": "Response behavior when RPS is below healthy threshold.",
+                "additionalProperties": false,
+                "required": ["threshold_rps", "responses"],
+                "properties": {
+                  "threshold_rps": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": "RPS threshold below which healthy behavior applies."
+                  },
+                  "responses": {
+                    "$ref": "#/properties/endpoints/items/properties/responses"
+                  }
+                }
+              },
+              "tipping_point": {
+                "type": "object",
+                "description": "Response behavior when RPS exceeds tipping point threshold.",
+                "additionalProperties": false,
+                "required": ["threshold_rps", "responses"],
+                "properties": {
+                  "threshold_rps": {
+                    "type": "number",
+                    "description": "RPS threshold above which tipping point behavior applies. Must be greater than healthy threshold."
+                  },
+                  "responses": {
+                    "$ref": "#/properties/endpoints/items/properties/responses"
+                  }
+                }
+              },
+              "grey_zone": {
+                "type": "object",
+                "description": "Controls behavior in the transition zone between healthy and tipping point.",
+                "additionalProperties": false,
+                "properties": {
+                  "penalty_base": {
+                    "type": "string",
+                    "description": "Base penalty duration in the grey zone (e.g., \"10ms\")."
+                  },
+                  "spike_threshold": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "exclusiveMaximum": 1,
+                    "description": "Grey zone position threshold that triggers spike behavior."
+                  },
+                  "spike_penalty_duration": {
+                    "type": "string",
+                    "description": "How long the spike penalty lasts (e.g., \"5s\")."
+                  },
+                  "spike_penalty_multiplier": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": "Multiplier applied to penalty during a spike."
+                  },
+                  "recovery_rate": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1,
+                    "description": "Rate at which penalty decays after a spike (0-1]."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
