@@ -34,3 +34,4 @@ jobs:
           token: ${{ github.token }}
           comment-id: ${{ github.event.comment.id }}
           pr-url: ${{ github.event.issue.pull_request.html_url }}
+          app-owner: github-actions
