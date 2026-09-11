@@ -105,6 +105,35 @@ longDescription: |
   | `waf_tx_blocked` | `authority`, `phase`, `rule_id` | Counter | Total amount of transactions blocked by the WAF. The `rule_id` will not be set if the request is not blocked by a concrete rule but by a WAF internal error. |
   | `waf_tx_duration` | - | Histogram | Duration of WAF processing the transaction, in microseconds. |
 
+  ### Histogram resolution
+
+  Envoy records dynamic-module histograms without a unit, so its default bucket
+  bounds apply verbatim to the microsecond values of `waf_tx_duration`. Two
+  consequences:
+
+  - Typical CRS evaluation lands in the ~0.5–10 ms range, which the default
+    bounds cover with only five buckets (`500, 1000, 2500, 5000, 10000`).
+  - The largest finite bound is 3,600,000 µs (3.6 s). `_sum`/`_count` and the
+    admin-interface quantiles stay correct above it, but PromQL's
+    `histogram_quantile()` clamps any quantile falling past the last finite
+    bound to that bound.
+
+  Both can be tuned in the Envoy bootstrap configuration, without touching the
+  extension. Note that the matcher sees the stat name before tag extraction,
+  i.e. with the `dynamicmodulescustom.` prefix — a `prefix` matcher needs the
+  full `dynamicmodulescustom.waf_tx_duration` name, while a regex sidesteps
+  this:
+
+  ```yaml
+  stats_config:
+    histogram_bucket_settings:
+      - match:
+          safe_regex:
+            regex: ".*waf_tx_duration"
+        # Sharper resolution across typical CRS latencies; ceiling at 10 s.
+        buckets: [100, 250, 500, 750, 1000, 1500, 2500, 5000, 10000, 25000, 100000, 1000000, 10000000]
+  ```
+
   ## Per Route Configuration
 
   The extension supports per-route configuration, allowing you to specify different WAF rules and policies for different routes in your application. This is useful for tailoring security measures to specific endpoints or services.
