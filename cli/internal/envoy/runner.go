@@ -48,6 +48,8 @@ type RunnerFuncE struct {
 	DefaultLogLevel string
 	// ComponentLogLevel specifies the Envoy component log level.
 	ComponentLogLevel string
+	// LogFormat specifies the Envoy log format.
+	LogFormat string
 	// Dirs specifies XDG directories.
 	Dirs *xdg.Directories
 	// RunID specifies the run identifier for this invocation.
@@ -196,6 +198,9 @@ Press Ctrl+C to stop
 	}
 	if r.ComponentLogLevel != "" {
 		args = append(args, "--component-log-level", r.ComponentLogLevel)
+	}
+	if r.LogFormat != "" {
+		args = append(args, "--log-format", r.LogFormat)
 	}
 
 	return funce.Run(ctx, args, opts...)
