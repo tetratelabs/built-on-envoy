@@ -45,6 +45,8 @@ updates:
       github-actions:
         patterns:
           - "*"
+    ignore:
+      - dependency-name: "envoyproxy/toolshed/gh-actions/retest"
 
   - package-ecosystem: gomod
     directory: /tools
