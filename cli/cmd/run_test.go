@@ -55,6 +55,7 @@ Flags:
       --envoy-path=STRING          Path to a custom Envoy binary. Skips Envoy
                                    download and version selection ($ENVOY_PATH).
       --log-level="all:error"      Envoy component log level ($ENVOY_LOG_LEVEL).
+      --log-format=STRING          Envoy log format ($ENVOY_LOG_FORMAT).
       --run-id=STRING              Run identifier for this invocation. Overrides
                                    the default timestamp-based ID ($BOE_RUN_ID).
       --listen-port=10000          Port for Envoy listener to accept incoming

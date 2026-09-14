@@ -33,6 +33,7 @@ const defaultLogLevel = "error"
 type Run struct {
 	Envoy      EnvoyFlags `embed:""`
 	LogLevel   string     `help:"Envoy component log level." default:"all:error" env:"ENVOY_LOG_LEVEL"`
+	LogFormat  string     `help:"Envoy log format." env:"ENVOY_LOG_FORMAT"`
 	RunID      string     `name:"run-id" env:"BOE_RUN_ID" help:"Run identifier for this invocation. Overrides the default timestamp-based ID."`
 	ListenPort uint32     `help:"Port for Envoy listener to accept incoming traffic." default:"10000"`
 	AdminPort  uint32     `name:"admin-port" help:"Port for Envoy admin interface." default:"9901" env:"BOE_ADMIN_PORT"`
@@ -185,6 +186,7 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 		EnvoyPath:               r.Envoy.Path,
 		DefaultLogLevel:         r.defaultLogLevel,
 		ComponentLogLevel:       r.componentLogLevel,
+		LogFormat:               r.LogFormat,
 		Dirs:                    dirs,
 		RunID:                   r.RunID,
 		ListenPort:              r.ListenPort,

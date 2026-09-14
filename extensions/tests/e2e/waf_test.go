@@ -48,6 +48,8 @@ func TestWAFSmoke(t *testing.T) {
 
 	internaltesting.RunEnvoy(t, cliBin, proxyPort, adminPort,
 		"--log-level", "dynamic_modules:debug",
+		// Include '%N' in the log format to see the exact Envoy SHA used in the e2e tests.
+		"--log-format", "[%Y-%m-%d %T.%e][%t][%l][%n] [%N][%g:%#] %v",
 		"--local", "../../composer/waf",
 		"--config", config)
 
@@ -126,6 +128,8 @@ func TestFTW(t *testing.T) {
 
 	internaltesting.RunEnvoy(t, cliBin, ftwPort, ports[0],
 		"--log-level", "dynamic_modules:debug",
+		// Include '%N' in the log format to see the exact Envoy SHA used in the e2e tests.
+		"--log-format", "[%Y-%m-%d %T.%e][%t][%l][%n] [%N][%g:%#] %v",
 		"--local", "../../composer/waf",
 		"--config", config)
 
