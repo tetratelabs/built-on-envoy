@@ -119,10 +119,10 @@ longDescription: |
     bound to that bound.
 
   Both can be tuned in the Envoy bootstrap configuration, without touching the
-  extension. Note that the matcher sees the stat name before tag extraction,
-  i.e. with the `dynamicmodulescustom.` prefix — a `prefix` matcher needs the
-  full `dynamicmodulescustom.waf_tx_duration` name, while a regex sidesteps
-  this:
+  extension. Two details about the matcher, both of which fail silently when
+  missed: it sees the stat name before tag extraction, i.e. with the
+  `dynamicmodulescustom.` prefix, and `safe_regex` is matched against the whole
+  name — hence the leading `.*` below.
 
   ```yaml
   stats_config:
