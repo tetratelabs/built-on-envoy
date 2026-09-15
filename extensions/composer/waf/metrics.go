@@ -32,11 +32,14 @@ func newMetrics(h shared.HttpFilterConfigHandle) *metrics {
 }
 
 // RecordTx increments the total transaction counter and records the accumulated
-// WAF processing duration.
+// WAF processing duration, in microseconds. Typical CRS evaluation takes a few
+// milliseconds at most, so whole milliseconds would truncate most transactions
+// to 0 or 1; microseconds resolve that range within Envoy's default histogram
+// buckets.
 // This should be called once for every transaction processed by the WAF.
 func (m *metrics) RecordTx(h shared.HttpFilterHandle, elapsed time.Duration) {
 	m.txTotal.Record(h, h.IncrementCounterValue, 1)
-	m.txDuration.Record(h, h.RecordHistogramValue, uint64(elapsed.Milliseconds())) //nolint:gosec // G115: elapsed is a non-negative duration
+	m.txDuration.Record(h, h.RecordHistogramValue, uint64(elapsed.Microseconds())) //nolint:gosec // G115: elapsed is a non-negative duration
 }
 
 // RecordBlockedByRule increments the blocked transaction counter with the appropriate labels.
