@@ -38,4 +38,4 @@ examples:
   - title: Basic Example
     description: Load the example go plugin as an HTTP filter
     code: |
-      boe run --extension example
+      boe run --extension example-go
