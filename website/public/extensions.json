@@ -456,7 +456,7 @@
       {
         "title": "Basic Example",
         "description": "Load the example go plugin as an HTTP filter",
-        "code": "boe run --extension example\n"
+        "code": "boe run --extension example-go\n"
       }
     ],
     "minEnvoyVersion": "1.38.0",
