@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/corazawaf/coraza/v3"
 	ctypes "github.com/corazawaf/coraza/v3/types"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 
@@ -29,13 +28,13 @@ const (
 
 type wafPluginFactory struct {
 	shared.EmptyHttpFilterFactory
-	config  coraza.WAF
+	config  *waf.SharedWAF
 	mode    waf.WAFMode
 	metrics *metrics
 }
 
 type perRouteWafPluginConfig struct {
-	config coraza.WAF
+	config *waf.SharedWAF
 	mode   waf.WAFMode
 }
 
@@ -73,16 +72,15 @@ func (f *wafPluginConfigFactory) Create(
 	handle shared.HttpFilterConfigHandle,
 	unparsedConfig []byte,
 ) (shared.HttpFilterFactory, error) {
-	var wafConfig coraza.WAF
+	var wafConfig *waf.SharedWAF
 	var mode waf.WAFMode
-	var err error
 
 	if len(unparsedConfig) > 0 {
-		wafConfig, mode, err = waf.NewWAFConfigFromBytes(unparsedConfig, logger.GetLogger())
-	}
-
-	if err != nil {
-		return nil, err
+		var err error
+		wafConfig, mode, err = newSharedWAFConfig(unparsedConfig)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if wafConfig == nil {
@@ -97,7 +95,7 @@ func (f *wafPluginConfigFactory) Create(
 }
 
 func (f *wafPluginConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, error) {
-	wafConfig, mode, err := waf.NewWAFConfigFromBytes(unparsedConfig, logger.GetLogger())
+	wafConfig, mode, err := newSharedWAFConfig(unparsedConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -107,12 +105,26 @@ func (f *wafPluginConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, err
 	}, nil
 }
 
+// newSharedWAFConfig parses a filter config and returns its shared WAF and mode.
+func newSharedWAFConfig(unparsedConfig []byte) (*waf.SharedWAF, waf.WAFMode, error) {
+	l := logger.GetLogger()
+	config, err := waf.ParseConfig(unparsedConfig, l)
+	if err != nil {
+		return nil, 0, err
+	}
+	sharedWAF, err := waf.GetOrCreateSharedWAF(config.Directives, l)
+	if err != nil {
+		return nil, 0, err
+	}
+	return sharedWAF, config.Mode, nil
+}
+
 // The plugin struct that implements the actual logic.
 type wafPlugin struct {
 	shared.EmptyHttpFilter
 	logger            *logger.Logger
 	handle            shared.HttpFilterHandle
-	config            coraza.WAF
+	config            *waf.SharedWAF
 	mode              waf.WAFMode
 	metrics           *metrics
 	metadataNamespace string
