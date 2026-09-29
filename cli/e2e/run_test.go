@@ -476,7 +476,6 @@ func TestGoPluginLoaderRemoteExtension(t *testing.T) {
 	proxyPort := ports[0]
 	config := fmt.Sprintf(`{"name":"example-go","url":%q,"strict_check":false}`, pluginURL)
 	internaltesting.RunEnvoy(t, cliBin, proxyPort, ports[1],
-		"--envoy-version", "dev-latest",
 		"--log-level", "dynamic_modules:debug",
 		"--extension", extensions.GoPluginLoaderName+":"+version,
 		"--config", config,
