@@ -26,6 +26,7 @@ GO_TEST_ARGS ?=
 ROOT       := $(shell git rev-parse --show-toplevel)
 GO_VERSION := $(shell sed -ne 's/^go //gp' $(ROOT)/go.mod)
 GO_TOOL    := go tool -modfile=$(ROOT)/tools/go.mod
+RUST_VERSION = $(shell $(GO_TOOL) yq -e -p toml -oy '.toolchain.channel' "$(ROOT)/rust-toolchain.toml")
 
 # Base OCI image annotations (shared by all image types)
 BASE_OCI_ANNOTATIONS := \
@@ -137,11 +138,13 @@ create_builder:
 
 .PHONY: build_image
 build_image:  ## Build the Docker image
+	@test -n "$(RUST_VERSION)"
 	@$(MAKE) build GOOS_LIST="linux" GOARCH_LIST="$(GOARCH_LIST)"
 	docker buildx build \
 		--output type=docker,oci-mediatypes=true \
 		--provenance=false \
 		--build-arg GO_VERSION="$(GO_VERSION)" \
+		--build-arg RUST_VERSION="$(RUST_VERSION)" \
 		$(BASE_OCI_ANNOTATIONS) \
 		-t $(OCI_REGISTRY)/$(NAME):$(TAG) \
 		-f ./Dockerfile .
@@ -150,12 +153,14 @@ build_image:  ## Build the Docker image
 push_image: GOARCH_LIST = amd64 arm64
 push_image: PLATFORMS = linux/amd64,linux/arm64
 push_image: create_builder  ## Push the Docker image to the registry
+	@test -n "$(RUST_VERSION)"
 	@$(MAKE) build GOOS_LIST="linux" GOARCH_LIST="$(GOARCH_LIST)"
 	docker buildx build --platform=$(PLATFORMS) \
 		--builder $(BUILDER_NAME) \
 		--output type=registry,oci-mediatypes=true$(registry_output) \
 		--provenance=false \
 		--build-arg GO_VERSION="$(GO_VERSION)" \
+		--build-arg RUST_VERSION="$(RUST_VERSION)" \
 		$(MULTI_OCI_ANNOTATIONS) \
 		-t $(OCI_REGISTRY)/$(NAME):$(TAG) \
 		-f ./Dockerfile .
