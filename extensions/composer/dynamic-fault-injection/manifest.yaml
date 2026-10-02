@@ -61,42 +61,42 @@ examples:
       ❯ curl -v http://localhost:10000/status/200
       > GET /status/200 HTTP/1.1
       > Host: localhost:10000
-      > User-Agent: curl/8.21.0
+      > User-Agent: curl/8.7.1
       > Accept: */*
       >
-      * Request completely sent off
       < HTTP/1.1 200 OK
-      < server: envoy
-      < date: Mon, 03 Aug 2026 12:22:42 GMT
+      < date: Fri, 02 Oct 2026 19:11:25 GMT
       < content-type: text/html; charset=utf-8
+      < content-length: 0
+      < server: envoy
       < access-control-allow-origin: *
       < access-control-allow-credentials: true
-      < content-length: 0
-      < x-envoy-upstream-service-time: 0
-      < x-fault-injected-delay: 213.77ms
-      < x-fault-actual-upstream: 953.946µs
+      < x-envoy-upstream-service-time: 113
+      < x-fault-injected-delay: 326.1ms
+      < x-fault-actual-upstream: 114.130167ms
+      < x-fault-added-delay: 211.969833ms
       < x-fault-status: 200
-      < x-fault-added-delay: 212.816054ms
+      < x-fault-upstream-status: 200
+      < x-fault-requests-in-flight: 0
 
-      $> curl -v http://localhost:10000/status/503
-      > GET /status/503 HTTP/1.1
+      # About 1% of requests sample the 503 response instead and get a local reply
+      ❯ curl -v http://localhost:10000/status/200
+      > GET /status/200 HTTP/1.1
       > Host: localhost:10000
-      > User-Agent: curl/8.21.0
+      > User-Agent: curl/8.7.1
       > Accept: */*
       >
-      * Request completely sent off
       < HTTP/1.1 503 Service Unavailable
-      < server: envoy
-      < date: Mon, 03 Aug 2026 12:20:30 GMT
-      < content-type: text/html; charset=utf-8
-      < access-control-allow-origin: *
-      < access-control-allow-credentials: true
-      < content-length: 0
-      < x-envoy-upstream-service-time: 0
-      < x-fault-injected-delay: 414.14ms
-      < x-fault-actual-upstream: 896.86µs
+      < content-type: text/plain
+      < x-fault-injected: abort
+      < x-fault-injected-delay: 4ms
+      < x-fault-actual-upstream: 182.419083ms
       < x-fault-status: 503
-      < x-fault-added-delay: 413ms
+      < x-fault-upstream-status: 200
+      < x-fault-requests-in-flight: 0
+      < content-length: 24
+      < date: Fri, 02 Oct 2026 19:12:39 GMT
+      < server: envoy
 type: go
 longDescription: |
   # Envoy Latency and Fault Distribution Simulation
@@ -256,7 +256,7 @@ longDescription: |
   |--------|-------------|
   | `x-fault-injected-delay` | Target duration from the distribution (e.g., "52.3ms") |
   | `x-fault-actual-upstream` | Actual time the upstream took to respond |
-  | `x-fault-added-delay` | Additional delay injected (target - upstream), or `0s` when none was added |
+  | `x-fault-added-delay` | Additional delay injected (target - upstream); omitted when no delay was added |
   | `x-fault-requests-in-flight` | Process-global in-flight matched request count observed at request entry, before the request is added |
   | `x-fault-worker-index` | Envoy worker index that made the fault decision; only included when `diagnostic` is `true` |
   | `x-fault-injected` | "response" when a sampled status below 400 overrides upstream, otherwise "abort" |
