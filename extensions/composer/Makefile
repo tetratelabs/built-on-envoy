@@ -93,10 +93,33 @@ format:
 	@echo "licenses => **"
 	@$(GO_TOOL) license-eye -c $(ROOT)/.licenserc.yaml header fix
 
+ANALYSIS_MAINS ?= $(patsubst %/main.go,%,$(wildcard */analysis-main/main.go))
+
 .PHONY: lint
-lint:
+lint: lint-deadcode
 	@echo "golangci-lint => ./..."
-	@$(GO_TOOL) golangci-lint run
+	@$(GO_TOOL) golangci-lint run --build-tags=analysis
+
+.PHONY: lint-deadcode
+lint-deadcode:
+	@set -eu; \
+	report="$$(mktemp)"; \
+	trap 'rm -f -- "$$report"' EXIT HUP INT TERM; \
+	for analysis_main in $(ANALYSIS_MAINS); do \
+		filter="$${analysis_main%/analysis-main}"; \
+		filter_import="$$(go list -f '{{.ImportPath}}' "./$$filter")"; \
+		filter_pattern="$$(printf '%s' "$$filter_import" | sed 's/[.]/[.]/g')"; \
+		implementation_packages="$$(go list -tags=analysis -f '{{if ne .Name "main"}}{{.ImportPath}}{{end}}' "./$$filter/...")"; \
+		set -- "./$$analysis_main"; \
+		for package in $$implementation_packages; do set -- "$$@" "$$package"; done; \
+		echo "deadcode => $$analysis_main"; \
+		if ! $(GO_TOOL) deadcode -tags=analysis -filter="^$$filter_pattern(/|$$)" "$$@" > "$$report"; then \
+			cat "$$report"; \
+			exit 1; \
+		fi; \
+		cat "$$report"; \
+		if test -s "$$report"; then exit 1; fi; \
+	done
 
 .PHONY: test
 test:

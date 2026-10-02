@@ -6,6 +6,7 @@ This directory contains an example Go plugin for Envoy HTTP filters using the Co
 
 ```
 example/
+├── analysis-main/       # Envoy callbacks for production reachability analysis
 ├── embedded/            # Embedded packaging (compiled into Composer)
 │   ├── host.go
 ├── standalone/          # Standalone packaging (loaded at runtime)
@@ -70,6 +71,14 @@ The plugin is compiled directly into the Composer dynamic module binary.
 ```bash
 boe run --extension example-go
 ```
+
+## Production reachability analysis
+
+The [analysis entrypoint](analysis-main/README.md) models the callbacks Envoy invokes
+through the Go SDK so the dead-code analyzer can distinguish live filter methods
+from helpers without production callers. Composer's `make lint` runs this analysis
+alongside the normal linters. The entrypoint uses the `analysis` build tag and is
+compiled for analysis only; its placeholder arguments do not provide an Envoy runtime.
 
 ## Go Runtime Compatibility
 
