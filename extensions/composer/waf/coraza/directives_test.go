@@ -163,12 +163,12 @@ func TestCombinedDirectivesFS_Glob(t *testing.T) {
 // a special file name such as @coraza.conf (loaded from the embedded layer).
 func TestCombinedDirectivesFS_EmbeddedDirectivesInNestedInclude(t *testing.T) {
 	t.Run("baseline: ResponseBodyAccess is Off without @coraza.conf", func(t *testing.T) {
-		waf, err := NewWAFFromDirectives("SecRuleEngine On", zap.NewNop())
+		waf, err := GetOrCreateSharedWAF("SecRuleEngine On", zap.NewNop())
 		require.NoError(t, err)
 		require.False(t, waf.NewTransaction().IsResponseBodyAccessible())
 	})
 	t.Run("embedded @coraza.conf resolves from within a local file include", func(t *testing.T) {
-		waf, err := NewWAFFromDirectives("Include testdata/include-coraza.conf", zap.NewNop())
+		waf, err := GetOrCreateSharedWAF("Include testdata/include-coraza.conf", zap.NewNop())
 		require.NoError(t, err)
 		require.True(t, waf.NewTransaction().IsResponseBodyAccessible())
 	})

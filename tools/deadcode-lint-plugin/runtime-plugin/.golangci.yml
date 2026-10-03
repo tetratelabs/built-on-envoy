@@ -1,0 +1,30 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# This smoke check discovers the example through the same profile used for all Composer filters.
+version: "2"
+run:
+  build-tags:
+    - coraza.rule.case_sensitive_args_keys
+    - coraza.rule.no_regex_multiline
+    - coraza.rule.mandatory_rule_id_check
+linters:
+  default: none
+  enable:
+    - ffideadcode
+  settings:
+    custom:
+      ffideadcode:
+        type: goplugin
+        path: ../out/ffideadcode.so
+        description: Reports functions unreachable from imported SDK FFI entrypoints.
+        settings:
+          composer:
+            directory: ../../extensions/composer
+            include: [example]
+            build-tags:
+              - coraza.rule.case_sensitive_args_keys
+              - coraza.rule.no_regex_multiline
+              - coraza.rule.mandatory_rule_id_check

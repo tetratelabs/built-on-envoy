@@ -74,27 +74,6 @@ func ParseConfig(configBytes []byte, l *zap.Logger) (Config, error) {
 	return Config{Directives: strings.Join(y.Directives, "\n"), Mode: mode}, nil
 }
 
-// NewWAFConfigFromBytes creates a new WAF from the given raw configuration bytes passed at the
-// Envoy filter configuration. configBytes must be a valid json of WAFConfig.
-//
-// The returned WAF is not shared: use ParseConfig and GetOrCreateSharedWAF for filter configs.
-func NewWAFConfigFromBytes(configBytes []byte, l *zap.Logger) (coraza.WAF, WAFMode, error) {
-	config, err := ParseConfig(configBytes, l)
-	if err != nil {
-		return nil, 0, err
-	}
-	waf, err := NewWAFFromDirectives(config.Directives, l)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to create WAF from directives: %w", err)
-	}
-	return waf, config.Mode, nil
-}
-
-// NewWAFFromDirectives creates a new WAF from the given directives.
-func NewWAFFromDirectives(directives string, l *zap.Logger) (coraza.WAF, error) {
-	return newWAF(directives, l, combinedDirectivesFS)
-}
-
 // newWAF creates a new WAF, reading included and data files from root.
 func newWAF(directives string, l *zap.Logger, root fs.FS) (coraza.WAF, error) {
 	conf := coraza.NewWAFConfig().

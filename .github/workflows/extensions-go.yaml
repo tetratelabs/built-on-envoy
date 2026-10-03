@@ -23,8 +23,11 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: extensions/composer/go.mod
-          cache-dependency-path: extensions/composer/go.sum
+          cache-dependency-path: |
+            extensions/composer/go.sum
+            tools/go.sum
 
+      - run: make -C ../../tools/deadcode-lint-plugin check
       - run: make format lint
       - run: make build
       - run: make build_plugins

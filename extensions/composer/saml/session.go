@@ -115,21 +115,6 @@ func buildSessionCookie(l logger, cfg *Config, token string) string {
 	return cookie
 }
 
-// clearSessionCookie builds a Set-Cookie header that clears the session cookie.
-func clearSessionCookie(cfg *Config) string {
-	cookie := fmt.Sprintf("%s=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0",
-		cfg.CookieName)
-
-	if cfg.CookieSecure {
-		cookie += "; Secure"
-	}
-	if cfg.CookieDomain != "" {
-		cookie += "; Domain=" + cfg.CookieDomain
-	}
-
-	return cookie
-}
-
 // extractSessionCookie extracts the session token from the Cookie header.
 func extractSessionCookie(cookieHeader string, cookieName string) string {
 	// Parse cookies manually (simple implementation).
