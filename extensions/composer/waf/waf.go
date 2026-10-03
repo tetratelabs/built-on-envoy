@@ -132,6 +132,7 @@ type wafPlugin struct {
 	txContext             ctypes.Transaction
 	wafElapsed            time.Duration // summed time spent in the waf callbacks (WAF-added latency)
 	txDone                bool          // WAF analysis complete and metrics emitted: set by recordTxMetrics, exactly once
+	txReleased            bool          // transaction closed before stream end: see scheduleRelease
 	protocol              string
 	isUpgrade             bool
 	isSSE                 bool
@@ -256,6 +257,10 @@ func (p *wafPlugin) OnRequestHeaders(headers shared.HeaderMap, endOfStream bool)
 
 func (p *wafPlugin) OnRequestBody(body shared.BodyBuffer, endOfStream bool) shared.BodyStatus {
 	defer p.trackAndMarkTxDone(time.Now())
+	// Released early (long-lived stream, see scheduleRelease): nothing left to inspect.
+	if p.txReleased {
+		return shared.BodyStatusContinue
+	}
 	if p.txContext == nil {
 		p.handle.Log(shared.LogLevelDebug,
 			"Request body phase reached without a previously initialized context. Passing through")
@@ -309,6 +314,10 @@ func (p *wafPlugin) OnRequestBody(body shared.BodyBuffer, endOfStream bool) shar
 
 func (p *wafPlugin) OnRequestTrailers(_ shared.HeaderMap) shared.TrailersStatus {
 	defer p.trackAndMarkTxDone(time.Now())
+	// Released early (long-lived stream, see scheduleRelease): nothing left to inspect.
+	if p.txReleased {
+		return shared.TrailersStatusContinue
+	}
 	if p.txContext == nil {
 		p.handle.Log(shared.LogLevelDebug,
 			"Request trailers phase reached without a previously initialized context. Passing through")
@@ -337,6 +346,10 @@ func (p *wafPlugin) OnResponseHeaders(headers shared.HeaderMap, endOfStream bool
 	// phase, skipping request-phase initialization (CRS phase 1).
 	// It leads to uninitialized TX variables and 403s, replacing the original response code
 	// (e.g. 431) with a false positive.
+	// Released early (long-lived stream, see scheduleRelease): nothing left to inspect.
+	if p.txReleased {
+		return shared.HeadersStatusContinue
+	}
 	if p.txContext == nil {
 		p.handle.Log(shared.LogLevelDebug,
 			"Response headers phase reached without a previously initialized context. Passing through")
@@ -386,6 +399,10 @@ func (p *wafPlugin) OnResponseHeaders(headers shared.HeaderMap, endOfStream bool
 func (p *wafPlugin) OnResponseBody(body shared.BodyBuffer, endOfStream bool) shared.BodyStatus {
 	defer p.trackAndMarkTxDone(time.Now())
 	// txContext is nil when the request phase never ran (see OnResponseHeaders).
+	// Released early (long-lived stream, see scheduleRelease): nothing left to inspect.
+	if p.txReleased {
+		return shared.BodyStatusContinue
+	}
 	if p.txContext == nil {
 		p.handle.Log(shared.LogLevelDebug,
 			"Response body phase reached without a previously initialized context. Passing through")
@@ -439,6 +456,10 @@ func (p *wafPlugin) OnResponseBody(body shared.BodyBuffer, endOfStream bool) sha
 func (p *wafPlugin) OnResponseTrailers(_ shared.HeaderMap) shared.TrailersStatus {
 	defer p.trackAndMarkTxDone(time.Now())
 	// txContext is nil when the request phase never ran (see OnResponseHeaders).
+	// Released early (long-lived stream, see scheduleRelease): nothing left to inspect.
+	if p.txReleased {
+		return shared.TrailersStatusContinue
+	}
 	if p.txContext == nil {
 		p.handle.Log(shared.LogLevelDebug,
 			"Response trailers phase reached without a previously initialized context. Passing through")
@@ -459,8 +480,10 @@ func (p *wafPlugin) OnResponseTrailers(_ shared.HeaderMap) shared.TrailersStatus
 
 func (p *wafPlugin) OnStreamComplete() {
 	if p.txContext == nil {
-		p.handle.Log(shared.LogLevelDebug,
-			"On Stream complete reached without a previously initialized context. Passing through")
+		if !p.txReleased {
+			p.handle.Log(shared.LogLevelDebug,
+				"On Stream complete reached without a previously initialized context. Passing through")
+		}
 		return
 	}
 	// Cover any path where the transaction was not marked done at a callback
@@ -469,8 +492,16 @@ func (p *wafPlugin) OnStreamComplete() {
 	if !p.txDone {
 		p.recordTxMetrics()
 	}
-	// ProcessLogging (phase 5 + audit logging) is expected to be run outside the data path
-	// in order to do not delay the response.
+	p.releaseTransaction()
+}
+
+// releaseTransaction runs ProcessLogging (phase 5 + audit logging) and closes the transaction,
+// returning it to Coraza's pool. It is expected to run outside the data path in order to not
+// delay the response.
+func (p *wafPlugin) releaseTransaction() {
+	if p.txContext == nil {
+		return
+	}
 	p.txContext.ProcessLogging()
 	if err := p.txContext.Close(); err != nil {
 		p.handle.Log(shared.LogLevelDebug, "Failed to close WAF transaction: %v", err.Error())
@@ -478,11 +509,35 @@ func (p *wafPlugin) OnStreamComplete() {
 	p.txContext = nil
 }
 
+// scheduleRelease closes the transaction of a long-lived stream (upgraded or SSE) as soon as
+// its WAF analysis is done, instead of at stream end.
+//
+// The WAF does not inspect WebSocket frames or SSE events: once the analysis is done the
+// transaction is idle, yet holding it until the stream ends (often hours) keeps alive
+// whatever memory it grew while serving previous requests, as Coraza pools and reuses
+// transactions. Many long-lived streams can therefore pin a large amount of memory.
+//
+// The release is scheduled rather than done inline so that ProcessLogging runs after the
+// headers are forwarded, off the data path, on the same worker thread as the other callbacks.
+// If the stream completes first, the scheduled task is dropped and OnStreamComplete releases
+// the transaction instead.
+func (p *wafPlugin) scheduleRelease() {
+	p.handle.GetScheduler().Schedule(func() {
+		if p.txContext == nil {
+			return
+		}
+		p.txReleased = true
+		p.releaseTransaction()
+	})
+}
+
 // trackAndMarkTxDone is deferred at the top of every filter callback.
 // It accumulates the time spent in each callback (the full overhead introduced
 // by the WAF) and, as soon as the WAF analysis is done, marks the transaction
 // done, emitting its metrics. The transaction stays live: audit logging
-// (phase 5) and closing are deferred to OnStreamComplete, outside the data path.
+// (phase 5) and closing are deferred to OnStreamComplete, outside the data path,
+// except for long-lived streams (upgraded or SSE) where they are scheduled right
+// away (see scheduleRelease).
 //
 // The WAF analysis is done when:
 //   - the WAF raised an interruption in any phase
@@ -508,6 +563,10 @@ func (p *wafPlugin) trackAndMarkTxDone(start time.Time) {
 		p.responseBodyProcessed || // phase 4 has run
 		(p.mode == waf.ModeRequestOnly && p.requestBodyProcessed) { // phase 2 has run in request-only mode
 		p.recordTxMetrics()
+		// An interrupted stream ends right away and is released by OnStreamComplete.
+		if (p.isUpgrade || p.isSSE) && !p.txContext.IsInterrupted() {
+			p.scheduleRelease()
+		}
 	}
 }
 
