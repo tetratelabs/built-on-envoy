@@ -5,7 +5,9 @@
 
 ROOT       := $(shell git rev-parse --show-toplevel)
 GO_VERSION := $(shell sed -ne 's/^go //gp' $(ROOT)/extensions/composer/go.mod)
-GO_TOOL    := go tool -modfile=$(ROOT)/tools/go.mod
+GO_TOOL    := go tool -modfile="$(ROOT)/tools/go.mod"
+FFI_LINTER_DIR := $(ROOT)/tools/deadcode-lint-plugin
+FFI_LINT_CONFIG := $(FFI_LINTER_DIR)/out/golangci-composer.yml
 
 GO_TEST_ARGS ?=
 
@@ -85,7 +87,7 @@ force_target_os ?= $(host_os)
 # Some IDEs like Goland place `.go` files in the `.idea` directory when using code templates. Using a
 # git command to find the files ensures that only relevant files are formatted and that git-ignored
 # files do not get in the way
-GO_FILES=$(shell git ls-files --cached --others --exclude-standard | grep '\.go$$')
+GO_FILES=$(wildcard $(shell git ls-files --cached --others --exclude-standard -- '*.go'))
 .PHONY: format
 format:
 	@echo "format => *.go"
@@ -93,33 +95,12 @@ format:
 	@echo "licenses => **"
 	@$(GO_TOOL) license-eye -c $(ROOT)/.licenserc.yaml header fix
 
-ANALYSIS_MAINS ?= $(patsubst %/main.go,%,$(wildcard */analysis-main/main.go))
-
 .PHONY: lint
-lint: lint-deadcode
+lint:
+	@$(MAKE) -C "$(FFI_LINTER_DIR)" runtime-plugin
+	@$(GO_TOOL) yq eval-all '. as $$config ireduce ({}; . *+ $$config)' "$(ROOT)/.golangci.yml" golangci-plugin.yml > "$(FFI_LINT_CONFIG)"
 	@echo "golangci-lint => ./..."
-	@$(GO_TOOL) golangci-lint run --build-tags=analysis
-
-.PHONY: lint-deadcode
-lint-deadcode:
-	@set -eu; \
-	report="$$(mktemp)"; \
-	trap 'rm -f -- "$$report"' EXIT HUP INT TERM; \
-	for analysis_main in $(ANALYSIS_MAINS); do \
-		filter="$${analysis_main%/analysis-main}"; \
-		filter_import="$$(go list -f '{{.ImportPath}}' "./$$filter")"; \
-		filter_pattern="$$(printf '%s' "$$filter_import" | sed 's/[.]/[.]/g')"; \
-		implementation_packages="$$(go list -tags=analysis -f '{{if ne .Name "main"}}{{.ImportPath}}{{end}}' "./$$filter/...")"; \
-		set -- "./$$analysis_main"; \
-		for package in $$implementation_packages; do set -- "$$@" "$$package"; done; \
-		echo "deadcode => $$analysis_main"; \
-		if ! $(GO_TOOL) deadcode -tags=analysis -filter="^$$filter_pattern(/|$$)" "$$@" > "$$report"; then \
-			cat "$$report"; \
-			exit 1; \
-		fi; \
-		cat "$$report"; \
-		if test -s "$$report"; then exit 1; fi; \
-	done
+	@$(GO_TOOL) golangci-lint run --config="$(FFI_LINT_CONFIG)" ./...
 
 .PHONY: test
 test:
