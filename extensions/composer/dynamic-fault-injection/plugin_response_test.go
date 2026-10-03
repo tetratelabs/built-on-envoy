@@ -3,6 +3,7 @@
 // The full text of the Apache license is available in the LICENSE file at
 // the root of the repo.
 
+// These tests cover response headers and local replies because both paths publish fault metadata.
 package impl
 
 import (
@@ -132,6 +133,59 @@ func requireHeaderCount(t *testing.T, headers [][2]string, name string, expected
 	require.Equal(t, expected, count, "header %q count", name)
 }
 
+func requireResponseTimingHeader(t *testing.T, headers [][2]string, name string) {
+	t.Helper()
+	values := headerValues(headers, name)
+	require.Len(t, values, 1, "header %s", name)
+	require.Regexp(t, `^[0-9]+\.[0-9]{3}ms$`, values[0])
+}
+
+func TestOnResponseHeaders_TimingHeaderPrecision(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		duration time.Duration
+		want     string
+	}{
+		{name: "zero", want: "0.000ms"},
+		{name: "nanoseconds", duration: 1, want: "0.000ms"},
+		{name: "microseconds", duration: time.Microsecond, want: "0.001ms"},
+		{name: "round down", duration: 1234499 * time.Nanosecond, want: "1.234ms"},
+		{name: "round up", duration: 1234567 * time.Nanosecond, want: "1.235ms"},
+		{name: "carry", duration: 999999600 * time.Nanosecond, want: "1000.000ms"},
+		{name: "seconds", duration: 1234567890 * time.Nanosecond, want: "1234.568ms"},
+		{name: "minutes", duration: time.Minute + 123456789*time.Nanosecond, want: "60123.457ms"},
+		{name: "hours", duration: time.Hour + 123456789*time.Nanosecond, want: "3600123.457ms"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			handle := mocks.NewMockHttpFilterHandle(ctrl)
+			span := mocks.NewMockSpan(ctrl)
+			handle.EXPECT().GetActiveSpan().Return(span).Times(1)
+			tags := make(map[string]string)
+			span.EXPECT().SetTag(gomock.Any(), gomock.Any()).Do(func(name, value string) {
+				tags[name] = value
+			}).AnyTimes()
+			filter := &latencyFaultFilter{
+				handle:       handle,
+				matched:      true,
+				sample:       fault.ResponseSample{Status: 200, Duration: tc.duration},
+				requestStart: time.Now().Add(-tc.duration - time.Second),
+			}
+			headers := fake.NewFakeHeaderMap(map[string][]string{":status": {"200"}})
+
+			require.Equal(t, shared.HeadersStatusContinue, filter.OnResponseHeaders(headers, false))
+			require.Equal(t, tc.want, headers.GetOne(injectedDelayHeader).ToUnsafeString())
+			upstream := headers.GetOne(actualUpstreamHeader).ToUnsafeString()
+			require.Regexp(t, `^[0-9]+\.[0-9]{3}ms$`, upstream)
+			parsed, err := time.ParseDuration(upstream)
+			require.NoError(t, err)
+			require.GreaterOrEqual(t, parsed+time.Microsecond, tc.duration+time.Second)
+			require.Equal(t, tc.want, tags[injectedDelayTag])
+			require.Equal(t, upstream, tags[actualUpstreamTag])
+		})
+	}
+}
+
 func TestOnResponseHeaders_DelayedAbort(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -173,9 +227,9 @@ func TestOnResponseHeaders_DelayedAbort(t *testing.T) {
 	requireResponseHeader(t, localResponseHeaders, "content-type", "application/problem+json")
 	requireResponseHeader(t, localResponseHeaders, "retry-after", "2")
 	requireResponseHeader(t, localResponseHeaders, "x-fault-injected", "abort")
-	requireResponseHeader(t, localResponseHeaders, "x-fault-injected-delay", "100ms")
-	requireResponseHeaderPresent(t, localResponseHeaders, "x-fault-actual-upstream")
-	requireResponseHeaderPresent(t, localResponseHeaders, "x-fault-added-delay")
+	requireResponseHeader(t, localResponseHeaders, "x-fault-injected-delay", "100.000ms")
+	requireResponseTimingHeader(t, localResponseHeaders, actualUpstreamHeader)
+	requireResponseTimingHeader(t, localResponseHeaders, addedDelayHeader)
 	requireResponseHeader(t, localResponseHeaders, "x-fault-status", "503")
 	requireResponseHeader(t, localResponseHeaders, upstreamStatusHeader, "200")
 	requireResponseHeader(t, localResponseHeaders, requestsInFlightHeader, "7")
@@ -210,8 +264,8 @@ func TestOnResponseHeaders_ImmediateAbort(t *testing.T) {
 	status := filter.OnResponseHeaders(headers, false)
 	require.Equal(t, shared.HeadersStatusStop, status)
 	requireResponseHeader(t, localResponseHeaders, "x-fault-injected", "abort")
-	requireResponseHeader(t, localResponseHeaders, "x-fault-injected-delay", "1ms")
-	requireResponseHeaderPresent(t, localResponseHeaders, "x-fault-actual-upstream")
+	requireResponseHeader(t, localResponseHeaders, "x-fault-injected-delay", "1.000ms")
+	requireResponseTimingHeader(t, localResponseHeaders, actualUpstreamHeader)
 	requireResponseHeaderMissing(t, localResponseHeaders, "x-fault-added-delay")
 	requireResponseHeader(t, localResponseHeaders, "x-fault-status", "500")
 	requireResponseHeader(t, localResponseHeaders, upstreamStatusHeader, "200")
@@ -257,9 +311,9 @@ func TestOnResponseHeaders_DelaysExpectedResponse(t *testing.T) {
 
 	status := filter.OnResponseHeaders(headers, false)
 	require.Equal(t, shared.HeadersStatusStopAllAndBuffer, status)
-	require.Equal(t, "100ms", headers.GetOne("x-fault-injected-delay").ToUnsafeString())
-	require.NotEmpty(t, headers.GetOne("x-fault-actual-upstream").ToUnsafeString())
-	require.NotEmpty(t, headers.GetOne("x-fault-added-delay").ToUnsafeString())
+	require.Equal(t, "100.000ms", headers.GetOne("x-fault-injected-delay").ToUnsafeString())
+	require.Regexp(t, `^[0-9]+\.[0-9]{3}ms$`, headers.GetOne(actualUpstreamHeader).ToUnsafeString())
+	require.Regexp(t, `^[0-9]+\.[0-9]{3}ms$`, headers.GetOne(addedDelayHeader).ToUnsafeString())
 	require.Equal(t, "200", headers.GetOne("x-fault-status").ToUnsafeString())
 	require.Equal(t, "200", headers.GetOne(upstreamStatusHeader).ToUnsafeString())
 	require.Equal(t, "9", headers.GetOne(requestsInFlightHeader).ToUnsafeString())
@@ -285,8 +339,8 @@ func TestOnResponseHeaders_ExpectedResponseNeedsNoDelay(t *testing.T) {
 
 	status := filter.OnResponseHeaders(headers, false)
 	require.Equal(t, shared.HeadersStatusContinue, status)
-	require.Equal(t, "1ms", headers.GetOne("x-fault-injected-delay").ToUnsafeString())
-	require.NotEmpty(t, headers.GetOne("x-fault-actual-upstream").ToUnsafeString())
+	require.Equal(t, "1.000ms", headers.GetOne("x-fault-injected-delay").ToUnsafeString())
+	require.Regexp(t, `^[0-9]+\.[0-9]{3}ms$`, headers.GetOne(actualUpstreamHeader).ToUnsafeString())
 	require.Empty(t, headers.GetOne("x-fault-added-delay").ToUnsafeString())
 	require.Equal(t, "200", headers.GetOne("x-fault-status").ToUnsafeString())
 	require.Equal(t, "200", headers.GetOne(upstreamStatusHeader).ToUnsafeString())
@@ -299,9 +353,10 @@ func TestOnResponseHeaders_SampledSuccessOverridesUpstreamError(t *testing.T) {
 		duration     time.Duration
 		upstreamTime time.Duration
 		wantStatus   shared.HeadersStatus
+		wantTiming   string
 	}{
-		{name: "immediate", duration: time.Millisecond, upstreamTime: 10 * time.Millisecond, wantStatus: shared.HeadersStatusStop},
-		{name: "delayed", duration: 100 * time.Millisecond, wantStatus: shared.HeadersStatusStopAllAndBuffer},
+		{name: "immediate", duration: time.Millisecond, upstreamTime: 10 * time.Millisecond, wantStatus: shared.HeadersStatusStop, wantTiming: "1.000ms"},
+		{name: "delayed", duration: 100 * time.Millisecond, wantStatus: shared.HeadersStatusStopAllAndBuffer, wantTiming: "100.000ms"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
@@ -343,7 +398,7 @@ func TestOnResponseHeaders_SampledSuccessOverridesUpstreamError(t *testing.T) {
 			}
 			requireResponseHeader(t, gotHeaders, "content-type", "application/json")
 			requireResponseHeader(t, gotHeaders, injectedHeader, "response")
-			requireResponseHeader(t, gotHeaders, injectedDelayHeader, tc.duration.String())
+			requireResponseHeader(t, gotHeaders, injectedDelayHeader, tc.wantTiming)
 			requireResponseHeader(t, gotHeaders, statusHeader, "200")
 			requireResponseHeader(t, gotHeaders, upstreamStatusHeader, "500")
 			requireResponseHeader(t, gotHeaders, requestsInFlightHeader, "6")

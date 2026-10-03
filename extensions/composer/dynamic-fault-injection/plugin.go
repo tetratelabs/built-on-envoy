@@ -92,6 +92,11 @@ type (
 	}
 )
 
+// Fixed millisecond precision keeps timing headers and span tags stable between requests.
+func formatTiming(duration time.Duration) string {
+	return fmt.Sprintf("%.3fms", float64(duration)/float64(time.Millisecond))
+}
+
 // Create implements [shared.HttpFilterFactory].
 func (f *latencyFaultFilterFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
 	factory := f
@@ -192,9 +197,9 @@ func (f *latencyFaultFilter) OnResponseHeaders(headers shared.HeaderMap, _ bool)
 
 			attrs := faultAttributes{
 				Injected:         injectedResponseName(sample.Status),
-				InjectedDelay:    totalDuration.String(),
-				ActualUpstream:   elapsed.String(),
-				AddedDelay:       remainingDelay.String(),
+				InjectedDelay:    formatTiming(totalDuration),
+				ActualUpstream:   formatTiming(elapsed),
+				AddedDelay:       formatTiming(remainingDelay),
 				Status:           fmt.Sprintf("%d", sample.Status),
 				UpstreamStatus:   status,
 				RequestsInFlight: f.requestEntryInFlight,
@@ -219,8 +224,8 @@ func (f *latencyFaultFilter) OnResponseHeaders(headers shared.HeaderMap, _ bool)
 		// No remaining delay needed; send the sampled status immediately.
 		attrs := faultAttributes{
 			Injected:         injectedResponseName(f.sample.Status),
-			InjectedDelay:    f.sample.Duration.String(),
-			ActualUpstream:   elapsed.String(),
+			InjectedDelay:    formatTiming(f.sample.Duration),
+			ActualUpstream:   formatTiming(elapsed),
 			Status:           fmt.Sprintf("%d", f.sample.Status),
 			UpstreamStatus:   status,
 			RequestsInFlight: f.requestEntryInFlight,
@@ -240,15 +245,15 @@ func (f *latencyFaultFilter) OnResponseHeaders(headers shared.HeaderMap, _ bool)
 
 	// Matching statuses retain the upstream response and only receive any remaining delay.
 	attrs := faultAttributes{
-		InjectedDelay:    f.sample.Duration.String(),
-		ActualUpstream:   elapsed.String(),
+		InjectedDelay:    formatTiming(f.sample.Duration),
+		ActualUpstream:   formatTiming(elapsed),
 		Status:           fmt.Sprintf("%d", f.sample.Status),
 		UpstreamStatus:   status,
 		RequestsInFlight: f.requestEntryInFlight,
 		WorkerIndex:      workerIndex,
 	}
 	if remainingDelay > 0 {
-		attrs.AddedDelay = remainingDelay.String()
+		attrs.AddedDelay = formatTiming(remainingDelay)
 	}
 
 	f.setFaultAttributesOnHeaderMap(headers, &attrs)

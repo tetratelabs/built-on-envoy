@@ -21,82 +21,160 @@ license: Apache-2.0
 examples:
   - title: Delay all success responses and introduce a 1% failure rate that returns quickly
     description: |
-      Wrap a succesfully and fast responding mock or stub service and make it a one matching the production performance and error ratio.
+      Wrap a fast, successful mock service to simulate production latency and an approximately 1% failure rate.
+      Capture one 200 response and one injected 503 response by retrying until each status occurs.
+      Show the original HTTP exchange, including the fault headers and response body.
+      This demonstrates both response cases without measuring the failure rate.
+    config:
+      endpoints:
+        - match:
+            prefix: /
+          responses:
+            - status: 200
+              resolution: 1000
+              distribution:
+                p0.0: 30ms
+                p100.0: 500ms
+            - status: 503
+              resolution: 10
+              distribution:
+                p0.0: 3ms
+                p100.0: 5ms
+    commands:
+      - comment: Capture a successful upstream response with the sampled latency.
+        argv:
+          - curl
+          - --disable
+          - --silent
+          - --show-error
+          - --verbose
+          - --user-agent
+          - boe-example
+          - --max-time
+          - "10"
+          - "${PROXY_URL}/status/200"
+        retry:
+          httpStatus: 200
+          maxAttempts: 1000
+      - comment: Capture a sampled failure replacing the successful upstream response.
+        argv:
+          - curl
+          - --disable
+          - --silent
+          - --show-error
+          - --verbose
+          - --user-agent
+          - boe-example
+          - --max-time
+          - "10"
+          - "${PROXY_URL}/status/200"
+        retry:
+          httpStatus: 503
+          maxAttempts: 1000
+    volatileHeaders:
+      - x-envoy-upstream-service-time
+      - x-fault-injected-delay
+      - x-fault-actual-upstream
+      - x-fault-added-delay
     code: |
-      CONFIG=$(cat <<-END
-      {
-        "endpoints": [
-          {
-            "match": {
-              "prefix": "/"
-            },
-            "responses": [
-              {
-                "status": 200,
-                "resolution": 1000,
-                "distribution": {
-                  "p0.0": "30ms",
-                  "p100.0": "500ms"
-                }
+      ```sh
+      # Terminal 1 (from the repository root)
+      boe run --local extensions/composer/dynamic-fault-injection --envoy-version \
+        1.38.0 --config '
+        {
+          "endpoints": [
+            {
+              "match": {
+                "prefix": "/"
               },
-              {
-                "status": 503,
-                "resolution": 10,
-                "distribution": {
-                  "p0.0": "3ms",
-                  "p100.0": "5ms"
+              "responses": [
+                {
+                  "distribution": {
+                    "p0.0": "30ms",
+                    "p100.0": "500ms"
+                  },
+                  "resolution": 1000,
+                  "status": 200
+                },
+                {
+                  "distribution": {
+                    "p0.0": "3ms",
+                    "p100.0": "5ms"
+                  },
+                  "resolution": 10,
+                  "status": 503
                 }
-              }
-            ]
-          }
-        ]
-      }
-      END
-      )
-      boe run \
-          --extension dynamic-fault-injection \
-          --log-level dynamic_modules:debug \
-          --config "${CONFIG}"
+              ]
+            }
+          ]
+        }'
+      ```
 
-      ❯ curl -v http://localhost:10000/status/200
+      ```sh
+      # Terminal 2 (after Envoy is ready, from the repository root)
+      # Capture a successful upstream response with the sampled latency.
+      # Repeat until HTTP 200, up to 1000 attempts.
+      curl --disable --silent --show-error --verbose --user-agent boe-example \
+        --max-time 10 http://localhost:10000/status/200
+      ```
+
+      ```text
       > GET /status/200 HTTP/1.1
       > Host: localhost:10000
-      > User-Agent: curl/8.7.1
+      > User-Agent: boe-example
       > Accept: */*
       >
       < HTTP/1.1 200 OK
-      < date: Fri, 02 Oct 2026 19:11:25 GMT
+      < date: Sat, 03 Oct 2026 15:05:17 GMT
       < content-type: text/html; charset=utf-8
       < content-length: 0
       < server: envoy
       < access-control-allow-origin: *
       < access-control-allow-credentials: true
-      < x-envoy-upstream-service-time: 113
-      < x-fault-injected-delay: 326.1ms
-      < x-fault-actual-upstream: 114.130167ms
-      < x-fault-added-delay: 211.969833ms
+      < x-envoy-upstream-service-time: 413
+      < x-fault-injected-delay: 377.800ms
+      < x-fault-actual-upstream: 414.962ms
       < x-fault-status: 200
       < x-fault-upstream-status: 200
       < x-fault-requests-in-flight: 0
+      <
+      ```
+      <!-- stderr; Line endings: CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF; Trailing whitespace: W3sibGluZSI6NCwidGV4dCI6IiAifSx7ImxpbmUiOjE4LCJ0ZXh0IjoiICJ9XQ== -->
 
-      # About 1% of requests sample the 503 response instead and get a local reply
-      ❯ curl -v http://localhost:10000/status/200
+
+      ```sh
+      # Capture a sampled failure replacing the successful upstream response.
+      # Repeat until HTTP 503, up to 1000 attempts.
+      curl --disable --silent --show-error --verbose --user-agent boe-example \
+        --max-time 10 http://localhost:10000/status/200
+      ```
+
+      ```text
+      fault filter abort: 503
+      ```
+      <!-- stdout; Line endings: LF -->
+
+
+      ```text
       > GET /status/200 HTTP/1.1
       > Host: localhost:10000
-      > User-Agent: curl/8.7.1
+      > User-Agent: boe-example
       > Accept: */*
       >
       < HTTP/1.1 503 Service Unavailable
       < content-type: text/plain
       < x-fault-injected: abort
-      < x-fault-injected-delay: 4ms
-      < x-fault-actual-upstream: 182.419083ms
+      < x-fault-injected-delay: 4.000ms
+      < x-fault-actual-upstream: 409.826ms
       < x-fault-status: 503
       < x-fault-upstream-status: 200
       < x-fault-requests-in-flight: 0
       < content-length: 24
-      < date: Fri, 02 Oct 2026 19:12:39 GMT
+      < date: Sat, 03 Oct 2026 15:05:54 GMT
       < server: envoy
+      <
+      ```
+      <!-- stderr; Line endings: CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF; Trailing whitespace: W3sibGluZSI6NCwidGV4dCI6IiAifSx7ImxpbmUiOjE2LCJ0ZXh0IjoiICJ9XQ== -->
 type: go
 longDescription: |
   # Envoy Latency and Fault Distribution Simulation
@@ -250,11 +328,12 @@ longDescription: |
 
   ## Response Headers
 
-  The filter adds response headers to indicate what was injected:
+  The filter adds response headers to indicate what was injected. Timing values use milliseconds
+  with three decimal places (e.g., "52.300ms"), rounded to the nearest microsecond:
 
   | Header | Description |
   |--------|-------------|
-  | `x-fault-injected-delay` | Target duration from the distribution (e.g., "52.3ms") |
+  | `x-fault-injected-delay` | Target duration from the distribution (e.g., "52.300ms") |
   | `x-fault-actual-upstream` | Actual time the upstream took to respond |
   | `x-fault-added-delay` | Additional delay injected (target - upstream); omitted when no delay was added |
   | `x-fault-requests-in-flight` | Process-global in-flight matched request count observed at request entry, before the request is added |

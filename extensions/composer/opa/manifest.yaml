@@ -116,32 +116,90 @@ examples:
   - title: Basic Authorization
     description: |
       Run the OPA extension with a simple Rego policy that allows or denies
-      requests based on the request path. Create a policy file and reference
-      it in the configuration.
+      requests based on the request path. The inline policy allows requests
+      to the default httpbin upstream's status endpoints and denies other paths.
+    config:
+      policies:
+        - inline: |
+            package envoy.authz
+
+            default allow := false
+
+            allow if {
+              input.parsed_path[0] == "status"
+            }
+    commands:
+      - comment: Request a status endpoint allowed by the policy.
+        argv: [curl, --silent, --show-error, --verbose, --user-agent, boe-example, --max-time, "10", "${PROXY_URL}/status/200"]
+      - comment: Request a private path and see it denied.
+        argv: [curl, --silent, --show-error, --verbose, --user-agent, boe-example, --max-time, "10", "${PROXY_URL}/private/resource"]
+    volatileHeaders:
+      - x-envoy-upstream-service-time
     code: |
-      # Create a simple policy file
-      cat > /tmp/policy.rego << 'EOF'
-      package envoy.authz
+      ```sh
+      # Terminal 1 (from the repository root)
+      boe run --local extensions/composer/opa --envoy-version 1.38.0 --config '
+        {
+          "policies": [
+            {
+              "inline": "package envoy.authz\n\ndefault allow := false\n\nallow if {\n  input.parsed_path[0] == \"status\"\n}\n"
+            }
+          ]
+        }'
+      ```
 
-      default allow := false
+      ```sh
+      # Terminal 2 (after Envoy is ready, from the repository root)
+      # Request a status endpoint allowed by the policy.
+      curl --silent --show-error --verbose --user-agent boe-example --max-time 10 \
+        http://localhost:10000/status/200
+      ```
 
-      allow if {
-        input.parsed_path[0] == "public"
-      }
-      EOF
+      ```text
+      > GET /status/200 HTTP/1.1
+      > Host: localhost:10000
+      > User-Agent: boe-example
+      > Accept: */*
+      >
+      < HTTP/1.1 200 OK
+      < date: Sat, 03 Oct 2026 11:31:44 GMT
+      < content-type: text/html; charset=utf-8
+      < content-length: 0
+      < server: envoy
+      < access-control-allow-origin: *
+      < access-control-allow-credentials: true
+      < x-envoy-upstream-service-time: 387
+      <
+      ```
+      <!-- stderr; Line endings: CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF; Trailing whitespace: W3sibGluZSI6NCwidGV4dCI6IiAifSx7ImxpbmUiOjEzLCJ0ZXh0IjoiICJ9XQ== -->
 
-      # Run the extension
-      boe run --extension opa --config '{
-        "policies": [{"file": "/tmp/policy.rego"}]
-      }'
 
-      # Test allowed request
-      curl http://localhost:10000/public/resource
-      # => 200 OK (proxied to upstream)
+      ```sh
+      # Request a private path and see it denied.
+      curl --silent --show-error --verbose --user-agent boe-example --max-time 10 \
+        http://localhost:10000/private/resource
+      ```
 
-      # Test denied request
-      curl http://localhost:10000/private/resource
-      # => 403 Forbidden
+      ```text
+      Forbidden
+      ```
+      <!-- stdout; No trailing newline -->
+
+
+      ```text
+      > GET /private/resource HTTP/1.1
+      > Host: localhost:10000
+      > User-Agent: boe-example
+      > Accept: */*
+      >
+      < HTTP/1.1 403 Forbidden
+      < content-length: 9
+      < content-type: text/plain
+      < date: Sat, 03 Oct 2026 11:31:44 GMT
+      < server: envoy
+      <
+      ```
+      <!-- stderr; Line endings: CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF,CRLF; Trailing whitespace: W3sibGluZSI6NCwidGV4dCI6IiAifSx7ImxpbmUiOjEwLCJ0ZXh0IjoiICJ9XQ== -->
   - title: Custom Deny Response
     description: |
       Use a policy that returns a structured object with custom HTTP status,

@@ -150,6 +150,8 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
       - run: make -C extensions/tests/e2e check
+      - name: Test extension example generator
+        run: make -C extensions test-examples EXTENSION_PATH=example-wasm-go
 
   e2e:
     runs-on: ubuntu-latest
@@ -176,6 +178,9 @@ jobs:
           GO_TEST_ARGS: -v
           ENVOY_VERSION: ${{ matrix.envoy_version }}
         run: make -C extensions/tests/e2e test
+      - name: Check Composer examples
+        if: ${{ matrix.envoy_version == '1.38.0' }}
+        run: make -C extensions check EXTENSION_PATH=composer EXAMPLES_ARGS="-envoy-version 1.38.0"
       - uses: actions/upload-artifact@v7
         if: failure()
         with:

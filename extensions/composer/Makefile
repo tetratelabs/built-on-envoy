@@ -8,6 +8,7 @@ GO_VERSION := $(shell sed -ne 's/^go //gp' $(ROOT)/extensions/composer/go.mod)
 GO_TOOL    := go tool -modfile=$(ROOT)/tools/go.mod
 
 GO_TEST_ARGS ?=
+EXAMPLES_ARGS ?=
 
 # This IMAGE_NONCE will be appended to the final image tag if set.
 # It is intended to be used in CI environments to ensure that each image
@@ -227,6 +228,13 @@ BUILTIN_PLUGIN_DIRS := goplugin-loader
 # Ignore current directory and the always-built-in loader.
 PLUGIN_DIRS := $(shell find . -mindepth 2 -maxdepth 2 -type f -name 'manifest.yaml' -exec dirname {} \; | sort)
 PLUGIN_CLEAN_DIRS := $(filter-out $(BUILTIN_PLUGIN_DIRS),$(notdir $(PLUGIN_DIRS)))
+
+EXAMPLE_EXTENSION_DIRS := . $(PLUGIN_DIRS)
+EXAMPLE_EXTENSION_ARGS := $(foreach dir,$(EXAMPLE_EXTENSION_DIRS),-extension "$(abspath $(dir))")
+
+.PHONY: update-examples check-examples
+update-examples check-examples:
+	@go -C "$(ROOT)" run ./cli/tools/gen-examples $(EXAMPLE_EXTENSION_ARGS) $(if $(filter check-examples,$@),-check,) $(EXAMPLES_ARGS)
 
 push_plugins: ## Push all plugin images
 	@for dir in $(PLUGIN_CLEAN_DIRS); do \

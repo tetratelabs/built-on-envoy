@@ -77,9 +77,34 @@ type (
 
 	// Example represents an example usage of an extension.
 	Example struct {
-		Title       string `yaml:"title" json:"title"`
-		Description string `yaml:"description" json:"description"`
-		Code        string `yaml:"code" json:"code"`
+		Title           string                  `yaml:"title" json:"title"`
+		Description     string                  `yaml:"description" json:"description"`
+		Code            string                  `yaml:"code,omitempty" json:"code,omitempty"`
+		Config          *map[string]any         `yaml:"config,omitempty" json:"config,omitempty"`
+		PreStart        []ExampleCommand        `yaml:"preStart,omitempty" json:"preStart,omitempty"`
+		Commands        []ExampleCommand        `yaml:"commands,omitempty" json:"commands,omitempty"`
+		Comparison      []ExampleComparisonRule `yaml:"comparison,omitempty" json:"comparison,omitempty"`
+		VolatileHeaders []string                `yaml:"volatileHeaders,omitempty" json:"volatileHeaders,omitempty"`
+	}
+
+	// ExampleCommand stores argument boundaries for execution and transcript rendering.
+	ExampleCommand struct {
+		Comment      string        `yaml:"comment,omitempty" json:"comment,omitempty"`
+		Argv         []string      `yaml:"argv" json:"argv"`
+		ExpectedExit int           `yaml:"expectedExit,omitempty" json:"expectedExit,omitempty"`
+		Retry        *ExampleRetry `yaml:"retry,omitempty" json:"retry,omitempty"`
+	}
+
+	// ExampleRetry bounds capture retries without concealing command failures.
+	ExampleRetry struct {
+		HTTPStatus  int `yaml:"httpStatus" json:"httpStatus"`
+		MaxAttempts int `yaml:"maxAttempts" json:"maxAttempts"`
+	}
+
+	// ExampleComparisonRule scopes volatile values without suppressing format changes.
+	ExampleComparisonRule struct {
+		Type    string `yaml:"type" json:"type"`
+		Pattern string `yaml:"pattern" json:"pattern"`
 	}
 
 	// Type represents the type of an Envoy extension.
@@ -210,6 +235,32 @@ func (m *Manifest) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
+// UnmarshalYAML validates source fields before omitempty can hide empty or null inputs.
+func (e *Example) UnmarshalYAML(value *yaml.Node) error {
+	var source map[string]any
+	if err := value.Decode(&source); err != nil {
+		return err
+	}
+	data, err := json.Marshal(source)
+	if err != nil {
+		return fmt.Errorf("marshal example for validation: %w", err)
+	}
+	var input any
+	if err := json.Unmarshal(data, &input); err != nil {
+		return fmt.Errorf("decode example for validation: %w", err)
+	}
+	if err := exampleSchema.Validate(input); err != nil {
+		return fmt.Errorf("invalid example: %w", err)
+	}
+	type exampleAlias Example
+	var decoded exampleAlias
+	if err := value.Decode(&decoded); err != nil {
+		return err
+	}
+	*e = Example(decoded)
+	return nil
+}
+
 // ApplyDefaults applies default values to the manifest fields.
 func (m *Manifest) ApplyDefaults() {
 	if len(m.FilterTypes) == 0 {
@@ -258,7 +309,10 @@ const (
 	schemaURL = "manifest.schema.json"
 )
 
-var manifestSchema *jsonschema.Schema
+var (
+	manifestSchema *jsonschema.Schema
+	exampleSchema  *jsonschema.Schema
+)
 
 var (
 	// ErrDuplicateManifestName is returned when there are duplicate manifest names.
@@ -291,6 +345,10 @@ func init() {
 	manifestSchema, err = compiler.Compile(schemaURL)
 	if err != nil {
 		panic(fmt.Errorf("failed to compile manifest schema: %w", err))
+	}
+	exampleSchema, err = compiler.Compile(schemaURL + "#/properties/examples/items")
+	if err != nil {
+		panic(fmt.Errorf("failed to compile example schema: %w", err))
 	}
 }
 
@@ -341,7 +399,7 @@ func loadManifest(fsys fs.FS, path string, validate bool) (*Manifest, error) {
 
 	var m Manifest
 	if err := yaml.Unmarshal(data, &m); err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrParseManifestFile, path)
+		return nil, fmt.Errorf("%w: %s: %w", ErrParseManifestFile, path, err)
 	}
 
 	m.ApplyDefaults()

@@ -483,7 +483,7 @@ func TestDynamicFaultInjectionPerRouteConfiguration(t *testing.T) {
 		_, _ = io.ReadAll(resp.Body)
 		require.Equal(c, http.StatusOK, resp.StatusCode)
 		require.Equal(c, "200", resp.Header.Get("x-fault-status"))
-		require.Equal(c, "20ms", resp.Header.Get("x-fault-injected-delay"))
+		require.Equal(c, "20.000ms", resp.Header.Get("x-fault-injected-delay"))
 		require.GreaterOrEqual(c, elapsed, 20*time.Millisecond)
 		return true
 	})
@@ -590,7 +590,7 @@ func TestDynamicFaultInjectionFixedDelayAccountsForUpstream(t *testing.T) {
 
 		// The target header should show the fixed delay.
 		delayHeader := resp.Header.Get("x-fault-injected-delay")
-		require.Equal(c, fmt.Sprintf("%dms", fixedDelay.Milliseconds()), delayHeader)
+		require.Equal(c, "100.000ms", delayHeader)
 
 		// The actual upstream time should be much less than the fixed delay.
 		upstreamHeader := resp.Header.Get("x-fault-actual-upstream")
