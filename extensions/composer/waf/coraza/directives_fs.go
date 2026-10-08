@@ -67,13 +67,17 @@ func (d directivesFS) Glob(pattern string) ([]string, error) {
 	return fs.Glob(d.subFS, normalized)
 }
 
-// normalizeDirectivePath strips any directory prefix before '@' (Coraza prepends
-// the including file's directory when resolving nested Include directives) and
-// resolves aliases to their canonical embedded file names.
+// normalizeDirectivePath strips the directory prefix that Coraza prepends when
+// resolving nested Include directives (it joins the including file's directory
+// with the included path) and resolves aliases to their canonical embedded file
+// names.
+// The cut is anchored to the last path segment starting with '@' ("/@") rather
+// than to the first '@', as the including file's directory may itself contain
+// an '@' (e.g. "/etc/waf@prod/" or a Go module cache path "repo@v1.2.3/").
 // Aliases usage is discouraged, but kept for backward compatibility.
 func normalizeDirectivePath(name string) string {
-	if idx := strings.Index(name, "@"); idx != -1 {
-		name = name[idx:]
+	if idx := strings.LastIndex(name, "/@"); idx != -1 {
+		name = name[idx+1:]
 	}
 	switch name {
 	case "@recommended.conf", "@recommended-conf":
