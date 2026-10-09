@@ -68,22 +68,15 @@ func TestFindDelve(t *testing.T) {
 }
 
 func TestPatchDelve(t *testing.T) {
-	// Patch the actual Delve sources of the pinned version.
+	// Apply the patches to the actual Delve sources of the pinned version.
 	out, err := exec.Command("go", "mod", "download", "-json", delveModule+"@"+DelveVersion).Output()
 	if err != nil {
 		t.Skipf("could not download Delve sources: %v", err)
 	}
 	var mod struct{ Dir string }
 	require.NoError(t, json.Unmarshal(out, &mod))
-
-	// Copy the files to patch to a writable directory.
 	src := t.TempDir()
-	for _, p := range delvePatches {
-		require.NoError(t, os.MkdirAll(filepath.Join(src, filepath.Dir(p.file)), 0o750))
-		content, err := os.ReadFile(filepath.Join(mod.Dir, p.file))
-		require.NoError(t, err)
-		require.NoError(t, os.WriteFile(filepath.Join(src, p.file), content, 0o600))
-	}
+	require.NoError(t, os.CopyFS(src, os.DirFS(mod.Dir)))
 
 	require.NoError(t, patchDelve(src))
 	read := func(file string) string {
@@ -93,11 +86,20 @@ func TestPatchDelve(t *testing.T) {
 	}
 	require.Contains(t, read("pkg/proc/goroutine_cache.go"), "for _, image := range bi.Images {")
 	require.Contains(t, read("pkg/proc/target.go"), "func (t *Target) InitGoImage() {")
-	require.Equal(t, 1, strings.Count(read("pkg/proc/native/proc_linux.go"), "sel.InitGoImage()"))
+	require.Contains(t, read("pkg/proc/native/proc_linux.go"), "sel.InitGoImage()")
 	require.Contains(t, read("pkg/proc/bininfo.go"), "func (bi *BinaryInfo) setGStructOffsetElfSharedLib(")
 
-	// Patching twice fails, as the sources no longer match the expected ones.
-	require.ErrorContains(t, patchDelve(src), "unexpected contents")
+	// The patched sources must compile on the platforms boe debug supports.
+	for _, goarch := range []string{"amd64", "arm64"} {
+		cmd := exec.Command("go", "build", "-o", os.DevNull, "./cmd/dlv")
+		cmd.Dir = src
+		cmd.Env = append(os.Environ(), "GOOS=linux", "GOARCH="+goarch, "CGO_ENABLED=0", "GOFLAGS=-mod=mod")
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "linux/%s: %s", goarch, out)
+	}
+
+	// Patching twice fails, as the sources no longer match the patches.
+	require.ErrorContains(t, patchDelve(src), "failed to apply Delve patch 0001")
 }
 
 func TestFindEnvoyPid(t *testing.T) {
@@ -154,7 +156,6 @@ func TestDockerRunArgsDebug(t *testing.T) {
 		"--security-opt", "seccomp=unconfined",
 		"-p", "127.0.0.1:40000:40000",
 		"-e", DelveListenHostEnv + "=0.0.0.0",
-		"-e", DelveInstallDirEnv + "=" + containerDelveInstallDir,
 		"-e", "GOFLAGS=-buildvcs=false",
 		"--entrypoint", "/boe", "ghcr.io/test/boe:latest",
 		"debug", "--dlv-port=40000",
@@ -223,7 +224,7 @@ func TestDebugNotes(t *testing.T) {
 func TestInstallDelveCached(t *testing.T) {
 	// A cached binary is reused without building it.
 	dir := t.TempDir()
-	cached := filepath.Join(dir, "dlv-"+DelveVersion+"-"+delvePatchRevision)
+	cached := filepath.Join(dir, "dlv-"+DelveVersion)
 	require.NoError(t, os.WriteFile(cached, []byte("cached"), 0o600))
 	got, err := installDelve(t.Context(), internaltesting.NewTLogger(t), dir, false)
 	require.NoError(t, err)

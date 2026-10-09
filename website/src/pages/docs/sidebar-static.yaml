@@ -14,6 +14,8 @@ sections:
         href: /docs/writing-go-extensions
       - title: Writing Rust extensions
         href: /docs/writing-rust-extensions
+      - title: Debugging
+        href: /docs/debugging-extensions
       - title: Exporting config and extensions
         href: /docs/custom-envoy-config
   - title: Moving to Prod

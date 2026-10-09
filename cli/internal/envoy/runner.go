@@ -187,9 +187,6 @@ func (r *RunnerFuncE) Run(ctx context.Context) error {
 
 Press Ctrl+C to stop
 `, r.ListenPort, adminClient.Port(), startDuration, internal.ANSIBold, internal.ANSIReset)
-		if r.Debug != nil {
-			r.Debug.printInstructions(dlv.Process.Pid)
-		}
 		return nil
 	}
 
@@ -408,9 +405,6 @@ const (
 	containerRuntimeDir = containerVolumeDir + "/run"
 	// containerLocalExtensionsDir is the directory inside the container where local extensions are mounted.
 	containerLocalExtensionsDir = containerRuntimeDir + "/extensions"
-	// containerDelveInstallDir is the directory inside the container where Delve is installed in debug mode.
-	// It is in the cache volume so it is installed only once.
-	containerDelveInstallDir = containerVolumeDir + "/bin"
 )
 
 // RunnerDocker handles running Envoy as a Docker container.
@@ -512,7 +506,6 @@ func (r *RunnerDocker) debugArgs() []string {
 		"--security-opt", "seccomp=unconfined",
 		"-p", "127.0.0.1:" + dlvPort + ":" + dlvPort,
 		"-e", DelveListenHostEnv + "=0.0.0.0",
-		"-e", DelveInstallDirEnv + "=" + containerDelveInstallDir,
 		// Source trees are mounted from the host and are not owned by the container user.
 		"-e", "GOFLAGS=-buildvcs=false",
 	}

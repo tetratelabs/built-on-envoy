@@ -10,7 +10,7 @@ used by `boe run`.
 Only local extensions (`--local`) are supported, and they must be Go extensions or composer sub-extensions.
 All other flags behave as in `boe run`.
 
-<Callout type="warning">
+<Callout type="note">
 Delve can only debug Go code loaded into a non-Go process on Linux. On other platforms, such as macOS,
 `boe debug` runs Envoy and Delve in a Linux container, so Docker is required. The local extension sources
 are mounted in the container at the same path as in the host, so breakpoints set in the IDE work without
@@ -52,22 +52,5 @@ Debug a Go extension using a custom port for Delve:
     boe debug --local ./my-go-extension --dlv-port 40000
     ```
 
-Once Delve is listening, attach your IDE to it. For VS Code, use a launch configuration like the following,
-then set breakpoints in the extension code and send requests to Envoy:
-
-    ```json
-    {
-      "name": "Attach to Envoy (boe debug)",
-      "type": "go",
-      "request": "attach",
-      "mode": "remote",
-      "host": "127.0.0.1",
-      "port": 2345
-    }
-    ```
-
-You can also use the Delve CLI directly:
-
-    ```shell
-    dlv connect 127.0.0.1:2345
-    ```
+Once Delve is listening, attach your IDE to it as a remote Delve session on `127.0.0.1:2345`, or use
+`dlv connect 127.0.0.1:2345`. See the [Debugging](/docs/debugging-extensions) guide for IDE configurations and caveats.

@@ -4,6 +4,7 @@ go 1.27.1
 
 require (
 	github.com/alecthomas/kong v1.16.1
+	github.com/bluekeyes/go-gitdiff v0.8.1
 	github.com/envoyproxy/go-control-plane/envoy v1.39.0
 	github.com/joho/godotenv v1.5.1
 	github.com/mccutchen/go-httpbin/v2 v2.25.0

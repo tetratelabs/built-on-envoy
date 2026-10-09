@@ -70,11 +70,16 @@ func TestDebugLocalComposer(t *testing.T) {
 	// Envoy must be ready before sending requests to it.
 	internaltesting.RequireEventuallyGet(t, fmt.Sprintf("http://localhost:%d/ready", adminPort), internaltesting.EqualStatus(http.StatusOK))
 
+	// Delve is started with --continue, so the target is running and Delve does not process requests that
+	// change the target state until it stops. Halt it first, as IDEs do before setting breakpoints.
+	var halted commandOut
+	callDelve(t, client, "RPCServer.Command", debuggerCommand{Name: "halt"}, &halted)
+
 	// Set a breakpoint by file and line, as an IDE does. The source paths in the debug information must
 	// match the host paths, even when Envoy runs in a container.
 	var bp createBreakpointOut
-	require.NoError(t, client.Call("RPCServer.CreateBreakpoint",
-		createBreakpointIn{Breakpoint: breakpoint{File: sourceFile, Line: sourceLine}}, &bp))
+	callDelve(t, client, "RPCServer.CreateBreakpoint",
+		createBreakpointIn{Breakpoint: breakpoint{File: sourceFile, Line: sourceLine}}, &bp)
 	require.Equal(t, sourceLine, bp.Breakpoint.Line)
 
 	// Send a request in the background. It blocks while the breakpoint is hit.
@@ -91,7 +96,7 @@ func TestDebugLocalComposer(t *testing.T) {
 
 	// Continue blocks until the target stops at the breakpoint.
 	var state commandOut
-	require.NoError(t, client.Call("RPCServer.Command", debuggerCommand{Name: "continue"}, &state))
+	callDelve(t, client, "RPCServer.Command", debuggerCommand{Name: "continue"}, &state)
 	require.NotNil(t, state.State.CurrentThread, "the target did not stop")
 	require.NotNil(t, state.State.CurrentThread.Breakpoint, "the target did not stop at a breakpoint")
 	require.Equal(t, bp.Breakpoint.ID, state.State.CurrentThread.Breakpoint.ID)
@@ -101,18 +106,33 @@ func TestDebugLocalComposer(t *testing.T) {
 
 	// Clear the breakpoint and resume Envoy without waiting: the request must then complete.
 	var cleared clearBreakpointOut
-	require.NoError(t, client.Call("RPCServer.ClearBreakpoint", clearBreakpointIn{ID: bp.Breakpoint.ID}, &cleared))
+	callDelve(t, client, "RPCServer.ClearBreakpoint", clearBreakpointIn{ID: bp.Breakpoint.ID}, &cleared)
 	client.Go("RPCServer.Command", debuggerCommand{Name: "continue"}, &commandOut{}, nil)
 
 	select {
 	case resp, ok := <-respCh:
 		require.True(t, ok, "request failed")
-		require.Equal(t, http.StatusOK, resp.StatusCode)
+		// Do not check the status code: when Envoy runs in a container the test upstream in the host
+		// loopback is not reachable. The response header proves the request went through the extension.
 		require.Equal(t, "example-value", resp.Header.Get("x-example-response-header"))
 	case <-time.After(60 * time.Second):
 		t.Fatal("request did not complete after resuming the target")
 	}
+}
 
+// delveCallTimeout is how long to wait for a Delve API call to complete.
+const delveCallTimeout = 60 * time.Second
+
+// callDelve calls the given Delve API method and fails the test if it errors or does not complete in time,
+// instead of blocking forever.
+func callDelve(t *testing.T, client *rpc.Client, method string, args, reply any) {
+	t.Helper()
+	select {
+	case call := <-client.Go(method, args, reply, nil).Done:
+		require.NoError(t, call.Error, "Delve call %s failed", method)
+	case <-time.After(delveCallTimeout):
+		t.Fatalf("Delve call %s did not complete in %v", method, delveCallTimeout)
+	}
 }
 
 // Minimal types for the Delve JSON-RPC v2 API (github.com/go-delve/delve/service/rpc2).
