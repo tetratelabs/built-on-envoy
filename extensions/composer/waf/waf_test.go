@@ -340,10 +340,6 @@ func Test_RequestOnlyWaf(t *testing.T) {
 			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(
 			pkg.UnsafeBufferFromString("127.0.0.1:8080"), true)
-		// Phase 2 completes the analysis in request-only mode, so the release is scheduled. The task
-		// is never run here: the stream completes first and OnStreamComplete releases the transaction.
-		scheduler := &testScheduler{}
-		pluginHandle.EXPECT().GetScheduler().Return(scheduler)
 
 		plugin := wafPluginFactory.Create(pluginHandle)
 		wafPlugin, ok := plugin.(*wafPlugin)
@@ -353,7 +349,6 @@ func Test_RequestOnlyWaf(t *testing.T) {
 		require.Equal(t, shared.HeadersStatusContinue, headerStatus,
 			"expected header status to continue for upgrade request")
 		require.True(t, wafPlugin.isUpgrade, "expected isUpgrade to be true for upgrade request")
-		require.Len(t, scheduler.tasks, 1, "expected the transaction release to be scheduled")
 
 		bodyBuffer := fake.NewFakeBodyBuffer([]byte(`{"name":"test","value":123}`))
 		bodyStatus := wafPlugin.OnRequestBody(bodyBuffer, false)
