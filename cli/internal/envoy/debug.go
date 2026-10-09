@@ -35,13 +35,17 @@ const (
 	delveModule = "github.com/go-delve/delve"
 	// delvePatchRevision identifies the patches boe applies to Delve (see patchDelve). Bump it when
 	// changing them, so previously built binaries are not reused.
-	delvePatchRevision = "boe1"
+	delvePatchRevision = "boe2"
 	// DelveListenHostEnv overrides the address the headless Delve server listens on. Set by RunnerDocker
 	// so Delve listens on all interfaces inside the container.
 	DelveListenHostEnv = "BOE_DLV_LISTEN_HOST"
 	// DelveInstallDirEnv overrides the directory where boe builds Delve. Set by RunnerDocker so Delve
 	// is built in the container cache volume.
 	DelveInstallDirEnv = "BOE_DLV_INSTALL_DIR"
+	// debugNotesEnv passes the debug notes computed in the host to the boe process running in the container.
+	debugNotesEnv = "BOE_DEBUG_NOTES"
+	// debugNotesSeparator separates the debug notes in debugNotesEnv.
+	debugNotesSeparator = "\x1e"
 
 	// envoyProcessTimeout is how long to wait for the Envoy process to be found.
 	envoyProcessTimeout = 30 * time.Second
@@ -57,6 +61,8 @@ type DebugOptions struct {
 	InstallDir string
 	// DelvePort is the port the headless Delve server listens on.
 	DelvePort uint32
+	// Notes are additional messages printed after the instructions to connect to Delve.
+	Notes []string
 
 	dlvPath string // resolved path to the dlv binary
 }
@@ -142,6 +148,17 @@ func (d *DebugOptions) printInstructions(dlvPid int) {
   → %[1]sCLI:%[2]s     dlv connect 127.0.0.1:%[3]d
 
 `, internal.ANSIBold, internal.ANSIReset, d.DelvePort, dlvPid)
+	for _, note := range d.Notes {
+		_, _ = fmt.Fprintln(os.Stderr, note)
+	}
+}
+
+// DebugNotesFromEnv returns the debug notes passed in the environment by the host boe process.
+func DebugNotesFromEnv() []string {
+	if v := os.Getenv(debugNotesEnv); v != "" {
+		return strings.Split(v, debugNotesSeparator)
+	}
+	return nil
 }
 
 // stopDelve stops the Delve server, which detaches it from Envoy without killing it.
@@ -208,18 +225,30 @@ func installDelve(ctx context.Context, logger *slog.Logger, dir string) (string,
 	return dlvPath, nil
 }
 
-// delveGoroutineCacheFile is the Delve source file that locates the runtime goroutine list.
-const delveGoroutineCacheFile = "pkg/proc/goroutine_cache.go"
+// delvePatch is a set of source replacements applied to a Delve source file.
+type delvePatch struct {
+	file         string
+	replacements [][2]string
+}
 
-// delvePatches are the source replacements applied to delveGoroutineCacheFile. Delve only looks for the
-// runtime goroutine list (runtime.allgs) in the main executable, and does it when the target is created,
-// before the shared libraries are loaded when attaching to a process. When the Go runtime is in a shared
-// library loaded by a non-Go process (libcomposer.so in Envoy), listing goroutines then fails with
-// "could not find goroutine array", and IDEs cannot show where the program stopped. The patches look for
-// runtime.allgs in all the loaded images, and retry when the goroutines are first requested.
-var delvePatches = [][2]string{
+// delvePatches are the patches applied to Delve to debug a Go runtime that lives in a shared library
+// loaded by a non-Go process (libcomposer.so in Envoy) after attaching to it:
+//
+//   - Delve only looks for the runtime goroutine list (runtime.allgs) in the main executable, and does
+//     it when the target is created, before the shared libraries are loaded when attaching. Listing
+//     goroutines then fails with "could not find goroutine array", and IDEs cannot show where the
+//     program stopped. The patch looks for runtime.allgs in all the loaded images, and retries when
+//     the goroutines are first requested.
+//   - Delve stops the target when shared libraries are loaded until it sees a Go image being loaded.
+//     When attaching, the Go image is already loaded, so the first library loaded afterwards (e.g. an
+//     NSS module during a DNS or user lookup) stops Envoy inside the dynamic linker, which IDEs report
+//     as a breakpoint hit in an unknown location. The patch sets up the Go image when attaching.
+var delvePatches = []delvePatch{
 	{
-		`	exeimage := bi.Images[0]
+		file: "pkg/proc/goroutine_cache.go",
+		replacements: [][2]string{
+			{
+				`	exeimage := bi.Images[0]
 	rdr := exeimage.DwarfReader()
 	if rdr == nil {
 		return
@@ -234,7 +263,7 @@ var delvePatches = [][2]string{
 		gcache.allgentryAddr, _ = rdr.AddrFor("runtime.allg", exeimage.StaticBase, bi.Arch.PtrSize())
 	}
 `,
-		`	for _, image := range bi.Images {
+				`	for _, image := range bi.Images {
 		rdr := image.DwarfReader()
 		if rdr == nil {
 			continue
@@ -253,37 +282,95 @@ var delvePatches = [][2]string{
 	}
 	_ = err
 `,
-	},
-	{
-		`func (gcache *goroutineCache) getRuntimeAllg(bi *BinaryInfo, mem MemoryReadWriter) (uint64, uint64, error) {
+			},
+			{
+				`func (gcache *goroutineCache) getRuntimeAllg(bi *BinaryInfo, mem MemoryReadWriter) (uint64, uint64, error) {
 	if gcache.allglenAddr == 0 || gcache.allgentryAddr == 0 {
 		return 0, 0, ErrNoRuntimeAllG
 `,
-		`func (gcache *goroutineCache) getRuntimeAllg(bi *BinaryInfo, mem MemoryReadWriter) (uint64, uint64, error) {
+				`func (gcache *goroutineCache) getRuntimeAllg(bi *BinaryInfo, mem MemoryReadWriter) (uint64, uint64, error) {
 	if gcache.allglenAddr == 0 || gcache.allgentryAddr == 0 {
 		gcache.init(bi)
 	}
 	if gcache.allglenAddr == 0 || gcache.allgentryAddr == 0 {
 		return 0, 0, ErrNoRuntimeAllG
 `,
+			},
+		},
+	},
+	{
+		file: "pkg/proc/target.go",
+		replacements: [][2]string{
+			{
+				`func (t *Target) sharedLibCallback(th Thread, tgt *Target) (bool, error) {
+`,
+				`// InitGoImage sets up the Go-specific breakpoints if a Go image is already loaded (e.g. when
+// attaching to a non-Go process that already loaded a Go shared library), so that later shared
+// library loads do not stop the target.
+func (t *Target) InitGoImage() {
+	if !t.BinInfo().HasGoImage() {
+		return
+	}
+	t.onInitialGoImage.Do(func() {
+		t.createUnrecoveredPanicBreakpoint()
+		t.createFatalThrowBreakpoint()
+		t.createPluginOpenBreakpoint()
+	})
+}
+
+func (t *Target) sharedLibCallback(th Thread, tgt *Target) (bool, error) {
+`,
+			},
+		},
+	},
+	{
+		file: "pkg/proc/native/proc_linux.go",
+		replacements: [][2]string{
+			{
+				`	err = linutil.ElfUpdateSharedObjects(dbp)
+	if err != nil {
+		return nil, err
+	}
+	setupSharedLibBreakpoint(dbp, tgt)
+	return tgt, nil
+}
+`,
+				`	err = linutil.ElfUpdateSharedObjects(dbp)
+	if err != nil {
+		return nil, err
+	}
+	setupSharedLibBreakpoint(dbp, tgt)
+	if sel := tgt.Selected; sel != nil && len(sel.BinInfo().Images) > 0 && !sel.BinInfo().Images[0].IsGo {
+		sel.InitGoImage()
+	}
+	return tgt, nil
+}
+`,
+			},
+		},
 	},
 }
 
 // patchDelve applies delvePatches to the Delve sources in the given directory.
 func patchDelve(src string) error {
-	file := filepath.Join(src, delveGoroutineCacheFile)
-	content, err := os.ReadFile(file) //nolint:gosec // path built from a temp dir
-	if err != nil {
-		return fmt.Errorf("failed to patch Delve: %w", err)
-	}
-	patched := string(content)
 	for _, p := range delvePatches {
-		if strings.Count(patched, p[0]) != 1 {
-			return fmt.Errorf("failed to patch Delve: unexpected contents in %s", delveGoroutineCacheFile)
+		file := filepath.Join(src, p.file)
+		content, err := os.ReadFile(file) //nolint:gosec // path built from a temp dir
+		if err != nil {
+			return fmt.Errorf("failed to patch Delve: %w", err)
 		}
-		patched = strings.Replace(patched, p[0], p[1], 1)
+		patched := string(content)
+		for _, r := range p.replacements {
+			if strings.Count(patched, r[0]) != 1 {
+				return fmt.Errorf("failed to patch Delve: unexpected contents in %s", p.file)
+			}
+			patched = strings.Replace(patched, r[0], r[1], 1)
+		}
+		if err = os.WriteFile(file, []byte(patched), 0o600); err != nil {
+			return fmt.Errorf("failed to patch Delve: %w", err)
+		}
 	}
-	return os.WriteFile(file, []byte(patched), 0o600)
+	return nil
 }
 
 // findEnvoyPid polls the children of the given process until it finds the Envoy process started by func-e.

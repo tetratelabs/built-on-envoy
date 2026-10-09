@@ -507,7 +507,7 @@ func (r *RunnerDocker) dockerRunArgs(image string, localExtArgs []string) []stri
 // debugArgs returns the Docker run arguments needed to debug Envoy with Delve inside the container.
 func (r *RunnerDocker) debugArgs() []string {
 	dlvPort := strconv.FormatUint(uint64(r.Debug.DelvePort), 10)
-	return []string{
+	args := []string{
 		"--cap-add=SYS_PTRACE",
 		"--security-opt", "seccomp=unconfined",
 		"-p", "127.0.0.1:" + dlvPort + ":" + dlvPort,
@@ -516,6 +516,11 @@ func (r *RunnerDocker) debugArgs() []string {
 		// Source trees are mounted from the host and are not owned by the container user.
 		"-e", "GOFLAGS=-buildvcs=false",
 	}
+	// The notes are computed in the host, but printed by the boe process in the container.
+	if len(r.Debug.Notes) > 0 {
+		args = append(args, "-e", debugNotesEnv+"="+strings.Join(r.Debug.Notes, debugNotesSeparator))
+	}
+	return args
 }
 
 // imageVersion returns the image version to use for the Docker runner. For dev versions, it returns "latest"

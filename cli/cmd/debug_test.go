@@ -131,3 +131,20 @@ examples:
     description: Test example
     code: boe run --extension ` + name
 }
+
+func TestSymlinkSubstitutePath(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	realDir := filepath.Join(dir, "real", "nested")
+	require.NoError(t, os.MkdirAll(filepath.Join(realDir, "ext"), 0o750))
+	link := filepath.Join(dir, "link")
+	require.NoError(t, os.Symlink(realDir, link))
+
+	from, to, ok := symlinkSubstitutePath(filepath.Join(link, "ext"))
+	require.True(t, ok)
+	require.Equal(t, realDir, from)
+	require.Equal(t, link, to)
+
+	_, _, ok = symlinkSubstitutePath(filepath.Join(realDir, "ext"))
+	require.False(t, ok)
+}

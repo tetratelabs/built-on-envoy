@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -75,16 +76,24 @@ func TestPatchDelve(t *testing.T) {
 	var mod struct{ Dir string }
 	require.NoError(t, json.Unmarshal(out, &mod))
 
+	// Copy the files to patch to a writable directory.
 	src := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(src, filepath.Dir(delveGoroutineCacheFile)), 0o750))
-	content, err := os.ReadFile(filepath.Join(mod.Dir, delveGoroutineCacheFile))
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(src, delveGoroutineCacheFile), content, 0o600))
+	for _, p := range delvePatches {
+		require.NoError(t, os.MkdirAll(filepath.Join(src, filepath.Dir(p.file)), 0o750))
+		content, err := os.ReadFile(filepath.Join(mod.Dir, p.file))
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(filepath.Join(src, p.file), content, 0o600))
+	}
 
 	require.NoError(t, patchDelve(src))
-	patched, err := os.ReadFile(filepath.Join(src, delveGoroutineCacheFile))
-	require.NoError(t, err)
-	require.Contains(t, string(patched), "for _, image := range bi.Images {")
+	read := func(file string) string {
+		content, err := os.ReadFile(filepath.Join(src, file))
+		require.NoError(t, err)
+		return string(content)
+	}
+	require.Contains(t, read("pkg/proc/goroutine_cache.go"), "for _, image := range bi.Images {")
+	require.Contains(t, read("pkg/proc/target.go"), "func (t *Target) InitGoImage() {")
+	require.Equal(t, 1, strings.Count(read("pkg/proc/native/proc_linux.go"), "sel.InitGoImage()"))
 
 	// Patching twice fails, as the sources no longer match the expected ones.
 	require.ErrorContains(t, patchDelve(src), "unexpected contents")
@@ -192,4 +201,20 @@ func TestProcessCommandArgsDebug(t *testing.T) {
 		"--local=/abs/ext2",
 		"--dlv-port", "40000",
 	}, got)
+}
+
+func TestDebugNotes(t *testing.T) {
+	r := &RunnerDocker{Debug: &DebugOptions{DelvePort: 2345, Notes: []string{"note 1\nline 2", "note 2"}}}
+	args := r.debugArgs()
+	env := args[len(args)-1]
+	require.Equal(t, "-e", args[len(args)-2])
+
+	// The notes are passed to the container and read back unchanged.
+	name, value, _ := strings.Cut(env, "=")
+	t.Setenv(name, value)
+	require.Equal(t, []string{"note 1\nline 2", "note 2"}, DebugNotesFromEnv())
+
+	// No notes, no env var.
+	r.Debug.Notes = nil
+	require.NotContains(t, strings.Join(r.debugArgs(), " "), debugNotesEnv)
 }
