@@ -23,9 +23,10 @@ import (
 // Debug is a command to run Envoy with local Go extensions built for debugging, with a
 // headless Delve server attached to the Envoy process.
 type Debug struct {
-	RunOpts   Run    `embed:""`
-	DelvePort uint32 `name:"dlv-port" env:"BOE_DLV_PORT" help:"Port for the headless Delve server attached to Envoy." default:"2345"`
-	DelvePath string `name:"dlv-path" env:"BOE_DLV_PATH" help:"Path to a dlv binary to use instead of the patched Delve that boe builds. Unpatched Delve versions may not be able to list goroutines."`
+	RunOpts      Run    `embed:""`
+	DelvePort    uint32 `name:"dlv-port" env:"BOE_DLV_PORT" help:"Port for the headless Delve server attached to Envoy." default:"2345"`
+	RebuildDelve bool   `name:"rebuild-dlv" env:"BOE_REBUILD_DLV" help:"Rebuild the patched Delve even if it is already in the cache."`
+	DelvePath    string `name:"dlv-path" env:"BOE_DLV_PATH" help:"Path to a dlv binary to use instead of the patched Delve that boe builds. Unpatched Delve versions may not be able to list goroutines."`
 
 	// goos is the OS used to decide whether Envoy must run in a container. Overridable for testing.
 	goos string `kong:"-"`
@@ -60,6 +61,9 @@ func (d *Debug) Validate() error {
 	if len(d.RunOpts.Local) == 0 {
 		return errDebugNoLocal
 	}
+	if d.RebuildDelve && d.DelvePath != "" {
+		return errors.New("--rebuild-dlv and --dlv-path are mutually exclusive")
+	}
 	if d.inContainer() && d.RunOpts.Envoy.Path != "" {
 		return fmt.Errorf("--envoy-path is not supported when debugging in a container (always the case on %s)", runtime.GOOS)
 	}
@@ -78,6 +82,7 @@ func (d *Debug) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Log
 	return d.RunOpts.run(ctx, dirs, logger, &envoy.DebugOptions{
 		DelvePort:  d.DelvePort,
 		DelvePath:  d.DelvePath,
+		Rebuild:    d.RebuildDelve,
 		InstallDir: filepath.Join(dirs.DataHome, "tools"),
 		// When running in a container, the notes computed in the host are passed in the environment.
 		Notes: append(envoy.DebugNotesFromEnv(), symlinkHints(d.RunOpts.Local)...),

@@ -95,6 +95,15 @@ func TestDebugValidate(t *testing.T) {
 	}
 }
 
+func TestDebugValidateRebuildDelve(t *testing.T) {
+	d, err := parseDebug(t, "--local", "../../extensions/composer/example", "--rebuild-dlv")
+	require.NoError(t, err)
+	require.True(t, d.RebuildDelve)
+
+	_, err = parseDebug(t, "--local", "../../extensions/composer/example", "--rebuild-dlv", "--dlv-path", "/usr/bin/dlv")
+	require.ErrorContains(t, err, "--rebuild-dlv and --dlv-path are mutually exclusive")
+}
+
 func TestDebugInContainer(t *testing.T) {
 	require.False(t, (&Debug{goos: "linux"}).inContainer())
 	require.True(t, (&Debug{goos: "darwin"}).inContainer())

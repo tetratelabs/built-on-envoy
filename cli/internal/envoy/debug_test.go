@@ -94,6 +94,7 @@ func TestPatchDelve(t *testing.T) {
 	require.Contains(t, read("pkg/proc/goroutine_cache.go"), "for _, image := range bi.Images {")
 	require.Contains(t, read("pkg/proc/target.go"), "func (t *Target) InitGoImage() {")
 	require.Equal(t, 1, strings.Count(read("pkg/proc/native/proc_linux.go"), "sel.InitGoImage()"))
+	require.Contains(t, read("pkg/proc/bininfo.go"), "func (bi *BinaryInfo) setGStructOffsetElfSharedLib(")
 
 	// Patching twice fails, as the sources no longer match the expected ones.
 	require.ErrorContains(t, patchDelve(src), "unexpected contents")
@@ -217,4 +218,20 @@ func TestDebugNotes(t *testing.T) {
 	// No notes, no env var.
 	r.Debug.Notes = nil
 	require.NotContains(t, strings.Join(r.debugArgs(), " "), debugNotesEnv)
+}
+
+func TestInstallDelveCached(t *testing.T) {
+	// A cached binary is reused without building it.
+	dir := t.TempDir()
+	cached := filepath.Join(dir, "dlv-"+DelveVersion+"-"+delvePatchRevision)
+	require.NoError(t, os.WriteFile(cached, []byte("cached"), 0o600))
+	got, err := installDelve(t.Context(), internaltesting.NewTLogger(t), dir, false)
+	require.NoError(t, err)
+	require.Equal(t, cached, got)
+
+	// When rebuilding, the cached binary is not reused. Fail the build early with an invalid toolchain
+	// so the test does not need to build Delve.
+	t.Setenv("GOTOOLCHAIN", "invalid")
+	_, err = installDelve(t.Context(), internaltesting.NewTLogger(t), dir, true)
+	require.Error(t, err)
 }

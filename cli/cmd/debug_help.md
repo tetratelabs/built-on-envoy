@@ -14,7 +14,7 @@ All other flags behave as in `boe run`.
 Delve can only debug Go code loaded into a non-Go process on Linux. On other platforms, such as macOS,
 `boe debug` runs Envoy and Delve in a Linux container, so Docker is required. The local extension sources
 are mounted in the container at the same path as in the host, so breakpoints set in the IDE work without
-any path mapping. `boe debug` builds its own Delve the first time it runs, so it does not need to be installed.
+any path mapping. `boe debug` builds its own Delve the first time it runs, so it does not need to be installed. Use `--rebuild-dlv` to force rebuilding it.
 </Callout>
 
 <Callout type="warning">

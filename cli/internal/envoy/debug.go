@@ -35,7 +35,7 @@ const (
 	delveModule = "github.com/go-delve/delve"
 	// delvePatchRevision identifies the patches boe applies to Delve (see patchDelve). Bump it when
 	// changing them, so previously built binaries are not reused.
-	delvePatchRevision = "boe2"
+	delvePatchRevision = "boe3"
 	// DelveListenHostEnv overrides the address the headless Delve server listens on. Set by RunnerDocker
 	// so Delve listens on all interfaces inside the container.
 	DelveListenHostEnv = "BOE_DLV_LISTEN_HOST"
@@ -59,6 +59,8 @@ type DebugOptions struct {
 	DelvePath string
 	// InstallDir is the directory where boe builds Delve.
 	InstallDir string
+	// Rebuild forces rebuilding Delve even if it is already in InstallDir.
+	Rebuild bool
 	// DelvePort is the port the headless Delve server listens on.
 	DelvePort uint32
 	// Notes are additional messages printed after the instructions to connect to Delve.
@@ -80,7 +82,7 @@ func (d *DebugOptions) resolveDelve(ctx context.Context, logger *slog.Logger) er
 			internal.ANSIBold, d.DelvePath, internal.ANSIReset)
 		dlvPath, err = findDelve(d.DelvePath)
 	} else {
-		dlvPath, err = installDelve(ctx, logger, cmp.Or(os.Getenv(DelveInstallDirEnv), d.InstallDir))
+		dlvPath, err = installDelve(ctx, logger, cmp.Or(os.Getenv(DelveInstallDirEnv), d.InstallDir), d.Rebuild)
 	}
 	if err != nil {
 		return err
@@ -179,10 +181,10 @@ func findDelve(path string) (string, error) {
 	return path, nil
 }
 
-// installDelve builds the patched Delve in the given directory, unless it is already there.
-func installDelve(ctx context.Context, logger *slog.Logger, dir string) (string, error) {
+// installDelve builds the patched Delve in the given directory, unless it is already there and rebuild is false.
+func installDelve(ctx context.Context, logger *slog.Logger, dir string, rebuild bool) (string, error) {
 	dlvPath := filepath.Join(dir, fmt.Sprintf("dlv-%s-%s", DelveVersion, delvePatchRevision))
-	if _, err := os.Stat(dlvPath); err == nil {
+	if _, err := os.Stat(dlvPath); err == nil && !rebuild {
 		return dlvPath, nil
 	}
 	_, _ = fmt.Fprintf(os.Stderr, "→ %sBuilding Delve %s...%s\n", internal.ANSIBold, DelveVersion, internal.ANSIReset)
@@ -243,6 +245,11 @@ type delvePatch struct {
 //     When attaching, the Go image is already loaded, so the first library loaded afterwards (e.g. an
 //     NSS module during a DNS or user lookup) stops Envoy inside the dynamic linker, which IDEs report
 //     as a breakpoint hit in an unknown location. The patch sets up the Go image when attaching.
+//   - On x86_64, Delve finds the current goroutine of a thread through the G pointer in thread local
+//     storage, but only computes its location for the executable. When the Go runtime is in a shared
+//     library loaded by a non-Go process, Delve reads the wrong location and reports a different
+//     (usually parked) goroutine as the current one, so IDEs show the wrong location when a breakpoint
+//     is hit. The patch reads the location of the G pointer from the GOT entry of the library.
 var delvePatches = []delvePatch{
 	{
 		file: "pkg/proc/goroutine_cache.go",
@@ -345,6 +352,86 @@ func (t *Target) sharedLibCallback(th Thread, tgt *Target) (bool, error) {
 	}
 	return tgt, nil
 }
+`,
+			},
+		},
+	},
+	{
+		file: "pkg/proc/bininfo.go",
+		replacements: [][2]string{
+			{
+				`		// determine g struct offset only when loading the executable file
+		wg.Add(1)
+		go bi.setGStructOffsetElf(image, dwarfFile, wg)
+	}
+`,
+				`		// determine g struct offset only when loading the executable file
+		wg.Add(1)
+		go bi.setGStructOffsetElf(image, dwarfFile, wg)
+	} else if elfFile.Machine == elf.EM_X86_64 && len(bi.Images) > 0 && !bi.Images[0].IsGo {
+		bi.setGStructOffsetElfSharedLib(image, elfFile)
+	}
+`,
+			},
+			{
+				`func getSymbol(image *Image, logger logflags.Logger, exe *elf.File, name string) *elf.Symbol {
+`,
+				`// setGStructOffsetElfSharedLib sets the offset of the G pointer in thread
+// local storage when the Go runtime is in a shared library built with
+// buildmode=c-shared and loaded by a non-Go executable on x86_64.
+//
+// The library accesses runtime.tlsg with the initial-exec TLS model: the
+// offset of the G pointer from the thread pointer is stored in a GOT entry,
+// filled by the dynamic linker through a R_X86_64_TPOFF64 relocation. The
+// offset depends on where the library's TLS block was placed at load time, so
+// it can't be computed from the file: the GOT entry is read from the target
+// memory instead.
+func (bi *BinaryInfo) setGStructOffsetElfSharedLib(image *Image, exe *elf.File) {
+	if bi.gStructOffsetIsPtr {
+		// Already set by another Go shared library.
+		return
+	}
+	tlsg := getSymbol(image, bi.logger, exe, "runtime.tlsg")
+	if tlsg == nil {
+		return
+	}
+	rela := exe.Section(".rela.dyn")
+	if rela == nil {
+		return
+	}
+	data, err := rela.Data()
+	if err != nil {
+		return
+	}
+	var (
+		dynsyms, _ = exe.DynamicSymbols()
+		got        uint64
+	)
+	const relaSize = 24 // sizeof(Elf64_Rela)
+	for i := 0; i+relaSize <= len(data); i += relaSize {
+		off := exe.ByteOrder.Uint64(data[i:])
+		info := exe.ByteOrder.Uint64(data[i+8:])
+		addend := exe.ByteOrder.Uint64(data[i+16:])
+		if elf.R_X86_64(elf.R_TYPE64(info)) != elf.R_X86_64_TPOFF64 {
+			continue
+		}
+		// runtime.tlsg is a local symbol, so the relocation usually has no
+		// symbol and its addend is the offset of runtime.tlsg in the TLS block.
+		sym := elf.R_SYM64(info)
+		if (sym == 0 && addend == tlsg.Value) ||
+			(sym > 0 && int(sym) <= len(dynsyms) && dynsyms[sym-1].Name == "runtime.tlsg") {
+			got = off
+			break
+		}
+	}
+	if got == 0 {
+		return
+	}
+	bi.gStructOffset = image.StaticBase + got
+	bi.gStructOffsetIsPtr = true
+}
+
+func getSymbol(image *Image, logger logflags.Logger, exe *elf.File, name string) *elf.Symbol {
 `,
 			},
 		},
