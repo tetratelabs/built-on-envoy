@@ -1,0 +1,195 @@
+// Copyright Built On Envoy
+// SPDX-License-Identifier: Apache-2.0
+// The full text of the Apache license is available in the LICENSE file at
+// the root of the repo.
+
+package envoy
+
+import (
+	"context"
+	"encoding/json"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	internaltesting "github.com/tetratelabs/built-on-envoy/internal/testing"
+)
+
+func TestMergeGODEBUG(t *testing.T) {
+	tests := []struct {
+		name     string
+		existing string
+		add      []string
+		want     string
+	}{
+		{"empty", "", []string{"cgocheck=0"}, "cgocheck=0"},
+		{"keeps existing", "madvdontneed=1", []string{"cgocheck=0"}, "madvdontneed=1,cgocheck=0"},
+		{"overrides existing", "cgocheck=1,madvdontneed=1", []string{"cgocheck=0", "asyncpreemptoff=1"},
+			"madvdontneed=1,cgocheck=0,asyncpreemptoff=1"},
+		{"ignores empty entries", ",madvdontneed=1,", []string{"cgocheck=0"}, "madvdontneed=1,cgocheck=0"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, mergeGODEBUG(tt.existing, tt.add...))
+		})
+	}
+}
+
+func TestDelveArgs(t *testing.T) {
+	d := &DebugOptions{DelvePort: 40000}
+	want := []string{
+		"attach", "1234", "--headless", "--listen=127.0.0.1:40000",
+		"--api-version=2", "--accept-multiclient", "--continue",
+	}
+	require.Equal(t, want, d.delveArgs(1234))
+
+	t.Setenv(DelveListenHostEnv, "0.0.0.0")
+	require.Contains(t, d.delveArgs(1234), "--listen=0.0.0.0:40000")
+}
+
+func TestFindDelve(t *testing.T) {
+	t.Run("explicit path", func(t *testing.T) {
+		dlv := filepath.Join(t.TempDir(), "dlv")
+		require.NoError(t, os.WriteFile(dlv, nil, 0o600))
+		got, err := findDelve(dlv)
+		require.NoError(t, err)
+		require.Equal(t, dlv, got)
+	})
+
+	t.Run("explicit path not found", func(t *testing.T) {
+		_, err := findDelve(filepath.Join(t.TempDir(), "dlv"))
+		require.ErrorContains(t, err, "dlv not found at")
+	})
+}
+
+func TestPatchDelve(t *testing.T) {
+	// Patch the actual Delve sources of the pinned version.
+	out, err := exec.Command("go", "mod", "download", "-json", delveModule+"@"+DelveVersion).Output()
+	if err != nil {
+		t.Skipf("could not download Delve sources: %v", err)
+	}
+	var mod struct{ Dir string }
+	require.NoError(t, json.Unmarshal(out, &mod))
+
+	src := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(src, filepath.Dir(delveGoroutineCacheFile)), 0o750))
+	content, err := os.ReadFile(filepath.Join(mod.Dir, delveGoroutineCacheFile))
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(src, delveGoroutineCacheFile), content, 0o600))
+
+	require.NoError(t, patchDelve(src))
+	patched, err := os.ReadFile(filepath.Join(src, delveGoroutineCacheFile))
+	require.NoError(t, err)
+	require.Contains(t, string(patched), "for _, image := range bi.Images {")
+
+	// Patching twice fails, as the sources no longer match the expected ones.
+	require.ErrorContains(t, patchDelve(src), "unexpected contents")
+}
+
+func TestFindEnvoyPid(t *testing.T) {
+	// Start a child process that looks like Envoy (it has the --use-dynamic-base-id flag) and one that does not.
+	other := exec.Command("sleep", "30")
+	require.NoError(t, other.Start())
+	t.Cleanup(func() { _ = other.Process.Kill(); _ = other.Wait() })
+
+	envoy := exec.Command("sh", "-c", "sleep 30; exit 0", "--use-dynamic-base-id")
+	require.NoError(t, envoy.Start())
+	t.Cleanup(func() { _ = envoy.Process.Kill(); _ = envoy.Wait() })
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	pid, err := findEnvoyPid(ctx, os.Getpid())
+	require.NoError(t, err)
+	require.Equal(t, envoy.Process.Pid, pid)
+}
+
+func TestFindEnvoyPidTimeout(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 300*time.Millisecond)
+	defer cancel()
+	_, err := findEnvoyPid(ctx, os.Getpid())
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+}
+
+func TestDockerRunArgsDebug(t *testing.T) {
+	originalArgs := os.Args
+	os.Args = []string{"boe", "debug", "--dlv-path", "/usr/bin/dlv", "--dlv-port=40000"}
+	t.Cleanup(func() { os.Args = originalArgs })
+
+	r := &RunnerDocker{
+		Logger:     internaltesting.NewTLogger(t),
+		ListenPort: 10000,
+		AdminPort:  9901,
+		Arch:       "arm64",
+		Pull:       "missing",
+		Debug:      &DebugOptions{DelvePort: 40000},
+	}
+	want := []string{
+		"run", "--rm",
+		"--pull", "missing",
+		"--platform", "linux/arm64",
+		"-p", "10000:10000/tcp",
+		"-p", "10000:10000/udp",
+		"-p", "9901:9901",
+		"-v", "boe-cache:" + containerVolumeDir,
+		"-e", "BOE_ADMIN_ADDRESS=0.0.0.0:9901",
+		"-e", "BOE_CONFIG_HOME=" + containerConfigHome,
+		"-e", "BOE_DATA_HOME=" + containerDataHome,
+		"-e", "BOE_STATE_HOME=" + containerStateHome,
+		"-e", "BOE_RUNTIME_DIR=" + containerRuntimeDir,
+		"--cap-add=SYS_PTRACE",
+		"--security-opt", "seccomp=unconfined",
+		"-p", "127.0.0.1:40000:40000",
+		"-e", DelveListenHostEnv + "=0.0.0.0",
+		"-e", DelveInstallDirEnv + "=" + containerDelveInstallDir,
+		"-e", "GOFLAGS=-buildvcs=false",
+		"--entrypoint", "/boe", "ghcr.io/test/boe:latest",
+		"debug", "--dlv-port=40000",
+	}
+	require.Equal(t, want, r.dockerRunArgs("ghcr.io/test/boe:latest", nil))
+}
+
+func TestProcessLocalExtensionsDebug(t *testing.T) {
+	// Mount the composer bundle root (once) for composer sub-extensions, and the extension itself otherwise.
+	composer, err := filepath.Abs("../../../extensions/composer")
+	require.NoError(t, err)
+	lua, err := filepath.Abs("../../../extensions/example-lua")
+	require.NoError(t, err)
+
+	r := &RunnerDocker{Logger: internaltesting.NewTLogger(t), Debug: &DebugOptions{}}
+	got, err := r.processLocalExtensionsDebug([]string{
+		"../../../extensions/composer/opa",
+		"../../../extensions/composer/example",
+		"../../../extensions/example-lua",
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"-v", composer + ":" + composer, "-v", lua + ":" + lua}, got)
+
+	_, err = r.processLocalExtensionsDebug([]string{t.TempDir()})
+	require.ErrorContains(t, err, "failed to load manifest")
+}
+
+func TestProcessCommandArgsDebug(t *testing.T) {
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+
+	r := &RunnerDocker{Logger: internaltesting.NewTLogger(t), Debug: &DebugOptions{}}
+	got := r.processCommandArgs([]string{
+		"boe", "debug",
+		"--local", "./ext1",
+		"--local=/abs/ext2",
+		"--dlv-path", "/usr/bin/dlv",
+		"--dlv-path=/usr/bin/dlv",
+		"--docker-image-version", "dev",
+		"--dlv-port", "40000",
+	})
+	require.Equal(t, []string{
+		"debug",
+		"--local", filepath.Join(cwd, "ext1"),
+		"--local=/abs/ext2",
+		"--dlv-port", "40000",
+	}, got)
+}

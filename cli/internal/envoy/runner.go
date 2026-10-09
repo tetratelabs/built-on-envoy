@@ -87,6 +87,8 @@ type RunnerFuncE struct {
 	TestUpstreamCluster string
 	// ExtProcBinaries maps ext_proc extension names to their binary paths.
 	ExtProcBinaries map[string]string
+	// Debug, when set, attaches a headless Delve server to the Envoy process once it is started.
+	Debug *DebugOptions
 }
 
 // Run starts Envoy using func-e as a library.
@@ -125,7 +127,12 @@ func (r *RunnerFuncE) Run(ctx context.Context) error {
 	}
 
 	// Disable cgo pointer checks as Envoy may hold pointers to Go memory.
-	if err = os.Setenv("GODEBUG", "cgocheck=0"); err != nil {
+	godebug := []string{"cgocheck=0"}
+	if r.Debug != nil {
+		// Async preemption signals make stepping through Go code hosted in a cgo process unreliable.
+		godebug = append(godebug, "asyncpreemptoff=1")
+	}
+	if err = os.Setenv("GODEBUG", mergeGODEBUG(os.Getenv("GODEBUG"), godebug...)); err != nil {
 		return fmt.Errorf("failed to set GODEBUG: %w", err)
 	}
 
@@ -149,9 +156,25 @@ func (r *RunnerFuncE) Run(ctx context.Context) error {
 	}
 	defer stopExtProcServers(r.Logger, extProcCmds)
 
+	var dlv *exec.Cmd
+	if r.Debug != nil {
+		// Resolve Delve before starting Envoy to fail fast if it is not available.
+		if err = r.Debug.resolveDelve(ctx, r.Logger); err != nil {
+			return err
+		}
+		defer func() { stopDelve(r.Logger, dlv) }()
+	}
+
 	// Define startup hook that will be called when Envoy admin is ready
 	start := time.Now()
-	startupHook := func(_ context.Context, adminClient admin.AdminClient, _ string) error {
+	startupHook := func(hookCtx context.Context, adminClient admin.AdminClient, _ string) error {
+		if r.Debug != nil {
+			var err error
+			if dlv, err = r.Debug.attach(ctx, hookCtx, r.Logger); err != nil {
+				return err
+			}
+		}
+
 		startDuration := time.Since(start).Round(100 * time.Millisecond)
 
 		_, _ = fmt.Fprintf(os.Stderr, `
@@ -164,6 +187,9 @@ func (r *RunnerFuncE) Run(ctx context.Context) error {
 
 Press Ctrl+C to stop
 `, r.ListenPort, adminClient.Port(), startDuration, internal.ANSIBold, internal.ANSIReset)
+		if r.Debug != nil {
+			r.Debug.printInstructions(dlv.Process.Pid)
+		}
 		return nil
 	}
 
@@ -382,6 +408,9 @@ const (
 	containerRuntimeDir = containerVolumeDir + "/run"
 	// containerLocalExtensionsDir is the directory inside the container where local extensions are mounted.
 	containerLocalExtensionsDir = containerRuntimeDir + "/extensions"
+	// containerDelveInstallDir is the directory inside the container where Delve is installed in debug mode.
+	// It is in the cache volume so it is installed only once.
+	containerDelveInstallDir = containerVolumeDir + "/bin"
 )
 
 // RunnerDocker handles running Envoy as a Docker container.
@@ -396,6 +425,9 @@ type RunnerDocker struct {
 	LocalExtensions []string
 	Pull            string
 	ImageVersion    string
+	// Debug, when set, runs the container so that a headless Delve server can be attached to Envoy
+	// and reached from the host.
+	Debug *DebugOptions
 }
 
 // Run starts Envoy in a Docker container.
@@ -406,7 +438,11 @@ func (r *RunnerDocker) Run(ctx context.Context) error {
 	)
 
 	// Process local extensions to mount them in the container and get the corresponding container paths.
-	localExtArgs, err := r.processLocalExtensions(r.LocalExtensions)
+	processLocal := r.processLocalExtensions
+	if r.Debug != nil {
+		processLocal = r.processLocalExtensionsDebug
+	}
+	localExtArgs, err := processLocal(r.LocalExtensions)
 	if err != nil {
 		return fmt.Errorf("failed to process local extensions: %w", err)
 	}
@@ -453,12 +489,33 @@ func (r *RunnerDocker) dockerRunArgs(image string, localExtArgs []string) []stri
 		args = append(args, "-e", "BOE_RUN_ID="+r.RunID)
 	}
 
-	args = append(args, localExtArgs...)                  // local extension volumes
-	args = append(args, passthroughEnvVars()...)          // passthrough BOE_ env vars
-	args = append(args, image, "/boe")                    // container image and command
+	args = append(args, localExtArgs...)         // local extension volumes
+	args = append(args, passthroughEnvVars()...) // passthrough BOE_ env vars
+	if r.Debug != nil {
+		args = append(args, r.debugArgs()...)
+		// Run as root: the default entrypoint drops privileges to an unprivileged user that cannot
+		// ptrace the (sibling) Envoy process.
+		args = append(args, "--entrypoint", "/boe", image)
+	} else {
+		args = append(args, image, "/boe") // container image and command
+	}
 	args = append(args, r.processCommandArgs(os.Args)...) // command-line args
 
 	return args
+}
+
+// debugArgs returns the Docker run arguments needed to debug Envoy with Delve inside the container.
+func (r *RunnerDocker) debugArgs() []string {
+	dlvPort := strconv.FormatUint(uint64(r.Debug.DelvePort), 10)
+	return []string{
+		"--cap-add=SYS_PTRACE",
+		"--security-opt", "seccomp=unconfined",
+		"-p", "127.0.0.1:" + dlvPort + ":" + dlvPort,
+		"-e", DelveListenHostEnv + "=0.0.0.0",
+		"-e", DelveInstallDirEnv + "=" + containerDelveInstallDir,
+		// Source trees are mounted from the host and are not owned by the container user.
+		"-e", "GOFLAGS=-buildvcs=false",
+	}
 }
 
 // imageVersion returns the image version to use for the Docker runner. For dev versions, it returns "latest"
@@ -514,6 +571,56 @@ func (r *RunnerDocker) processLocalExtensions(localExts []string) ([]string, err
 	return args, nil
 }
 
+// processLocalExtensionsDebug mounts the root of each local extension (the extension itself, or its parent
+// bundle such as composer) at the same absolute path in the container. This allows resolving parent bundles
+// from the container and makes the source paths in the debug information match the ones in the host, so
+// breakpoints set in the IDE resolve without any path mapping.
+func (r *RunnerDocker) processLocalExtensionsDebug(localExts []string) ([]string, error) {
+	var (
+		args    []string
+		mounted = make(map[string]bool)
+	)
+	for _, ext := range localExts {
+		root, err := localExtensionRoot(ext)
+		if err != nil {
+			return nil, err
+		}
+		if mounted[root] {
+			continue
+		}
+		mounted[root] = true
+		args = append(args, "-v", root+":"+root)
+	}
+
+	r.Logger.Debug("processed local extensions for Docker debugging", "volumes", args)
+
+	return args, nil
+}
+
+// localExtensionRoot returns the absolute path of the root of the given local extension: the directory of its
+// parent bundle if it has one, or the extension directory itself otherwise.
+func localExtensionRoot(ext string) (string, error) {
+	absPath, err := filepath.Abs(ext)
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute path for local extension %q: %w", ext, err)
+	}
+	manifest, err := extensions.LoadLocalManifest(filepath.Join(absPath, "manifest.yaml"))
+	if err != nil {
+		return "", fmt.Errorf("failed to load manifest for local extension %q: %w", ext, err)
+	}
+	if manifest.Parent == "" {
+		return absPath, nil
+	}
+	_, parentDir, err := extensions.FindLocalParentManifest(manifest)
+	if err != nil {
+		return "", fmt.Errorf("failed to find parent manifest for local extension %q: %w", ext, err)
+	}
+	if parentDir == "" {
+		return "", fmt.Errorf("parent manifest %q not found locally for extension %q", manifest.Parent, ext)
+	}
+	return parentDir, nil
+}
+
 // localExtensionContainerPath returns the container path for a given local extension path.
 func localExtensionContainerPath(ext string) (string, string, error) {
 	absPath, err := filepath.Abs(ext)
@@ -550,6 +657,30 @@ func (r *RunnerDocker) processCommandArgs(args []string) []string {
 		if arg == "--pull" && i+1 < len(args) {
 			i++ // skip next arg (the value for --pull)
 			continue
+		}
+
+		// In debug mode, local extensions are mounted at the same absolute path, and dlv is installed in the container.
+		if r.Debug != nil {
+			if arg == "--dlv-path" && i+1 < len(args) {
+				i++
+				continue
+			}
+			if strings.HasPrefix(arg, "--dlv-path=") {
+				continue
+			}
+			if strings.HasPrefix(arg, "--local=") {
+				if abs, err := filepath.Abs(strings.TrimPrefix(arg, "--local=")); err == nil {
+					processed = append(processed, "--local="+abs)
+					continue
+				}
+			}
+			if arg == "--local" && i+1 < len(args) {
+				if abs, err := filepath.Abs(args[i+1]); err == nil {
+					processed = append(processed, "--local", abs)
+					i++
+					continue
+				}
+			}
 		}
 
 		// Handle --local=value

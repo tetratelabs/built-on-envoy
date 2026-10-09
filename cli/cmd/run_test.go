@@ -530,13 +530,13 @@ func TestLoadLocalManifests(t *testing.T) {
 		Dirs:   &xdg.Directories{DataHome: t.TempDir()},
 	}
 	t.Run("empty paths", func(t *testing.T) {
-		manifests, err := loadLocalManifests(t.Context(), logger, downloader, []string{}, false)
+		manifests, err := loadLocalManifests(t.Context(), logger, downloader, []string{}, false, extensions.BuildOptions{})
 		require.NoError(t, err)
 		require.Empty(t, manifests)
 	})
 
 	t.Run("multiple valid paths", func(t *testing.T) {
-		manifests, err := loadLocalManifests(t.Context(), logger, downloader, []string{"./testdata", "./testdata/push_pull"}, false)
+		manifests, err := loadLocalManifests(t.Context(), logger, downloader, []string{"./testdata", "./testdata/push_pull"}, false, extensions.BuildOptions{})
 		require.NoError(t, err)
 		require.Len(t, manifests, 2)
 		require.Equal(t, "test-lua", manifests[0].Name)
@@ -544,13 +544,13 @@ func TestLoadLocalManifests(t *testing.T) {
 	})
 
 	t.Run("nonexistent path", func(t *testing.T) {
-		_, err := loadLocalManifests(t.Context(), logger, downloader, []string{"/nonexistent/path"}, false)
+		_, err := loadLocalManifests(t.Context(), logger, downloader, []string{"/nonexistent/path"}, false, extensions.BuildOptions{})
 		require.Error(t, err)
 		require.ErrorIs(t, err, errFailedToLoadLocalManifest)
 	})
 
 	t.Run("invalid path", func(t *testing.T) {
-		_, err := loadLocalManifests(t.Context(), logger, downloader, []string{"./"}, false)
+		_, err := loadLocalManifests(t.Context(), logger, downloader, []string{"./"}, false, extensions.BuildOptions{})
 		require.Error(t, err)
 		require.ErrorIs(t, err, errFailedToLoadLocalManifest)
 	})
@@ -568,7 +568,7 @@ func TestLoadLocalManifests(t *testing.T) {
 		err = os.Remove(tempDir + "/test_custom/go.sum")
 		require.NoError(t, err)
 
-		_, err = loadLocalManifests(t.Context(), logger, downloader, []string{tempDir + "/test_custom"}, true)
+		_, err = loadLocalManifests(t.Context(), logger, downloader, []string{tempDir + "/test_custom"}, true, extensions.BuildOptions{})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "failed to run 'go mod tidy'")
 	})
@@ -580,7 +580,7 @@ func TestLoadLocalManifests(t *testing.T) {
 		err := createGoExtension(logger, downloader.Dirs, tempDir, "test_valid", "0.1.0")
 		require.NoError(t, err)
 
-		manifests, err := loadLocalManifests(t.Context(), logger, downloader, []string{tempDir + "/test_valid"}, false)
+		manifests, err := loadLocalManifests(t.Context(), logger, downloader, []string{tempDir + "/test_valid"}, false, extensions.BuildOptions{})
 		require.NoError(t, err)
 		require.Len(t, manifests, 1)
 		require.Equal(t, "test_valid", manifests[0].Name)
@@ -612,7 +612,7 @@ examples: []
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "manifest.yaml"), []byte(parentYAML), 0o600))
 		require.NoError(t, os.WriteFile(filepath.Join(childDir, "manifest.yaml"), []byte(childYAML), 0o600))
 
-		manifests, err := loadLocalManifests(t.Context(), logger, downloader, []string{childDir}, false)
+		manifests, err := loadLocalManifests(t.Context(), logger, downloader, []string{childDir}, false, extensions.BuildOptions{})
 		require.NoError(t, err)
 		require.Len(t, manifests, 1)
 		require.Equal(t, "test-child", manifests[0].Name)
@@ -636,7 +636,7 @@ examples: []
 
 		mock := &mockOCIClient{pullErr: errors.New("registry unavailable")}
 		d := newTestDownloader(t, t.TempDir(), mock)
-		_, err := loadLocalManifests(t.Context(), logger, d, []string{tmpDir}, false)
+		_, err := loadLocalManifests(t.Context(), logger, d, []string{tmpDir}, false, extensions.BuildOptions{})
 		require.ErrorIs(t, err, errFailedToLoadLocalManifest)
 		// loadLocalManifests resolves parents locally only (no registry fallback), so a
 		// missing local parent fails fast rather than attempting a download.

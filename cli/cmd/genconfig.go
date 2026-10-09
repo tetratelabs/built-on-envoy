@@ -111,7 +111,7 @@ func (g *GenConfig) Run(ctx context.Context, dirs *xdg.Directories, logger *slog
 		m.SourceRegistry = downloader.Registry
 		m.SourceTag = m.Version
 	}
-	local, err := loadLocalManifests(ctx, logger, downloader, g.Local, true)
+	local, err := loadLocalManifests(ctx, logger, downloader, g.Local, true, extensions.BuildOptions{})
 	if err != nil {
 		return err
 	}

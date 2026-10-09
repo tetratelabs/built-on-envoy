@@ -28,6 +28,31 @@ const (
 	ComposerArtifactSource = "composer-src"
 )
 
+// BuildOptions configures how Go extensions and composer libraries are compiled.
+type BuildOptions struct {
+	// Debug builds the libraries for debugging: optimizations and inlining are disabled, full source
+	// paths are kept (no -trimpath) and DWARF is always emitted, so a debugger such as Delve can be
+	// attached to the Envoy process hosting them. Debug builds go to their own cache slot.
+	Debug bool
+}
+
+// goBuildFlags returns the `go build` flags for the given build options.
+func (o BuildOptions) goBuildFlags() []string {
+	if o.Debug {
+		// -w=0 is needed because Go omits DWARF by default for c-shared libraries on darwin (golang/go#61229).
+		return []string{"-gcflags=all=-N -l", "-ldflags=-w=0"}
+	}
+	return []string{"-trimpath"}
+}
+
+// cacheVersion returns the cache version slot for the given version and build options.
+func (o BuildOptions) cacheVersion(version string) string {
+	if o.Debug {
+		return DebugVersion(version)
+	}
+	return version
+}
+
 // CheckOrDownloadLibComposerLite checks if libcomposer-lite.so exists in the local cache directory.
 // If not, it tries to download the pre-built composer-lite from the OCI registry (falling back to
 // building it from source). composer-lite is the loader used to host standalone Go plugins.
@@ -36,13 +61,13 @@ func CheckOrDownloadLibComposerLite(ctx context.Context, downloader *Downloader,
 		downloader.Logger.Debug("libcomposer-lite already exists in local cache. skipping download", "version", version)
 		return nil
 	}
-	return DownloadComposerLiteAndBuildIfNeeded(ctx, downloader, version, ComposerArtifactLite)
+	return DownloadComposerLiteAndBuildIfNeeded(ctx, downloader, version, ComposerArtifactLite, BuildOptions{})
 }
 
 // DownloadComposerLiteAndBuildIfNeeded combines downloading and building composer-lite: it pulls the
 // given artifact (a prebuilt composer-lite binary, or composer-src) and, when source, builds
-// libcomposer-lite.so from it.
-func DownloadComposerLiteAndBuildIfNeeded(ctx context.Context, downloader *Downloader, version string, artifactName string) error {
+// libcomposer-lite.so from it with the given build options.
+func DownloadComposerLiteAndBuildIfNeeded(ctx context.Context, downloader *Downloader, version string, artifactName string, opts BuildOptions) error {
 	artifact, err := downloader.DownloadComposer(ctx, version, artifactName)
 	if err != nil {
 		return fmt.Errorf("failed to download libcomposer: %w", err)
@@ -52,7 +77,7 @@ func DownloadComposerLiteAndBuildIfNeeded(ctx context.Context, downloader *Downl
 		return nil
 	}
 
-	return BuildLibComposer(downloader.Logger, downloader.Dirs, artifact.Path, version, true)
+	return BuildLibComposer(downloader.Logger, downloader.Dirs, artifact.Path, version, true, opts)
 }
 
 // ensureComposerLiteLib normalizes a downloaded composer-lite binary artifact. Legacy
@@ -85,7 +110,7 @@ func HasCSharedMain(path string) bool {
 // BuildExtensionFromPath builds the extension from the given path.
 // If a main/ directory exists, it builds as a c-shared library (loaded directly by Envoy).
 // Otherwise, it falls back to building as a Go plugin (loaded by composer/goplugin-loader).
-func BuildExtensionFromPath(logger *slog.Logger, dirs *xdg.Directories, manifest *Manifest, path string) (cshared bool, err error) {
+func BuildExtensionFromPath(logger *slog.Logger, dirs *xdg.Directories, manifest *Manifest, path string, opts BuildOptions) (cshared bool, err error) {
 	// Run go mod tidy in the local extension directory to ensure dependencies are up to date.
 	cmd := exec.Command("go", "mod", "tidy")
 	cmd.Dir = path
@@ -96,14 +121,16 @@ func BuildExtensionFromPath(logger *slog.Logger, dirs *xdg.Directories, manifest
 			path, err, string(output))
 	}
 
+	buildManifest := *manifest
+	buildManifest.Debug = opts.Debug
 	if HasCSharedMain(path) {
-		return true, buildExtensionCShared(logger, dirs, manifest, path)
+		return true, buildExtensionCShared(logger, dirs, &buildManifest, path, opts)
 	}
-	return false, buildExtensionPlugin(logger, dirs, manifest, path)
+	return false, buildExtensionPlugin(logger, dirs, &buildManifest, path, opts)
 }
 
 // buildExtensionCShared builds the extension as a c-shared library using the main/ directory.
-func buildExtensionCShared(logger *slog.Logger, dirs *xdg.Directories, manifest *Manifest, path string) error {
+func buildExtensionCShared(logger *slog.Logger, dirs *xdg.Directories, manifest *Manifest, path string, opts BuildOptions) error {
 	csharedManifest := *manifest
 	csharedManifest.CShared = true
 
@@ -112,7 +139,9 @@ func buildExtensionCShared(logger *slog.Logger, dirs *xdg.Directories, manifest 
 		return fmt.Errorf("failed to create cache directory: %w", err)
 	}
 	// #nosec G204
-	cmd := exec.Command("go", "build", "-trimpath", "-buildmode=c-shared", "-o", dest, "./main")
+	args := append([]string{"build"}, opts.goBuildFlags()...)
+	args = append(args, "-buildmode=c-shared", "-o", dest, "./main")
+	cmd := exec.Command("go", args...)
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=1")
 	cmd.Dir = path
 	logger.Debug("building local extension as c-shared", "version", manifest.Version, "path", path, "cmd", cmd.String())
@@ -125,10 +154,12 @@ func buildExtensionCShared(logger *slog.Logger, dirs *xdg.Directories, manifest 
 }
 
 // buildExtensionPlugin builds the extension as a Go plugin using the standalone/ directory.
-func buildExtensionPlugin(logger *slog.Logger, dirs *xdg.Directories, manifest *Manifest, path string) error {
+func buildExtensionPlugin(logger *slog.Logger, dirs *xdg.Directories, manifest *Manifest, path string, opts BuildOptions) error {
 	dest := LocalCacheExtension(dirs, manifest)
+	args := append([]string{"build"}, opts.goBuildFlags()...)
+	args = append(args, "-buildmode=plugin", "-o", dest, "./standalone")
 	// #nosec G204
-	cmd := exec.Command("go", "build", "-trimpath", "-buildmode=plugin", "-o", dest, "./standalone")
+	cmd := exec.Command("go", args...)
 	cmd.Dir = path
 	logger.Debug("building local extension as go-plugin", "version", manifest.Version, "path", path, "cmd", cmd.String())
 	output, err := cmd.CombinedOutput()
@@ -142,12 +173,12 @@ func buildExtensionPlugin(logger *slog.Logger, dirs *xdg.Directories, manifest *
 // BuildLibComposer builds the libcomposer.so from source. The composer source code is expected
 // to be at composerSrcPath. The built libcomposer.so will be saved in the local cache directory for
 // composer to load.
-func BuildLibComposer(logger *slog.Logger, dirs *xdg.Directories, composerSrcPath string, version string, lite bool) error {
+func BuildLibComposer(logger *slog.Logger, dirs *xdg.Directories, composerSrcPath string, version string, lite bool, opts BuildOptions) error {
 	// composer-lite is built into its own independent cache slot (libcomposer-lite.so) so it
 	// never collides with a full composer built from the same source for the same version.
-	dest := LocalCacheComposerLib(dirs, version)
+	dest := LocalCacheComposerLib(dirs, opts.cacheVersion(version))
 	if lite {
-		dest = LocalCacheComposerLiteLib(dirs, version)
+		dest = LocalCacheComposerLiteLib(dirs, opts.cacheVersion(version))
 	}
 	if err := os.MkdirAll(filepath.Dir(dest), 0o750); err != nil {
 		return fmt.Errorf("failed to create composer cache directory: %w", err)
@@ -173,12 +204,8 @@ func BuildLibComposer(logger *slog.Logger, dirs *xdg.Directories, composerSrcPat
 		buildTags += "lite"
 	}
 
-	args := []string{
-		"build",
-		"-trimpath",
-		"-buildmode=c-shared",
-		"-o", dest,
-	}
+	args := append([]string{"build"}, opts.goBuildFlags()...)
+	args = append(args, "-buildmode=c-shared", "-o", dest)
 	if buildTags != "" {
 		args = append(args, "-tags", buildTags)
 	}
