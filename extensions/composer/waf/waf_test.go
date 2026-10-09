@@ -6,9 +6,12 @@
 package waf
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"maps"
+	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 
@@ -1973,7 +1976,8 @@ func Test_PerRouteConfigBlocksRequest(t *testing.T) {
 // for long-lived streams might be far later. The transaction itself stays
 // live until OnStreamComplete, which runs audit logging (phase 5) outside the
 // data path, so responses are never delayed by the audit log writers, and then
-// closes it.
+// closes it. Upgraded and SSE streams are the exception: see
+// Test_TxReleasedEarlyOnLongLivedStreams.
 func Test_TxDoneBeforeStreamComplete(t *testing.T) {
 	directives := []string{
 		"SecRuleEngine On",
@@ -2120,4 +2124,194 @@ func Test_TxDoneBeforeStreamComplete(t *testing.T) {
 			require.Nil(t, p.txContext)
 		})
 	}
+}
+
+// Test_TxReleasedEarlyOnLongLivedStreams complements Test_TxDoneBeforeStreamComplete:
+// upgraded (e.g. WebSocket) and SSE streams can stay open for hours with nothing
+// left to inspect, so their transaction is released as soon as the analysis is
+// done instead of at OnStreamComplete. After the release, every callback must
+// pass through without logging: frames keep flowing for the whole stream lifetime.
+func Test_TxReleasedEarlyOnLongLivedStreams(t *testing.T) {
+	directives := []string{
+		"SecRuleEngine On",
+		`SecRule REQUEST_HEADERS:X-Block-Test "@streq block-me" "id:100001,phase:1,deny,status:403"`,
+		`SecRule REQUEST_HEADERS:X-Engine-Off "@streq yes" "id:100002,phase:1,pass,nolog,ctl:ruleEngine=Off"`,
+	}
+
+	upgradeReq := func(extra map[string][]string) shared.HeaderMap {
+		m := map[string][]string{
+			":authority": {"example.com:8080"}, ":method": {"GET"}, ":path": {"/ws"},
+			"connection": {"Upgrade"}, "upgrade": {"websocket"},
+		}
+		maps.Copy(m, extra)
+		return fake.NewFakeHeaderMap(m)
+	}
+	switchingProtocols := func() shared.HeaderMap {
+		return fake.NewFakeHeaderMap(map[string][]string{":status": {"101"}, "connection": {"Upgrade"}, "upgrade": {"websocket"}})
+	}
+	// Times(1) (gomock default): a second emission would fail the test.
+	expectTxMetrics := func(h *mocks.MockHttpFilterHandle) {
+		h.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		h.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+	}
+
+	for _, tc := range []struct {
+		name  string
+		mode  string
+		setup func(*mocks.MockHttpFilterHandle)
+		// drive runs the callbacks up to the point where the analysis is done.
+		drive func(t *testing.T, p *wafPlugin)
+		// then runs the callbacks that follow it, if any, before frames start flowing.
+		then     func(t *testing.T, p *wafPlugin)
+		released bool
+	}{
+		{
+			name: "upgrade in full mode: released after the response headers",
+			mode: "FULL", setup: expectTxMetrics, released: true,
+			drive: func(t *testing.T, p *wafPlugin) {
+				require.Equal(t, shared.HeadersStatusContinue, p.OnRequestHeaders(upgradeReq(nil), false))
+				require.NotNil(t, p.txContext, "the analysis is not done until the response headers in FULL mode")
+				require.Equal(t, shared.HeadersStatusContinue, p.OnResponseHeaders(switchingProtocols(), false))
+			},
+		},
+		{
+			name: "SSE in full mode: released after the response headers",
+			mode: "FULL", setup: expectTxMetrics, released: true,
+			drive: func(t *testing.T, p *wafPlugin) {
+				req := fake.NewFakeHeaderMap(map[string][]string{":authority": {"example.com:8080"}, ":method": {"GET"}, ":path": {"/events"}})
+				require.Equal(t, shared.HeadersStatusContinue, p.OnRequestHeaders(req, true))
+				resp := fake.NewFakeHeaderMap(map[string][]string{":status": {"200"}, "content-type": {"text/event-stream"}})
+				require.Equal(t, shared.HeadersStatusContinue, p.OnResponseHeaders(resp, false))
+			},
+		},
+		{
+			name: "upgrade in request-only mode: released after the request headers",
+			mode: "REQUEST_ONLY", setup: expectTxMetrics, released: true,
+			drive: func(t *testing.T, p *wafPlugin) {
+				require.Equal(t, shared.HeadersStatusContinue, p.OnRequestHeaders(upgradeReq(nil), false))
+			},
+			then: func(t *testing.T, p *wafPlugin) {
+				require.Equal(t, shared.HeadersStatusContinue, p.OnResponseHeaders(switchingProtocols(), false))
+			},
+		},
+		{
+			// No transaction metrics are emitted with the rule engine off.
+			name: "upgrade with ctl:ruleEngine=Off: released after the request headers",
+			mode: "FULL", released: true,
+			drive: func(t *testing.T, p *wafPlugin) {
+				require.Equal(t, shared.HeadersStatusContinue, p.OnRequestHeaders(upgradeReq(map[string][]string{"x-engine-off": {"yes"}}), false))
+			},
+			then: func(t *testing.T, p *wafPlugin) {
+				require.Equal(t, shared.HeadersStatusContinue, p.OnResponseHeaders(switchingProtocols(), false))
+			},
+		},
+		{
+			// A blocked stream ends right away: it is released by OnStreamComplete as any other stream.
+			name: "blocked upgrade: not released early",
+			mode: "FULL",
+			setup: func(h *mocks.MockHttpFilterHandle) {
+				expectTxMetrics(h)
+				h.EXPECT().IncrementCounterValue(shared.MetricID(2), uint64(1), "example.com", strconv.Itoa(int(ctypes.PhaseRequestHeaders)), "100001").Return(shared.MetricsSuccess)
+				h.EXPECT().SetMetadata(defaultMetadataNamespace, metadataKeyBlockRule, 100001)
+				h.EXPECT().SetMetadata(defaultMetadataNamespace, metadataKeyBlockPhase, int(ctypes.PhaseRequestHeaders))
+				h.EXPECT().SendLocalResponse(uint32(403), nil, nil, "waf_request_headers_blocked")
+			},
+			drive: func(t *testing.T, p *wafPlugin) {
+				require.Equal(t, shared.HeadersStatusStop, p.OnRequestHeaders(upgradeReq(map[string][]string{"x-block-test": {"block-me"}}), false))
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			// Strict handle counting the Log calls.
+			logs := 0
+			h := mocks.NewMockHttpFilterHandle(ctrl)
+			h.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
+			h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).Do(func(...any) { logs++ }).AnyTimes()
+			h.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+			h.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
+			if tc.setup != nil {
+				tc.setup(h)
+			}
+
+			p, ok := newWAFFactory(t, ctrl, directives, tc.mode).Create(h).(*wafPlugin)
+			require.True(t, ok, "failed to cast plugin to wafPlugin")
+
+			tc.drive(t, p)
+
+			if !tc.released {
+				require.NotNil(t, p.txContext, "transaction must stay live until OnStreamComplete")
+				require.False(t, p.txReleased)
+				p.OnStreamComplete()
+				require.Nil(t, p.txContext)
+				return
+			}
+
+			require.Nil(t, p.txContext, "transaction must be released once the analysis is done")
+			require.True(t, p.txReleased)
+
+			// The rest of the stream passes through without logging and without
+			// re-emitting the metrics (Times(1) guard).
+			logs = 0
+			if tc.then != nil {
+				tc.then(t, p)
+			}
+			frame := fake.NewFakeBodyBuffer([]byte("frame"))
+			require.Equal(t, shared.BodyStatusContinue, p.OnRequestBody(frame, false))
+			require.Equal(t, shared.BodyStatusContinue, p.OnResponseBody(frame, false))
+			require.Equal(t, shared.TrailersStatusContinue, p.OnRequestTrailers(fake.NewFakeHeaderMap(nil)))
+			require.Equal(t, shared.TrailersStatusContinue, p.OnResponseTrailers(fake.NewFakeHeaderMap(nil)))
+			p.OnStreamComplete()
+			require.Zero(t, logs, "a released stream must not log on every callback")
+		})
+	}
+}
+
+// Test_TxReleasedEarlyWritesAuditLogOnce verifies that releasing the transaction
+// early runs the audit logging (phase 5), and that OnStreamComplete does not log
+// the same transaction again.
+func Test_TxReleasedEarlyWritesAuditLogOnce(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	auditLog := filepath.Join(t.TempDir(), "audit.log")
+	auditEntries := func() int {
+		content, err := os.ReadFile(filepath.Clean(auditLog))
+		require.NoError(t, err)
+		return bytes.Count(content, []byte("\n"))
+	}
+	factory := newWAFFactory(t, ctrl, []string{
+		"SecRuleEngine On",
+		"SecAuditEngine On", "SecAuditLogType Serial", "SecAuditLogFormat JSON", "SecAuditLog " + auditLog,
+	}, "FULL")
+
+	h := newPluginHandleWithoutPerRouteConfig(ctrl)
+	h.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+	h.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+	h.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+	h.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
+
+	p, ok := factory.Create(h).(*wafPlugin)
+	require.True(t, ok, "failed to cast plugin to wafPlugin")
+
+	p.OnRequestHeaders(fake.NewFakeHeaderMap(map[string][]string{
+		":authority": {"example.com:8080"}, ":method": {"GET"}, ":path": {"/ws"},
+		"connection": {"Upgrade"}, "upgrade": {"websocket"},
+	}), false)
+	require.Zero(t, auditEntries())
+
+	p.OnResponseHeaders(fake.NewFakeHeaderMap(map[string][]string{":status": {"101"}, "connection": {"Upgrade"}, "upgrade": {"websocket"}}), false)
+	require.Equal(t, 1, auditEntries(), "the audit log must be written when the transaction is released")
+
+	p.OnStreamComplete()
+	require.Equal(t, 1, auditEntries(), "the transaction must not be logged again at stream end")
+}
+
+// Test_ReleaseTransactionWithoutTransaction verifies that releasing is a no-op,
+// rather than a nil dereference, when there is no transaction.
+func Test_ReleaseTransactionWithoutTransaction(t *testing.T) {
+	p := &wafPlugin{}
+	require.NotPanics(t, p.releaseTransaction)
 }
