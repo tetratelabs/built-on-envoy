@@ -128,6 +128,12 @@ jobs:
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
+      # The debug tests attach debuggers to Envoy, which is not their child process. Allow it, and install
+      # the debuggers used to debug Rust extensions.
+      - name: Set up debuggers
+        run: |
+          sudo sysctl -w kernel.yama.ptrace_scope=0
+          sudo apt-get update && sudo apt-get install -y gdb gdbserver
       - run: make build_image
       - run: make test-e2e
 

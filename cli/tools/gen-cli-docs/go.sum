@@ -12,6 +12,8 @@ github.com/alecthomas/kong v1.16.1 h1:ixhCt93XkJ98kGposQ54+bl0IK6XwqB40AsMynU7Z8
 github.com/alecthomas/kong v1.16.1/go.mod h1:wrlbXem1CWqUV5Vbmss5ISYhsVPkBb1Yo7YKJghju2I=
 github.com/alecthomas/repr v0.5.2 h1:SU73FTI9D1P5UNtvseffFSGmdNci/O6RsqzeXJtP0Qs=
 github.com/alecthomas/repr v0.5.2/go.mod h1:Fr0507jx4eOXV7AlPV6AVZLYrLIuIeSOWtW57eE/O/4=
+github.com/bluekeyes/go-gitdiff v0.8.1 h1:lL1GofKMywO17c0lgQmJYcKek5+s8X6tXVNOLxy4smI=
+github.com/bluekeyes/go-gitdiff v0.8.1/go.mod h1:WWAk1Mc6EgWarCrPFO+xeYlujPu98VuLW3Tu+B/85AE=
 github.com/cenkalti/backoff/v4 v4.3.0 h1:MyRJ/UdXutAwSAT+s3wNd7MfTIcy71VQueUuFK343L8=
 github.com/cenkalti/backoff/v4 v4.3.0/go.mod h1:Y3VNntkOUPxTVeUxJ/G5vcM//AlwfmyYozVcomhLiZE=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=

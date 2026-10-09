@@ -139,6 +139,9 @@ Commands:
   run [flags]
     Run Envoy with extensions
 
+  debug [flags]
+    Run Envoy with local extensions built for debugging and attach the debugger
+
   gen-config [flags]
     Generate Envoy configuration with extensions
 

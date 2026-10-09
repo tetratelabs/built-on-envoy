@@ -73,6 +73,9 @@ type (
 		// (via the main/ directory) rather than as a Go plugin (via standalone/).
 		// Set by BuildExtensionFromPath when the extension has a main/ directory.
 		CShared bool `yaml:"-" json:"-"`
+		// Debug indicates the extension was built for debugging (no optimizations, full debug info).
+		// Debug builds are stored in a separate cache slot so they are never picked up by regular runs.
+		Debug bool `yaml:"-" json:"-"`
 	}
 
 	// Example represents an example usage of an extension.
