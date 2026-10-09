@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
+	internaltesting "github.com/tetratelabs/built-on-envoy/internal/testing"
 )
 
 func parseDebug(t *testing.T, args ...string) (*Debug, error) {
@@ -156,4 +157,48 @@ func TestSymlinkSubstitutePath(t *testing.T) {
 
 	_, _, ok = symlinkSubstitutePath(filepath.Join(realDir, "ext"))
 	require.False(t, ok)
+}
+
+func TestDebugRun(t *testing.T) {
+	// Run Envoy natively and fail before starting it, to check the run options are propagated.
+	d := &Debug{goos: "linux", RunOpts: Run{
+		Local: []string{"../../extensions/composer/example"},
+		Envoy: EnvoyFlags{Path: filepath.Join(t.TempDir(), "envoy")},
+	}}
+	err := d.Run(t.Context(), &xdg.Directories{DataHome: t.TempDir()}, internaltesting.NewTLogger(t))
+	require.ErrorContains(t, err, "specified Envoy binary not found")
+	require.False(t, d.RunOpts.Docker.Enabled)
+}
+
+func TestSymlinkHints(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	realDir := filepath.Join(dir, "real")
+	require.NoError(t, os.MkdirAll(filepath.Join(realDir, "ext1"), 0o750))
+	require.NoError(t, os.MkdirAll(filepath.Join(realDir, "ext2"), 0o750))
+	link := filepath.Join(dir, "link")
+	require.NoError(t, os.Symlink(realDir, link))
+
+	// Paths through the same symlink produce a single hint, and paths without symlinks produce none.
+	hints := symlinkHints([]string{
+		filepath.Join(link, "ext1"),
+		filepath.Join(link, "ext2"),
+		filepath.Join(realDir, "ext1"),
+	})
+	require.Len(t, hints, 1)
+	require.Contains(t, hints[0], filepath.Join(link, "ext1")+" resolves to "+filepath.Join(realDir, "ext1"))
+	require.Contains(t, hints[0], `"substitutePath": [{ "from": "`+realDir+`", "to": "`+link+`" }]`)
+
+	require.Empty(t, symlinkHints([]string{filepath.Join(dir, "missing")}))
+}
+
+func TestMustEvalSymlinks(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	link := filepath.Join(dir, "link")
+	require.NoError(t, os.Symlink(dir, link))
+
+	require.Equal(t, dir, mustEvalSymlinks(link))
+	missing := filepath.Join(dir, "missing")
+	require.Equal(t, missing, mustEvalSymlinks(missing))
 }

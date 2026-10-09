@@ -120,14 +120,22 @@ func TestLocalCacheExtensionDirDebug(t *testing.T) {
 		manifest *Manifest
 		want     string
 	}{
-		{&Manifest{Name: "ext", Version: "1.0.0", Type: TypeGo, CShared: true, Debug: true},
-			"/home/user/.local/share/extensions/dym/ext/1.0.0-debug/libext.so"},
-		{&Manifest{Name: "ext", Version: "1.0.0", Type: TypeGo, Debug: true},
-			"/home/user/.local/share/extensions/goplugin/ext/1.0.0-debug/plugin.so"},
-		{&Manifest{Name: "opa", Parent: ComposerBundle, Version: "1.0.0", Type: TypeGo, CShared: true, Debug: true},
-			"/home/user/.local/share/extensions/dym/composer/1.0.0-debug/libcomposer.so"},
-		{&Manifest{Name: "opa", Parent: ComposerBundle, Version: "1.0.0", Type: TypeGo, CShared: true},
-			"/home/user/.local/share/extensions/dym/composer/1.0.0/libcomposer.so"},
+		{
+			&Manifest{Name: "ext", Version: "1.0.0", Type: TypeGo, CShared: true, Debug: true},
+			"/home/user/.local/share/extensions/dym/ext/1.0.0-debug/libext.so",
+		},
+		{
+			&Manifest{Name: "ext", Version: "1.0.0", Type: TypeGo, Debug: true},
+			"/home/user/.local/share/extensions/goplugin/ext/1.0.0-debug/plugin.so",
+		},
+		{
+			&Manifest{Name: "opa", Parent: ComposerBundle, Version: "1.0.0", Type: TypeGo, CShared: true, Debug: true},
+			"/home/user/.local/share/extensions/dym/composer/1.0.0-debug/libcomposer.so",
+		},
+		{
+			&Manifest{Name: "opa", Parent: ComposerBundle, Version: "1.0.0", Type: TypeGo, CShared: true},
+			"/home/user/.local/share/extensions/dym/composer/1.0.0/libcomposer.so",
+		},
 	}
 	for _, tt := range tests {
 		require.Equal(t, tt.want, LocalCacheExtension(dirs, tt.manifest))

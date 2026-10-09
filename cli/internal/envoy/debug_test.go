@@ -29,8 +29,11 @@ func TestMergeGODEBUG(t *testing.T) {
 	}{
 		{"empty", "", []string{"cgocheck=0"}, "cgocheck=0"},
 		{"keeps existing", "madvdontneed=1", []string{"cgocheck=0"}, "madvdontneed=1,cgocheck=0"},
-		{"overrides existing", "cgocheck=1,madvdontneed=1", []string{"cgocheck=0", "asyncpreemptoff=1"},
-			"madvdontneed=1,cgocheck=0,asyncpreemptoff=1"},
+		{
+			"overrides existing", "cgocheck=1,madvdontneed=1",
+			[]string{"cgocheck=0", "asyncpreemptoff=1"},
+			"madvdontneed=1,cgocheck=0,asyncpreemptoff=1",
+		},
 		{"ignores empty entries", ",madvdontneed=1,", []string{"cgocheck=0"}, "madvdontneed=1,cgocheck=0"},
 	}
 	for _, tt := range tests {
@@ -80,7 +83,7 @@ func TestPatchDelve(t *testing.T) {
 
 	require.NoError(t, patchDelve(src))
 	read := func(file string) string {
-		content, err := os.ReadFile(filepath.Join(src, file))
+		content, err := os.ReadFile(filepath.Clean(filepath.Join(src, file)))
 		require.NoError(t, err)
 		return string(content)
 	}
@@ -91,6 +94,7 @@ func TestPatchDelve(t *testing.T) {
 
 	// The patched sources must compile on the platforms boe debug supports.
 	for _, goarch := range []string{"amd64", "arm64"} {
+		// #nosec G204
 		cmd := exec.Command("go", "build", "-o", os.DevNull, "./cmd/dlv")
 		cmd.Dir = src
 		cmd.Env = append(os.Environ(), "GOOS=linux", "GOARCH="+goarch, "CGO_ENABLED=0", "GOFLAGS=-mod=mod")

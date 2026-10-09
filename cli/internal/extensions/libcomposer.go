@@ -141,6 +141,7 @@ func buildExtensionCShared(logger *slog.Logger, dirs *xdg.Directories, manifest 
 	// #nosec G204
 	args := append([]string{"build"}, opts.goBuildFlags()...)
 	args = append(args, "-buildmode=c-shared", "-o", dest, "./main")
+	// #nosec G204
 	cmd := exec.Command("go", args...)
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=1")
 	cmd.Dir = path

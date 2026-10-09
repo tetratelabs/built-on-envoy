@@ -146,30 +146,30 @@ func symlinkHints(paths []string) []string {
 // its symlinks resolved: from is the resolved prefix and to the prefix recorded in the debug information.
 // For example, for /tmp/ext on macOS, it returns ("/private/tmp", "/tmp").
 func symlinkSubstitutePath(path string) (from, to string, ok bool) {
-	abs, err := filepath.Abs(path)
+	absolute, err := filepath.Abs(path)
 	if err != nil {
 		return "", "", false
 	}
-	real, err := filepath.EvalSymlinks(abs)
-	if err != nil || real == abs {
+	resolvedAbs, err := filepath.EvalSymlinks(absolute)
+	if err != nil || resolvedAbs == absolute {
 		return "", "", false
 	}
 	// Strip the common trailing path elements to get the minimal mapping, but keep the symlink itself
 	// (e.g. map /private/tmp to /tmp, not /private to /).
-	for filepath.Base(abs) == filepath.Base(real) {
-		parentAbs, parentReal := filepath.Dir(abs), filepath.Dir(real)
+	for filepath.Base(absolute) == filepath.Base(resolvedAbs) {
+		parentAbs, parentReal := filepath.Dir(absolute), filepath.Dir(resolvedAbs)
 		if resolved, err := filepath.EvalSymlinks(parentAbs); err != nil || resolved != parentReal || parentAbs == parentReal {
 			break
 		}
-		abs, real = parentAbs, parentReal
+		absolute, resolvedAbs = parentAbs, parentReal
 	}
-	return real, abs, true
+	return resolvedAbs, absolute, true
 }
 
 // mustEvalSymlinks returns the path with symlinks resolved, or the path itself if that fails.
 func mustEvalSymlinks(path string) string {
-	if real, err := filepath.EvalSymlinks(path); err == nil {
-		return real
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
 	}
 	return path
 }
