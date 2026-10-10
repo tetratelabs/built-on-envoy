@@ -6,6 +6,7 @@
 package e2e
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -28,12 +29,11 @@ import (
 // breakpoint is hit when a request is sent to Envoy.
 func TestDebugLocalComposer(t *testing.T) {
 	internaltesting.MaybeSkipLongRunningTest(t)
-	if runtime.GOOS == "linux" {
-		if _, err := exec.LookPath("dlv"); err != nil {
-			t.Skip("dlv is required to run boe debug on Linux")
+	// boe builds its own Delve. Go extensions are debugged in a container on non-Linux platforms.
+	if runtime.GOOS != "linux" {
+		if err := exec.Command("docker", "info").Run(); err != nil {
+			t.Skipf("docker is required to debug Go extensions on %s", runtime.GOOS)
 		}
-	} else if err := exec.Command("docker", "info").Run(); err != nil {
-		t.Skipf("docker is required to run boe debug on %s", runtime.GOOS)
 	}
 
 	extensionDir, err := filepath.Abs("../../extensions/composer/example")
@@ -44,7 +44,7 @@ func TestDebugLocalComposer(t *testing.T) {
 	ports := internaltesting.FreePorts(t, 3)
 	proxyPort, adminPort, dlvPort := ports[0], ports[1], ports[2]
 	internaltesting.RunBoe(t, cliBin, "debug", proxyPort, adminPort,
-		"--dlv-port", strconv.Itoa(dlvPort),
+		"--debug-port", strconv.Itoa(dlvPort),
 		"--local", extensionDir,
 	)
 
@@ -117,6 +117,84 @@ func TestDebugLocalComposer(t *testing.T) {
 		require.Equal(t, "example-value", resp.Header.Get("x-example-response-header"))
 	case <-time.After(60 * time.Second):
 		t.Fatal("request did not complete after resuming the target")
+	}
+}
+
+// TestDebugLocalRust runs a Rust extension with `boe debug`, connects LLDB to the GDB remote debug server attached
+// to Envoy (as an IDE would do), sets a breakpoint by file and line in the extension source, and verifies the
+// breakpoint is hit when a request is sent to Envoy. It connects twice to verify debuggers can reconnect, and
+// that Envoy keeps serving requests when no debugger is connected.
+func TestDebugLocalRust(t *testing.T) {
+	internaltesting.MaybeSkipLongRunningTest(t)
+	lldb, err := exec.LookPath("lldb")
+	if err != nil {
+		t.Skip("lldb is required to connect to the debug server")
+	}
+	if _, err = exec.LookPath("cargo"); err != nil {
+		t.Skip("cargo is required to build Rust extensions")
+	}
+	if runtime.GOOS == "linux" {
+		if _, err = exec.LookPath("gdbserver"); err != nil {
+			t.Skip("gdbserver is required to debug Rust extensions on Linux")
+		}
+	}
+
+	extensionDir, err := filepath.Abs("../../extensions/ip-restriction")
+	require.NoError(t, err)
+	sourceFile := filepath.Join(extensionDir, "src", "lib.rs")
+	const sourceLine = 144 // First statement in Filter::on_request_headers
+
+	ports := internaltesting.FreePorts(t, 3)
+	proxyPort, adminPort, debugPort := ports[0], ports[1], ports[2]
+	internaltesting.RunBoe(t, cliBin, "debug", proxyPort, adminPort,
+		"--debug-port", strconv.Itoa(debugPort),
+		// The minimum Envoy version of ip-restriction does not support the generated dynamic module config.
+		"--envoy-version", "1.38.0",
+		"--local", extensionDir,
+		"--config", `{"deny_addresses":["192.168.1.50"]}`,
+	)
+	internaltesting.RequireEventuallyGet(t, fmt.Sprintf("http://localhost:%d/ready", adminPort), internaltesting.EqualStatus(http.StatusOK))
+
+	url := fmt.Sprintf("http://localhost:%d/status/200", proxyPort)
+	for session := range 2 {
+		// The debug server is only attached while a debugger is connected, so requests go through.
+		internaltesting.RequireEventuallyGet(t, url, internaltesting.EqualStatus(http.StatusOK))
+
+		// Send a request once the breakpoint is set. It blocks while the breakpoint is hit.
+		respCh := make(chan int, 1)
+		go func() {
+			time.Sleep(10 * time.Second)
+			c := &http.Client{Timeout: 60 * time.Second}
+			resp, err := c.Get(url) //nolint:noctx
+			if err != nil {
+				respCh <- 0
+				return
+			}
+			_ = resp.Body.Close()
+			respCh <- resp.StatusCode
+		}()
+
+		ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
+		out, err := exec.CommandContext(ctx, lldb, "--batch", //nolint:gosec // test command
+			"-o", "gdb-remote 127.0.0.1:"+strconv.Itoa(debugPort),
+			"-o", fmt.Sprintf("breakpoint set -f %s -l %d", sourceFile, sourceLine),
+			"-o", "continue",
+			"-o", "frame variable _end_stream",
+			"-o", "detach",
+		).CombinedOutput()
+		cancel()
+		require.NoError(t, err, "session %d: %s", session, out)
+		require.Contains(t, string(out), "stop reason = breakpoint 1.1", "session %d: %s", session, out)
+		require.Contains(t, string(out), "on_request_headers", "session %d: %s", session, out)
+		require.Contains(t, string(out), "_end_stream = true", "session %d: %s", session, out)
+
+		// After detaching, Envoy keeps running and the request completes.
+		select {
+		case status := <-respCh:
+			require.Equal(t, http.StatusOK, status, "session %d: request failed", session)
+		case <-time.After(60 * time.Second):
+			t.Fatalf("session %d: request did not complete after detaching", session)
+		}
 	}
 }
 
