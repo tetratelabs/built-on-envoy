@@ -85,8 +85,8 @@ require (
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/cloudflare/circl v1.6.3 // indirect
-	github.com/corazawaf/coraza/v3 v3.7.0 // indirect
-	github.com/corazawaf/libinjection-go v0.3.2 // indirect
+	github.com/corazawaf/coraza/v3 v3.8.1 // indirect
+	github.com/corazawaf/libinjection-go v0.3.3 // indirect
 	github.com/coreruleset/albedo v0.3.0 // indirect
 	github.com/coreruleset/ftw-tests-schema/v2 v2.3.0 // indirect
 	github.com/coreruleset/go-ftw/v2 v2.1.2 // indirect
