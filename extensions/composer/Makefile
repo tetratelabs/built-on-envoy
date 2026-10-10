@@ -5,7 +5,8 @@
 
 ROOT       := $(shell git rev-parse --show-toplevel)
 GO_VERSION := $(shell sed -ne 's/^go //gp' $(ROOT)/extensions/composer/go.mod)
-GO_TOOL    := go tool -modfile=$(ROOT)/tools/go.mod
+GO_TOOL    := go tool -modfile="$(ROOT)/tools/go.mod"
+FFI_LINTER_DIR := $(ROOT)/tools/deadcode-lint-plugin
 
 GO_TEST_ARGS ?=
 
@@ -85,7 +86,7 @@ force_target_os ?= $(host_os)
 # Some IDEs like Goland place `.go` files in the `.idea` directory when using code templates. Using a
 # git command to find the files ensures that only relevant files are formatted and that git-ignored
 # files do not get in the way
-GO_FILES=$(shell git ls-files --cached --others --exclude-standard | grep '\.go$$')
+GO_FILES=$(wildcard $(shell git ls-files --cached --others --exclude-standard -- '*.go'))
 .PHONY: format
 format:
 	@echo "format => *.go"
@@ -95,8 +96,10 @@ format:
 
 .PHONY: lint
 lint:
+	@$(MAKE) -C "$(FFI_LINTER_DIR)" check
 	@echo "golangci-lint => ./..."
-	@$(GO_TOOL) golangci-lint run
+	@lint_build_tags=$$($(GO_TOOL) yq '.linters.settings.custom.ffideadcode.settings.composer.build-tags | join(",")' "$(ROOT)/.golangci.yml") && \
+		$(GO_TOOL) golangci-lint run --enable=ffideadcode --build-tags="$$lint_build_tags" ./...
 
 .PHONY: test
 test:

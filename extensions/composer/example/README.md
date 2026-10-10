@@ -71,6 +71,14 @@ The plugin is compiled directly into the Composer dynamic module binary.
 boe run --extension example-go
 ```
 
+## Production reachability analysis
+
+Composer's `make lint` uses the [FFI-aware golangci plugin](../../../tools/deadcode-lint-plugin/README.md)
+alongside the normal linters. It discovers each Go extension from its manifest,
+derives embedded and standalone entrypoints, and follows the actual SDK's FFI
+callback dispatch. Each extension is analyzed independently, excluding tests.
+No synthetic analysis executable or per-extension linter configuration is needed.
+
 ## Go Runtime Compatibility
 
 When loading external plugins, the Go plugin system requires:

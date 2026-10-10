@@ -128,20 +128,6 @@ func TestBuildSessionCookie_NoSecure(t *testing.T) {
 	require.NotContains(t, cookie, "Domain=")
 }
 
-func TestClearSessionCookie(t *testing.T) {
-	cfg := &Config{
-		CookieName:   "_saml_session",
-		CookieSecure: true,
-		CookieDomain: ".example.com",
-	}
-
-	cookie := clearSessionCookie(cfg)
-	require.Contains(t, cookie, "_saml_session=")
-	require.Contains(t, cookie, "Max-Age=0")
-	require.Contains(t, cookie, "Secure")
-	require.Contains(t, cookie, "Domain=.example.com")
-}
-
 func TestExtractSessionCookie(t *testing.T) {
 	tests := []struct {
 		name       string

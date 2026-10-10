@@ -20,6 +20,15 @@ import (
 	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
 )
 
+func headerValue(headers [][2]string, key string) string {
+	for _, header := range headers {
+		if header[0] == key {
+			return header[1]
+		}
+	}
+	return ""
+}
+
 func testConfig(t *testing.T) *parsedConfig {
 	t.Helper()
 	cfg := openfgaConfig{

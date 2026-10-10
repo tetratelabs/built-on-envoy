@@ -29,7 +29,13 @@ jobs:
           filters: |
             extensions:
               - 'extensions/**'
-          predicate-quantifier: every  # Make the filters be AND-ed
+              - 'tools/deadcode-lint-plugin/**'
+              - 'tools/go.mod'
+              - 'tools/go.sum'
+              - '.golangci.yml'
+              - '.github/workflows/extensions.yaml'
+              - '.github/workflows/extensions-go.yaml'
+          predicate-quantifier: some  # Any relevant extension or scanner change triggers Composer checks.
           token: "" # don't use github api
     outputs:
       extensions: ${{ steps.changes.outputs.extensions }}
