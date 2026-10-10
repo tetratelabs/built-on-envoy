@@ -36,9 +36,10 @@ Thumbs.db
 *.so
 
 # Rust
-# Ignore Cargo build artifacts and lock in every subdirectory
+# Ignore Cargo build artifacts and standalone lockfiles; track the workspace lock.
 **/target/
 **/Cargo.lock
+!/Cargo.lock
 **/*.dylib
 **/.rustc_info.json
 **/lcov.info
