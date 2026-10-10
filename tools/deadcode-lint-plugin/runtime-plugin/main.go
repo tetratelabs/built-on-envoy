@@ -11,10 +11,14 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"go/ast"
+	"io/fs"
+	"os"
 	"path/filepath"
 
+	"golang.org/x/mod/modfile"
 	"golang.org/x/tools/go/analysis"
 
 	"github.com/tetratelabs/built-on-envoy/cli/tools/deadcode-lint-plugin/scanner"
@@ -23,6 +27,7 @@ import (
 const linterName = "ffideadcode"
 
 type settings struct {
+	Module   string                     `json:"module"`
 	Targets  []scanner.Target           `json:"targets"`
 	Composer *scanner.ComposerDiscovery `json:"composer"`
 }
@@ -39,11 +44,28 @@ func New(conf any) ([]*analysis.Analyzer, error) {
 	if err = decoder.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("decode settings: %w", err)
 	}
+	if cfg.Composer != nil && len(cfg.Targets) != 0 {
+		return nil, fmt.Errorf("configure composer discovery or explicit targets, not both")
+	}
+	if cfg.Module != "" {
+		dir, moduleErr := moduleDirectory(cfg.Module)
+		if moduleErr != nil {
+			return nil, moduleErr
+		}
+		if dir == "" {
+			return []*analysis.Analyzer{newReporter(nil)}, nil
+		}
+		if cfg.Composer != nil && cfg.Composer.Directory != "" && !filepath.IsAbs(cfg.Composer.Directory) {
+			cfg.Composer.Directory = filepath.Join(dir, cfg.Composer.Directory)
+		}
+		for i := range cfg.Targets {
+			if !filepath.IsAbs(cfg.Targets[i].Directory) {
+				cfg.Targets[i].Directory = filepath.Join(dir, cfg.Targets[i].Directory)
+			}
+		}
+	}
 	targets := cfg.Targets
 	if cfg.Composer != nil {
-		if len(targets) != 0 {
-			return nil, fmt.Errorf("configure composer discovery or explicit targets, not both")
-		}
 		targets, err = scanner.DiscoverComposer(*cfg.Composer)
 		if err != nil {
 			return nil, fmt.Errorf("discover composer extensions: %w", err)
@@ -67,13 +89,6 @@ func New(conf any) ([]*analysis.Analyzer, error) {
 		return nil, fmt.Errorf("encode findings: %w", err)
 	}
 	digest := sha256.Sum256(encoded)
-	reporter := &analysis.Analyzer{
-		Name: linterName,
-		Doc:  "Reports functions unreachable from executable and imported SDK FFI entrypoints.",
-		Run: func(pass *analysis.Pass) (any, error) {
-			return nil, report(pass, byPackage[pass.Pkg.Path()])
-		},
-	}
 	// Golangci v2.13.2 hashes analyzer names for its issue cache. Import-only package
 	// hashes cannot invalidate a finding when a different caller package changes.
 	cacheSeed := &analysis.Analyzer{
@@ -81,7 +96,49 @@ func New(conf any) ([]*analysis.Analyzer, error) {
 		Doc:  "Keys cached diagnostics by the complete whole-program findings.",
 		Run:  func(*analysis.Pass) (any, error) { return nil, nil },
 	}
-	return []*analysis.Analyzer{reporter, cacheSeed}, nil
+	return []*analysis.Analyzer{newReporter(byPackage), cacheSeed}, nil
+}
+
+func newReporter(byPackage map[string][]scanner.Finding) *analysis.Analyzer {
+	return &analysis.Analyzer{
+		Name: linterName,
+		Doc:  "Reports functions unreachable from executable and imported SDK FFI entrypoints.",
+		Run: func(pass *analysis.Pass) (any, error) {
+			return nil, report(pass, byPackage[pass.Pkg.Path()])
+		},
+	}
+}
+
+func moduleDirectory(expected string) (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("working directory: %w", err)
+	}
+	for {
+		filename := filepath.Join(dir, "go.mod")
+		data, readErr := os.ReadFile(filename) //nolint:gosec // The module file is resolved from the process working directory.
+		if readErr == nil {
+			module, parseErr := modfile.Parse(filename, data, nil)
+			if parseErr != nil {
+				return "", fmt.Errorf("parse working module: %w", parseErr)
+			}
+			if module.Module == nil {
+				return "", fmt.Errorf("working module %q has no module directive", filename)
+			}
+			if module.Module.Mod.Path == expected {
+				return dir, nil
+			}
+			return "", nil
+		}
+		if !errors.Is(readErr, fs.ErrNotExist) {
+			return "", fmt.Errorf("read working module: %w", readErr)
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", nil
+		}
+		dir = parent
+	}
 }
 
 func report(pass *analysis.Pass, findings []scanner.Finding) error {

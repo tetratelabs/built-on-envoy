@@ -27,7 +27,6 @@ jobs:
             extensions/composer/go.sum
             tools/go.sum
 
-      - run: make -C ../../tools/deadcode-lint-plugin check
       - run: make format lint
       - run: make build
       - run: make build_plugins

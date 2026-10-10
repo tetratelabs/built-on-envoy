@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go/types"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -19,6 +20,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"golang.org/x/tools/go/analysis"
 
 	"github.com/tetratelabs/built-on-envoy/cli/tools/deadcode-lint-plugin/scanner"
 )
@@ -66,14 +69,15 @@ func TestRuntimePluginCommand(t *testing.T) {
 		"version": "2",
 		"linters": map[string]any{
 			"default": "none",
-			"enable":  []string{"ffideadcode"},
+			"enable":  []string{"govet"},
 			"settings": map[string]any{
 				"custom": map[string]any{
 					"ffideadcode": map[string]any{
 						"type": "goplugin",
 						"path": pluginPath,
 						"settings": map[string]any{
-							"composer": scanner.ComposerDiscovery{Directory: fixturePath},
+							"module":   "github.com/tetratelabs/built-on-envoy/cli/tools/deadcode-lint-plugin/fixture",
+							"composer": scanner.ComposerDiscovery{Directory: "."},
 						},
 					},
 				},
@@ -88,12 +92,13 @@ func TestRuntimePluginCommand(t *testing.T) {
 		t.Fatalf("write golangci config: %v", configWriteErr)
 	}
 
-	runLint := func() ([]byte, error) {
-		cmd := exec.Command("go", "tool", "-modfile="+toolsMod, "golangci-lint", "run", "--config", configPath, "./...") //nolint:gosec // Paths point to this test's temporary fixture, config, cache, and repository module file.
-		cmd.Dir = fixturePath
+	runLintFrom := func(directory string) ([]byte, error) {
+		cmd := exec.Command("go", "tool", "-modfile="+toolsMod, "golangci-lint", "run", "--config", configPath, "--enable", linterName, "./...") //nolint:gosec // Paths point to this test's temporary fixture, config, cache, and repository module file.
+		cmd.Dir = directory
 		cmd.Env = append(os.Environ(), "GOLANGCI_LINT_CACHE="+cacheDir)
 		return cmd.CombinedOutput()
 	}
+	runLint := func() ([]byte, error) { return runLintFrom(fixturePath) }
 	assertDiagnostics := func(label string, output []byte, runErr error, want []string, absent []string) {
 		t.Helper()
 		var exitError *exec.ExitError
@@ -120,6 +125,8 @@ func TestRuntimePluginCommand(t *testing.T) {
 		output, runErr := runLint()
 		assertDiagnostics(label, output, runErr, want, []string{"genericLive"})
 	}
+	nestedOutput, nestedErr := runLintFrom(filepath.Join(fixturePath, "probe"))
+	assertDiagnostics("module subdirectory", nestedOutput, nestedErr, want, []string{"genericLive"})
 
 	pluginSourcePath := filepath.Join(fixturePath, "probe", "plugin.go")
 	pluginSource, pluginReadErr := os.ReadFile(pluginSourcePath) //nolint:gosec // The source file is in the copied temporary fixture.
@@ -211,6 +218,94 @@ func init() {
 	output, runErr = runLint()
 	if runErr == nil || !strings.Contains(string(output), "packages contain errors") {
 		t.Fatalf("expected package loading failure to be explicit, got %v\n%s", runErr, output)
+	}
+
+	// A broken Composer tree must not affect a different module using the same config.
+	unrelatedDir := filepath.Join(tempDir, "cli")
+	if mkdirErr := os.Mkdir(unrelatedDir, 0o750); mkdirErr != nil {
+		t.Fatal(mkdirErr)
+	}
+	for name, contents := range map[string]string{
+		"go.mod": "module test.invalid/cli\n\ngo 1.27.1\n",
+		"cli.go": "package cli\nfunc Keep() {}\n",
+	} {
+		if writeErr := os.WriteFile(filepath.Join(unrelatedDir, name), []byte(contents), 0o600); writeErr != nil { //nolint:gosec // Files are confined to this test's temporary module.
+			t.Fatal(writeErr)
+		}
+	}
+	for _, enabled := range []bool{false, true} {
+		args := []string{"tool", "-modfile=" + toolsMod, "golangci-lint", "run", "--config", configPath, "--verbose"}
+		if enabled {
+			args = append(args, "--enable", linterName)
+		}
+		args = append(args, "./...")
+		cmd := exec.Command("go", args...) //nolint:gosec // Arguments use repository tools and temporary test paths.
+		cmd.Dir = unrelatedDir
+		cmd.Env = append(os.Environ(), "GOLANGCI_LINT_CACHE="+cacheDir)
+		otherOutput, otherErr := cmd.CombinedOutput()
+		if otherErr != nil || !strings.Contains(string(otherOutput), "Loaded "+pluginPath+": "+linterName) {
+			t.Fatalf("unrelated module (enabled=%t): expected loaded plugin without scanning, got %v\n%s", enabled, otherErr, otherOutput)
+		}
+	}
+}
+
+func TestModuleScope(t *testing.T) {
+	for _, test := range []struct {
+		name         string
+		module       string
+		nestedModule string
+		wantError    string
+	}{
+		{name: "unrelated module", module: "module test.invalid/cli\n"},
+		{name: "module name prefix", module: "module test.invalid/composer-extra\n"},
+		{name: "no module"},
+		{name: "nested unrelated module", module: "module test.invalid/composer\n", nestedModule: "module test.invalid/cli\n"},
+		{name: "active module preserves discovery errors", module: "module test.invalid/composer\n", wantError: "read composer directory"},
+		{name: "malformed module", module: "not a module file\n", wantError: "parse working module"},
+		{name: "missing module directive", module: "go 1.27.1\n", wantError: "has no module directive"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if test.module != "" {
+				if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(test.module), 0o600); err != nil { //nolint:gosec // The module file is in this test's temporary directory.
+					t.Fatal(err)
+				}
+			}
+			child := filepath.Join(dir, "child")
+			if err := os.Mkdir(child, 0o750); err != nil {
+				t.Fatal(err)
+			}
+			if test.nestedModule != "" {
+				if err := os.WriteFile(filepath.Join(child, "go.mod"), []byte(test.nestedModule), 0o600); err != nil { //nolint:gosec // The nested module is in this test's temporary directory.
+					t.Fatal(err)
+				}
+			}
+			t.Chdir(child)
+			analyzers, err := New(map[string]any{
+				"module":   "test.invalid/composer",
+				"composer": scanner.ComposerDiscovery{Directory: "missing"},
+			})
+			if test.wantError != "" {
+				if err == nil || !strings.Contains(err.Error(), test.wantError) {
+					t.Fatalf("expected %q, got %v", test.wantError, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unrelated module attempted discovery: %v", err)
+			}
+			for _, analyzer := range analyzers {
+				_, runErr := analyzer.Run(&analysis.Pass{
+					Pkg: types.NewPackage("test.invalid/cli", "cli"),
+					Report: func(diagnostic analysis.Diagnostic) {
+						t.Errorf("unexpected diagnostic: %s", diagnostic.Message)
+					},
+				})
+				if runErr != nil {
+					t.Fatal(runErr)
+				}
+			}
+		})
 	}
 }
 

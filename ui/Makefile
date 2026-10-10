@@ -50,6 +50,7 @@ test-coverage: compiled/bundle.js  ## Run the UI tests with coverage check.
 
 .PHONY: lint
 lint: compiled/bundle.js  ## Run linters on the UI code.
+	@$(MAKE) -C "$(ROOT)/tools/deadcode-lint-plugin" runtime-plugin
 	@echo "Linting UI code..."
 	@cd src && npm run lint
 	@$(GO_TOOL) golangci-lint run ./...

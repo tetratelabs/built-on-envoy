@@ -8,6 +8,7 @@ ROOT := $(abspath ../..)
 GO_TOOL := go tool -modfile="$(ROOT)/tools/go.mod"
 GO_FILES := $(wildcard scanner/*.go runtime-plugin/*.go testdata/fixture/probe/*.go testdata/fixture/probe/*/*.go)
 PLUGIN_SOURCES := $(filter-out %_test.go,$(wildcard scanner/*.go runtime-plugin/*.go))
+GO_TEST_ARGS ?=
 
 .PHONY: check format lint test runtime-plugin runtime-plugin-check
 check: lint test
@@ -15,12 +16,12 @@ check: lint test
 format:
 	$(GO_TOOL) golangci-lint fmt $(GO_FILES)
 
-lint:
+lint: runtime-plugin
 	$(GO_TOOL) golangci-lint run ./...
 
 test:
 	# Subprocess builds of the runtime plugin are outside Go's test-cache dependency tracking.
-	go test -count=1 ./...
+	go test -count=1 $(GO_TEST_ARGS) ./...
 
 runtime-plugin: out/ffideadcode.so
 

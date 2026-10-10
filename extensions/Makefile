@@ -159,6 +159,7 @@ format-go:
 
 .PHONY: lint-go
 lint-go:
+	@$(MAKE) -C "$(ROOT)/tools/deadcode-lint-plugin" runtime-plugin
 	@echo "golangci-lint => ./$(EXTENSION_PATH)/..."
 	@$(GO_TOOL) golangci-lint run
 

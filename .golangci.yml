@@ -4,19 +4,40 @@
 # the root of the repo.
 
 version: "2"
+run:
+  relative-path-mode: gitroot
 linters:
+  # List the standard linters explicitly so custom plugins stay disabled until enabled by a caller.
+  default: none
   enable:
     - copyloopvar
+    - errcheck
     - errorlint
     - gocritic
     - gosec
+    - govet
     - importas
+    - ineffassign
     - misspell
     - revive
     - staticcheck
     - testifylint
     - unconvert
+    - unused
   settings:
+    custom:
+      ffideadcode:
+        type: goplugin
+        path: ./tools/deadcode-lint-plugin/out/ffideadcode.so
+        description: Reports functions unreachable from SDK FFI entrypoints for each Composer extension.
+        settings:
+          module: github.com/tetratelabs/built-on-envoy/extensions/composer
+          composer:
+            directory: .
+            build-tags:
+              - coraza.rule.case_sensitive_args_keys
+              - coraza.rule.no_regex_multiline
+              - coraza.rule.mandatory_rule_id_check
     gocritic:
       enabled-tags:
         - performance

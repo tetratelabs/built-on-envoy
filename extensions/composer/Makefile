@@ -7,7 +7,6 @@ ROOT       := $(shell git rev-parse --show-toplevel)
 GO_VERSION := $(shell sed -ne 's/^go //gp' $(ROOT)/extensions/composer/go.mod)
 GO_TOOL    := go tool -modfile="$(ROOT)/tools/go.mod"
 FFI_LINTER_DIR := $(ROOT)/tools/deadcode-lint-plugin
-FFI_LINT_CONFIG := $(FFI_LINTER_DIR)/out/golangci-composer.yml
 
 GO_TEST_ARGS ?=
 
@@ -97,10 +96,10 @@ format:
 
 .PHONY: lint
 lint:
-	@$(MAKE) -C "$(FFI_LINTER_DIR)" runtime-plugin
-	@$(GO_TOOL) yq eval-all '. as $$config ireduce ({}; . *+ $$config)' "$(ROOT)/.golangci.yml" golangci-plugin.yml > "$(FFI_LINT_CONFIG)"
+	@$(MAKE) -C "$(FFI_LINTER_DIR)" check
 	@echo "golangci-lint => ./..."
-	@$(GO_TOOL) golangci-lint run --config="$(FFI_LINT_CONFIG)" ./...
+	@lint_build_tags=$$($(GO_TOOL) yq '.linters.settings.custom.ffideadcode.settings.composer.build-tags | join(",")' "$(ROOT)/.golangci.yml") && \
+		$(GO_TOOL) golangci-lint run --enable=ffideadcode --build-tags="$$lint_build_tags" ./...
 
 .PHONY: test
 test:
