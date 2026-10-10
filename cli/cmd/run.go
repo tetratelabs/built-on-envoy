@@ -54,6 +54,7 @@ type Run struct {
 	extensionPositions extensionPositions `kong:"-"` // Internal field: tracks the original position of extensions specified via both --extension and --local flags
 	defaultLogLevel    string             `kong:"-"` // Internal field: parsed default log level
 	componentLogLevel  string             `kong:"-"` // Internal field: parsed component log levels
+	dockerImplicit     bool               `kong:"-"` // Internal field: Docker may be enabled by the caller command (e.g. debug)
 }
 
 //go:embed run_help.md
@@ -83,7 +84,7 @@ func (r *Run) Validate() error {
 	if r.Envoy.Path != "" && r.Envoy.Version != "" {
 		return fmt.Errorf("--envoy-path and --envoy-version are mutually exclusive")
 	}
-	if r.Docker.ImageVersion != "" && !r.Docker.Enabled {
+	if r.Docker.ImageVersion != "" && !r.Docker.Enabled && !r.dockerImplicit {
 		return fmt.Errorf("--docker-image-version can only be used with --docker")
 	}
 	return nil
@@ -92,6 +93,12 @@ func (r *Run) Validate() error {
 // Run executes the run command
 func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logger) error {
 	logger.Debug("handling run command", "cmd", internal.RedactSensitive(r))
+	return r.run(ctx, dirs, logger, nil)
+}
+
+// run runs Envoy with the configured extensions. When debug is not nil, local Go extensions are built
+// for debugging and a headless Delve server is attached to the Envoy process.
+func (r *Run) run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logger, debug *envoy.DebugOptions) error {
 	if r.Docker.Enabled {
 		runner := &envoy.RunnerDocker{
 			Logger:          logger,
@@ -104,6 +111,7 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 			LocalExtensions: r.Local,
 			Pull:            r.Docker.Pull,
 			ImageVersion:    r.Docker.ImageVersion,
+			Debug:           debug,
 		}
 		return runner.Run(ctx)
 	}
@@ -133,7 +141,8 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 		return err
 	}
 
-	local, err := loadLocalManifests(ctx, logger, downloader, r.Local, true)
+	local, err := loadLocalManifests(ctx, logger, downloader, r.Local, true,
+		extensions.BuildOptions{Debug: debug != nil})
 	if err != nil {
 		return err
 	}
@@ -202,6 +211,7 @@ func (r *Run) Run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 		TestUpstreamHost:        r.Clusters.TestUpstreamHost,
 		TestUpstreamCluster:     r.Clusters.TestUpstreamCluster,
 		ExtProcBinaries:         extProcBinaries,
+		Debug:                   debug,
 	}
 
 	return runner.Run(ctx)
@@ -260,7 +270,7 @@ func downloadExtensions(ctx context.Context, downloader *extensions.Downloader, 
 			downloaded = append(downloaded, artifact.ExtensionManifest)
 		case extensions.ArtifactSource:
 			handleSourceError := handleExtensionSource(ctx, downloader, artifact.Manifest, artifact.ExtensionManifest,
-				artifact.Path, downloader.Logger, build)
+				artifact.Path, downloader.Logger, build, extensions.BuildOptions{})
 			if handleSourceError != nil {
 				return nil, handleSourceError
 			}
@@ -314,9 +324,10 @@ func parseLogLevels(logLevel string) (string, string, error) {
 
 var errFailedToLoadLocalManifest = errors.New("failed to load local manifest")
 
-// loadLocalManifests loads extension manifests from the specified local paths.
+// loadLocalManifests loads extension manifests from the specified local paths, building them with the
+// given build options.
 func loadLocalManifests(ctx context.Context, logger *slog.Logger, downloader *extensions.Downloader,
-	paths []string, build bool,
+	paths []string, build bool, opts extensions.BuildOptions,
 ) ([]*extensions.Manifest, error) {
 	manifests := make([]*extensions.Manifest, 0, len(paths))
 
@@ -345,7 +356,7 @@ func loadLocalManifests(ctx context.Context, logger *slog.Logger, downloader *ex
 			rootManifest = manifest
 			rootPath = path
 		}
-		err = handleExtensionSource(ctx, downloader, rootManifest, manifest, rootPath, logger, build)
+		err = handleExtensionSource(ctx, downloader, rootManifest, manifest, rootPath, logger, build, opts)
 		if err != nil {
 			return nil, err
 		}
@@ -487,9 +498,10 @@ func validateComposerCompat(manifests []*extensions.Manifest) error {
 // handleExtensionSource builds the bundle root from source (composer, Go, Rust or ext_proc) and
 // resolves the extension's runtime metadata (CShared, inherited versions) from the build result.
 // When build is false the build step is skipped entirely — used by config generation and tests
-// that only need manifest resolution, not compiled artifacts.
+// that only need manifest resolution, not compiled artifacts. The build options only apply to Go and
+// composer extensions.
 func handleExtensionSource(ctx context.Context, downloader *extensions.Downloader, rootManifest *extensions.Manifest,
-	extensionManifest *extensions.Manifest, rootPath string, logger *slog.Logger, build bool,
+	extensionManifest *extensions.Manifest, rootPath string, logger *slog.Logger, build bool, opts extensions.BuildOptions,
 ) error {
 	if !build {
 		return nil
@@ -504,14 +516,15 @@ func handleExtensionSource(ctx context.Context, downloader *extensions.Downloade
 	case extensions.TypeComposer:
 		fmt.Fprintf(os.Stderr, "→ %sBuilding composer for %s...%s\n", internal.ANSIBold, extensionManifest.Name, internal.ANSIReset)
 		logger.Info("building composer from local source", "name", rootManifest.Name, "version", rootManifest.Version)
-		if err := extensions.BuildLibComposer(logger, downloader.Dirs, rootPath, rootManifest.Version, false); err != nil {
+		if err := extensions.BuildLibComposer(logger, downloader.Dirs, rootPath, rootManifest.Version, false, opts); err != nil {
 			return fmt.Errorf("failed to build libcomposer for local extension %s: %w", rootManifest.Name, err)
 		}
 		extensionManifest.CShared = true
+		extensionManifest.Debug = opts.Debug
 	case extensions.TypeGo:
 		fmt.Fprintf(os.Stderr, "→ %sBuilding %s...%s\n", internal.ANSIBold, rootManifest.Name, internal.ANSIReset)
 		logger.Info("building local Go extension", "name", rootManifest.Name, "version", rootManifest.Version)
-		cshared, err := extensions.BuildExtensionFromPath(logger, downloader.Dirs, rootManifest, rootPath)
+		cshared, err := extensions.BuildExtensionFromPath(logger, downloader.Dirs, rootManifest, rootPath, opts)
 		if err != nil {
 			return fmt.Errorf("failed to build local Go extension %s: %w", rootManifest.Name, err)
 		}
@@ -525,7 +538,7 @@ func handleExtensionSource(ctx context.Context, downloader *extensions.Downloade
 			// here and reintroduce the ABI mismatch. Building from source overwrites that slot with an
 			// ABI-matched libcomposer-lite.so.
 			if err = extensions.DownloadComposerLiteAndBuildIfNeeded(ctx, downloader, rootManifest.ComposerVersion,
-				extensions.ComposerArtifactSource); err != nil {
+				extensions.ComposerArtifactSource, opts); err != nil {
 				return fmt.Errorf("failed to build libcomposer %s for extension %s: %w",
 					rootManifest.ComposerVersion, rootManifest.Name, err)
 			}
@@ -535,6 +548,7 @@ func handleExtensionSource(ctx context.Context, downloader *extensions.Downloade
 			}
 		}
 		extensionManifest.CShared = cshared
+		extensionManifest.Debug = opts.Debug
 	case extensions.TypeRust:
 		fmt.Fprintf(os.Stderr, "→ %sBuilding %s...%s\n", internal.ANSIBold, rootManifest.Name, internal.ANSIReset)
 		downloader.Logger.Info("building local Rust extension", "name", rootManifest.Name, "version", rootManifest.Version)

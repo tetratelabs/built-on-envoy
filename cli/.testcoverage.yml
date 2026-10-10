@@ -15,6 +15,7 @@ exclude:
     # Covered in integration tests.
     - main.go
     - internal/envoy/runner.go
+    - internal/envoy/debug.go
     # These are test-only libraries.
     - internal/testing/
     
