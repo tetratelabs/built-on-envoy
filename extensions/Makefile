@@ -40,6 +40,7 @@ endif
 
 ROOT       := $(shell git rev-parse --show-toplevel)
 GO_TOOL    := go -C $(EXTENSION_PATH) tool -modfile=$(ROOT)/tools/go.mod
+RUST_VERSION = $(shell $(GO_TOOL) yq -e -p toml -oy '.toolchain.channel' "$(ROOT)/rust-toolchain.toml")
 
 # Labels for this lua extension image.
 NAME             := $(shell $(GO_TOOL) yq '.name' manifest.yaml)
@@ -181,23 +182,24 @@ test-go-coverage:
 
 .PHONY: format-rust
 format-rust:
-	@cd $(EXTENSION_PATH) &&  cargo fmt --check
+	@cd "$(EXTENSION_PATH)" && cargo fmt --check
 
 .PHONY: lint-rust
 lint-rust:
-	@cd $(EXTENSION_PATH) && cargo clippy -- -D warnings
+	@cd "$(EXTENSION_PATH)" && cargo clippy --locked -- -D warnings
 
 .PHONY: build-rust
 build-rust:
-	@cd $(EXTENSION_PATH) && cargo build --release
+	@cd "$(EXTENSION_PATH)" && cargo build --release --locked
 
 .PHONY: test-rust
 test-rust:
-	@cd $(EXTENSION_PATH) && cargo test
+	@cd "$(EXTENSION_PATH)" && cargo test --locked
 
 .PHONY: test-rust-coverage
 test-rust-coverage:
-	@cd $(EXTENSION_PATH) && cargo llvm-cov --lcov --output-path lcov.info --fail-under-lines 80; \
+	@cd "$(EXTENSION_PATH)" || exit $$?; \
+		cargo llvm-cov --locked --lcov --output-path lcov.info --fail-under-lines 80; \
 		status=$$?; \
 		cargo llvm-cov report --summary-only; \
 		exit $$status
@@ -231,6 +233,7 @@ else
 endif
 .PHONY: push_rust
 push_rust: create_builder
+	@test -n "$(RUST_VERSION)"
 	@echo "Building and pushing Rust extension image for platforms ($(PLATFORMS)): $(IMAGE)"
 	@docker buildx build \
 		--builder $(BUILDER_NAME) \
@@ -239,7 +242,9 @@ push_rust: create_builder
 		--provenance=false \
 		$(PUSH_ANNOTATIONS) \
 		--tag $(IMAGE) $(DEV_TAG) \
-		--file Dockerfile.rust ./$(EXTENSION_PATH)
+		--build-arg RUST_VERSION="$(RUST_VERSION)" \
+		--build-arg EXTENSION_PATH="$(EXTENSION_PATH)" \
+		--file "$(ROOT)/extensions/Dockerfile.rust" "$(ROOT)"
 
 .PHONY: push_extproc
 push_extproc: create_builder

@@ -24,9 +24,7 @@ jobs:
         working-directory: extensions
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy, llvm-tools
+      - uses: ./.github/actions/setup-rust
       - uses: taiki-e/install-action@cargo-llvm-cov
 
       - run: make format-rust EXTENSION_PATH=${{ matrix.extension.path }}

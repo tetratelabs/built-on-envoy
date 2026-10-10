@@ -17,9 +17,11 @@ import (
 	"testing"
 
 	"github.com/alecthomas/kong"
+	"github.com/pelletier/go-toml/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	builtonenvoy "github.com/tetratelabs/built-on-envoy"
 	"github.com/tetratelabs/built-on-envoy/cli/internal"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 	internaltesting "github.com/tetratelabs/built-on-envoy/internal/testing"
@@ -360,6 +362,21 @@ func TestCreateRust_Run(t *testing.T) {
 	// Verify lib name conversion (hyphens to underscores)
 	assert.Contains(t, string(cargo), `name = "my_rust_extension"`)
 
+	// #nosec G304
+	dockerfile, err := os.ReadFile(filepath.Join(repoPath, "Dockerfile"))
+	require.NoError(t, err)
+	// #nosec G304
+	toolchainFile, err := os.ReadFile(filepath.Join("..", "..", "rust-toolchain.toml"))
+	require.NoError(t, err)
+	var toolchain struct {
+		Toolchain struct {
+			Channel string `toml:"channel"`
+		} `toml:"toolchain"`
+	}
+	require.NoError(t, toml.Unmarshal(toolchainFile, &toolchain))
+	require.NotEmpty(t, toolchain.Toolchain.Channel)
+	assert.Contains(t, string(dockerfile), `--default-toolchain "`+toolchain.Toolchain.Channel+`"`)
+
 	// verify src/lib.rs content
 	// #nosec G304
 	libRs, err := os.ReadFile(filepath.Join(repoPath, "src/lib.rs"))
@@ -367,6 +384,64 @@ func TestCreateRust_Run(t *testing.T) {
 	assert.Contains(t, string(libRs), `"x-`+name+`"`)
 	assert.Contains(t, string(libRs), `"`+name+`"`)
 	assert.Contains(t, string(libRs), "declare_init_functions!")
+}
+
+func TestCreateRust_InvalidToolchain(t *testing.T) {
+	tests := []struct {
+		name            string
+		toolchain       string
+		wantErr         error
+		wantDecodeError bool
+	}{
+		{
+			name:            "invalid TOML",
+			toolchain:       "[toolchain",
+			wantErr:         errFailedToParseRustToolchain,
+			wantDecodeError: true,
+		},
+		{
+			name:            "invalid channel type",
+			toolchain:       "[toolchain]\nchannel = 123",
+			wantErr:         errFailedToParseRustToolchain,
+			wantDecodeError: true,
+		},
+		{
+			name:      "missing toolchain",
+			toolchain: "",
+			wantErr:   errMissingRustToolchainChannel,
+		},
+		{
+			name:      "missing channel",
+			toolchain: "[toolchain]\nprofile = \"minimal\"",
+			wantErr:   errMissingRustToolchainChannel,
+		},
+		{
+			name:      "empty channel",
+			toolchain: "[toolchain]\nchannel = \"\"",
+			wantErr:   errMissingRustToolchainChannel,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			original := builtonenvoy.RustToolchain
+			t.Cleanup(func() { builtonenvoy.RustToolchain = original })
+			builtonenvoy.RustToolchain = []byte(tt.toolchain)
+
+			c := &Create{
+				Type:       "rust",
+				FilterType: "http",
+				Name:       "my-rust-extension",
+				Path:       t.TempDir(),
+			}
+			err := c.Run(t.Context(), &xdg.Directories{}, internaltesting.NewTLogger(t))
+			require.ErrorIs(t, err, tt.wantErr)
+			if tt.wantDecodeError {
+				var decodeErr *toml.DecodeError
+				require.ErrorAs(t, err, &decodeErr)
+			}
+			assert.NoDirExists(t, filepath.Join(c.Path, c.Name))
+		})
+	}
 }
 
 func TestUnsupportedType(t *testing.T) {
