@@ -1,7 +1,7 @@
 ---
 layout: ../../layouts/DocsLayout.astro
 title: Debugging
-description: How to debug Go extensions running in Envoy from your IDE
+description: How to debug Go and Rust extensions running in Envoy from your IDE
 ---
 
 import ToC from '../../components/ToC.astro';
@@ -9,15 +9,15 @@ import Callout from '../../components/Callout.astro';
 
 # Debugging
 
-This guide explains how to debug Go extensions while they run in Envoy: set breakpoints in your IDE, send requests
-to Envoy, and inspect the extension's variables and goroutines when the breakpoints are hit.
+This guide explains how to debug Go and Rust extensions while they run in Envoy: set breakpoints in your IDE, send
+requests to Envoy, and inspect the extension's variables when the breakpoints are hit.
 
 <ToC maxDepth="3"/>
 
 ## How It Works
 
-Go extensions are built as a shared library that Envoy loads at runtime: the Go code runs inside the Envoy process,
-not in the `boe` CLI. To debug an extension, the debugger has to attach to the Envoy process.
+Go and Rust extensions are built as shared libraries that Envoy loads at runtime: their code runs inside the Envoy
+process, not in the `boe` CLI. To debug an extension, the debugger has to attach to the Envoy process.
 
 The [`boe debug`](/docs/cli/debug) command takes care of it:
 
@@ -25,39 +25,53 @@ The [`boe debug`](/docs/cli/debug) command takes care of it:
    inlining, and with full debug information and source paths. Debug builds are stored separately in the cache and
    are never used by `boe run`.
 2. It starts Envoy with the extension, as `boe run` does.
-3. It attaches a headless [Delve](https://github.com/go-delve/delve) debug server to the Envoy process, listening on
-   `127.0.0.1:2345` by default.
+3. It attaches a debug server to the Envoy process, listening on `127.0.0.1:2345` by default:
+   - For **Go** extensions, a headless [Delve](https://github.com/go-delve/delve) server.
+   - For **Rust** extensions, the platform's native debug server, which speaks the GDB remote protocol: `gdbserver` on
+     Linux, and LLDB's `debugserver` on macOS.
 
-Your IDE then connects to the Delve server as it would to any remote Go debugging session.
+Your IDE then connects to the debug server as it would to any remote debugging session.
 
-`boe debug` accepts the same flags as `boe run`, but only for local extensions (`--local`) of type Go, or extensions
-of the composer bundle.
+`boe debug` accepts the same flags as `boe run`, but only for local extensions (`--local`) of type Go, composer
+sub-extensions, or Rust. Go and Rust extensions can't be debugged in the same session.
 
 <Callout type="note">
 `boe debug` builds its own copy of Delve the first time it runs, so it does not need to be installed. Upstream Delve
 cannot yet properly debug a Go runtime that lives in a shared library loaded by a non-Go process such as Envoy, so
-`boe` applies a few patches to it. Use `--rebuild-dlv` to force rebuilding it, or `--dlv-path` to use your own
-Delve binary instead (it may not be able to list goroutines or show where the program stopped).
+`boe` applies a few patches to it. Use `--rebuild-dlv` to force rebuilding it, or `--debug-server-path` to use your
+own Delve binary instead (it may not be able to list goroutines or show where the program stopped).
 </Callout>
 
 ## Prerequisites
 
-The Go toolchain is needed to build the extension and Delve, as for running local Go extensions.
+The toolchain of the extension is needed to build it, as for running local extensions: Go (also used to build Delve)
+for Go extensions, and Cargo for Rust extensions.
 
-### macOS and Other Non-Linux Platforms
+### Go Extensions on macOS and Other Non-Linux Platforms
 
 Delve can only debug Go code loaded into a non-Go process on Linux. On other platforms, `boe debug` always runs
-Envoy and Delve in a Linux container, so **Docker** is required. This is transparent:
+Envoy and Delve in a Linux container for Go extensions, so **Docker** is required. This is transparent:
 
 - The local extension sources are mounted in the container at the same path as in your machine, so the source paths
   in the debug information match the files you open in your IDE, and breakpoints work without any path mapping.
 - The Delve port is published on `127.0.0.1` only.
 - The container runs with the `SYS_PTRACE` capability, which Delve needs to attach to the Envoy process.
 
+### Rust Extensions
+
+Rust extensions are always debugged natively (`--docker` is not supported for them):
+
+- **macOS:** `boe debug` uses LLDB's `debugserver`, which is part of the Xcode Command Line Tools
+  (`xcode-select --install`). macOS may ask once for permission to let the developer tools attach to processes. To
+  allow it permanently, run `sudo DevToolsSecurity -enable`.
+- **Linux:** `gdbserver` must be installed, for example with `apt install gdbserver` or `dnf install gdb-gdbserver`.
+
+Use `--debug-server-path` to use a different `gdbserver` or `debugserver` binary.
+
 ### Linux
 
-On Linux, Envoy and Delve run natively. Delve attaches to the Envoy process started by `boe`, which is not its
-parent process. Many distributions, such as Ubuntu, only allow a process to attach to its own descendants
+On Linux, Envoy and the debug server run natively. The debug server attaches to the Envoy process started by `boe`,
+which is not its parent process. Many distributions, such as Ubuntu, only allow a process to attach to its own descendants
 (`kernel.yama.ptrace_scope=1`), and attaching then fails with `operation not permitted`. Allow it by setting
 `ptrace_scope` to `0`:
 
@@ -69,8 +83,8 @@ sudo sysctl -w kernel.yama.ptrace_scope=0
 echo 'kernel.yama.ptrace_scope = 0' | sudo tee /etc/sysctl.d/10-ptrace.conf
 ```
 
-Alternatively, run `boe debug` as root, or use `boe debug --docker` to run Envoy and Delve in a container as on
-macOS.
+Alternatively, run `boe debug` as root, or, for Go extensions, use `boe debug --docker` to run Envoy and Delve in a
+container.
 
 ## Starting a Debug Session
 
@@ -88,26 +102,38 @@ boe debug --local ~/src/built-on-envoy/extensions/composer/opa \
     --config '{"policies":[{"inline":"package envoy.authz\ndefault allow := true"}]}'
 ```
 
-Once Envoy is running and Delve is attached, `boe debug` prints:
+Rust extensions work the same way:
+
+```bash
+boe debug --local ~/src/built-on-envoy/extensions/ip-restriction --config '{"deny_addresses":["192.168.1.50"]}'
+```
+
+Once Envoy is running, `boe debug` prints how to connect to the debug server:
 
 ```
-🐞 Delve is attached to Envoy and listening on 127.0.0.1:2345 (dlv PID 117)
+🐞 Connect your debugger to 127.0.0.1:2345
   → CLI: dlv connect 127.0.0.1:2345
 ```
 
-Envoy keeps serving requests until a breakpoint is hit. Use `--dlv-port` to use a different port, for example to run
+Envoy keeps serving requests until a breakpoint is hit. Use `--debug-port` to use a different port, for example to run
 several debug sessions at the same time.
+
+For Rust extensions, the debug server is only attached to Envoy while a debugger is connected: Envoy runs normally
+until you connect, and keeps running when you disconnect, so you can reconnect at any time.
 
 ## Connecting From Your IDE
 
-Configure your IDE to attach to a remote Delve server on `127.0.0.1:2345` (or the port set with `--dlv-port`). Then:
+Configure your IDE to attach to the debug server on `127.0.0.1:2345` (or the port set with `--debug-port`): as a
+remote Delve session for Go extensions, or as a GDB remote session for Rust extensions. Then:
 
-1. Start `boe debug` and wait until Delve is attached.
+1. Start `boe debug` and wait until Envoy is ready.
 2. Start the debug configuration in your IDE.
 3. Set breakpoints in the extension code.
 4. Send requests to Envoy, for example `curl http://localhost:10000/`.
 
-### VS Code
+### Go Extensions
+
+#### VS Code
 
 Install the [Go extension](https://marketplace.visualstudio.com/items?itemName=golang.go) and add an attach
 configuration to `.vscode/launch.json`:
@@ -131,7 +157,7 @@ configuration to `.vscode/launch.json`:
 Stopping the debug session in VS Code disconnects from Delve but leaves Envoy and Delve running, so you can attach
 again later.
 
-### GoLand and IntelliJ IDEA
+#### GoLand and IntelliJ IDEA
 
 Create a **Go Remote** run configuration (**Run → Edit Configurations… → + → Go Remote**):
 
@@ -142,7 +168,7 @@ Create a **Go Remote** run configuration (**Run → Edit Configurations… → +
 Then start it with **Debug**. See the [GoLand documentation](https://www.jetbrains.com/help/go/go-remote.html) for
 details.
 
-### Neovim
+#### Neovim
 
 With [nvim-dap](https://codeberg.org/mfussenegger/nvim-dap) and
 [nvim-dap-go](https://github.com/leoluz/nvim-dap-go), register an attach configuration:
@@ -164,7 +190,7 @@ require('dap-go').setup {
 
 nvim-dap also reads `.vscode/launch.json`, so the VS Code configuration works as well.
 
-### Delve CLI
+#### Delve CLI
 
 You can also use Delve directly from a terminal:
 
@@ -175,6 +201,70 @@ dlv connect 127.0.0.1:2345
 ```
 
 When you are done, run `quit` and answer `n` when asked whether to kill the headless instance, so Envoy keeps running.
+
+### Rust Extensions
+
+The debug server stops Envoy when the debugger connects. Continue the execution after connecting (**Continue** in the
+IDE, or `continue` from the command line), and Envoy keeps serving requests until a breakpoint is hit.
+
+#### VS Code
+
+Install the [CodeLLDB](https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb) extension and add an
+attach configuration to `.vscode/launch.json`:
+
+```json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Attach to Envoy (boe debug, Rust)",
+      "type": "lldb",
+      "request": "attach",
+      "targetCreateCommands": ["target create ${env:HOME}/.local/share/boe/envoy-versions/1.38.0/bin/envoy"],
+      "processCreateCommands": ["gdb-remote 127.0.0.1:2345"]
+    }
+  ]
+}
+```
+
+CodeLLDB needs a target to attach to: `targetCreateCommands` creates it from the Envoy binary, and
+`processCreateCommands` connects it to the debug server. `boe debug` prints the exact path of the Envoy binary it is
+running. It depends on the Envoy version and on the `boe` data directory (`BOE_DATA_HOME`).
+
+When CodeLLDB connects, Envoy is paused and VS Code shows a `signal SIGSTOP` stop in a system function such as
+`kevent`. This is the debug server attaching to Envoy, not an error: press **Continue**, and Envoy keeps serving
+requests and stops at your breakpoints. To continue automatically when attaching, add
+`"postRunCommands": ["process continue"]` to the configuration.
+
+#### RustRover and CLion
+
+Create a **Remote Debug** run configuration (**Run → Edit Configurations… → + → Remote Debug**):
+
+- **Debugger:** the bundled LLDB or GDB.
+- **'target remote' args** (GDB) or **'process connect' URL** (LLDB): `127.0.0.1:2345` or `connect://127.0.0.1:2345`.
+- **Symbol file:** the debug build of the extension, for example `target/debug/libip_restriction.so` on Linux or
+  `target/debug/libip_restriction.dylib` on macOS.
+
+Then start it with **Debug**. See the [RustRover documentation](https://www.jetbrains.com/help/rust/remote-debug.html)
+for details.
+
+#### Neovim
+
+With [nvim-dap](https://codeberg.org/mfussenegger/nvim-dap) and the CodeLLDB adapter, add a configuration that uses
+the same `processCreateCommands` as VS Code. nvim-dap also reads `.vscode/launch.json`, so the VS Code configuration
+works as well.
+
+#### LLDB and GDB CLI
+
+```bash
+lldb -o 'gdb-remote 127.0.0.1:2345'
+(lldb) breakpoint set -f /path/to/my-extension/src/lib.rs -l 144
+(lldb) continue
+```
+
+On Linux, you can also use `gdb -ex 'target remote 127.0.0.1:2345'`. Use full source paths when setting breakpoints
+from the command line: file names alone may also match files with the same name in dependencies, such as the Envoy
+Rust SDK. When you are done, run `detach`: Envoy keeps running.
 
 ## Caveats
 
@@ -204,7 +294,7 @@ To avoid it, keep the extensions in a directory that is not behind a symlink.
 
 ### Stepping Into Dependencies
 
-When running in a container (on macOS, or with `--docker`), the Go module cache is in the container, so the source
+When running Go extensions in a container (on macOS, or with `--docker`), the Go module cache is in the container, so the source
 paths of the extension dependencies (for example, the Envoy Go SDK) are under `/var/boe/go/pkg/mod`. To step into
 them from your IDE, map those paths to your local module cache. In VS Code:
 
@@ -221,6 +311,12 @@ Each Go extension built as an independent shared library has its own Go runtime.
 time (for example, the composer bundle and a standalone Go extension), the debugger only sees the goroutines of one
 of them. Debug one Go extension (or one composer bundle) at a time.
 
+### Envoy Binaries With Hardened Runtime on macOS
+
+On macOS, the debug server can't attach to programs signed with the hardened runtime. The Envoy binaries downloaded
+by `boe` can be debugged, but a custom Envoy binary passed with `--envoy-path` may not.
+
 ### Supported Extensions
 
-Only Go extensions can be debugged with `boe debug`. Rust, Lua, Wasm and ext_proc extensions are not supported.
+Go and Rust extensions can be debugged with `boe debug`, but not in the same session. Lua, Wasm and ext_proc
+extensions are not supported.

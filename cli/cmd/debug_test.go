@@ -14,6 +14,7 @@ import (
 	"github.com/alecthomas/kong"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tetratelabs/built-on-envoy/cli/internal/envoy"
 	"github.com/tetratelabs/built-on-envoy/cli/internal/xdg"
 	internaltesting "github.com/tetratelabs/built-on-envoy/internal/testing"
 )
@@ -46,8 +47,9 @@ func parseDebug(t *testing.T, args ...string) (*Debug, error) {
 func TestParseCmdDebug(t *testing.T) {
 	d, err := parseDebug(t, "--local", "../../extensions/composer/opa", "--config", `{"a":"b"}`)
 	require.NoError(t, err)
-	require.Equal(t, uint32(2345), d.DelvePort)
-	require.Empty(t, d.DelvePath)
+	require.Equal(t, uint32(2345), d.DebugPort)
+	require.Empty(t, d.DebugServerPath)
+	require.Equal(t, envoy.DebuggerDelve, d.debugger)
 	opa, err := filepath.Abs("../../extensions/composer/opa")
 	require.NoError(t, err)
 	require.Equal(t, []string{opa}, d.RunOpts.Local)
@@ -55,10 +57,10 @@ func TestParseCmdDebug(t *testing.T) {
 	require.Equal(t, "all:error", d.RunOpts.LogLevel)
 	require.NotEmpty(t, d.RunOpts.extensionPositions.local)
 
-	d, err = parseDebug(t, "--local", "../../extensions/composer/example", "--dlv-port", "40000", "--dlv-path", "/usr/bin/dlv")
+	d, err = parseDebug(t, "--local", "../../extensions/composer/example", "--debug-port", "40000", "--debug-server-path", "/usr/bin/dlv")
 	require.NoError(t, err)
-	require.Equal(t, uint32(40000), d.DelvePort)
-	require.Equal(t, "/usr/bin/dlv", d.DelvePath)
+	require.Equal(t, uint32(40000), d.DebugPort)
+	require.Equal(t, "/usr/bin/dlv", d.DebugServerPath)
 }
 
 func TestParseCmdDebugDockerImageVersion(t *testing.T) {
@@ -79,7 +81,11 @@ func TestDebugValidate(t *testing.T) {
 	}{
 		{"remote extension", []string{"--local", "../../extensions/composer/opa", "--extension", "cors"}, errDebugRemoteExtension.Error()},
 		{"no local extension", nil, errDebugNoLocal.Error()},
-		{"non-go extension", []string{"--local", "../../extensions/example-lua"}, errDebugExtensionType.Error()},
+		{"lua extension", []string{"--local", "../../extensions/example-lua"}, errDebugExtensionType.Error()},
+		{"rust extension", []string{"--local", "../../extensions/ip-restriction"}, ""},
+		{"go and rust", []string{"--local", "../../extensions/composer/opa", "--local", "../../extensions/ip-restriction"}, errDebugMixedTypes.Error()},
+		{"docker with rust", []string{"--local", "../../extensions/ip-restriction", "--docker"}, "--docker is not supported for Rust extensions"},
+		{"rebuild-dlv with rust", []string{"--local", "../../extensions/ip-restriction", "--rebuild-dlv"}, "--rebuild-dlv only applies to Go extensions"},
 		{"invalid manifest", []string{"--local", t.TempDir()}, errFailedToLoadLocalManifest.Error()},
 		{"composer sub-extension", []string{"--local", "../../extensions/composer/opa"}, ""},
 		{"go extension", []string{"--local", goExt}, ""},
@@ -101,14 +107,18 @@ func TestDebugValidateRebuildDelve(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, d.RebuildDelve)
 
-	_, err = parseDebug(t, "--local", "../../extensions/composer/example", "--rebuild-dlv", "--dlv-path", "/usr/bin/dlv")
-	require.ErrorContains(t, err, "--rebuild-dlv and --dlv-path are mutually exclusive")
+	_, err = parseDebug(t, "--local", "../../extensions/composer/example", "--rebuild-dlv", "--debug-server-path", "/usr/bin/dlv")
+	require.ErrorContains(t, err, "--rebuild-dlv and --debug-server-path are mutually exclusive")
 }
 
 func TestDebugInContainer(t *testing.T) {
-	require.False(t, (&Debug{goos: "linux"}).inContainer())
-	require.True(t, (&Debug{goos: "darwin"}).inContainer())
-	require.True(t, (&Debug{goos: "linux", RunOpts: Run{Docker: DockerFlags{Enabled: true}}}).inContainer())
+	// Go extensions are debugged in a container on non-Linux platforms.
+	require.False(t, (&Debug{goos: "linux", debugger: envoy.DebuggerDelve}).inContainer())
+	require.True(t, (&Debug{goos: "darwin", debugger: envoy.DebuggerDelve}).inContainer())
+	require.True(t, (&Debug{goos: "linux", debugger: envoy.DebuggerDelve, RunOpts: Run{Docker: DockerFlags{Enabled: true}}}).inContainer())
+	// Native extensions are always debugged natively, with a GDB remote protocol server.
+	require.False(t, (&Debug{goos: "linux", debugger: envoy.DebuggerGDBRemote}).inContainer())
+	require.False(t, (&Debug{goos: "darwin", debugger: envoy.DebuggerGDBRemote}).inContainer())
 }
 
 func TestDebugValidateEnvoyPathInContainer(t *testing.T) {
@@ -116,7 +126,12 @@ func TestDebugValidateEnvoyPathInContainer(t *testing.T) {
 		Local: []string{"../../extensions/composer/opa"},
 		Envoy: EnvoyFlags{Path: "/usr/local/bin/envoy"},
 	}}
-	require.ErrorContains(t, d.Validate(), "--envoy-path is not supported when debugging in a container")
+	require.ErrorContains(t, d.Validate(), "--envoy-path is not supported when debugging Go extensions in a container")
+
+	// Rust extensions are debugged natively, so a custom Envoy binary can be used.
+	d.RunOpts.Local = []string{"../../extensions/ip-restriction"}
+	require.NoError(t, d.Validate())
+	d.RunOpts.Local = []string{"../../extensions/composer/opa"}
 
 	d.goos = "linux"
 	require.NoError(t, d.Validate())

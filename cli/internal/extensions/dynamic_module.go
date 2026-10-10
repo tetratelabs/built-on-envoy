@@ -36,17 +36,27 @@ func CheckOrBuildDynamicModule(logger *slog.Logger, dirs *xdg.Directories, manif
 		return nil
 	}
 
-	return BuildDynamicModule(logger, dirs, manifest, path)
+	return BuildDynamicModule(logger, dirs, manifest, path, BuildOptions{})
 }
 
 // BuildDynamicModule builds the dynamic module from source. The source code is expected to be at the given path.
-// The built library will be saved in the local cache directory.
-func BuildDynamicModule(logger *slog.Logger, dirs *xdg.Directories, manifest *Manifest, path string) error {
+// The built library will be saved in the local cache directory. Debug builds use the Cargo dev profile
+// (no optimizations, full debug information) and go to their own cache slot.
+func BuildDynamicModule(logger *slog.Logger, dirs *xdg.Directories, manifest *Manifest, path string, opts BuildOptions) error {
+	buildManifest := *manifest
+	buildManifest.Debug = opts.Debug
+	manifest = &buildManifest
 	destLib := LocalCacheExtension(dirs, manifest)
 
 	// Build the Rust project and make sure the output is in current path.
+	args := []string{"build", "--target-dir", "./target"}
+	profileDir := "debug"
+	if !opts.Debug {
+		args = append(args, "--release")
+		profileDir = "release"
+	}
 	// #nosec G204
-	cmd := exec.Command("cargo", "build", "--release", "--target-dir", "./target")
+	cmd := exec.Command("cargo", args...)
 	cmd.Dir = path
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -64,15 +74,15 @@ func BuildDynamicModule(logger *slog.Logger, dirs *xdg.Directories, manifest *Ma
 	// We need to find this file and copy it with the original manifest name.
 	rustLibName := RustLibNameFromName(manifest.Name)
 
-	// Find the built library in target/release
+	// Find the built library in target/<profile>
 	// Note: Cargo may build with platform-specific extension (.dylib on macOS), but we use .so
 	ext := "so"
 	if runtime.GOOS == "darwin" {
 		ext = "dylib"
 	}
-	srcLib := filepath.Join(path, "target", "release", fmt.Sprintf("lib%s.%s", rustLibName, ext))
+	srcLib := filepath.Join(path, "target", profileDir, fmt.Sprintf("lib%s.%s", rustLibName, ext))
 	if _, err := os.Stat(srcLib); err != nil {
-		return fmt.Errorf("built library not found at %s/target/release/lib%s.%s", path, rustLibName, ext)
+		return fmt.Errorf("built library not found at %s", srcLib)
 	}
 
 	logger.Debug("built Rust dynamic module library", "lib", srcLib)

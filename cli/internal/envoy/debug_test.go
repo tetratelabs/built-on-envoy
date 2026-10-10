@@ -7,7 +7,6 @@ package envoy
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,90 +19,15 @@ import (
 	internaltesting "github.com/tetratelabs/built-on-envoy/internal/testing"
 )
 
-func TestMergeGODEBUG(t *testing.T) {
-	tests := []struct {
-		name     string
-		existing string
-		add      []string
-		want     string
-	}{
-		{"empty", "", []string{"cgocheck=0"}, "cgocheck=0"},
-		{"keeps existing", "madvdontneed=1", []string{"cgocheck=0"}, "madvdontneed=1,cgocheck=0"},
-		{
-			"overrides existing", "cgocheck=1,madvdontneed=1",
-			[]string{"cgocheck=0", "asyncpreemptoff=1"},
-			"madvdontneed=1,cgocheck=0,asyncpreemptoff=1",
-		},
-		{"ignores empty entries", ",madvdontneed=1,", []string{"cgocheck=0"}, "madvdontneed=1,cgocheck=0"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			require.Equal(t, tt.want, mergeGODEBUG(tt.existing, tt.add...))
-		})
-	}
-}
+func TestFindExecutable(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "dlv")
+	require.NoError(t, os.WriteFile(bin, nil, 0o600))
+	got, err := findExecutable(bin)
+	require.NoError(t, err)
+	require.Equal(t, bin, got)
 
-func TestDelveArgs(t *testing.T) {
-	d := &DebugOptions{DelvePort: 40000}
-	want := []string{
-		"attach", "1234", "--headless", "--listen=127.0.0.1:40000",
-		"--api-version=2", "--accept-multiclient", "--continue",
-	}
-	require.Equal(t, want, d.delveArgs(1234))
-
-	t.Setenv(DelveListenHostEnv, "0.0.0.0")
-	require.Contains(t, d.delveArgs(1234), "--listen=0.0.0.0:40000")
-}
-
-func TestFindDelve(t *testing.T) {
-	t.Run("explicit path", func(t *testing.T) {
-		dlv := filepath.Join(t.TempDir(), "dlv")
-		require.NoError(t, os.WriteFile(dlv, nil, 0o600))
-		got, err := findDelve(dlv)
-		require.NoError(t, err)
-		require.Equal(t, dlv, got)
-	})
-
-	t.Run("explicit path not found", func(t *testing.T) {
-		_, err := findDelve(filepath.Join(t.TempDir(), "dlv"))
-		require.ErrorContains(t, err, "dlv not found at")
-	})
-}
-
-func TestPatchDelve(t *testing.T) {
-	// Apply the patches to the actual Delve sources of the pinned version.
-	out, err := exec.Command("go", "mod", "download", "-json", delveModule+"@"+DelveVersion).Output()
-	if err != nil {
-		t.Skipf("could not download Delve sources: %v", err)
-	}
-	var mod struct{ Dir string }
-	require.NoError(t, json.Unmarshal(out, &mod))
-	src := t.TempDir()
-	require.NoError(t, os.CopyFS(src, os.DirFS(mod.Dir)))
-
-	require.NoError(t, patchDelve(src))
-	read := func(file string) string {
-		content, err := os.ReadFile(filepath.Clean(filepath.Join(src, file)))
-		require.NoError(t, err)
-		return string(content)
-	}
-	require.Contains(t, read("pkg/proc/goroutine_cache.go"), "for _, image := range bi.Images {")
-	require.Contains(t, read("pkg/proc/target.go"), "func (t *Target) InitGoImage() {")
-	require.Contains(t, read("pkg/proc/native/proc_linux.go"), "sel.InitGoImage()")
-	require.Contains(t, read("pkg/proc/bininfo.go"), "func (bi *BinaryInfo) setGStructOffsetElfSharedLib(")
-
-	// The patched sources must compile on the platforms boe debug supports.
-	for _, goarch := range []string{"amd64", "arm64"} {
-		// #nosec G204
-		cmd := exec.Command("go", "build", "-o", os.DevNull, "./cmd/dlv")
-		cmd.Dir = src
-		cmd.Env = append(os.Environ(), "GOOS=linux", "GOARCH="+goarch, "CGO_ENABLED=0", "GOFLAGS=-mod=mod")
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "linux/%s: %s", goarch, out)
-	}
-
-	// Patching twice fails, as the sources no longer match the patches.
-	require.ErrorContains(t, patchDelve(src), "failed to apply Delve patch 0001")
+	_, err = findExecutable(filepath.Join(t.TempDir(), "dlv"))
+	require.ErrorContains(t, err, "not found")
 }
 
 func TestFindEnvoyPid(t *testing.T) {
@@ -132,7 +56,7 @@ func TestFindEnvoyPidTimeout(t *testing.T) {
 
 func TestDockerRunArgsDebug(t *testing.T) {
 	originalArgs := os.Args
-	os.Args = []string{"boe", "debug", "--dlv-path", "/usr/bin/dlv", "--dlv-port=40000"}
+	os.Args = []string{"boe", "debug", "--debug-server-path", "/usr/bin/dlv", "--debug-port=40000"}
 	t.Cleanup(func() { os.Args = originalArgs })
 
 	r := &RunnerDocker{
@@ -141,7 +65,7 @@ func TestDockerRunArgsDebug(t *testing.T) {
 		AdminPort:  9901,
 		Arch:       "arm64",
 		Pull:       "missing",
-		Debug:      &DebugOptions{DelvePort: 40000},
+		Debug:      &DebugOptions{Port: 40000},
 	}
 	want := []string{
 		"run", "--rm",
@@ -159,10 +83,10 @@ func TestDockerRunArgsDebug(t *testing.T) {
 		"--cap-add=SYS_PTRACE",
 		"--security-opt", "seccomp=unconfined",
 		"-p", "127.0.0.1:40000:40000",
-		"-e", DelveListenHostEnv + "=0.0.0.0",
+		"-e", DebugListenHostEnv + "=0.0.0.0",
 		"-e", "GOFLAGS=-buildvcs=false",
 		"--entrypoint", "/boe", "ghcr.io/test/boe:latest",
-		"debug", "--dlv-port=40000",
+		"debug", "--debug-port=40000",
 	}
 	require.Equal(t, want, r.dockerRunArgs("ghcr.io/test/boe:latest", nil))
 }
@@ -196,21 +120,21 @@ func TestProcessCommandArgsDebug(t *testing.T) {
 		"boe", "debug",
 		"--local", "./ext1",
 		"--local=/abs/ext2",
-		"--dlv-path", "/usr/bin/dlv",
-		"--dlv-path=/usr/bin/dlv",
+		"--debug-server-path", "/usr/bin/dlv",
+		"--debug-server-path=/usr/bin/dlv",
 		"--docker-image-version", "dev",
-		"--dlv-port", "40000",
+		"--debug-port", "40000",
 	})
 	require.Equal(t, []string{
 		"debug",
 		"--local", filepath.Join(cwd, "ext1"),
 		"--local=/abs/ext2",
-		"--dlv-port", "40000",
+		"--debug-port", "40000",
 	}, got)
 }
 
 func TestDebugNotes(t *testing.T) {
-	r := &RunnerDocker{Debug: &DebugOptions{DelvePort: 2345, Notes: []string{"note 1\nline 2", "note 2"}}}
+	r := &RunnerDocker{Debug: &DebugOptions{Port: 2345, Notes: []string{"note 1\nline 2", "note 2"}}}
 	args := r.debugArgs()
 	env := args[len(args)-1]
 	require.Equal(t, "-e", args[len(args)-2])
@@ -223,20 +147,4 @@ func TestDebugNotes(t *testing.T) {
 	// No notes, no env var.
 	r.Debug.Notes = nil
 	require.NotContains(t, strings.Join(r.debugArgs(), " "), debugNotesEnv)
-}
-
-func TestInstallDelveCached(t *testing.T) {
-	// A cached binary is reused without building it.
-	dir := t.TempDir()
-	cached := filepath.Join(dir, "dlv-"+DelveVersion)
-	require.NoError(t, os.WriteFile(cached, []byte("cached"), 0o600))
-	got, err := installDelve(t.Context(), internaltesting.NewTLogger(t), dir, false)
-	require.NoError(t, err)
-	require.Equal(t, cached, got)
-
-	// When rebuilding, the cached binary is not reused. Fail the build early with an invalid toolchain
-	// so the test does not need to build Delve.
-	t.Setenv("GOTOOLCHAIN", "invalid")
-	_, err = installDelve(t.Context(), internaltesting.NewTLogger(t), dir, true)
-	require.Error(t, err)
 }
