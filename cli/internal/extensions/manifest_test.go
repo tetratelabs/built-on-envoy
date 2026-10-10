@@ -145,6 +145,324 @@ func TestValidateExtProcManifest(t *testing.T) {
 	}
 }
 
+func TestValidateExamples(t *testing.T) {
+	manifestPath := filepath.Join("testdata", "valid_manifest.yaml")
+	base, err := LoadLocalManifest(manifestPath)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name    string
+		example Example
+		wantErr bool
+	}{
+		{
+			name:    "legacy code example",
+			example: Example{Title: "Static", Description: "A static example", Code: "boe run"},
+		},
+		{
+			name: "executable example with empty config",
+			example: Example{
+				Title: "Executable", Description: "An executable example",
+				Config:   &map[string]any{},
+				Commands: []ExampleCommand{{Argv: []string{"curl", "${PROXY_URL}"}}},
+			},
+		},
+		{
+			name: "executable example options",
+			example: Example{
+				Title: "Executable", Description: "An executable example",
+				Config:          &map[string]any{"enabled": true},
+				Commands:        []ExampleCommand{{Argv: []string{"curl", "-i", "${PROXY_URL}"}, ExpectedExit: 22}},
+				Comparison:      []ExampleComparisonRule{{Type: "duration", Pattern: `elapsed: (?P<value>[0-9.]+)ms`}},
+				VolatileHeaders: []string{"x-runtime", "X-Created-At"},
+			},
+		},
+		{
+			name:    "missing source",
+			example: Example{Title: "Invalid", Description: "No source"},
+			wantErr: true,
+		},
+		{
+			name: "commands require config",
+			example: Example{
+				Title: "Invalid", Description: "Commands without config",
+				Commands: []ExampleCommand{{Argv: []string{"curl"}}},
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty executable",
+			example: Example{
+				Title: "Invalid", Description: "Empty executable",
+				Config: &map[string]any{}, Commands: []ExampleCommand{{Argv: []string{""}}},
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty argv",
+			example: Example{
+				Title: "Invalid", Description: "Empty argv",
+				Config: &map[string]any{}, Commands: []ExampleCommand{{Argv: []string{}}},
+			},
+			wantErr: true,
+		},
+		{
+			name: "exit code out of range",
+			example: Example{
+				Title: "Invalid", Description: "Invalid expected exit",
+				Config: &map[string]any{}, Commands: []ExampleCommand{{Argv: []string{"curl"}, ExpectedExit: 256}},
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid comparison type",
+			example: Example{
+				Title: "Invalid", Description: "Invalid comparison",
+				Config: &map[string]any{}, Commands: []ExampleCommand{{Argv: []string{"curl"}}},
+				Comparison: []ExampleComparisonRule{{Type: "timestamp", Pattern: `(?P<value>.*)`}},
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid volatile header name",
+			example: Example{
+				Title: "Invalid", Description: "Invalid header",
+				Config: &map[string]any{}, Commands: []ExampleCommand{{Argv: []string{"curl"}}},
+				VolatileHeaders: []string{"x-runtime:"},
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := *base
+			m.Examples = []Example{tt.example}
+			err := ValidateManifest(&m)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestExampleYAMLSourceValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		yaml    string
+		wantErr bool
+	}{
+		{
+			name:    "null config is rejected",
+			yaml:    "title: Example\ndescription: Test\nconfig: null\ncommands:\n  - argv: [curl]\n",
+			wantErr: true,
+		},
+		{
+			name:    "config with empty commands cannot be hidden by code",
+			yaml:    "title: Example\ndescription: Test\ncode: snippet\nconfig: {}\ncommands: []\n",
+			wantErr: true,
+		},
+		{
+			name:    "misspelled source field is rejected",
+			yaml:    "title: Example\ndescription: Test\nconfg: {}\ncommands:\n  - argv: [curl]\n",
+			wantErr: true,
+		},
+		{
+			name:    "null expected exit is rejected",
+			yaml:    "title: Example\ndescription: Test\nconfig: {}\ncommands:\n  - argv: [curl]\n    expectedExit: null\n",
+			wantErr: true,
+		},
+		{
+			name:    "volatile header objects are rejected",
+			yaml:    "title: Example\ndescription: Test\nconfig: {}\ncommands:\n  - argv: [curl]\nvolatileHeaders:\n  - name: x-runtime\n    type: duration\n",
+			wantErr: true,
+		},
+		{
+			name:    "empty volatile header names are rejected",
+			yaml:    "title: Example\ndescription: Test\nconfig: {}\ncommands:\n  - argv: [curl]\nvolatileHeaders: [\"\"]\n",
+			wantErr: true,
+		},
+		{
+			name:    "null volatile header names are rejected",
+			yaml:    "title: Example\ndescription: Test\nconfig: {}\ncommands:\n  - argv: [curl]\nvolatileHeaders: [null]\n",
+			wantErr: true,
+		},
+		{
+			name: "explicit empty argument is allowed",
+			yaml: "title: Example\ndescription: Test\nconfig: {}\ncommands:\n  - argv: [curl, \"\"]\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var example Example
+			err := yaml.Unmarshal([]byte(tt.yaml), &example)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Empty(t, example.Commands[0].Argv[1])
+			}
+		})
+	}
+}
+
+func TestExamplePreStartYAML(t *testing.T) {
+	base := "title: Example\ndescription: Test\ncode: legacy\n"
+	executable := "config: {}\ncommands:\n  - argv: [printf, ready]\n"
+	tests := []struct {
+		name    string
+		yaml    string
+		wantErr bool
+	}{
+		{name: "pre-start command with comment and expected exit", yaml: base + executable + "preStart:\n  - comment: Prepare the input file.\n    argv: [sh, -c, exit 7]\n    expectedExit: 7\n"},
+		{name: "missing config", yaml: base + "commands:\n  - argv: [printf, ready]\npreStart:\n  - argv: [printf, setup]\n", wantErr: true},
+		{name: "missing request commands", yaml: base + "config: {}\npreStart:\n  - argv: [printf, setup]\n", wantErr: true},
+		{name: "null pre-start", yaml: base + executable + "preStart: null\n", wantErr: true},
+		{name: "empty pre-start", yaml: base + executable + "preStart: []\n", wantErr: true},
+		{name: "empty argv", yaml: base + executable + "preStart:\n  - argv: []\n", wantErr: true},
+		{name: "empty executable", yaml: base + executable + "preStart:\n  - argv: [\"\"]\n", wantErr: true},
+		{name: "null expected exit", yaml: base + executable + "preStart:\n  - argv: [printf, setup]\n    expectedExit: null\n", wantErr: true},
+		{name: "invalid expected exit", yaml: base + executable + "preStart:\n  - argv: [printf, setup]\n    expectedExit: 256\n", wantErr: true},
+		{name: "unknown command field", yaml: base + executable + "preStart:\n  - argv: [printf, setup]\n    shell: true\n", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var example Example
+			err := yaml.Unmarshal([]byte(tt.yaml), &example)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, []ExampleCommand{{Comment: "Prepare the input file.", Argv: []string{"sh", "-c", "exit 7"}, ExpectedExit: 7}}, example.PreStart)
+		})
+	}
+}
+
+func TestExampleCommandCommentYAML(t *testing.T) {
+	tests := []struct {
+		name        string
+		yaml        string
+		wantComment string
+		wantErr     bool
+	}{
+		{
+			name:        "multiline comment is preserved",
+			yaml:        "title: Example\ndescription: Test\nconfig: {}\ncommands:\n  - argv: [curl]\n    comment: |\n      First display line\n      Second display line\n",
+			wantComment: "First display line\nSecond display line\n",
+		},
+		{
+			name: "comment may be omitted",
+			yaml: "title: Example\ndescription: Test\nconfig: {}\ncommands:\n  - argv: [curl]\n",
+		},
+		{
+			name:    "null comment is rejected",
+			yaml:    "title: Example\ndescription: Test\nconfig: {}\ncommands:\n  - argv: [curl]\n    comment: null\n",
+			wantErr: true,
+		},
+		{
+			name:    "non-string comment is rejected",
+			yaml:    "title: Example\ndescription: Test\nconfig: {}\ncommands:\n  - argv: [curl]\n    comment: 42\n",
+			wantErr: true,
+		},
+		{
+			name:    "empty comment is rejected",
+			yaml:    "title: Example\ndescription: Test\nconfig: {}\ncommands:\n  - argv: [curl]\n    comment: \"\"\n",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var example Example
+			err := yaml.Unmarshal([]byte(tt.yaml), &example)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.wantComment, example.Commands[0].Comment)
+		})
+	}
+}
+
+func TestExampleRetryYAMLValidation(t *testing.T) {
+	invalidRetryValues := []struct {
+		name  string
+		retry string
+	}{
+		{name: "null retry", retry: "null"},
+		{name: "non-object retry", retry: "true"},
+		{name: "missing status", retry: "{maxAttempts: 2}"},
+		{name: "missing attempts", retry: "{httpStatus: 200}"},
+		{name: "null status", retry: "{httpStatus: null, maxAttempts: 2}"},
+		{name: "string status", retry: "{httpStatus: '200', maxAttempts: 2}"},
+		{name: "status below range", retry: "{httpStatus: 199, maxAttempts: 2}"},
+		{name: "status above range", retry: "{httpStatus: 600, maxAttempts: 2}"},
+		{name: "null attempts", retry: "{httpStatus: 200, maxAttempts: null}"},
+		{name: "string attempts", retry: "{httpStatus: 200, maxAttempts: '2'}"},
+		{name: "attempts below range", retry: "{httpStatus: 200, maxAttempts: 0}"},
+		{name: "attempts above range", retry: "{httpStatus: 200, maxAttempts: 10001}"},
+		{name: "unknown field", retry: "{httpStatus: 200, maxAttempts: 2, seed: 1}"},
+	}
+
+	for _, phase := range []string{"commands", "preStart"} {
+		t.Run(phase, func(t *testing.T) {
+			validRetries := []struct {
+				name  string
+				retry string
+				want  ExampleRetry
+			}{
+				{name: "minimum bounds", retry: "{httpStatus: 200, maxAttempts: 1}", want: ExampleRetry{HTTPStatus: 200, MaxAttempts: 1}},
+				{name: "maximum bounds", retry: "{httpStatus: 599, maxAttempts: 10000}", want: ExampleRetry{HTTPStatus: 599, MaxAttempts: 10000}},
+			}
+			for _, tt := range validRetries {
+				t.Run(tt.name, func(t *testing.T) {
+					var example Example
+					require.NoError(t, yaml.Unmarshal([]byte(retryExampleYAML(phase, tt.retry)), &example))
+					var got *ExampleRetry
+					if phase == "commands" {
+						got = example.Commands[0].Retry
+					} else {
+						got = example.PreStart[0].Retry
+					}
+					require.Equal(t, &tt.want, got)
+				})
+			}
+
+			for _, tt := range invalidRetryValues {
+				t.Run(tt.name, func(t *testing.T) {
+					var example Example
+					err := yaml.Unmarshal([]byte(retryExampleYAML(phase, tt.retry)), &example)
+					require.Error(t, err)
+				})
+			}
+		})
+	}
+}
+
+func retryExampleYAML(phase, retry string) string {
+	command := "  - argv: [curl]\n    retry: " + retry + "\n"
+	preStart := ""
+	commands := "commands:\n  - argv: [curl]\n"
+	if phase == "commands" {
+		commands = "commands:\n" + command
+	} else {
+		preStart = "preStart:\n" + command
+	}
+	return "title: Example\ndescription: Test\nconfig: {}\n" + preStart + commands
+}
+
+func TestVolatileHeaderNamesYAML(t *testing.T) {
+	var example Example
+	source := "title: Example\ndescription: Test\nconfig: {}\ncommands:\n  - argv: [curl]\nvolatileHeaders: [x-runtime, X-Created-At]\n"
+	require.NoError(t, yaml.Unmarshal([]byte(source), &example))
+	require.Equal(t, []string{"x-runtime", "X-Created-At"}, example.VolatileHeaders)
+}
+
 func TestManifestsForCatalog(t *testing.T) {
 	all, err := LoadManifests(internaltesting.ExtensionsFS(t), ".", false)
 	require.NoError(t, err)

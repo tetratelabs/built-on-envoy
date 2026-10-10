@@ -90,8 +90,48 @@ Code snippet showing usage.
 | | |
 |---|---|
 | **Type** | `string` |
-| **Required** | Yes |
+| **Required** | No |
 | **Min length** | 1 |
+
+[↑ Top](#) | [↑ Extension Manifest](#reference)
+
+
+
+#### examples.commands
+
+Commands executed sequentially against the running extension to generate code.
+
+| | |
+|---|---|
+| **Type** | [[]exampleCommand](#reference-exampleCommand) |
+| **Required** | No |
+| **Min items** | 1 |
+
+[↑ Top](#) | [↑ Extension Manifest](#reference)
+
+
+
+#### examples.comparison
+
+Scoped comparison rules for date and duration values in captured output, beyond HTTP headers. Invalid values and format changes remain visible.
+
+| | |
+|---|---|
+| **Type** | `[]object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Extension Manifest](#reference)
+
+
+
+#### examples.config
+
+Extension configuration for an executable example. Serialized as JSON for boe run; an empty object is allowed.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
 
 [↑ Top](#) | [↑ Extension Manifest](#reference)
 
@@ -111,6 +151,20 @@ Explanation of what the example demonstrates.
 
 
 
+#### examples.preStart
+
+Commands executed sequentially before starting the extension.
+
+| | |
+|---|---|
+| **Type** | [[]exampleCommand](#reference-exampleCommand) |
+| **Required** | No |
+| **Min items** | 1 |
+
+[↑ Top](#) | [↑ Extension Manifest](#reference)
+
+
+
 #### examples.title
 
 Short title for the example.
@@ -120,6 +174,20 @@ Short title for the example.
 | **Type** | `string` |
 | **Required** | Yes |
 | **Min length** | 1 |
+
+[↑ Top](#) | [↑ Extension Manifest](#reference)
+
+
+
+#### examples.volatileHeaders
+
+Case-insensitive response header names whose values vary between runs. Date and duration formats are inferred; only values with the same recognized type and format compare equal. Unrecognized values compare exactly. HTTP Date headers are handled automatically as dates.
+
+| | |
+|---|---|
+| **Type** | `[]string` |
+| **Required** | No |
+| **Item pattern** | ``^[!#$%&'*+.^_`\|~0-9A-Za-z-]+$`` |
 
 [↑ Top](#) | [↑ Extension Manifest](#reference)
 
@@ -425,4 +493,57 @@ Semantic version of the extension. Required unless the `parent` field is set.
 | **Forbidden when** | `parent` is set |
 | **Required when** | `parent` is not set |
 
-[↑ Top](#) | [↑ Extension Manifest](#reference) {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */} {/* range . */}
+[↑ Top](#) | [↑ Extension Manifest](#reference) {/* if .SubProperties */} {/* range .Properties */}
+
+
+
+<a id="reference-exampleCommand"></a>
+### Custom type: exampleCommand
+
+
+
+#### argv
+
+Executable and arguments, without shell evaluation. Supports PROXY_URL, ADMIN_URL, UPSTREAM_ADDRESS, and WORK_DIR placeholders in `${NAME}` form.
+
+| | |
+|---|---|
+| **Type** | `[]string` |
+| **Required** | Yes |
+| **Min items** | 1 |
+
+[↑ Top](#) | [↑ Extension Manifest](#reference)
+
+#### comment
+
+Comment explaining the command.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+| **Min length** | 1 |
+
+[↑ Top](#) | [↑ Extension Manifest](#reference)
+
+#### expectedExit
+
+Expected command exit code. Defaults to zero; HTTP denial responses do not normally cause curl to fail.
+
+| | |
+|---|---|
+| **Type** | `integer` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Extension Manifest](#reference)
+
+#### retry
+
+Repeat a single curl request until it returns the selected HTTP status, within a bounded number of attempts.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Extension Manifest](#reference) {/* range .Properties */} {/* range .CustomTypes */} {/* if .CustomTypes */} {/* range . */}
