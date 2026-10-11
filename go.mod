@@ -15,7 +15,7 @@ require (
 	github.com/testcontainers/testcontainers-go v0.44.0
 	github.com/tetratelabs/func-e v1.6.0
 	golang.org/x/mod v0.41.0
-	golang.org/x/tools v0.50.0
+	golang.org/x/tools v0.51.0
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v3 v3.0.1
 	oras.land/oras-go/v2 v2.6.2
