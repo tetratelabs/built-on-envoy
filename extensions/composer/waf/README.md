@@ -4,19 +4,20 @@ This extension implements a Web Application Firewall using [OWASP Coraza](https:
 
 ## Rule Files
 
-The WAF resolves rule files from three layered filesystems (first match wins):
+The WAF resolves rule files from four layered filesystems (first match wins):
 
 1. **Embedded rules** — tailored configurations shipped with this extension.
-2. **Coraza CoreRuleSet package** — upstream OWASP CRS rules.
-3. **Local filesystem** — support for user-provided overrides and custom rules.
+2. **Coraza CoreRuleSet `crs/v4` module** — upstream OWASP CRS rules and setup file.
+3. **Coraza CoreRuleSet `coraza/v3` module** — upstream Coraza recommended configuration.
+4. **Local filesystem** — support for user-provided overrides and custom rules.
 
 ## Upgrading CRS
 
-The CRS rules are provided by the [Coraza CoreRuleSet package](https://github.com/corazawaf/coraza-coreruleset). To upgrade:
+The CRS rules are provided by the `crs/v4` module of [Coraza CoreRuleSet](https://github.com/corazawaf/coraza-coreruleset). To upgrade:
 
-1. Bump the CRS dependency version in `go.mod`. You can find the latest CRS version on the [coraza-coreruleset releases page](https://github.com/corazawaf/coraza-coreruleset/releases):
+1. Bump the CRS module version in `go.mod`. Its versions follow the upstream CRS releases and are tagged as `crs/vX.Y.Z` (see the [coraza-coreruleset tags](https://github.com/corazawaf/coraza-coreruleset/tags)):
 ```sh
-go get github.com/corazawaf/coraza-coreruleset/v4@<new-version>
+go get github.com/corazawaf/coraza-coreruleset/crs/v4@<new-version>
 go mod tidy
 ```
 
@@ -26,9 +27,9 @@ go mod tidy
 
 To upgrade to a new Coraza version:
 
-1. Bump the Coraza dependency version in `go.mod`:
+1. Bump the Coraza dependency version in `go.mod`, together with the `coraza/v3` module of Coraza CoreRuleSet, which provides `@coraza.conf-recommended` for the same Coraza version (tagged as `coraza/vX.Y.Z`):
    ```sh
-   go get github.com/corazawaf/coraza/v3@<new-version>
+   go get github.com/corazawaf/coraza/v3@<new-version> github.com/corazawaf/coraza-coreruleset/coraza/v3@<new-version>
    go mod tidy
    ```
 

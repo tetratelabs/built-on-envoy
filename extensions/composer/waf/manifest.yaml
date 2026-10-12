@@ -50,6 +50,7 @@ longDescription: |
   | `@coraza.conf-recommended` | — | Coraza upstream configuration file example |
   | [`@coraza.conf`](https://github.com/tetratelabs/built-on-envoy/blob/main/extensions/composer/waf/coraza/directives/%40coraza.conf) | `@recommended.conf`, `@recommended-conf` | Coraza configuration file tailored for Coraza dynamic module implementation |
   | `@crs-setup.conf.example` | — | CRS upstream configuration file example |
+  | `@crs-setup.conf.example-nodefaultact` | — | CRS upstream configuration file example without the `SecDefaultAction` directives |
   | [`@crs-setup.conf`](https://github.com/tetratelabs/built-on-envoy/blob/main/extensions/composer/waf/coraza/directives/%40crs-setup.conf) | `@crs-setup-conf` | CRS configuration file tailored for Coraza dynamic module implementation |
   | `@owasp_crs/` | — | CRS rules directory |
 
