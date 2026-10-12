@@ -336,6 +336,7 @@ func TestPassthroughEnvVars(t *testing.T) {
 				"BOE_STATE_HOME":    "/custom/state",
 				"BOE_RUNTIME_DIR":   "/custom/runtime",
 				"BOE_RUN_ID":        "host-run-id",
+				"BOE_RUN_DOCKER":    "true",
 				"BOE_TOKEN":         "secret",
 				"HOME":              "/home/user",
 			},
