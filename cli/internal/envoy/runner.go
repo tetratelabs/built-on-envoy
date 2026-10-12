@@ -557,13 +557,16 @@ func passthroughEnvVars() []string {
 	// Pass through BOE_ environment variables to the Docker container,
 	// so that users can set registry credentials or other configs via env vars instead of CLI flags.
 	// We don't passthrough the XDG variables as we'll mount the host directories on a fixed location in the container.
+	// BOE_RUN_DOCKER is not passed through either, as the CLI in the container must run Envoy directly
+	// instead of trying to start another Docker container.
 	passthroughEnv := slices.DeleteFunc(os.Environ(), func(arg string) bool {
 		return strings.HasPrefix(arg, "BOE_ADMIN_ADDRESS=") ||
 			strings.HasPrefix(arg, "BOE_CONFIG_HOME=") ||
 			strings.HasPrefix(arg, "BOE_DATA_HOME=") ||
 			strings.HasPrefix(arg, "BOE_STATE_HOME=") ||
 			strings.HasPrefix(arg, "BOE_RUNTIME_DIR=") ||
-			strings.HasPrefix(arg, "BOE_RUN_ID=")
+			strings.HasPrefix(arg, "BOE_RUN_ID=") ||
+			strings.HasPrefix(arg, "BOE_RUN_DOCKER=")
 	})
 
 	for _, e := range passthroughEnv {
