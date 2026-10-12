@@ -13,10 +13,10 @@ List of environment variables that can be used to configure the CLI behavior.
 | `BOE_ADMIN_PORT` | Port for Envoy admin interface. | `9901` |
 | `BOE_CONFIG_HOME` | Configuration files directory. Defaults to ~/.config/boe | `~/.config/boe` |
 | `BOE_DATA_HOME` | Downloaded Envoy binaries directory. Defaults to ~/.local/share/boe | `~/.local/share/boe` |
-| `BOE_DLV_PATH` | Path to a dlv binary to use instead of the patched Delve that boe builds. Unpatched Delve versions may not be able to list goroutines. | - |
-| `BOE_DLV_PORT` | Port for the headless Delve server attached to Envoy. | `2345` |
+| `BOE_DEBUG_PORT` | Port for the debug server attached to Envoy. | `2345` |
+| `BOE_DEBUG_SERVER_PATH` | Path to the debug server binary: dlv for Go extensions (instead of the patched Delve that boe builds; unpatched versions may not be able to list goroutines), or gdbserver (Linux) or debugserver (macOS) for Rust extensions. | - |
 | `BOE_LOG_LEVEL` | Log level for the CLI. Defaults to debug | `debug` |
-| `BOE_REBUILD_DLV` | Rebuild the patched Delve even if it is already in the cache. | - |
+| `BOE_REBUILD_DLV` | Rebuild the patched Delve used for Go extensions even if it is already in the cache. | - |
 | `BOE_REGISTRY` | OCI registry URL for the extensions. | `ghcr.io/tetratelabs/built-on-envoy` |
 | `BOE_REGISTRY_INSECURE` | Allow connecting to an insecure (HTTP) registry. | `false` |
 | `BOE_REGISTRY_PASSWORD` | Password for the OCI registry. | - |

@@ -553,9 +553,10 @@ func handleExtensionSource(ctx context.Context, downloader *extensions.Downloade
 		fmt.Fprintf(os.Stderr, "→ %sBuilding %s...%s\n", internal.ANSIBold, rootManifest.Name, internal.ANSIReset)
 		downloader.Logger.Info("building local Rust extension", "name", rootManifest.Name, "version", rootManifest.Version)
 		// Build dynamic module (currently supports Rust)
-		if err := extensions.BuildDynamicModule(downloader.Logger, downloader.Dirs, rootManifest, rootPath); err != nil {
+		if err := extensions.BuildDynamicModule(downloader.Logger, downloader.Dirs, rootManifest, rootPath, opts); err != nil {
 			return err
 		}
+		extensionManifest.Debug = opts.Debug
 	case extensions.TypeExtProc:
 		fmt.Fprintf(os.Stderr, "→ %sBuilding %s...%s\n", internal.ANSIBold, rootManifest.Name, internal.ANSIReset)
 		downloader.Logger.Info("building local ext_proc extension", "name", rootManifest.Name, "version", rootManifest.Version)

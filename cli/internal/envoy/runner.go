@@ -87,7 +87,7 @@ type RunnerFuncE struct {
 	TestUpstreamCluster string
 	// ExtProcBinaries maps ext_proc extension names to their binary paths.
 	ExtProcBinaries map[string]string
-	// Debug, when set, attaches a headless Delve server to the Envoy process once it is started.
+	// Debug, when set, attaches a debug server to the Envoy process once it is started.
 	Debug *DebugOptions
 }
 
@@ -128,7 +128,7 @@ func (r *RunnerFuncE) Run(ctx context.Context) error {
 
 	// Disable cgo pointer checks as Envoy may hold pointers to Go memory.
 	godebug := []string{"cgocheck=0"}
-	if r.Debug != nil {
+	if r.Debug != nil && r.Debug.Debugger == DebuggerDelve {
 		// Async preemption signals make stepping through Go code hosted in a cgo process unreliable.
 		godebug = append(godebug, "asyncpreemptoff=1")
 	}
@@ -156,21 +156,19 @@ func (r *RunnerFuncE) Run(ctx context.Context) error {
 	}
 	defer stopExtProcServers(r.Logger, extProcCmds)
 
-	var dlv *exec.Cmd
 	if r.Debug != nil {
-		// Resolve Delve before starting Envoy to fail fast if it is not available.
-		if err = r.Debug.resolveDelve(ctx, r.Logger); err != nil {
+		// Resolve the debug server before starting Envoy to fail fast if it is not available.
+		if err = r.Debug.resolve(ctx, r.Logger); err != nil {
 			return err
 		}
-		defer func() { stopDelve(r.Logger, dlv) }()
+		defer r.Debug.stop(r.Logger)
 	}
 
 	// Define startup hook that will be called when Envoy admin is ready
 	start := time.Now()
 	startupHook := func(hookCtx context.Context, adminClient admin.AdminClient, _ string) error {
 		if r.Debug != nil {
-			var err error
-			if dlv, err = r.Debug.attach(ctx, hookCtx, r.Logger); err != nil {
+			if err := r.Debug.attach(ctx, hookCtx, r.Logger); err != nil {
 				return err
 			}
 		}
@@ -187,6 +185,9 @@ func (r *RunnerFuncE) Run(ctx context.Context) error {
 
 Press Ctrl+C to stop
 `, r.ListenPort, adminClient.Port(), startDuration, internal.ANSIBold, internal.ANSIReset)
+		if r.Debug != nil {
+			r.Debug.printNotes()
+		}
 		return nil
 	}
 
@@ -419,8 +420,8 @@ type RunnerDocker struct {
 	LocalExtensions []string
 	Pull            string
 	ImageVersion    string
-	// Debug, when set, runs the container so that a headless Delve server can be attached to Envoy
-	// and reached from the host.
+	// Debug, when set, runs the container so that a debug server can be attached to Envoy and reached
+	// from the host.
 	Debug *DebugOptions
 }
 
@@ -498,14 +499,14 @@ func (r *RunnerDocker) dockerRunArgs(image string, localExtArgs []string) []stri
 	return args
 }
 
-// debugArgs returns the Docker run arguments needed to debug Envoy with Delve inside the container.
+// debugArgs returns the Docker run arguments needed to debug Envoy inside the container.
 func (r *RunnerDocker) debugArgs() []string {
-	dlvPort := strconv.FormatUint(uint64(r.Debug.DelvePort), 10)
+	port := strconv.FormatUint(uint64(r.Debug.Port), 10)
 	args := []string{
 		"--cap-add=SYS_PTRACE",
 		"--security-opt", "seccomp=unconfined",
-		"-p", "127.0.0.1:" + dlvPort + ":" + dlvPort,
-		"-e", DelveListenHostEnv + "=0.0.0.0",
+		"-p", "127.0.0.1:" + port + ":" + port,
+		"-e", DebugListenHostEnv + "=0.0.0.0",
 		// Source trees are mounted from the host and are not owned by the container user.
 		"-e", "GOFLAGS=-buildvcs=false",
 	}
@@ -657,13 +658,14 @@ func (r *RunnerDocker) processCommandArgs(args []string) []string {
 			continue
 		}
 
-		// In debug mode, local extensions are mounted at the same absolute path, and dlv is installed in the container.
+		// In debug mode, local extensions are mounted at the same absolute path, and the debug server is
+		// resolved in the container.
 		if r.Debug != nil {
-			if arg == "--dlv-path" && i+1 < len(args) {
+			if arg == "--debug-server-path" && i+1 < len(args) {
 				i++
 				continue
 			}
-			if strings.HasPrefix(arg, "--dlv-path=") {
+			if strings.HasPrefix(arg, "--debug-server-path=") {
 				continue
 			}
 			if strings.HasPrefix(arg, "--local=") {

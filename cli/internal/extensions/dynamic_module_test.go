@@ -7,6 +7,7 @@ package extensions
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -58,6 +59,41 @@ func TestCheckOrBuildRustDynamicModule(t *testing.T) {
 	// Run again to verify it uses the cached library and doesn't fail
 	err = CheckOrBuildDynamicModule(logger, fakeDirs, manifest, extensionPath)
 	require.NoError(t, err, "should not fail when library is already cached")
+}
+
+func TestBuildDynamicModuleDebug(t *testing.T) {
+	if _, err := exec.LookPath("cargo"); err != nil {
+		t.Skip("cargo not available")
+	}
+	// A minimal crate without dependencies, so it builds fast.
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "Cargo.toml"), []byte(`[package]
+name = "debug-test"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "debug_test"
+crate-type = ["cdylib"]
+`), 0o600))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "src"), 0o750))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "src", "lib.rs"), []byte("#[no_mangle]\npub extern \"C\" fn f() {}\n"), 0o600))
+
+	fakeDirs := &xdg.Directories{DataHome: t.TempDir()}
+	manifest := &Manifest{Name: "debug-test", Version: "0.1.0", Type: TypeRust}
+	require.NoError(t, BuildDynamicModule(internaltesting.NewTLogger(t), fakeDirs, manifest, dir, BuildOptions{Debug: true}))
+
+	// The debug build uses the dev profile and goes to the debug cache slot.
+	_, err := os.Stat(filepath.Join(dir, "target", "debug"))
+	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(dir, "target", "release"))
+	require.True(t, os.IsNotExist(err))
+	debugManifest := *manifest
+	debugManifest.Debug = true
+	_, err = os.Stat(LocalCacheExtension(fakeDirs, &debugManifest))
+	require.NoError(t, err)
+	_, err = os.Stat(LocalCacheExtension(fakeDirs, manifest))
+	require.True(t, os.IsNotExist(err))
 }
 
 func TestCopyExtensionManifests(t *testing.T) {
