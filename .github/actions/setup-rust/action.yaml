@@ -1,0 +1,27 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# Read the shared toolchain pin so CI does not independently track stable.
+name: Set up repository Rust toolchain
+description: Install the Rust version and components declared by the workspace
+runs:
+  using: composite
+  steps:
+    - name: Read Rust toolchain
+      id: toolchain
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        python3 - <<'PYTHON' >> "$GITHUB_OUTPUT"
+        import tomllib
+        with open("rust-toolchain.toml", "rb") as source:
+            toolchain = tomllib.load(source)["toolchain"]
+        print(f"version={toolchain['channel']}")
+        print(f"components={','.join(toolchain['components'])}")
+        PYTHON
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ steps.toolchain.outputs.version }}
+        components: ${{ steps.toolchain.outputs.components }}

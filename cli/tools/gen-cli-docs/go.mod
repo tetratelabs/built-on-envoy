@@ -1,6 +1,6 @@
 module github.com/tetratelabs/built-on-envoy/cli/tools/gen-cli-docs
 
-go 1.27.1
+go 1.27.2
 
 require (
 	github.com/alecthomas/kong v1.16.1
@@ -19,6 +19,7 @@ require (
 	github.com/lufia/plan9stats v0.0.0-20260330125221-c963978e514e // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
+	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3 // indirect

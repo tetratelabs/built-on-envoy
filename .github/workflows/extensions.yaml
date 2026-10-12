@@ -29,7 +29,11 @@ jobs:
           filters: |
             extensions:
               - 'extensions/**'
-          predicate-quantifier: every  # Make the filters be AND-ed
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - '.github/actions/setup-rust/**'
+              - '.github/workflows/extensions-rust.yaml'
           token: "" # don't use github api
     outputs:
       extensions: ${{ steps.changes.outputs.extensions }}

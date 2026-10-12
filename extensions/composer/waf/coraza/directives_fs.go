@@ -11,7 +11,8 @@ import (
 	"log"
 	"strings"
 
-	coreruleset "github.com/corazawaf/coraza-coreruleset/v4"
+	corazaconf "github.com/corazawaf/coraza-coreruleset/coraza/v3"
+	crs "github.com/corazawaf/coraza-coreruleset/crs/v4"
 	"github.com/jcchavezs/mergefs"
 	"github.com/jcchavezs/mergefs/io"
 )
@@ -22,10 +23,11 @@ var customConfigsEmbed embed.FS
 // embeddedConfigs is the embedded directives directory wrapped with alias resolution.
 var embeddedConfigs directivesFS
 
-// combinedDirectivesFS merges three filesystems with the following precedence order:
+// combinedDirectivesFS merges four filesystems with the following precedence order:
 //  1. Embedded directives — tailored configurations shipped with this extension
-//  2. coraza-coreruleset package — upstream unmodified OWASP CRS directives and configs
-//  3. Local filesystem — support for user-provided directive files
+//  2. coraza-coreruleset crs/v4 module — upstream unmodified OWASP CRS rules and setup file
+//  3. coraza-coreruleset coraza/v3 module — upstream unmodified Coraza recommended config
+//  4. Local filesystem — support for user-provided directive files
 var combinedDirectivesFS fs.FS
 
 func init() {
@@ -36,7 +38,7 @@ func init() {
 		log.Fatal(err)
 	}
 	embeddedConfigs = directivesFS{sub}
-	combinedDirectivesFS = mergefs.Merge(embeddedConfigs, coreruleset.FS, io.OSFS)
+	combinedDirectivesFS = mergefs.Merge(embeddedConfigs, crs.FS, corazaconf.FS, io.OSFS)
 }
 
 // directivesFS wraps the embedded directives directory, strips directory prefixes

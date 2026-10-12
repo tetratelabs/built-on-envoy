@@ -1,6 +1,6 @@
 module github.com/tetratelabs/built-on-envoy
 
-go 1.27.1
+go 1.27.2
 
 require (
 	github.com/alecthomas/kong v1.16.1
@@ -9,12 +9,13 @@ require (
 	github.com/mccutchen/go-httpbin/v2 v2.25.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
+	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.44.0
 	github.com/tetratelabs/func-e v1.6.0
 	golang.org/x/mod v0.41.0
-	golang.org/x/tools v0.50.0
+	golang.org/x/tools v0.51.0
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v3 v3.0.1
 	oras.land/oras-go/v2 v2.6.2

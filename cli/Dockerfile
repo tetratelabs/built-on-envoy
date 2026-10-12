@@ -31,15 +31,17 @@ ENV GOMODCACHE=/var/boe/go/pkg/mod \
 ARG TARGETOS
 ARG TARGETARCH
 ARG GO_VERSION
+ARG RUST_VERSION
 
 # Install Go
 RUN curl -fsSL https://go.dev/dl/go${GO_VERSION}.${TARGETOS}-${TARGETARCH}.tar.gz \
     | tar -C /usr/local -xz
 
-# Install Rust (minimal profile)
-RUN curl https://sh.rustup.rs -sSf \
-    | sh -s -- -y --profile minimal --default-toolchain stable
-RUN chown -R boe:boe $RUSTUP_HOME $CARGO_HOME
+# Install the repository's Rust toolchain (minimal profile).
+RUN curl --fail --silent --show-error --location https://sh.rustup.rs -o /tmp/rustup-init.sh && \
+    sh /tmp/rustup-init.sh -y --profile minimal --default-toolchain "${RUST_VERSION}" && \
+    rm /tmp/rustup-init.sh
+RUN chown -R boe:boe "$RUSTUP_HOME" "$CARGO_HOME"
 
 # Install the CLI
 COPY --chown=boe:boe ./out/boe-${TARGETOS}-${TARGETARCH} /boe

@@ -10,12 +10,18 @@
 # Multi-stage build for Rust dynamic modules
 
 # Build stage
-FROM rust:1.96-bookworm AS builder
+FROM debian:bookworm-slim AS builder
 
-# Install build dependencies
+# Install the exact toolchain without depending on Rust image publication timing.
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
 RUN apt-get update && \
-    apt-get install -y clang libclang-dev && \
+    apt-get install -y --no-install-recommends ca-certificates curl clang libclang-dev gcc libc6-dev git && \
     rm -rf /var/lib/apt/lists/*
+RUN curl --fail --silent --show-error --location https://sh.rustup.rs -o /tmp/rustup-init.sh && \
+    sh /tmp/rustup-init.sh -y --profile minimal --default-toolchain "{{ .RustVersion }}" && \
+    rm /tmp/rustup-init.sh
 
 WORKDIR /workspace
 

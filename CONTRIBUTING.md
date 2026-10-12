@@ -29,6 +29,18 @@ These are the must-run commands before you submit or pushing commits to a PR.
 
 All test targets are prefixed with `test-*` and can be run via `make test-<target>`.
 
+## Rust extensions
+
+Install Rust with rustup to use the exact version and components in `rust-toolchain.toml`.
+The Rust extensions share the root `Cargo.lock`. Commit lockfile updates alongside
+manifest changes; repository checks and binary release builds use `--locked`.
+For an intentional dependency update, run `cargo update` from the repository root
+and review the lockfile diff. The same toolchain pin is used by CI and the CLI image.
+
+Source-only extension images contain standalone crates and do not include the root
+workspace lockfile. Dependency resolution when compiling those images is independent
+of the repository's locked builds.
+
 ## Use of generative AI policy
 
 ### Goals

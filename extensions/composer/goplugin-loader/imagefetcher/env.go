@@ -39,7 +39,7 @@ func OptionFromEnv() Option {
 	}
 
 	if secretPath := os.Getenv("GOPLUGIN_PULL_SECRET"); secretPath != "" {
-		data, err := os.ReadFile(filepath.Clean(secretPath))
+		data, err := os.ReadFile(filepath.Clean(secretPath)) //nolint:gosec // Path is set by the operator via env var.
 		if err != nil {
 			fmt.Printf("warning: failed to read GOPLUGIN_PULL_SECRET %s: %v\n", secretPath, err)
 		} else {
