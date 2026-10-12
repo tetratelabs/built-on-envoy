@@ -133,11 +133,11 @@ impl DnsGatewayFilter {
         let query = Message::read(&mut BinDecoder::new(data))
             .map_err(|e| envoy_log_warn!("Failed to parse DNS query: {}", e))
             .ok()?;
-        if query.message_type() != MessageType::Query {
+        if query.message_type != MessageType::Query {
             return None;
         }
 
-        let question = query.queries().first()?;
+        let question = query.queries.first()?;
         // DNS names are fully qualified with a trailing dot (e.g. "api.aws.com.").
         // Strip it so our wildcard patterns like "*.aws.com" match correctly.
         let domain = question.name().to_utf8().trim_end_matches('.').to_string();
@@ -208,10 +208,10 @@ fn build_dns_response(
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut response = query_message.clone();
 
-    response.set_message_type(MessageType::Response);
-    response.set_response_code(ResponseCode::NoError);
-    response.set_recursion_available(true);
-    response.set_authoritative(true);
+    response.metadata.message_type = MessageType::Response;
+    response.metadata.response_code = ResponseCode::NoError;
+    response.metadata.recursion_available = true;
+    response.metadata.authoritative = true;
 
     // Emit an A record for IPv4 virtual IPs and an AAAA record for IPv6 virtual IPs.
     let rdata = match ip {
@@ -229,10 +229,10 @@ fn build_dns_response(
 fn build_nodata_response(query_message: &Message) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut response = query_message.clone();
 
-    response.set_message_type(MessageType::Response);
-    response.set_response_code(ResponseCode::NoError);
-    response.set_recursion_available(true);
-    response.set_authoritative(true);
+    response.metadata.message_type = MessageType::Response;
+    response.metadata.response_code = ResponseCode::NoError;
+    response.metadata.recursion_available = true;
+    response.metadata.authoritative = true;
 
     let bytes = response.to_vec()?;
     Ok(bytes)
@@ -241,6 +241,7 @@ fn build_nodata_response(query_message: &Message) -> Result<Vec<u8>, Box<dyn std
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hickory_proto::op::OpCode;
     use std::collections::HashMap;
 
     #[test]
@@ -385,10 +386,8 @@ mod tests {
 
     #[test]
     fn test_dns_response_building() {
-        let mut query = Message::new();
-        query.set_id(12345);
-        query.set_message_type(MessageType::Query);
-        query.set_recursion_desired(true);
+        let mut query = Message::new(12345, MessageType::Query, OpCode::Query);
+        query.metadata.recursion_desired = true;
 
         let name = Name::from_utf8("test.example.com").unwrap();
         let ip = IpAddr::V4(std::net::Ipv4Addr::new(10, 10, 0, 1));
@@ -402,20 +401,18 @@ mod tests {
         let mut decoder = BinDecoder::new(&response_bytes);
         let response = Message::read(&mut decoder).unwrap();
 
-        assert_eq!(response.id(), 12345);
-        assert_eq!(response.message_type(), MessageType::Response);
-        assert_eq!(response.response_code(), ResponseCode::NoError);
-        assert!(response.recursion_available());
-        assert_eq!(response.answers().len(), 1);
-        assert!(matches!(response.answers()[0].data(), RData::A(_)));
+        assert_eq!(response.id, 12345);
+        assert_eq!(response.message_type, MessageType::Response);
+        assert_eq!(response.response_code, ResponseCode::NoError);
+        assert!(response.recursion_available);
+        assert_eq!(response.answers.len(), 1);
+        assert!(matches!(&response.answers[0].data, RData::A(_)));
     }
 
     #[test]
     fn test_dns_response_building_v6_emits_aaaa() {
-        let mut query = Message::new();
-        query.set_id(2222);
-        query.set_message_type(MessageType::Query);
-        query.set_recursion_desired(true);
+        let mut query = Message::new(2222, MessageType::Query, OpCode::Query);
+        query.metadata.recursion_desired = true;
 
         let name = Name::from_utf8("test.example.com").unwrap();
         let ip = IpAddr::V6("fd00::1".parse::<std::net::Ipv6Addr>().unwrap());
@@ -423,9 +420,9 @@ mod tests {
         let response_bytes = build_dns_response(&query, &name, ip).unwrap();
         let response = Message::read(&mut BinDecoder::new(&response_bytes)).unwrap();
 
-        assert_eq!(response.message_type(), MessageType::Response);
-        assert_eq!(response.answers().len(), 1);
-        match response.answers()[0].data() {
+        assert_eq!(response.message_type, MessageType::Response);
+        assert_eq!(response.answers.len(), 1);
+        match &response.answers[0].data {
             RData::AAAA(a) => assert_eq!(a.0, "fd00::1".parse::<std::net::Ipv6Addr>().unwrap()),
             other => panic!("expected AAAA, got {:?}", other),
         }
@@ -433,10 +430,8 @@ mod tests {
 
     #[test]
     fn test_nodata_response_building() {
-        let mut query = Message::new();
-        query.set_id(54321);
-        query.set_message_type(MessageType::Query);
-        query.set_recursion_desired(false);
+        let mut query = Message::new(54321, MessageType::Query, OpCode::Query);
+        query.metadata.recursion_desired = false;
 
         let result = build_nodata_response(&query);
         assert!(result.is_ok());
@@ -447,11 +442,11 @@ mod tests {
         let mut decoder = BinDecoder::new(&response_bytes);
         let response = Message::read(&mut decoder).unwrap();
 
-        assert_eq!(response.id(), 54321);
-        assert_eq!(response.message_type(), MessageType::Response);
-        assert_eq!(response.response_code(), ResponseCode::NoError);
-        assert!(response.recursion_available());
-        assert_eq!(response.answers().len(), 0);
+        assert_eq!(response.id, 54321);
+        assert_eq!(response.message_type, MessageType::Response);
+        assert_eq!(response.response_code, ResponseCode::NoError);
+        assert!(response.recursion_available);
+        assert_eq!(response.answers.len(), 0);
     }
 
     #[test]
@@ -495,8 +490,8 @@ mod tests {
         // An arbitrary domain not enumerated anywhere still resolves via the catch-all.
         let query = make_dns_query("anything.example.net", RecordType::A);
         let msg = parse_response(&filter.process_dns_query(&query).unwrap());
-        assert_eq!(msg.answers().len(), 1);
-        match msg.answers()[0].data() {
+        assert_eq!(msg.answers.len(), 1);
+        match &msg.answers[0].data {
             RData::A(ip) => assert_eq!(&ip.0.octets()[..3], &[10, 123, 0]),
             other => panic!("expected A record from catch-all, got {:?}", other),
         }
@@ -505,7 +500,7 @@ mod tests {
     // ── process_dns_query tests ──────────────────────────────────────────────
 
     fn make_dns_query(domain: &str, record_type: RecordType) -> Vec<u8> {
-        use hickory_proto::op::{OpCode, Query as DnsQuery};
+        use hickory_proto::op::Query as DnsQuery;
         use hickory_proto::rr::DNSClass;
 
         let name = Name::from_utf8(domain).unwrap();
@@ -514,11 +509,8 @@ mod tests {
         q.set_query_type(record_type);
         q.set_query_class(DNSClass::IN);
 
-        let mut msg = Message::new();
-        msg.set_id(1);
-        msg.set_message_type(MessageType::Query);
-        msg.set_op_code(OpCode::Query);
-        msg.set_recursion_desired(true);
+        let mut msg = Message::new(1, MessageType::Query, OpCode::Query);
+        msg.metadata.recursion_desired = true;
         msg.add_query(q);
         msg.to_vec().unwrap()
     }
@@ -549,11 +541,11 @@ mod tests {
         );
 
         let msg = parse_response(&response.unwrap());
-        assert_eq!(msg.message_type(), MessageType::Response);
-        assert_eq!(msg.response_code(), ResponseCode::NoError);
-        assert_eq!(msg.answers().len(), 1);
+        assert_eq!(msg.message_type, MessageType::Response);
+        assert_eq!(msg.response_code, ResponseCode::NoError);
+        assert_eq!(msg.answers.len(), 1);
         // The allocated virtual IP must fall within 10.100.0.0/24
-        match msg.answers()[0].data() {
+        match &msg.answers[0].data {
             RData::A(ip) => assert_eq!(&ip.0.octets()[..3], &[10, 100, 0]),
             other => panic!("expected A record in response, got {:?}", other),
         }
@@ -582,8 +574,8 @@ mod tests {
         );
 
         let msg = parse_response(&response.unwrap());
-        assert_eq!(msg.answers().len(), 1);
-        match msg.answers()[0].data() {
+        assert_eq!(msg.answers.len(), 1);
+        match &msg.answers[0].data {
             RData::AAAA(ip) => {
                 assert_eq!(&ip.0.octets()[..6], &[0xfd, 0x00, 0x01, 0x00, 0x00, 0x00])
             }
@@ -609,7 +601,7 @@ mod tests {
         let query = make_dns_query("api.v6-data-test.com", RecordType::A);
         let msg = parse_response(&filter.process_dns_query(&query).unwrap());
         assert_eq!(
-            msg.answers().len(),
+            msg.answers.len(),
             0,
             "A query against a v6 matcher must return NODATA"
         );
@@ -658,13 +650,9 @@ mod tests {
         );
 
         let msg = parse_response(&response.unwrap());
-        assert_eq!(msg.message_type(), MessageType::Response);
-        assert_eq!(msg.response_code(), ResponseCode::NoError);
-        assert_eq!(
-            msg.answers().len(),
-            0,
-            "NODATA response must have no answers"
-        );
+        assert_eq!(msg.message_type, MessageType::Response);
+        assert_eq!(msg.response_code, ResponseCode::NoError);
+        assert_eq!(msg.answers.len(), 0, "NODATA response must have no answers");
     }
 
     #[test]
@@ -703,7 +691,7 @@ mod tests {
             "expected NODATA response when CIDR exhausted and fail_open=false"
         );
         assert_eq!(
-            parse_response(&response.unwrap()).answers().len(),
+            parse_response(&response.unwrap()).answers.len(),
             0,
             "exhausted CIDR with fail_open=false must return NODATA"
         );
