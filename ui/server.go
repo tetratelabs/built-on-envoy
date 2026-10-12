@@ -54,6 +54,8 @@ type RunParams struct {
 	ClustersJSONSpec    []string
 	TestUpstreamHost    string
 	TestUpstreamCluster string
+	ListenerTLSCert     string
+	ListenerTLSKey      string
 	Docker              bool
 	DockerImage         string
 	DockerPullPolicy    string
@@ -100,6 +102,12 @@ func (r *RunParams) Args() []string {
 	}
 	if r.TestUpstreamCluster != "" {
 		args = append(args, "--test-upstream-cluster", r.TestUpstreamCluster)
+	}
+	if r.ListenerTLSCert != "" {
+		args = append(args, "--listener-cert", r.ListenerTLSCert)
+	}
+	if r.ListenerTLSKey != "" {
+		args = append(args, "--listener-key", r.ListenerTLSKey)
 	}
 	if r.Docker {
 		args = append(args, "--docker")

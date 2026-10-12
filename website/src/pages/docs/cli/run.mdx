@@ -76,6 +76,16 @@ If the extension needs to reach external services, you can provide additional En
     boe run --extension ext1 --cluster-json '{"name":"my-cluster","type":"STRICT_DNS","load_assignment":{"cluster_name":"my-cluster","endpoints":[{"lb_endpoints":[{"endpoint":{"address":{"socket_address":"address":"example.com","port_value":8081}}}}]}]}}'
     ```
 
+Serve HTTPS on the listener by providing a certificate and a private key. This is useful to test
+browser features that require a secure context. For example, using a locally-trusted certificate
+generated with [mkcert](https://github.com/FiloSottile/mkcert):
+
+    ```shell
+    mkcert localhost
+    boe run --extension ext1 --listener-cert localhost.pem --listener-key localhost-key.pem
+    curl https://localhost:10000/anything
+    ```
+
 Run the extensions against a custom upstream host instead of the default `httpbin.org`:
 
     ```shell
@@ -115,6 +125,8 @@ boe run --help
 | `--cluster-json` | Optional additional Envoy cluster providing the complete cluster config in JSON format. | `[]string` | - | - | No |
 | `--test-upstream-host` | Hostname for the test upstream cluster. Mutually exclusive with --test-upstream-cluster. Defaults to "httpbin.org". | `string` | - | - | No |
 | `--test-upstream-cluster` | Name of an existing configured cluster to use as the test upstream. The cluster must be configured via --cluster, --cluster-insecure, or --cluster-json. Mutually exclusive with --test-upstream-host. | `string` | - | - | No |
+| `--listener-cert` | Path to a PEM-encoded certificate chain used to terminate TLS on the Envoy listener. Requires --listener-key. | `string` | - | - | No |
+| `--listener-key` | Path to the PEM-encoded private key for the listener certificate. Requires --listener-cert. | `string` | - | - | No |
 | `--docker` | Run Envoy as a Docker container instead of using func-e. | `bool` | `false` | `BOE_RUN_DOCKER` | No |
 | `--pull` | Pull policy for the BOE Docker image (missing, always, never). Only applicable when running with --docker. | `string` | `missing` | - | No |
 | `--docker-image-version` | Override the BOE Docker image tag to use when running with --docker. By default, the image version matches the BOE version. | `string` | - | - | No |

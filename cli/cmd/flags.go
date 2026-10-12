@@ -37,6 +37,15 @@ type ClusterFlags struct {
 	TestUpstreamCluster string   `name:"test-upstream-cluster" help:"Name of an existing configured cluster to use as the test upstream. The cluster must be configured via --cluster, --cluster-insecure, or --cluster-json. Mutually exclusive with --test-upstream-host."`
 }
 
+// ListenerTLSFlags holds flags to terminate TLS on the Envoy listener.
+type ListenerTLSFlags struct {
+	Cert string `name:"listener-cert" help:"Path to a PEM-encoded certificate chain used to terminate TLS on the Envoy listener. Requires --listener-key." type:"existingfile" and:"listener-tls"`
+	Key  string `name:"listener-key" help:"Path to the PEM-encoded private key for the listener certificate. Requires --listener-cert." type:"existingfile" and:"listener-tls"`
+}
+
+// enabled returns true if TLS has been configured for the listener.
+func (l *ListenerTLSFlags) enabled() bool { return l.Cert != "" || l.Key != "" }
+
 // DockerFlags holds flags for Docker configuration.
 type DockerFlags struct {
 	Enabled      bool   `name:"docker" help:"Run Envoy as a Docker container instead of using func-e." default:"false" env:"BOE_RUN_DOCKER"`

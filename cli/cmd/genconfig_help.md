@@ -49,6 +49,13 @@ For full control over the cluster configuration, raw JSON is also supported:
     boe gen-config --local ~/src/my-extension --cluster-json '{"name":"my-service","type":"STRICT_DNS","load_assignment":{"cluster_name":"my-service","endpoints":[{"lb_endpoints":[{"endpoint":{"address":{"socket_address":{"address":"my-service.example.com","port_value":443}}}}]}]}}'
     ```
 
+Generate configuration that terminates TLS on the listener. When exporting the configuration with
+`--output`, the certificate and key are copied to the output directory:
+
+    ```shell
+    boe gen-config --local ~/src/my-extension --listener-cert cert.pem --listener-key key.pem --output /tmp/export
+    ```
+
 Generate configuration from a specific version hosted in a custom OCI registry:
 
     ```shell

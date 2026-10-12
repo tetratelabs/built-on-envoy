@@ -43,13 +43,14 @@ type Run struct {
 	// sep:"none" disables Kong's default comma-separated splitting for []string flags.
 	// JSON config values contain commas (e.g. {"a":"1","b":"2"}) which would otherwise
 	// be split into separate invalid fragments, causing protobuf unmarshal failures.
-	Configs                 []string     `name:"config" sep:"none" help:"Optional JSON config string for extensions. Applied in order to combined --extension and --local flags."`
-	FilterTypes             []string     `name:"filter-type" sep:"none" help:"Set the filter type for an extension. Applied positionally to the combined --extension and --local flags. Accepted values: http, network, listener, udp_listener."`
-	NativeHTTPFiltersBefore []string     `name:"native-http-filter-before" sep:"none" help:"Optional YAML/JSON native HTTP filter list (or @filepath) per extension position. Overrides manifest nativeHttpFilters.before."`
-	NativeHTTPFiltersAfter  []string     `name:"native-http-filter-after" sep:"none" help:"Optional YAML/JSON native HTTP filter list (or @filepath) per extension position. Overrides manifest nativeHttpFilters.after."`
-	Clusters                ClusterFlags `embed:""`
-	Docker                  DockerFlags  `embed:""`
-	OCI                     OCIFlags     `embed:""`
+	Configs                 []string         `name:"config" sep:"none" help:"Optional JSON config string for extensions. Applied in order to combined --extension and --local flags."`
+	FilterTypes             []string         `name:"filter-type" sep:"none" help:"Set the filter type for an extension. Applied positionally to the combined --extension and --local flags. Accepted values: http, network, listener, udp_listener."`
+	NativeHTTPFiltersBefore []string         `name:"native-http-filter-before" sep:"none" help:"Optional YAML/JSON native HTTP filter list (or @filepath) per extension position. Overrides manifest nativeHttpFilters.before."`
+	NativeHTTPFiltersAfter  []string         `name:"native-http-filter-after" sep:"none" help:"Optional YAML/JSON native HTTP filter list (or @filepath) per extension position. Overrides manifest nativeHttpFilters.after."`
+	Clusters                ClusterFlags     `embed:""`
+	ListenerTLS             ListenerTLSFlags `embed:""`
+	Docker                  DockerFlags      `embed:""`
+	OCI                     OCIFlags         `embed:""`
 
 	extensionPositions extensionPositions `kong:"-"` // Internal field: tracks the original position of extensions specified via both --extension and --local flags
 	defaultLogLevel    string             `kong:"-"` // Internal field: parsed default log level
@@ -112,6 +113,8 @@ func (r *Run) run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 			Pull:            r.Docker.Pull,
 			ImageVersion:    r.Docker.ImageVersion,
 			Debug:           debug,
+			ListenerTLSCert: r.ListenerTLS.Cert,
+			ListenerTLSKey:  r.ListenerTLS.Key,
 		}
 		return runner.Run(ctx)
 	}
@@ -210,6 +213,8 @@ func (r *Run) run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 		ClustersJSON:            r.Clusters.JSONSpec,
 		TestUpstreamHost:        r.Clusters.TestUpstreamHost,
 		TestUpstreamCluster:     r.Clusters.TestUpstreamCluster,
+		ListenerTLSCert:         r.ListenerTLS.Cert,
+		ListenerTLSKey:          r.ListenerTLS.Key,
 		ExtProcBinaries:         extProcBinaries,
 		Debug:                   debug,
 	}

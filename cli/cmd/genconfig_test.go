@@ -94,6 +94,12 @@ Flags:
                                    configured via --cluster, --cluster-insecure,
                                    or --cluster-json. Mutually exclusive with
                                    --test-upstream-host.
+      --listener-cert=STRING       Path to a PEM-encoded certificate chain
+                                   used to terminate TLS on the Envoy listener.
+                                   Requires --listener-key.
+      --listener-key=STRING        Path to the PEM-encoded private key
+                                   for the listener certificate. Requires
+                                   --listener-cert.
       --registry="%s"
                                    OCI registry URL for the extensions
                                    ($BOE_REGISTRY).
@@ -277,6 +283,11 @@ func TestGenConfigValidateMutualExclusion(t *testing.T) {
 	require.ErrorContains(t, cmd.Validate(), "--test-upstream-host and --test-upstream-cluster are mutually exclusive")
 }
 
+func TestGenConfigValidateListenerTLSMinimal(t *testing.T) {
+	cmd := &GenConfig{Minimal: true, ListenerTLS: ListenerTLSFlags{Cert: "cert.pem", Key: "key.pem"}}
+	require.EqualError(t, cmd.Validate(), "--listener-cert and --listener-key cannot be used with --minimal, as no listener is generated")
+}
+
 func TestGenConfigMultipleArgsWithCommas(t *testing.T) {
 	config1 := `{"header":"value1","header2":"value2"}`
 	config2 := `{"another_config":"value3","yet_another_config":"value4"}`
@@ -391,6 +402,54 @@ func TestGenConfigWriteConfig(t *testing.T) {
 		written, err := os.ReadFile(cmd.Output + "/envoy.yaml")
 		require.NoError(t, err)
 		require.Contains(t, string(written), "oci://ex/p:v1", "user url must be preserved, not rewritten to file://")
+	})
+}
+
+func TestGenConfigListenerTLS(t *testing.T) {
+	dir := t.TempDir()
+	cert := filepath.Join(dir, "cert.pem")
+	key := filepath.Join(dir, "key.pem")
+	require.NoError(t, os.WriteFile(cert, []byte("cert"), 0o600))
+	require.NoError(t, os.WriteFile(key, []byte("key"), 0o600))
+
+	t.Run("stdout references the given files", func(t *testing.T) {
+		var buf bytes.Buffer
+		cmd := &GenConfig{
+			ListenPort:  10000,
+			AdminPort:   9901,
+			ListenerTLS: ListenerTLSFlags{Cert: cert, Key: key},
+			Output:      "-",
+			stdout:      &buf,
+		}
+		require.NoError(t, cmd.Run(t.Context(), &xdg.Directories{DataHome: t.TempDir()}, internaltesting.NewTLogger(t)))
+		require.Contains(t, buf.String(), "DownstreamTlsContext")
+		require.Contains(t, buf.String(), "filename: "+cert)
+		require.Contains(t, buf.String(), "filename: "+key)
+	})
+
+	t.Run("export copies the files", func(t *testing.T) {
+		var buf bytes.Buffer
+		cmd := &GenConfig{
+			ListenPort:  10000,
+			AdminPort:   9901,
+			ListenerTLS: ListenerTLSFlags{Cert: cert, Key: key},
+			Output:      t.TempDir(),
+			stdout:      &buf,
+		}
+		require.NoError(t, cmd.Run(t.Context(), &xdg.Directories{DataHome: t.TempDir()}, internaltesting.NewTLogger(t)))
+
+		gotCert, err := os.ReadFile(filepath.Join(cmd.Output, listenerCertFile))
+		require.NoError(t, err)
+		require.Equal(t, "cert", string(gotCert))
+		gotKey, err := os.ReadFile(filepath.Join(cmd.Output, listenerKeyFile))
+		require.NoError(t, err)
+		require.Equal(t, "key", string(gotKey))
+
+		written, err := os.ReadFile(filepath.Join(cmd.Output, "envoy.yaml"))
+		require.NoError(t, err)
+		require.Contains(t, string(written), "filename: "+listenerCertFile)
+		require.Contains(t, string(written), "filename: "+listenerKeyFile)
+		require.NotContains(t, string(written), dir)
 	})
 }
 

@@ -328,3 +328,25 @@ func TestRunParams_Args(t *testing.T) {
 		})
 	}
 }
+
+func TestRunParamsArgs(t *testing.T) {
+	require.Nil(t, (*RunParams)(nil).Args())
+	require.Empty(t, (&RunParams{}).Args())
+
+	params := &RunParams{
+		LogLevel:            "all:debug",
+		ClustersInsecure:    []string{"localhost:8080"},
+		TestUpstreamCluster: "localhost:8080",
+		ListenerTLSCert:     "/certs/listener.crt",
+		ListenerTLSKey:      "/certs/listener.key",
+		Docker:              true,
+	}
+	require.Equal(t, []string{
+		"--log-level", "all:debug",
+		"--cluster-insecure", "localhost:8080",
+		"--test-upstream-cluster", "localhost:8080",
+		"--listener-cert", "/certs/listener.crt",
+		"--listener-key", "/certs/listener.key",
+		"--docker",
+	}, params.Args())
+}

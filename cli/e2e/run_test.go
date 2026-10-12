@@ -7,11 +7,21 @@ package e2e
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"fmt"
+	"math/big"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -616,4 +626,85 @@ func TestNativeHTTPFilterPositionExtensions(t *testing.T) {
 			require.Subset(t, resp.Header, tt.expectedResponseHeaders)
 		})
 	}
+}
+
+// TestListenerTLS verifies that the listener terminates TLS when a certificate and key are provided.
+func TestListenerTLS(t *testing.T) {
+	certFile, keyFile, certPool := generateSelfSignedCert(t)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+
+	upstreamAddr := upstream.Listener.Addr().String()
+	ports := internaltesting.FreePorts(t, 2)
+	proxyPort := ports[0]
+	internaltesting.RunEnvoy(t, cliBin, proxyPort, ports[1],
+		"--cluster-insecure", upstreamAddr,
+		"--test-upstream-cluster", upstreamAddr,
+		"--listener-cert", certFile,
+		"--listener-key", keyFile,
+	)
+
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig:   &tls.Config{RootCAs: certPool, MinVersion: tls.VersionTLS12},
+			ForceAttemptHTTP2: true,
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	t.Cleanup(cancel)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://localhost:%d/anything", proxyPort), nil)
+	require.NoError(t, err)
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close() // nolint:errcheck
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.NotNil(t, resp.TLS)
+	require.Equal(t, "h2", resp.TLS.NegotiatedProtocol)
+}
+
+// generateSelfSignedCert writes a self-signed certificate for localhost and its key to a temporary
+// directory, and returns their paths along with a cert pool that trusts the certificate.
+func generateSelfSignedCert(t *testing.T) (string, string, *x509.CertPool) {
+	t.Helper()
+
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	template := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "localhost"},
+		DNSNames:              []string{"localhost"},
+		IPAddresses:           []net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	require.NoError(t, err)
+	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	certFile := filepath.Join(dir, "cert.pem")
+	keyFile := filepath.Join(dir, "key.pem")
+	require.NoError(t, os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600))
+	require.NoError(t, os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}), 0o600))
+
+	cert, err := x509.ParseCertificate(der)
+	require.NoError(t, err)
+	pool := x509.NewCertPool()
+	pool.AddCert(cert)
+
+	return certFile, keyFile, pool
 }

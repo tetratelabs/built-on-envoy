@@ -66,6 +66,16 @@ If the extension needs to reach external services, you can provide additional En
     boe run --extension ext1 --cluster-json '{"name":"my-cluster","type":"STRICT_DNS","load_assignment":{"cluster_name":"my-cluster","endpoints":[{"lb_endpoints":[{"endpoint":{"address":{"socket_address":"address":"example.com","port_value":8081}}}}]}]}}'
     ```
 
+Serve HTTPS on the listener by providing a certificate and a private key. This is useful to test
+browser features that require a secure context. For example, using a locally-trusted certificate
+generated with [mkcert](https://github.com/FiloSottile/mkcert):
+
+    ```shell
+    mkcert localhost
+    boe run --extension ext1 --listener-cert localhost.pem --listener-key localhost-key.pem
+    curl https://localhost:10000/anything
+    ```
+
 Run the extensions against a custom upstream host instead of the default `httpbin.org`:
 
     ```shell
