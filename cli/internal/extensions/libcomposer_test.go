@@ -31,7 +31,7 @@ func TestDownloadComposerLiteAndBuildIfNeeded_DownloadError(t *testing.T) {
 			return nil, fmt.Errorf("connection refused")
 		},
 	}
-	err := DownloadComposerLiteAndBuildIfNeeded(t.Context(), d, "0.1.0", ComposerArtifactLite)
+	err := DownloadComposerLiteAndBuildIfNeeded(t.Context(), d, "0.1.0", ComposerArtifactLite, BuildOptions{})
 	require.ErrorContains(t, err, "failed to download libcomposer")
 }
 
@@ -86,7 +86,7 @@ func TestEnsureComposerLiteLib(t *testing.T) {
 func TestBuildLibComposer_InvalidPath(t *testing.T) {
 	logger := internaltesting.NewTLogger(t)
 	fakeDirs := &xdg.Directories{DataHome: t.TempDir()}
-	err := BuildLibComposer(logger, fakeDirs, "/nonexistent/path", "0.1.0", true)
+	err := BuildLibComposer(logger, fakeDirs, "/nonexistent/path", "0.1.0", true, BuildOptions{})
 	require.ErrorContains(t, err, "failed to build libcomposer from source")
 }
 
@@ -99,7 +99,7 @@ func TestBuildLibComposerLite(t *testing.T) {
 	require.NoError(t, err)
 	composerVersion := composerManifest.Version
 
-	err = BuildLibComposer(logger, fakeDirs, composerPath, composerVersion, true)
+	err = BuildLibComposer(logger, fakeDirs, composerPath, composerVersion, true, BuildOptions{})
 	require.NoError(t, err)
 
 	// Ensure the libcomposer-lite.so is created in the independent composer-lite slot.
@@ -130,7 +130,7 @@ func TestBuildLibComposer(t *testing.T) {
 	require.NoError(t, err)
 	composerVersion := composerManifest.Version
 
-	err = BuildLibComposer(logger, fakeDirs, composerPath, composerVersion, false)
+	err = BuildLibComposer(logger, fakeDirs, composerPath, composerVersion, false, BuildOptions{})
 	require.NoError(t, err)
 
 	// Ensure the libcomposer.so is created
@@ -163,7 +163,7 @@ func TestBuildExtensionFromPath_CShared(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(extDir, "main", "main.go"), []byte("package main\nfunc main() {}\n"), 0o600))
 
 	manifest := &Manifest{Name: "test-cshared", Version: "0.0.1"}
-	cshared, err := BuildExtensionFromPath(logger, fakeDirs, manifest, extDir)
+	cshared, err := BuildExtensionFromPath(logger, fakeDirs, manifest, extDir, BuildOptions{})
 	// The build may fail (no exported symbols for c-shared), but we exercise the code path.
 	if err != nil {
 		require.True(t, cshared)
@@ -181,7 +181,7 @@ func TestBuildExtensionFromPath(t *testing.T) {
 	manifest, err := LoadLocalManifest(extensionPath + "/manifest.yaml")
 	require.NoError(t, err)
 
-	cshared, err := BuildExtensionFromPath(logger, fakeDirs, manifest, extensionPath)
+	cshared, err := BuildExtensionFromPath(logger, fakeDirs, manifest, extensionPath, BuildOptions{})
 	require.NoError(t, err)
 
 	// The example extension does not have a main/ directory, so it should be built as a plugin.
@@ -190,4 +190,33 @@ func TestBuildExtensionFromPath(t *testing.T) {
 	pluginPath := LocalCacheExtension(fakeDirs, manifest)
 	_, err = os.Stat(pluginPath)
 	require.NoError(t, err)
+}
+
+func TestBuildOptionsGoBuildFlags(t *testing.T) {
+	require.Equal(t, []string{"-trimpath"}, BuildOptions{}.goBuildFlags())
+	require.Equal(t, []string{"-gcflags=all=-N -l", "-ldflags=-w=0"}, BuildOptions{Debug: true}.goBuildFlags())
+}
+
+func TestBuildLibComposerDebug(t *testing.T) {
+	logger := internaltesting.NewTLogger(t)
+	fakeDirs := &xdg.Directories{DataHome: t.TempDir()}
+	composerPath := "../../../extensions/composer"
+
+	err := BuildLibComposer(logger, fakeDirs, composerPath, "0.1.0", true, BuildOptions{Debug: true})
+	require.NoError(t, err)
+
+	// Debug builds go to their own cache slot.
+	_, err = os.Stat(LocalCacheComposerLiteLib(fakeDirs, "0.1.0"))
+	require.True(t, os.IsNotExist(err))
+	out := LocalCacheComposerLiteLib(fakeDirs, DebugVersion("0.1.0"))
+	bi, err := buildinfo.ReadFile(out)
+	require.NoError(t, err)
+
+	settings := make(map[string]string)
+	for _, s := range bi.Settings {
+		settings[s.Key] = s.Value
+	}
+	require.Equal(t, "all=-N -l", settings["-gcflags"])
+	require.Equal(t, "-w=0", settings["-ldflags"])
+	require.NotContains(t, settings, "-trimpath")
 }

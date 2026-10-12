@@ -1,0 +1,47 @@
+proc: set up the Go image when attaching to a non-Go process
+
+Delve stops the target when shared libraries are loaded until it sees a Go image
+being loaded. When attaching, the Go image is already loaded, so the first library
+loaded afterwards (e.g. an NSS module during a DNS or user lookup) stops the
+process inside the dynamic linker, which IDEs report as a breakpoint hit in an
+unknown location. Set up the Go image when attaching.
+
+diff --git a/pkg/proc/native/proc_linux.go b/pkg/proc/native/proc_linux.go
+index 9f03e6d..0435d55 100644
+--- a/pkg/proc/native/proc_linux.go
++++ b/pkg/proc/native/proc_linux.go
+@@ -176,6 +176,9 @@ func Attach(pid int, waitFor *proc.WaitFor, debugInfoDirs []string) (*proc.Targe
+ 		return nil, err
+ 	}
+ 	setupSharedLibBreakpoint(dbp, tgt)
++	if sel := tgt.Selected; sel != nil && len(sel.BinInfo().Images) > 0 && !sel.BinInfo().Images[0].IsGo {
++		sel.InitGoImage()
++	}
+ 	return tgt, nil
+ }
+ 
+diff --git a/pkg/proc/target.go b/pkg/proc/target.go
+index a41a071..ade7dd7 100644
+--- a/pkg/proc/target.go
++++ b/pkg/proc/target.go
+@@ -454,6 +454,20 @@ func (t *Target) CreateSharedLibBreakpoint(rBrkAddr uint64) {
+ 	bp.Breaklets[len(bp.Breaklets)-1].callback = t.sharedLibCallback
+ }
+ 
++// InitGoImage sets up the Go-specific breakpoints if a Go image is already loaded (e.g. when
++// attaching to a non-Go process that already loaded a Go shared library), so that later shared
++// library loads do not stop the target.
++func (t *Target) InitGoImage() {
++	if !t.BinInfo().HasGoImage() {
++		return
++	}
++	t.onInitialGoImage.Do(func() {
++		t.createUnrecoveredPanicBreakpoint()
++		t.createFatalThrowBreakpoint()
++		t.createPluginOpenBreakpoint()
++	})
++}
++
+ func (t *Target) sharedLibCallback(th Thread, tgt *Target) (bool, error) {
+ 	// Check if any newly loaded image is a Go binary.
+ 	// ElfUpdateSharedObjects has already run by this point (called in stop1

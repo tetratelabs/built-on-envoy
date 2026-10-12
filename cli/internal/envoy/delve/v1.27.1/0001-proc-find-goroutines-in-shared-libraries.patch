@@ -1,0 +1,57 @@
+proc: find goroutines when the Go runtime is in a shared library
+
+Delve only looks for the runtime goroutine list (runtime.allgs) in the main
+executable, and does it when the target is created, before the shared libraries
+are known when attaching to a process. When the Go runtime is in a shared library
+loaded by a non-Go process (e.g. a Go c-shared library loaded by Envoy), listing
+goroutines fails with "could not find goroutine array", and IDEs cannot show
+where the program stopped. Look for runtime.allgs in all the loaded images, and
+retry when the goroutines are first requested.
+
+diff --git a/pkg/proc/goroutine_cache.go b/pkg/proc/goroutine_cache.go
+index 4020dad..90a673e 100644
+--- a/pkg/proc/goroutine_cache.go
++++ b/pkg/proc/goroutine_cache.go
+@@ -10,23 +10,30 @@ type goroutineCache struct {
+ func (gcache *goroutineCache) init(bi *BinaryInfo) {
+ 	var err error
+ 
+-	exeimage := bi.Images[0]
+-	rdr := exeimage.DwarfReader()
+-	if rdr == nil {
++	for _, image := range bi.Images {
++		rdr := image.DwarfReader()
++		if rdr == nil {
++			continue
++		}
++		allglenAddr, err := rdr.AddrFor("runtime.allglen", image.StaticBase, bi.Arch.PtrSize())
++		if err != nil {
++			continue
++		}
++		rdr.Seek(0)
++		allgentryAddr, err := rdr.AddrFor("runtime.allgs", image.StaticBase, bi.Arch.PtrSize())
++		if err != nil {
++			continue
++		}
++		gcache.allglenAddr, gcache.allgentryAddr = allglenAddr, allgentryAddr
+ 		return
+ 	}
+-
+-	gcache.allglenAddr, _ = rdr.AddrFor("runtime.allglen", exeimage.StaticBase, bi.Arch.PtrSize())
+-
+-	rdr.Seek(0)
+-	gcache.allgentryAddr, err = rdr.AddrFor("runtime.allgs", exeimage.StaticBase, bi.Arch.PtrSize())
+-	if err != nil {
+-		// try old name (pre Go 1.6)
+-		gcache.allgentryAddr, _ = rdr.AddrFor("runtime.allg", exeimage.StaticBase, bi.Arch.PtrSize())
+-	}
++	_ = err
+ }
+ 
+ func (gcache *goroutineCache) getRuntimeAllg(bi *BinaryInfo, mem MemoryReadWriter) (uint64, uint64, error) {
++	if gcache.allglenAddr == 0 || gcache.allgentryAddr == 0 {
++		gcache.init(bi)
++	}
+ 	if gcache.allglenAddr == 0 || gcache.allgentryAddr == 0 {
+ 		return 0, 0, ErrNoRuntimeAllG
+ 	}

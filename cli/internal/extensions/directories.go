@@ -69,25 +69,29 @@ func ModuleName(manifest *Manifest) string {
 //   - others: extensions/<name>/<version>
 func LocalCacheExtensionDir(dirs *xdg.Directories, manifest *Manifest) string {
 	moduleName := ModuleName(manifest)
+	version := manifest.Version
+	if manifest.Debug {
+		version = DebugVersion(version)
+	}
 
 	switch manifest.Type {
 	case TypeGo:
 		if manifest.CShared {
-			return filepath.Join(dirs.DataHome, "extensions", "dym", moduleName, manifest.Version)
+			return filepath.Join(dirs.DataHome, "extensions", "dym", moduleName, version)
 		}
-		return filepath.Join(dirs.DataHome, "extensions", "goplugin", moduleName, manifest.Version)
+		return filepath.Join(dirs.DataHome, "extensions", "goplugin", moduleName, version)
 	case TypeRust:
-		return filepath.Join(dirs.DataHome, "extensions", "dym", moduleName, manifest.Version)
+		return filepath.Join(dirs.DataHome, "extensions", "dym", moduleName, version)
 	case TypeWasm:
-		return filepath.Join(dirs.DataHome, "extensions", "wasm", moduleName, manifest.Version)
+		return filepath.Join(dirs.DataHome, "extensions", "wasm", moduleName, version)
 	case TypeExtProc:
-		return filepath.Join(dirs.DataHome, "extensions", "extproc", moduleName, manifest.Version)
+		return filepath.Join(dirs.DataHome, "extensions", "extproc", moduleName, version)
 	case TypeComposer:
 		// Keyed off the module name so the full composer (libcomposer.so) and the
 		// independent composer-lite (libcomposer-lite.so) live in separate slots.
-		return composerDir(dirs, moduleName, manifest.Version)
+		return composerDir(dirs, moduleName, version)
 	default:
-		return filepath.Join(dirs.DataHome, "extensions", moduleName, manifest.Version)
+		return filepath.Join(dirs.DataHome, "extensions", moduleName, version)
 	}
 }
 
@@ -160,6 +164,12 @@ func LocalCacheComposerLiteDir(dirs *xdg.Directories, version string) string {
 // (libcomposer-lite.so).
 func LocalCacheComposerLiteLib(dirs *xdg.Directories, version string) string {
 	return composerLib(dirs, ComposerLiteBundle, version)
+}
+
+// DebugVersion returns the cache version slot used for debug builds of the given version, so that
+// debug libraries never overwrite (or get picked up instead of) the regular ones.
+func DebugVersion(version string) string {
+	return version + "-debug"
 }
 
 // composerDir returns the dynamic-module cache directory for a composer bundle (composer or
