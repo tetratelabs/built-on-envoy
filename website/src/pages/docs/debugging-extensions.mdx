@@ -1,0 +1,226 @@
+---
+layout: ../../layouts/DocsLayout.astro
+title: Debugging
+description: How to debug Go extensions running in Envoy from your IDE
+---
+
+import ToC from '../../components/ToC.astro';
+import Callout from '../../components/Callout.astro';
+
+# Debugging
+
+This guide explains how to debug Go extensions while they run in Envoy: set breakpoints in your IDE, send requests
+to Envoy, and inspect the extension's variables and goroutines when the breakpoints are hit.
+
+<ToC maxDepth="3"/>
+
+## How It Works
+
+Go extensions are built as a shared library that Envoy loads at runtime: the Go code runs inside the Envoy process,
+not in the `boe` CLI. To debug an extension, the debugger has to attach to the Envoy process.
+
+The [`boe debug`](/docs/cli/debug) command takes care of it:
+
+1. It builds the local extension (or the composer bundle it belongs to) for debugging: without optimizations and
+   inlining, and with full debug information and source paths. Debug builds are stored separately in the cache and
+   are never used by `boe run`.
+2. It starts Envoy with the extension, as `boe run` does.
+3. It attaches a headless [Delve](https://github.com/go-delve/delve) debug server to the Envoy process, listening on
+   `127.0.0.1:2345` by default.
+
+Your IDE then connects to the Delve server as it would to any remote Go debugging session.
+
+`boe debug` accepts the same flags as `boe run`, but only for local extensions (`--local`) of type Go, or extensions
+of the composer bundle.
+
+<Callout type="note">
+`boe debug` builds its own copy of Delve the first time it runs, so it does not need to be installed. Upstream Delve
+cannot yet properly debug a Go runtime that lives in a shared library loaded by a non-Go process such as Envoy, so
+`boe` applies a few patches to it. Use `--rebuild-dlv` to force rebuilding it, or `--dlv-path` to use your own
+Delve binary instead (it may not be able to list goroutines or show where the program stopped).
+</Callout>
+
+## Prerequisites
+
+The Go toolchain is needed to build the extension and Delve, as for running local Go extensions.
+
+### macOS and Other Non-Linux Platforms
+
+Delve can only debug Go code loaded into a non-Go process on Linux. On other platforms, `boe debug` always runs
+Envoy and Delve in a Linux container, so **Docker** is required. This is transparent:
+
+- The local extension sources are mounted in the container at the same path as in your machine, so the source paths
+  in the debug information match the files you open in your IDE, and breakpoints work without any path mapping.
+- The Delve port is published on `127.0.0.1` only.
+- The container runs with the `SYS_PTRACE` capability, which Delve needs to attach to the Envoy process.
+
+### Linux
+
+On Linux, Envoy and Delve run natively. Delve attaches to the Envoy process started by `boe`, which is not its
+parent process. Many distributions, such as Ubuntu, only allow a process to attach to its own descendants
+(`kernel.yama.ptrace_scope=1`), and attaching then fails with `operation not permitted`. Allow it by setting
+`ptrace_scope` to `0`:
+
+```bash
+# Until the next reboot
+sudo sysctl -w kernel.yama.ptrace_scope=0
+
+# Permanently
+echo 'kernel.yama.ptrace_scope = 0' | sudo tee /etc/sysctl.d/10-ptrace.conf
+```
+
+Alternatively, run `boe debug` as root, or use `boe debug --docker` to run Envoy and Delve in a container as on
+macOS.
+
+## Starting a Debug Session
+
+Run `boe debug` with the local extension and its configuration, as you would with `boe run`:
+
+```bash
+boe debug --local ./my-extension --config '{"header_value":"debug"}'
+```
+
+To debug an extension of the composer bundle, point to the extension directory. The whole bundle is built for
+debugging:
+
+```bash
+boe debug --local ~/src/built-on-envoy/extensions/composer/opa \
+    --config '{"policies":[{"inline":"package envoy.authz\ndefault allow := true"}]}'
+```
+
+Once Envoy is running and Delve is attached, `boe debug` prints:
+
+```
+🐞 Delve is attached to Envoy and listening on 127.0.0.1:2345 (dlv PID 117)
+  → CLI: dlv connect 127.0.0.1:2345
+```
+
+Envoy keeps serving requests until a breakpoint is hit. Use `--dlv-port` to use a different port, for example to run
+several debug sessions at the same time.
+
+## Connecting From Your IDE
+
+Configure your IDE to attach to a remote Delve server on `127.0.0.1:2345` (or the port set with `--dlv-port`). Then:
+
+1. Start `boe debug` and wait until Delve is attached.
+2. Start the debug configuration in your IDE.
+3. Set breakpoints in the extension code.
+4. Send requests to Envoy, for example `curl http://localhost:10000/`.
+
+### VS Code
+
+Install the [Go extension](https://marketplace.visualstudio.com/items?itemName=golang.go) and add an attach
+configuration to `.vscode/launch.json`:
+
+```json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Attach to Envoy (boe debug)",
+      "type": "go",
+      "request": "attach",
+      "mode": "remote",
+      "host": "127.0.0.1",
+      "port": 2345
+    }
+  ]
+}
+```
+
+Stopping the debug session in VS Code disconnects from Delve but leaves Envoy and Delve running, so you can attach
+again later.
+
+### GoLand and IntelliJ IDEA
+
+Create a **Go Remote** run configuration (**Run → Edit Configurations… → + → Go Remote**):
+
+- **Host:** `127.0.0.1`
+- **Port:** `2345`
+- **On disconnect:** *Leave it running*, so that Envoy and Delve keep running when you stop debugging.
+
+Then start it with **Debug**. See the [GoLand documentation](https://www.jetbrains.com/help/go/go-remote.html) for
+details.
+
+### Neovim
+
+With [nvim-dap](https://codeberg.org/mfussenegger/nvim-dap) and
+[nvim-dap-go](https://github.com/leoluz/nvim-dap-go), register an attach configuration:
+
+```lua
+require('dap-go').setup {
+  dap_configurations = {
+    {
+      type = "go",
+      name = "Attach to Envoy (boe debug)",
+      request = "attach",
+      mode = "remote",
+      host = "127.0.0.1",
+      port = 2345,
+    },
+  },
+}
+```
+
+nvim-dap also reads `.vscode/launch.json`, so the VS Code configuration works as well.
+
+### Delve CLI
+
+You can also use Delve directly from a terminal:
+
+```bash
+dlv connect 127.0.0.1:2345
+(dlv) break plugin.go:25
+(dlv) continue
+```
+
+When you are done, run `quit` and answer `n` when asked whether to kill the headless instance, so Envoy keeps running.
+
+## Caveats
+
+### Paused Requests
+
+While Envoy is stopped at a breakpoint, all its workers are paused: in-flight requests do not progress, and clients
+or upstreams may time out. Continue the execution to release them. When stepping through code for a long time,
+increase the timeout of your client, for example with `curl --max-time`.
+
+### Breakpoints in Symlinked Paths
+
+Breakpoints are resolved using the source paths recorded when building the extension, which are the paths given in
+`--local`. If those paths go through a symlink and your IDE uses the resolved path, breakpoints are not hit: they show
+as unverified in the IDE, and requests go through without stopping. This is common with `/tmp` on macOS, which is a
+symlink to `/private/tmp`.
+
+`boe debug` detects this and prints the path mapping to add to the IDE configuration:
+
+```
+⚠ /tmp/my-extension resolves to /private/tmp/my-extension through a symlink.
+  Breakpoints only resolve with paths under /tmp. If your IDE uses /private/tmp, add a path mapping.
+  For VS Code, add this to the attach launch configuration:
+    "substitutePath": [{ "from": "/private/tmp", "to": "/tmp" }]
+```
+
+To avoid it, keep the extensions in a directory that is not behind a symlink.
+
+### Stepping Into Dependencies
+
+When running in a container (on macOS, or with `--docker`), the Go module cache is in the container, so the source
+paths of the extension dependencies (for example, the Envoy Go SDK) are under `/var/boe/go/pkg/mod`. To step into
+them from your IDE, map those paths to your local module cache. In VS Code:
+
+```json
+"substitutePath": [{ "from": "${env:HOME}/go/pkg/mod", "to": "/var/boe/go/pkg/mod" }]
+```
+
+The Go standard library is in `/usr/local/go` in the container: if your local Go version differs, the IDE may show
+standard library frames at the wrong lines.
+
+### Multiple Go Extensions
+
+Each Go extension built as an independent shared library has its own Go runtime. When several are loaded at the same
+time (for example, the composer bundle and a standalone Go extension), the debugger only sees the goroutines of one
+of them. Debug one Go extension (or one composer bundle) at a time.
+
+### Supported Extensions
+
+Only Go extensions can be debugged with `boe debug`. Rust, Lua, Wasm and ext_proc extensions are not supported.
