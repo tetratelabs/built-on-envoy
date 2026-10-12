@@ -132,7 +132,7 @@ type wafPlugin struct {
 	txContext             ctypes.Transaction
 	wafElapsed            time.Duration // summed time spent in the waf callbacks (WAF-added latency)
 	txDone                bool          // WAF analysis complete and metrics emitted: set by recordTxMetrics, exactly once
-	txReleased            bool          // transaction closed before stream end: see trackAndMarkTxDone
+	txReleased            bool          // transaction closed and returned to the pool: see releaseTransaction
 	protocol              string
 	isUpgrade             bool
 	isSSE                 bool
@@ -495,8 +495,9 @@ func (p *wafPlugin) OnStreamComplete() {
 	p.releaseTransaction()
 }
 
-// releaseTransaction runs ProcessLogging (phase 5 + audit logging) and closes the transaction,
-// returning it to Coraza's pool. It is a no-op if the transaction was already released.
+// releaseTransaction runs ProcessLogging (phase 5 + audit logging), closes the transaction,
+// returning it to Coraza's pool, and marks it as released. It is a no-op if there is no
+// transaction.
 func (p *wafPlugin) releaseTransaction() {
 	if p.txContext == nil {
 		return
@@ -506,6 +507,7 @@ func (p *wafPlugin) releaseTransaction() {
 		p.handle.Log(shared.LogLevelDebug, "Failed to close WAF transaction: %v", err.Error())
 	}
 	p.txContext = nil
+	p.txReleased = true
 }
 
 // trackAndMarkTxDone is deferred at the top of every filter callback.
@@ -553,7 +555,6 @@ func (p *wafPlugin) trackAndMarkTxDone(start time.Time) {
 		// An interrupted stream ends right away and is released by OnStreamComplete.
 		if (p.isUpgrade || p.isSSE) && !p.txContext.IsInterrupted() {
 			p.releaseTransaction()
-			p.txReleased = true
 		}
 	}
 }
