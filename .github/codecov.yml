@@ -71,6 +71,7 @@ ignore:
   # Covered in integration tests.
   - cli/main.go
   - cli/internal/envoy/runner.go
+  - cli/internal/envoy/debug.go
   # These are test-only libraries.
   - cli/internal/testing/
   - extensions/**/standalone/main.go"

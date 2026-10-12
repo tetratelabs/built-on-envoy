@@ -374,7 +374,7 @@ func Inner() string {
 	require.NoError(t, err, "failed to create inner module directory")
 
 	goModPath := newModulePath + "/go.mod"
-	err = os.WriteFile(goModPath, []byte(fmt.Sprintf(goModContent, internal.GoVersion)), 0o600)
+	err = os.WriteFile(goModPath, fmt.Appendf(nil, goModContent, internal.GoVersion), 0o600)
 	require.NoError(t, err, "failed to write go.mod for inner module")
 
 	goFilePath := newModulePath + "/inner.go"

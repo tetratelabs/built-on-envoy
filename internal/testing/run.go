@@ -34,8 +34,14 @@ func testUpstreamArgs() []string {
 
 // RunEnvoy executes the CLI run command on the given listener and admin ports.
 func RunEnvoy(t *testing.T, cliBin string, listenPort int, adminPort int, args ...string) {
+	RunBoe(t, cliBin, "run", listenPort, adminPort, args...)
+}
+
+// RunBoe executes the given CLI command that starts Envoy (e.g. run, debug) on the given listener and admin ports,
+// and waits for Envoy to be ready.
+func RunBoe(t *testing.T, cliBin string, command string, listenPort int, adminPort int, args ...string) {
 	args = append([]string{
-		"run",
+		command,
 		"--listen-port", strconv.Itoa(listenPort),
 		"--admin-port", strconv.Itoa(adminPort),
 	}, append(testUpstreamArgs(), args...)...)

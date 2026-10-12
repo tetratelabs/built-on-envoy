@@ -1,0 +1,84 @@
+proc: find the G pointer of Go shared libraries on x86_64
+
+On x86_64, Delve finds the current goroutine of a thread through the G pointer in
+thread local storage, but only computes its location for the executable. When the
+Go runtime is in a shared library loaded by a non-Go process, Delve reads the
+wrong location and reports a different (usually parked) goroutine as the current
+one, so IDEs show the wrong location when a breakpoint is hit. Read the location
+of the G pointer from the GOT entry of the library.
+
+diff --git a/pkg/proc/bininfo.go b/pkg/proc/bininfo.go
+index b415dcd..5ec532e 100644
+--- a/pkg/proc/bininfo.go
++++ b/pkg/proc/bininfo.go
+@@ -1791,6 +1791,8 @@ func loadBinaryInfoElf(bi *BinaryInfo, image *Image, path string, addr uint64, w
+ 		// determine g struct offset only when loading the executable file
+ 		wg.Add(1)
+ 		go bi.setGStructOffsetElf(image, dwarfFile, wg)
++	} else if elfFile.Machine == elf.EM_X86_64 && len(bi.Images) > 0 && !bi.Images[0].IsGo {
++		bi.setGStructOffsetElfSharedLib(image, elfFile)
+ 	}
+ 	return nil
+ }
+@@ -1991,6 +1993,61 @@ func (bi *BinaryInfo) setGStructOffsetElf(image *Image, exe *elf.File, wg *sync.
+ 	}
+ }
+ 
++// setGStructOffsetElfSharedLib sets the offset of the G pointer in thread
++// local storage when the Go runtime is in a shared library built with
++// buildmode=c-shared and loaded by a non-Go executable on x86_64.
++//
++// The library accesses runtime.tlsg with the initial-exec TLS model: the
++// offset of the G pointer from the thread pointer is stored in a GOT entry,
++// filled by the dynamic linker through a R_X86_64_TPOFF64 relocation. The
++// offset depends on where the library's TLS block was placed at load time, so
++// it can't be computed from the file: the GOT entry is read from the target
++// memory instead.
++func (bi *BinaryInfo) setGStructOffsetElfSharedLib(image *Image, exe *elf.File) {
++	if bi.gStructOffsetIsPtr {
++		// Already set by another Go shared library.
++		return
++	}
++	tlsg := getSymbol(image, bi.logger, exe, "runtime.tlsg")
++	if tlsg == nil {
++		return
++	}
++	rela := exe.Section(".rela.dyn")
++	if rela == nil {
++		return
++	}
++	data, err := rela.Data()
++	if err != nil {
++		return
++	}
++	var (
++		dynsyms, _ = exe.DynamicSymbols()
++		got        uint64
++	)
++	const relaSize = 24 // sizeof(Elf64_Rela)
++	for i := 0; i+relaSize <= len(data); i += relaSize {
++		off := exe.ByteOrder.Uint64(data[i:])
++		info := exe.ByteOrder.Uint64(data[i+8:])
++		addend := exe.ByteOrder.Uint64(data[i+16:])
++		if elf.R_X86_64(elf.R_TYPE64(info)) != elf.R_X86_64_TPOFF64 {
++			continue
++		}
++		// runtime.tlsg is a local symbol, so the relocation usually has no
++		// symbol and its addend is the offset of runtime.tlsg in the TLS block.
++		sym := elf.R_SYM64(info)
++		if (sym == 0 && addend == tlsg.Value) ||
++			(sym > 0 && int(sym) <= len(dynsyms) && dynsyms[sym-1].Name == "runtime.tlsg") {
++			got = off
++			break
++		}
++	}
++	if got == 0 {
++		return
++	}
++	bi.gStructOffset = image.StaticBase + got
++	bi.gStructOffsetIsPtr = true
++}
++
+ func getSymbol(image *Image, logger logflags.Logger, exe *elf.File, name string) *elf.Symbol {
+ 	symbols, err := exe.Symbols()
+ 	if err != nil {

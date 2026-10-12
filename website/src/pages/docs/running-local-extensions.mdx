@@ -98,6 +98,8 @@ By default, Envoy listens on port `10000` and proxies requests to https://httpbi
 curl -v http://localhost:10000/status/200
 ```
 
+To debug Go extensions from your IDE while they run in Envoy, use `boe debug` instead. See [Debugging](/docs/debugging-extensions).
+
 You can combine `--local` with other flags. For example, to enable debug logging for the dynamic modules subsystem:
 
 ```bash
