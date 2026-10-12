@@ -28,12 +28,6 @@ type SharedWAF struct {
 	inputs *wafInputs
 }
 
-// GetOrCreateSharedWAF returns the WAF for the given directives, reusing a live one built from
-// the same directives if the files it was built from are unchanged.
-func GetOrCreateSharedWAF(directives string, l *zap.Logger) (*SharedWAF, error) {
-	return sharedWAFs.getOrCreate(directives, l, combinedDirectivesFS)
-}
-
 var sharedWAFs = newSharedWAFCache()
 
 type sharedWAFCache struct {

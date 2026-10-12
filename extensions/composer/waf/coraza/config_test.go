@@ -14,7 +14,7 @@ import (
 	"github.com/tetratelabs/built-on-envoy/extensions/composer/waf/logger"
 )
 
-func Test_newWAF(t *testing.T) {
+func TestGetOrCreateSharedWAFFromConfig(t *testing.T) {
 	t.Run("ok", func(t *testing.T) {
 		config := map[string]interface{}{
 			"directives": []string{
@@ -28,7 +28,7 @@ func Test_newWAF(t *testing.T) {
 		// Convert map to JSON bytes
 		wafConfig, _ := json.Marshal(config)
 
-		waf, mode, err := NewWAFConfigFromBytes(wafConfig, logger.GetLogger())
+		waf, mode, err := GetOrCreateSharedWAFFromConfig(wafConfig, logger.GetLogger())
 		require.NoError(t, err)
 		require.NotNil(t, waf)
 		// REQUEST_ONLY is the default when no mode is set.
@@ -58,7 +58,7 @@ func Test_newWAF(t *testing.T) {
 				}
 				wafConfig, _ := json.Marshal(config)
 
-				waf, mode, err := NewWAFConfigFromBytes(wafConfig, logger.GetLogger())
+				waf, mode, err := GetOrCreateSharedWAFFromConfig(wafConfig, logger.GetLogger())
 				require.NoError(t, err)
 				require.NotNil(t, waf)
 				require.Equal(t, tc.expected, mode)
@@ -73,7 +73,7 @@ func Test_newWAF(t *testing.T) {
 		}
 		wafConfig, _ := json.Marshal(config)
 
-		waf, _, err := NewWAFConfigFromBytes(wafConfig, logger.GetLogger())
+		waf, _, err := GetOrCreateSharedWAFFromConfig(wafConfig, logger.GetLogger())
 		require.ErrorContains(t, err, "invalid mode")
 		require.Nil(t, waf)
 	})
@@ -87,7 +87,7 @@ func Test_newWAF(t *testing.T) {
 		// Convert map to JSON bytes
 		wafConfig, _ := json.Marshal(config)
 
-		waf, _, err := NewWAFConfigFromBytes(wafConfig, logger.GetLogger())
+		waf, _, err := GetOrCreateSharedWAFFromConfig(wafConfig, logger.GetLogger())
 		require.ErrorContains(t, err, "failed to create WAF")
 		require.Nil(t, waf)
 	})

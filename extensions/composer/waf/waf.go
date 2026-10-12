@@ -68,16 +68,13 @@ type wafPluginConfigFactory struct {
 	shared.EmptyHttpFilterConfigFactory
 }
 
-func (f *wafPluginConfigFactory) Create(
-	handle shared.HttpFilterConfigHandle,
-	unparsedConfig []byte,
-) (shared.HttpFilterFactory, error) {
+func (f *wafPluginConfigFactory) Create(handle shared.HttpFilterConfigHandle, unparsedConfig []byte) (shared.HttpFilterFactory, error) {
 	var wafConfig *waf.SharedWAF
 	var mode waf.WAFMode
 
 	if len(unparsedConfig) > 0 {
 		var err error
-		wafConfig, mode, err = newSharedWAFConfig(unparsedConfig)
+		wafConfig, mode, err = waf.GetOrCreateSharedWAFFromConfig(unparsedConfig, logger.GetLogger())
 		if err != nil {
 			return nil, err
 		}
@@ -95,7 +92,7 @@ func (f *wafPluginConfigFactory) Create(
 }
 
 func (f *wafPluginConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, error) {
-	wafConfig, mode, err := newSharedWAFConfig(unparsedConfig)
+	wafConfig, mode, err := waf.GetOrCreateSharedWAFFromConfig(unparsedConfig, logger.GetLogger())
 	if err != nil {
 		return nil, err
 	}
@@ -103,20 +100,6 @@ func (f *wafPluginConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, err
 		config: wafConfig,
 		mode:   mode,
 	}, nil
-}
-
-// newSharedWAFConfig parses a filter config and returns its shared WAF and mode.
-func newSharedWAFConfig(unparsedConfig []byte) (*waf.SharedWAF, waf.WAFMode, error) {
-	l := logger.GetLogger()
-	config, err := waf.ParseConfig(unparsedConfig, l)
-	if err != nil {
-		return nil, 0, err
-	}
-	sharedWAF, err := waf.GetOrCreateSharedWAF(config.Directives, l)
-	if err != nil {
-		return nil, 0, err
-	}
-	return sharedWAF, config.Mode, nil
 }
 
 // The plugin struct that implements the actual logic.

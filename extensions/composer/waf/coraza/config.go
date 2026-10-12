@@ -34,16 +34,16 @@ const (
 	ModeResponseOnly
 )
 
-// Config is the parsed WAF filter configuration.
-type Config struct {
+// parsedConfig is the parsed WAF filter configuration.
+type parsedConfig struct {
 	// Directives are the Coraza directives, joined with newlines.
 	Directives string
 	Mode       WAFMode
 }
 
-// ParseConfig parses the raw configuration bytes passed at the Envoy filter configuration.
+// parseConfig parses the raw configuration bytes passed at the Envoy filter configuration.
 // configBytes must be a valid json of WAFConfig.
-func ParseConfig(configBytes []byte, l *zap.Logger) (Config, error) {
+func parseConfig(configBytes []byte, l *zap.Logger) (parsedConfig, error) {
 	var y struct {
 		// List of Coraza directive which will be joined with newlines. Use list here to
 		// simplify writing multi-line directives in JSON/YAML.
@@ -51,7 +51,7 @@ func ParseConfig(configBytes []byte, l *zap.Logger) (Config, error) {
 		ModeString string   `json:"mode"`
 	}
 	if err := json.Unmarshal(configBytes, &y); err != nil {
-		return Config{}, fmt.Errorf("failed to unmarshal config: %w", err)
+		return parsedConfig{}, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
 	var mode WAFMode
@@ -67,32 +67,26 @@ func ParseConfig(configBytes []byte, l *zap.Logger) (Config, error) {
 	case "":
 		mode = ModeRequestOnly
 	default:
-		return Config{}, fmt.Errorf("invalid mode: %s", y.ModeString)
+		return parsedConfig{}, fmt.Errorf("invalid mode: %s", y.ModeString)
 	}
 
 	// Join directives with newlines
-	return Config{Directives: strings.Join(y.Directives, "\n"), Mode: mode}, nil
+	return parsedConfig{Directives: strings.Join(y.Directives, "\n"), Mode: mode}, nil
 }
 
-// NewWAFConfigFromBytes creates a new WAF from the given raw configuration bytes passed at the
-// Envoy filter configuration. configBytes must be a valid json of WAFConfig.
-//
-// The returned WAF is not shared: use ParseConfig and GetOrCreateSharedWAF for filter configs.
-func NewWAFConfigFromBytes(configBytes []byte, l *zap.Logger) (coraza.WAF, WAFMode, error) {
-	config, err := ParseConfig(configBytes, l)
+// GetOrCreateSharedWAFFromConfig parses the raw configuration bytes passed at the Envoy filter
+// configuration and returns its WAF and mode. The WAF is shared: a live one built from the same
+// directives is reused if the files it was built from are unchanged.
+func GetOrCreateSharedWAFFromConfig(configBytes []byte, l *zap.Logger) (*SharedWAF, WAFMode, error) {
+	cfg, err := parseConfig(configBytes, l)
 	if err != nil {
 		return nil, 0, err
 	}
-	waf, err := NewWAFFromDirectives(config.Directives, l)
+	sharedWAF, err := sharedWAFs.getOrCreate(cfg.Directives, l, combinedDirectivesFS)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to create WAF from directives: %w", err)
+		return nil, 0, err
 	}
-	return waf, config.Mode, nil
-}
-
-// NewWAFFromDirectives creates a new WAF from the given directives.
-func NewWAFFromDirectives(directives string, l *zap.Logger) (coraza.WAF, error) {
-	return newWAF(directives, l, combinedDirectivesFS)
+	return sharedWAF, cfg.Mode, nil
 }
 
 // newWAF creates a new WAF, reading included and data files from root.
