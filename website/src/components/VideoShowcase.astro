@@ -8,6 +8,13 @@ const videos = [
 		src: "/boe-ui.mp4",
 	},
 	{
+		title: "Debugging your extensions live in Envoy with a single command",
+		description:
+			"Built On Envoy starts Envoy with your extension loaded and a debugger already attached. Set breakpoints, step through your filter code, and inspect each request as real traffic flows through Envoy.",
+		type: "local" as const,
+		src: "/boe-debug-go.mp4",
+	},
+	{
 		title: "Creating Envoy extensions",
 		description:
 			"Learn how to scaffold a new extension from scratch and try it out in a few minutes.",
@@ -85,7 +92,13 @@ const videos = [
 	let current = 0;
 
 	function goTo(index) {
+		if (index === current) return;
+		slides[current].querySelector("video")?.pause();
 		current = index;
+		// Hide the incoming video's controls while it slides into view; they are
+		// restored once the transition ends (see below).
+		const incoming = slides[current].querySelector("video");
+		if (incoming) incoming.controls = false;
 		track.style.transform = `translateX(-${current * 100}%)`;
 		dots.forEach((dot, i) => dot.classList.toggle("active", i === current));
 		prevBtn.classList.toggle("hidden", current === 0);
@@ -93,6 +106,15 @@ const videos = [
 		titleEl.textContent = videos[current].title;
 		captionEl.textContent = videos[current].description;
 	}
+
+	// Native video controls are sized to the visible part of the video and are
+	// not re-laid out when the transform ends, so showing them mid-slide leaves
+	// them at a fraction of the width. Only enable them once the slide has settled.
+	track.addEventListener("transitionend", (e) => {
+		if (e.target !== track) return;
+		const video = slides[current].querySelector("video");
+		if (video) video.controls = true;
+	});
 
 	prevBtn.addEventListener("click", () => goTo(current - 1));
 	nextBtn.addEventListener("click", () => goTo(current + 1));
