@@ -203,13 +203,14 @@ func (p *wafPlugin) OnRequestHeaders(headers shared.HeaderMap, endOfStream bool)
 	// Destination is not known in this context. Use placeholders.
 	dstIP, dstPort := "127.0.0.1", 80
 
-	scheme := headers.GetOne(":scheme").ToString()
-	if scheme == "" {
-		scheme = "http"
-	}
-	path := headers.GetOne(":path").ToString()
 	method := headers.GetOne(":method").ToString()
-	uri := scheme + "://" + host + path
+	// REQUEST_URI is the path and query, without scheme and authority.
+	uri := headers.GetOne(":path").ToString()
+	if uri == "" {
+		// CONNECT has no :path. Use "//host:port" as net/http does, since a bare
+		// authority does not always parse as a URI.
+		uri = "//" + host
+	}
 
 	// CRS rules tend to expect Host even with HTTP/2
 	p.txContext.AddRequestHeader("Host", host)

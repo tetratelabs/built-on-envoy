@@ -2274,3 +2274,58 @@ func Test_ReleaseTransactionWithoutTransaction(t *testing.T) {
 	p := &wafPlugin{}
 	require.NotPanics(t, p.releaseTransaction)
 }
+
+// Test_RequestURIHasNoSchemeOrAuthority checks that REQUEST_URI is the path
+// and query, so that path-based rules such as "@beginsWith /" can match.
+func Test_RequestURIHasNoSchemeOrAuthority(t *testing.T) {
+	tests := []struct {
+		name    string
+		headers map[string][]string
+		want    string
+	}{
+		{
+			name: "path and query",
+			headers: map[string][]string{
+				":authority": {"example.com:8080"},
+				":method":    {"POST"},
+				":path":      {"/api/v1/push?x=1"},
+				":scheme":    {"https"},
+			},
+			want: "/api/v1/push?x=1",
+		},
+		{
+			name: "CONNECT without path",
+			headers: map[string][]string{
+				":authority": {"10.0.0.1:443"},
+				":method":    {"CONNECT"},
+			},
+			want: "//10.0.0.1:443",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			h := newPluginHandleWithoutPerRouteConfig(ctrl)
+			h.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+			h.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+			h.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
+				pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+			h.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(
+				pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
+
+			// Any other REQUEST_URI value, or a URI that fails to parse, is denied.
+			directives := []string{
+				"SecRuleEngine On",
+				`SecRule REQUEST_URI "!@streq ` + tt.want + `" "id:100501,phase:1,deny"`,
+				`SecRule URI_PARSE_ERROR "@eq 1" "id:100502,phase:1,deny"`,
+			}
+			p, ok := newWAFFactory(t, ctrl, directives, "FULL").Create(h).(*wafPlugin)
+			require.True(t, ok, "failed to cast plugin to wafPlugin")
+
+			require.Equal(t, shared.HeadersStatusContinue, p.OnRequestHeaders(fake.NewFakeHeaderMap(tt.headers), true))
+			p.OnStreamComplete()
+		})
+	}
+}

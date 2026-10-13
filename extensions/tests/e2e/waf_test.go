@@ -33,7 +33,7 @@ func TestWAFSmoke(t *testing.T) {
 		"SecResponseBodyAccess On",
 		"SecResponseBodyMimeType application/json text/plain",
 		"SecRule &REQUEST_HEADERS:coraza-e2e \"@eq 0\" \"id:100,phase:1,deny,status:424,log,msg:'Coraza E2E - Missing header'\"",
-		"SecRule REQUEST_URI \"@contains /admin\" \"id:101,phase:1,t:lowercase,log,deny,status:403\"",
+		"SecRule REQUEST_URI \"@streq /admin\" \"id:101,phase:1,t:lowercase,log,deny,status:403\"",
 		"SecRule ARGS:payload \"@streq maliciouspayload\" \"id:102,phase:2,t:lowercase,log,deny,status:403\"",
 		"SecRule RESPONSE_HEADERS:pass \"@rx leak\" \"id:103,phase:3,t:lowercase,log,deny,status:403\"",
 		"SecRule RESPONSE_BODY \"@contains responsebodycode\" \"id:104,phase:4,t:lowercase,log,deny,status:403\"",
