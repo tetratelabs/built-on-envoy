@@ -16,7 +16,8 @@ make -C extensions/composer format lint
 
 The [root configuration](../../.golangci.yml) leaves `ffideadcode` disabled.
 Composer's `lint` target checks the plugin and enables it alongside ordinary
-linters. Findings fail lint. Go lint targets ensure `out/ffideadcode.so` exists.
+linters. Findings fail lint. Go lint targets call the plugin's `build` target to
+ensure `out/ffideadcode.so` exists.
 The plugin is rebuilt only when its sources, tools module dependencies, or build recipe change;
 analysis runs on every Composer lint invocation. The plugin is ignored in `out/`.
 

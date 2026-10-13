@@ -25,7 +25,7 @@ format:
 
 .PHONY: lint
 lint: 
-	@$(MAKE) -C "$(ROOT)/tools/deadcode-lint-plugin" runtime-plugin
+	@$(MAKE) -C "$(ROOT)/tools/deadcode-lint-plugin" build
 	@echo "golangci-lint => ./..."
 	@$(GO_TOOL) golangci-lint run
 
