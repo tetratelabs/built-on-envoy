@@ -85,6 +85,10 @@ type RunnerFuncE struct {
 	// TestUpstreamCluster specifies the name of an existing configured cluster to use as the test upstream.
 	// Mutually exclusive with TestUpstreamHost.
 	TestUpstreamCluster string
+	// ListenerTLSCert is the path to the certificate chain used to terminate TLS on the listener.
+	ListenerTLSCert string
+	// ListenerTLSKey is the path to the private key used to terminate TLS on the listener.
+	ListenerTLSKey string
 	// ExtProcBinaries maps ext_proc extension names to their binary paths.
 	ExtProcBinaries map[string]string
 	// Debug, when set, attaches a debug server to the Envoy process once it is started.
@@ -108,6 +112,8 @@ func (r *RunnerFuncE) Run(ctx context.Context) error {
 		ClustersJSON:            r.ClustersJSON,
 		TestUpstreamHost:        r.TestUpstreamHost,
 		TestUpstreamCluster:     r.TestUpstreamCluster,
+		ListenerTLSCert:         r.ListenerTLSCert,
+		ListenerTLSKey:          r.ListenerTLSKey,
 	}
 	config, err := RenderConfig(params, FullConfigRenderer)
 	if err != nil {
@@ -165,6 +171,10 @@ func (r *RunnerFuncE) Run(ctx context.Context) error {
 	}
 
 	// Define startup hook that will be called when Envoy admin is ready
+	proxyProtocol := "http"
+	if r.ListenerTLSCert != "" && r.ListenerTLSKey != "" {
+		proxyProtocol = "https"
+	}
 	start := time.Now()
 	startupHook := func(hookCtx context.Context, adminClient admin.AdminClient, _ string) error {
 		if r.Debug != nil {
@@ -174,17 +184,16 @@ func (r *RunnerFuncE) Run(ctx context.Context) error {
 		}
 
 		startDuration := time.Since(start).Round(100 * time.Millisecond)
-
 		_, _ = fmt.Fprintf(os.Stderr, `
-%[4]s✓ Envoy is ready after %[3]v%[5]s
-  → %[4]sProxy:%[5]s http://localhost:%[1]d
-  → %[4]sAdmin:%[5]s http://localhost:%[2]d
+%[1]s✓ Envoy is ready after %[5]v%[2]s
+  → %[1]sProxy:%[2]s %[6]s://localhost:%[3]d
+  → %[1]sAdmin:%[2]s http://localhost:%[4]d
 
-%[4]sTest with:%[5]s
-  curl http://localhost:%[1]d/
+%[1]sTest with:%[2]s
+  curl %[6]s://localhost:%[3]d/
 
 Press Ctrl+C to stop
-`, r.ListenPort, adminClient.Port(), startDuration, internal.ANSIBold, internal.ANSIReset)
+`, internal.ANSIBold, internal.ANSIReset, r.ListenPort, adminClient.Port(), startDuration, proxyProtocol)
 		if r.Debug != nil {
 			r.Debug.printNotes()
 		}
@@ -406,6 +415,10 @@ const (
 	containerRuntimeDir = containerVolumeDir + "/run"
 	// containerLocalExtensionsDir is the directory inside the container where local extensions are mounted.
 	containerLocalExtensionsDir = containerRuntimeDir + "/extensions"
+	// containerListenerTLSCert is the path inside the container where the listener certificate is mounted.
+	containerListenerTLSCert = containerRuntimeDir + "/tls/listener.crt"
+	// containerListenerTLSKey is the path inside the container where the listener private key is mounted.
+	containerListenerTLSKey = containerRuntimeDir + "/tls/listener.key"
 )
 
 // RunnerDocker handles running Envoy as a Docker container.
@@ -423,6 +436,10 @@ type RunnerDocker struct {
 	// Debug, when set, runs the container so that a debug server can be attached to Envoy and reached
 	// from the host.
 	Debug *DebugOptions
+	// ListenerTLSCert is the host path to the listener certificate, mounted into the container.
+	ListenerTLSCert string
+	// ListenerTLSKey is the host path to the listener private key, mounted into the container.
+	ListenerTLSKey string
 }
 
 // Run starts Envoy in a Docker container.
@@ -441,6 +458,11 @@ func (r *RunnerDocker) Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to process local extensions: %w", err)
 	}
+	// Process the listener TLS files to mount them in the container.
+	listenerTLSArgs, err := r.processListenerTLS()
+	if err != nil {
+		return fmt.Errorf("failed to process listener TLS files: %w", err)
+	}
 
 	// Create a Docker volume for cache directories to enable caching across runs.
 	cmd := exec.CommandContext(ctx, "docker", "volume", "create", "--name", ContainerCacheVolumeName)
@@ -448,7 +470,7 @@ func (r *RunnerDocker) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to create Docker volume for cache: %w\nOutput: %s", err, string(output))
 	}
 
-	args := r.dockerRunArgs(image, localExtArgs)
+	args := r.dockerRunArgs(image, append(localExtArgs, listenerTLSArgs...))
 
 	fmt.Fprintf(os.Stderr, "→ %sRunning Envoy in Docker (%v)...%s\n", internal.ANSIBold, image, internal.ANSIReset)
 
@@ -484,7 +506,7 @@ func (r *RunnerDocker) dockerRunArgs(image string, localExtArgs []string) []stri
 		args = append(args, "-e", "BOE_RUN_ID="+r.RunID)
 	}
 
-	args = append(args, localExtArgs...)         // local extension volumes
+	args = append(args, localExtArgs...)         // local extension and TLS volumes
 	args = append(args, passthroughEnvVars()...) // passthrough BOE_ env vars
 	if r.Debug != nil {
 		args = append(args, r.debugArgs()...)
@@ -623,6 +645,39 @@ func localExtensionRoot(ext string) (string, error) {
 	return parentDir, nil
 }
 
+// processListenerTLS returns the Docker volume arguments to mount the listener TLS files in the container.
+func (r *RunnerDocker) processListenerTLS() ([]string, error) {
+	var args []string
+	for _, f := range []struct{ host, container string }{
+		{r.ListenerTLSCert, containerListenerTLSCert},
+		{r.ListenerTLSKey, containerListenerTLSKey},
+	} {
+		if f.host == "" {
+			continue
+		}
+		absPath, err := filepath.Abs(f.host)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get absolute path for %q: %w", f.host, err)
+		}
+		args = append(args, "-v", absPath+":"+f.container+":ro")
+	}
+	return args, nil
+}
+
+// listenerTLSContainerArg returns the flag name and the container path to use for the given listener TLS argument,
+// if the argument is one of the listener TLS flags.
+func listenerTLSContainerArg(arg string) (string, string, bool) {
+	flag, _, _ := strings.Cut(arg, "=")
+	switch flag {
+	case "--listener-cert":
+		return flag, containerListenerTLSCert, true
+	case "--listener-key":
+		return flag, containerListenerTLSKey, true
+	default:
+		return "", "", false
+	}
+}
+
 // localExtensionContainerPath returns the container path for a given local extension path.
 func localExtensionContainerPath(ext string) (string, string, error) {
 	absPath, err := filepath.Abs(ext)
@@ -703,6 +758,15 @@ func (r *RunnerDocker) processCommandArgs(args []string) []string {
 				i++ // skip next arg (the original value)
 				continue
 			}
+		}
+
+		// Rewrite the listener TLS files to the paths where they are mounted in the container.
+		if flag, val, ok := listenerTLSContainerArg(arg); ok {
+			processed = append(processed, flag+"="+val)
+			if !strings.Contains(arg, "=") {
+				i++ // skip next arg (the original value)
+			}
+			continue
 		}
 
 		processed = append(processed, arg)

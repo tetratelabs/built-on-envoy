@@ -36,13 +36,14 @@ type GenConfig struct {
 	// sep:"none" disables Kong's default comma-separated splitting for []string flags.
 	// JSON config values contain commas (e.g. {"a":"1","b":"2"}) which would otherwise
 	// be split into separate invalid fragments, causing protobuf unmarshal failures.
-	Configs                 []string     `name:"config" sep:"none" help:"Optional JSON config string for extensions. Applied in order to combined --extension and --local flags."`
-	FilterTypes             []string     `name:"filter-type" sep:"none" help:"Set the filter type for an extension. Applied positionally to the combined --extension and --local flags. Accepted values: http, network, listener, udp_listener."`
-	NativeHTTPFiltersBefore []string     `name:"native-http-filter-before" sep:"none" help:"Optional YAML/JSON native HTTP filter list (or @filepath) per extension position. Overrides manifest nativeHttpFilters.before."`
-	NativeHTTPFiltersAfter  []string     `name:"native-http-filter-after" sep:"none" help:"Optional YAML/JSON native HTTP filter list (or @filepath) per extension position. Overrides manifest nativeHttpFilters.after."`
-	Clusters                ClusterFlags `embed:""`
-	OCI                     OCIFlags     `embed:""`
-	Output                  string       `name:"output" help:"Directory to put the generated config into. Use \"-\" to print it to the standard output." default:"-" type:"path"`
+	Configs                 []string         `name:"config" sep:"none" help:"Optional JSON config string for extensions. Applied in order to combined --extension and --local flags."`
+	FilterTypes             []string         `name:"filter-type" sep:"none" help:"Set the filter type for an extension. Applied positionally to the combined --extension and --local flags. Accepted values: http, network, listener, udp_listener."`
+	NativeHTTPFiltersBefore []string         `name:"native-http-filter-before" sep:"none" help:"Optional YAML/JSON native HTTP filter list (or @filepath) per extension position. Overrides manifest nativeHttpFilters.before."`
+	NativeHTTPFiltersAfter  []string         `name:"native-http-filter-after" sep:"none" help:"Optional YAML/JSON native HTTP filter list (or @filepath) per extension position. Overrides manifest nativeHttpFilters.after."`
+	Clusters                ClusterFlags     `embed:""`
+	ListenerTLS             ListenerTLSFlags `embed:""`
+	OCI                     OCIFlags         `embed:""`
+	Output                  string           `name:"output" help:"Directory to put the generated config into. Use \"-\" to print it to the standard output." default:"-" type:"path"`
 
 	extensionPositions extensionPositions `kong:"-"` // Internal field: tracks the original position of extensions specified via both --extension and --local flags
 	stdout             io.Writer          `kong:"-"` // Internal field for testing
@@ -50,6 +51,13 @@ type GenConfig struct {
 
 //go:embed genconfig_help.md
 var genConfigHelp string
+
+const (
+	// listenerCertFile is the name of the listener certificate file in the exported config directory.
+	listenerCertFile = "listener.crt"
+	// listenerKeyFile is the name of the listener private key file in the exported config directory.
+	listenerKeyFile = "listener.key"
+)
 
 // Help provides detailed help for the config command.
 func (g *GenConfig) Help() string { return genConfigHelp }
@@ -66,6 +74,9 @@ func (g *GenConfig) BeforeResolve() error {
 func (g *GenConfig) Validate() error {
 	if g.Clusters.TestUpstreamHost != "" && g.Clusters.TestUpstreamCluster != "" {
 		return fmt.Errorf("--test-upstream-host and --test-upstream-cluster are mutually exclusive")
+	}
+	if g.Minimal && g.ListenerTLS.enabled() {
+		return fmt.Errorf("--listener-cert and --listener-key cannot be used with --minimal, as no listener is generated")
 	}
 	return nil
 }
@@ -152,6 +163,8 @@ func (g *GenConfig) Run(ctx context.Context, dirs *xdg.Directories, logger *slog
 		ClustersJSON:            g.Clusters.JSONSpec,
 		TestUpstreamHost:        g.Clusters.TestUpstreamHost,
 		TestUpstreamCluster:     g.Clusters.TestUpstreamCluster,
+		ListenerTLSCert:         g.ListenerTLS.Cert,
+		ListenerTLSKey:          g.ListenerTLS.Key,
 	}, renderer)
 	if err != nil {
 		return err
@@ -226,6 +239,22 @@ func (g *GenConfig) writeConfig(
 			return nil, err
 		}
 		files = append(files, dstExtensionFile)
+	}
+
+	// Copy the listener TLS files next to the config and reference them by relative path
+	// so that the exported configuration is self-contained.
+	if g.ListenerTLS.enabled() {
+		for _, f := range []struct{ src, dst string }{
+			{g.ListenerTLS.Cert, listenerCertFile},
+			{g.ListenerTLS.Key, listenerKeyFile},
+		} {
+			dst := filepath.Join(g.Output, f.dst)
+			if err := copyFile(f.src, dst, logger); err != nil {
+				return nil, err
+			}
+			config = strings.ReplaceAll(config, f.src, f.dst)
+			files = append(files, dst)
+		}
 	}
 
 	logger.Info("writing configuration", "path", g.Output)

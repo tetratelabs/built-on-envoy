@@ -21,13 +21,14 @@ import (
 
 // UI is a command that starts the Extension Manager web UI.
 type UI struct {
-	Port     int          `help:"HTTP server port." default:"18000"`
-	LogLevel string       `help:"Envoy component log level." default:"all:error" env:"ENVOY_LOG_LEVEL"`
-	Envoy    EnvoyFlags   `embed:""`
-	Local    []string     `name:"local" sep:"none" help:"Path to a directory containing a local Extension to enable." type:"existingdir"`
-	Dev      bool         `help:"Whether to allow downloading dev versions of extensions (with -dev suffix). By default, only stable versions are allowed." default:"false"`
-	Clusters ClusterFlags `embed:""`
-	Docker   DockerFlags  `embed:""`
+	Port        int              `help:"HTTP server port." default:"18000"`
+	LogLevel    string           `help:"Envoy component log level." default:"all:error" env:"ENVOY_LOG_LEVEL"`
+	Envoy       EnvoyFlags       `embed:""`
+	Local       []string         `name:"local" sep:"none" help:"Path to a directory containing a local Extension to enable." type:"existingdir"`
+	Dev         bool             `help:"Whether to allow downloading dev versions of extensions (with -dev suffix). By default, only stable versions are allowed." default:"false"`
+	Clusters    ClusterFlags     `embed:""`
+	ListenerTLS ListenerTLSFlags `embed:""`
+	Docker      DockerFlags      `embed:""`
 
 	openBrowserFunc func(string) error // overridable for tests; nil means use openBrowser
 }
@@ -54,6 +55,8 @@ func (u *UI) Run(ctx context.Context, logger *slog.Logger) error {
 		ClustersJSONSpec:    u.Clusters.JSONSpec,
 		TestUpstreamHost:    u.Clusters.TestUpstreamHost,
 		TestUpstreamCluster: u.Clusters.TestUpstreamCluster,
+		ListenerTLSCert:     u.ListenerTLS.Cert,
+		ListenerTLSKey:      u.ListenerTLS.Key,
 		Docker:              u.Docker.Enabled,
 		DockerImage:         u.Docker.ImageVersion,
 		DockerPullPolicy:    u.Docker.Pull,

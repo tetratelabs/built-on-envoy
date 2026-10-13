@@ -59,6 +59,13 @@ For full control over the cluster configuration, raw JSON is also supported:
     boe gen-config --local ~/src/my-extension --cluster-json '{"name":"my-service","type":"STRICT_DNS","load_assignment":{"cluster_name":"my-service","endpoints":[{"lb_endpoints":[{"endpoint":{"address":{"socket_address":{"address":"my-service.example.com","port_value":443}}}}]}]}}'
     ```
 
+Generate configuration that terminates TLS on the listener. When exporting the configuration with
+`--output`, the certificate and key are copied to the output directory:
+
+    ```shell
+    boe gen-config --local ~/src/my-extension --listener-cert cert.pem --listener-key key.pem --output /tmp/export
+    ```
+
 Generate configuration from a specific version hosted in a custom OCI registry:
 
     ```shell
@@ -98,6 +105,8 @@ boe gen-config --help
 | `--cluster-json` | Optional additional Envoy cluster providing the complete cluster config in JSON format. | `[]string` | - | - | No |
 | `--test-upstream-host` | Hostname for the test upstream cluster. Mutually exclusive with --test-upstream-cluster. Defaults to "httpbin.org". | `string` | - | - | No |
 | `--test-upstream-cluster` | Name of an existing configured cluster to use as the test upstream. The cluster must be configured via --cluster, --cluster-insecure, or --cluster-json. Mutually exclusive with --test-upstream-host. | `string` | - | - | No |
+| `--listener-cert` | Path to a PEM-encoded certificate chain used to terminate TLS on the Envoy listener. Requires --listener-key. | `string` | - | - | No |
+| `--listener-key` | Path to the PEM-encoded private key for the listener certificate. Requires --listener-cert. | `string` | - | - | No |
 | `--registry` | OCI registry URL for the extensions. | `string` | `ghcr.io/tetratelabs/built-on-envoy` | `BOE_REGISTRY` | No |
 | `--insecure` | Allow connecting to an insecure (HTTP) registry. | `bool` | `false` | `BOE_REGISTRY_INSECURE` | No |
 | `--username` | Username for the OCI registry. | `string` | - | `BOE_REGISTRY_USERNAME` | No |

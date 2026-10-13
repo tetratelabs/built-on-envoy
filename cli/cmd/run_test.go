@@ -104,6 +104,12 @@ Flags:
                                    configured via --cluster, --cluster-insecure,
                                    or --cluster-json. Mutually exclusive with
                                    --test-upstream-host.
+      --listener-cert=STRING       Path to a PEM-encoded certificate chain
+                                   used to terminate TLS on the Envoy listener.
+                                   Requires --listener-key.
+      --listener-key=STRING        Path to the PEM-encoded private key
+                                   for the listener certificate. Requires
+                                   --listener-cert.
       --docker                     Run Envoy as a Docker container instead of
                                    using func-e ($BOE_RUN_DOCKER).
       --pull="missing"             Pull policy for the BOE Docker image

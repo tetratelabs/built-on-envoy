@@ -221,6 +221,8 @@ func TestProcessCommandArgs(t *testing.T) {
 		"--local", "/host/path/ext2.so",
 		"--local=./ext3.so",
 		"--local=/path/ext4.so",
+		"--listener-cert", "./cert.pem",
+		"--listener-key=/path/key.pem",
 		"--listen-port", "8080",
 	}
 
@@ -230,12 +232,40 @@ func TestProcessCommandArgs(t *testing.T) {
 		"--local", containerLocalExtensionsDir + "/ext2.so",
 		"--local=" + containerLocalExtensionsDir + "/ext3.so",
 		"--local=" + containerLocalExtensionsDir + "/ext4.so",
+		"--listener-cert=" + containerListenerTLSCert,
+		"--listener-key=" + containerListenerTLSKey,
 		"--listen-port", "8080",
 	}
 
 	r := &RunnerDocker{Logger: internaltesting.NewTLogger(t)}
 	result := r.processCommandArgs(args)
 	assert.Equal(t, want, result)
+}
+
+func TestProcessListenerTLS(t *testing.T) {
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+
+	t.Run("not configured", func(t *testing.T) {
+		r := &RunnerDocker{Logger: internaltesting.NewTLogger(t)}
+		args, err := r.processListenerTLS()
+		require.NoError(t, err)
+		require.Empty(t, args)
+	})
+
+	t.Run("configured", func(t *testing.T) {
+		r := &RunnerDocker{
+			Logger:          internaltesting.NewTLogger(t),
+			ListenerTLSCert: "cert.pem",
+			ListenerTLSKey:  "/path/key.pem",
+		}
+		args, err := r.processListenerTLS()
+		require.NoError(t, err)
+		require.Equal(t, []string{
+			"-v", filepath.Join(cwd, "cert.pem") + ":" + containerListenerTLSCert + ":ro",
+			"-v", "/path/key.pem:" + containerListenerTLSKey + ":ro",
+		}, args)
+	})
 }
 
 func TestDockerRunArgs_RunID(t *testing.T) {

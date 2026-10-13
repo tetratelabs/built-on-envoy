@@ -9,9 +9,11 @@ import (
 	"bytes"
 	"go/doc"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/alecthomas/kong"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tetratelabs/built-on-envoy/cli/internal/extensions"
@@ -146,4 +148,50 @@ func wrapHelp(text string) string {
 	}
 
 	return out.String()
+}
+
+func TestListenerTLSFlagsEnabled(t *testing.T) {
+	require.False(t, (&ListenerTLSFlags{}).enabled())
+	require.True(t, (&ListenerTLSFlags{Cert: "cert.pem"}).enabled())
+	require.True(t, (&ListenerTLSFlags{Key: "key.pem"}).enabled())
+}
+
+func TestParseListenerTLSFlags(t *testing.T) {
+	dir := t.TempDir()
+	cert := filepath.Join(dir, "cert.pem")
+	key := filepath.Join(dir, "key.pem")
+	missing := filepath.Join(dir, "missing.pem")
+	require.NoError(t, os.WriteFile(cert, []byte("cert"), 0o600))
+	require.NoError(t, os.WriteFile(key, []byte("key"), 0o600))
+
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{name: "existing files", args: []string{"--listener-cert", cert, "--listener-key", key}},
+		{name: "missing cert", args: []string{"--listener-cert", missing, "--listener-key", key}, wantErr: "--listener-cert: stat " + missing},
+		{name: "missing key", args: []string{"--listener-cert", cert, "--listener-key", missing}, wantErr: "--listener-key: stat " + missing},
+		{name: "cert without key", args: []string{"--listener-cert", cert}, wantErr: "--listener-cert and --listener-key must be used together"},
+		{name: "key without cert", args: []string{"--listener-key", key}, wantErr: "--listener-cert and --listener-key must be used together"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var cli struct {
+				ListenerTLS ListenerTLSFlags `embed:""`
+			}
+			parser, err := kong.New(&cli, kong.Exit(func(int) {}))
+			require.NoError(t, err)
+
+			_, err = parser.Parse(tt.args)
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, cert, cli.ListenerTLS.Cert)
+			require.Equal(t, key, cli.ListenerTLS.Key)
+		})
+	}
 }

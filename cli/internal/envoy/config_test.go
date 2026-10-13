@@ -47,6 +47,9 @@ var outputConfigWithTestUpstreamClusterYAML []byte
 //go:embed testdata/output_config_admin_all_interfaces.yaml
 var outputConfigAdminAllInterfacesYAML []byte
 
+//go:embed testdata/output_config_listener_tls.yaml
+var outputConfigListenerTLSYAML []byte
+
 // errUnmarshalFilterList is the error parseNativeHTTPFilters* returns for input that is valid YAML
 // but not a list. The type name is derived rather than hardcoded because json.RawMessage is an alias
 // for jsontext.Value under the jsonv2 experiment (on by default as of Go 1.27), and the standard
@@ -120,6 +123,29 @@ func TestRenderConfig(t *testing.T) {
 			},
 			renderer: FullConfigRenderer,
 			expect:   string(outputConfigWithTestUpstreamClusterYAML),
+		},
+		{
+			name: "with listener TLS",
+			params: &ConfigGenerationParams{
+				Logger:          internaltesting.NewTLogger(t),
+				AdminAddress:    "127.0.0.1:9901",
+				ListenerPort:    10000,
+				ListenerTLSCert: "/certs/listener.crt",
+				ListenerTLSKey:  "/certs/listener.key",
+			},
+			renderer: FullConfigRenderer,
+			expect:   string(outputConfigListenerTLSYAML),
+		},
+		{
+			name: "listener TLS without key",
+			params: &ConfigGenerationParams{
+				Logger:          internaltesting.NewTLogger(t),
+				AdminAddress:    "127.0.0.1:9901",
+				ListenerPort:    10000,
+				ListenerTLSCert: "/certs/listener.crt",
+			},
+			renderer:    FullConfigRenderer,
+			expectedErr: "failed to render config: failed to build listener TLS config: both the listener certificate and key must be provided",
 		},
 		{
 			name: "test upstream cluster not found",

@@ -74,6 +74,11 @@ type ConfigGenerationParams struct {
 	// The cluster must exist in the generated configuration (from extensions or --cluster/--cluster-insecure/--cluster-json flags).
 	// Mutually exclusive with TestUpstreamHost.
 	TestUpstreamCluster string
+	// ListenerTLSCert is the path to a PEM-encoded certificate chain used to terminate TLS on the listener.
+	// Must be set together with ListenerTLSKey. When empty, the listener serves plain text traffic.
+	ListenerTLSCert string
+	// ListenerTLSKey is the path to the PEM-encoded private key for ListenerTLSCert.
+	ListenerTLSKey string
 }
 
 const defaultTestUpstreamHost = "httpbin.org"
@@ -148,7 +153,16 @@ func FullConfigRenderer(params *ConfigGenerationParams, gen *GeneratedConfigReso
 		hostRewrite = testUpstreamHost
 	}
 
-	cfg, err := buildFullConfig(params.AdminAddress, params.ListenerPort, clusterName, hostRewrite, newCluster, gen.HTTPFilters, gen.NetworkFilters, gen.ListenerFilters, gen.UDPListenerFilters, gen.Clusters)
+	var listenerTLS *corev3.TransportSocket
+	if params.ListenerTLSCert != "" || params.ListenerTLSKey != "" {
+		var err error
+		listenerTLS, err = buildDownstreamTLSTransportSocket(params.ListenerTLSCert, params.ListenerTLSKey)
+		if err != nil {
+			return "", fmt.Errorf("failed to build listener TLS config: %w", err)
+		}
+	}
+
+	cfg, err := buildFullConfig(params.AdminAddress, params.ListenerPort, clusterName, hostRewrite, newCluster, gen.HTTPFilters, gen.NetworkFilters, gen.ListenerFilters, gen.UDPListenerFilters, gen.Clusters, listenerTLS)
 	if err != nil {
 		return "", fmt.Errorf("failed to build config: %w", err)
 	}
@@ -467,7 +481,7 @@ func parseCluster(shortSpec string, tls bool) (*clusterv3.Cluster, error) {
 // and allows us to use the proto marshalling functions. Otherwise, we would have to create a wrapper
 // proto on our own, or marshal the config manually.
 // TODO(nacx): Is there a wrapper for `admin` and `static_resources` we could use other than Bootstrap?
-func buildFullConfig(adminAddress string, listenerPort uint32, testUpstreamClusterName, testUpstreamHostRewrite string, newCluster *clusterv3.Cluster, httpFilters []*hcmv3.HttpFilter, networkFilters []*listenerv3.Filter, listenerFilters []*listenerv3.ListenerFilter, udpListenerFilters []*listenerv3.ListenerFilter, clusters []*clusterv3.Cluster) (*bootstrapv3.Bootstrap, error) {
+func buildFullConfig(adminAddress string, listenerPort uint32, testUpstreamClusterName, testUpstreamHostRewrite string, newCluster *clusterv3.Cluster, httpFilters []*hcmv3.HttpFilter, networkFilters []*listenerv3.Filter, listenerFilters []*listenerv3.ListenerFilter, udpListenerFilters []*listenerv3.ListenerFilter, clusters []*clusterv3.Cluster, listenerTLS *corev3.TransportSocket) (*bootstrapv3.Bootstrap, error) {
 	adminHost, adminPortStr, err := net.SplitHostPort(adminAddress)
 	if err != nil {
 		return nil, fmt.Errorf("invalid admin address %q: %w", adminAddress, err)
@@ -508,7 +522,8 @@ func buildFullConfig(adminAddress string, listenerPort uint32, testUpstreamClust
 		},
 		FilterChains: []*listenerv3.FilterChain{
 			{
-				Filters: networkFilters,
+				Filters:         networkFilters,
+				TransportSocket: listenerTLS,
 			},
 		},
 		ListenerFilters: listenerFilters,
@@ -703,6 +718,35 @@ func buildTestUpstreamCluster(name string, hostname string, port uint32, tls boo
 		},
 	}
 	return cluster, nil
+}
+
+// buildDownstreamTLSTransportSocket builds a TLS transport socket to terminate TLS on the listener
+// using the given certificate chain and private key files.
+func buildDownstreamTLSTransportSocket(certFile, keyFile string) (*corev3.TransportSocket, error) {
+	if certFile == "" || keyFile == "" {
+		return nil, fmt.Errorf("both the listener certificate and key must be provided")
+	}
+	tlsContext := &tlsv3.DownstreamTlsContext{
+		CommonTlsContext: &tlsv3.CommonTlsContext{
+			TlsCertificates: []*tlsv3.TlsCertificate{
+				{
+					CertificateChain: &corev3.DataSource{Specifier: &corev3.DataSource_Filename{Filename: certFile}},
+					PrivateKey:       &corev3.DataSource{Specifier: &corev3.DataSource_Filename{Filename: keyFile}},
+				},
+			},
+			AlpnProtocols: []string{"h2", "http/1.1"},
+		},
+	}
+	tlsContextAny, err := anypb.New(tlsContext)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal TLS context to Any: %w", err)
+	}
+	return &corev3.TransportSocket{
+		Name: "envoy.transport_sockets.tls",
+		ConfigType: &corev3.TransportSocket_TypedConfig{
+			TypedConfig: tlsContextAny,
+		},
+	}, nil
 }
 
 // ProtoToYaml converts a proto Message to YAML
