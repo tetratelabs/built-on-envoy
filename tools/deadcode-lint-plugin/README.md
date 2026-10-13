@@ -65,8 +65,11 @@ The nearest `go.mod` determines the active module, including from subdirectories
 nested modules have their own scope. The plugin path follows golangci's
 `run.relative-path-mode`.
 Run golangci over all reporting packages with the same build tags and environment
-as the scanner. Composer lint reads both sets of tags from the root configuration,
-independently of full/lite packaging flags. Invoke it from the Composer module,
+as the scanner. Composer lint takes the shared tags from
+[`Makefile.common`](../../extensions/composer/Makefile.common), passing them to
+golangci and the scanner through `GOFLAGS`, independently of full/lite packaging
+flags. Omitted `build-tags` inherits `GOFLAGS`; an explicit list overrides it,
+including an empty list to clear inherited tags. Invoke it from the Composer module,
 as the Make target does; the repository root is a different Go module.
 
 ## Exclude a finding
@@ -94,6 +97,6 @@ This suppresses the function's diagnostic without making its callees reachable.
   caller invalidate affected diagnostics. This depends on the pinned golangci
   version's cache behavior.
 
-Tests cover SDK callbacks, disconnected packages, test-only functions,
+Tests cover SDK callbacks, build-tag inheritance, disconnected packages, test-only functions,
 suppression comments, independent extension scans, and cache invalidation through
 the [real golangci plugin](runtime-plugin/main_test.go).

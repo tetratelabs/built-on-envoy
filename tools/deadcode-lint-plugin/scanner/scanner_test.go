@@ -58,6 +58,50 @@ func TestImportedFFI(t *testing.T) {
 	}
 }
 
+func TestBuildTagInheritance(t *testing.T) {
+	dir := fixture(t)
+	write(t, dir, "sdk/tagged.go", `//go:build ffideadcode_fixture
+
+// This tagged SDK entrypoint makes a disconnected implementation reachable.
+package sdk
+import "test.invalid/ffi/impl"
+//export taggedHostEntry
+func taggedHostEntry() { impl.Dead() }
+`)
+	t.Setenv("GOFLAGS", "-tags=ffideadcode_fixture")
+	for _, tc := range []struct {
+		name       string
+		tags       []string
+		dead       bool
+		ffiExports int
+	}{
+		{name: "inherited", ffiExports: 3},
+		{name: "cleared", tags: []string{}, dead: true, ffiExports: 2},
+		{name: "replaced", tags: []string{"other_fixture_tag"}, dead: true, ffiExports: 2},
+		{name: "explicit", tags: []string{"ffideadcode_fixture"}, ffiExports: 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := scanner.Scan([]scanner.Target{{
+				Directory: dir, Packages: []string{"./impl/..."}, EntryPackages: []string{"./entry"},
+				BuildTags: tc.tags,
+				Env:       map[string]string{"GOOS": "wasip1", "GOARCH": "wasm", "CGO_ENABLED": "0"},
+			}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := len(result.Targets[0].FFIExports); got != tc.ffiExports {
+				t.Errorf("expected %d FFI exports, got %d", tc.ffiExports, got)
+			}
+			dead := slices.ContainsFunc(result.Findings, func(finding scanner.Finding) bool {
+				return finding.Function == "test.invalid/ffi/impl.Dead"
+			})
+			if dead != tc.dead {
+				t.Errorf("expected Dead reported=%t, got %t: %v", tc.dead, dead, result.Findings)
+			}
+		})
+	}
+}
+
 func TestRootFailures(t *testing.T) {
 	t.Run("missing entrypoint", func(t *testing.T) {
 		dir := fixture(t)

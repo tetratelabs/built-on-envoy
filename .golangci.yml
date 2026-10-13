@@ -3,6 +3,7 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
+# Shared Go lint settings keep checks consistent across the repository's modules.
 version: "2"
 run:
   relative-path-mode: gitroot
@@ -34,10 +35,6 @@ linters:
           module: github.com/tetratelabs/built-on-envoy/extensions/composer
           composer:
             directory: .
-            build-tags:
-              - coraza.rule.case_sensitive_args_keys
-              - coraza.rule.no_regex_multiline
-              - coraza.rule.mandatory_rule_id_check
     gocritic:
       enabled-tags:
         - performance

@@ -5,11 +5,6 @@
 
 # This smoke check discovers the example through the same profile used for all Composer filters.
 version: "2"
-run:
-  build-tags:
-    - coraza.rule.case_sensitive_args_keys
-    - coraza.rule.no_regex_multiline
-    - coraza.rule.mandatory_rule_id_check
 linters:
   default: none
   enable:
@@ -24,7 +19,3 @@ linters:
           composer:
             directory: ../../extensions/composer
             include: [example]
-            build-tags:
-              - coraza.rule.case_sensitive_args_keys
-              - coraza.rule.no_regex_multiline
-              - coraza.rule.mandatory_rule_id_check

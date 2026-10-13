@@ -3,6 +3,7 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
+# Composer build and lint commands share the tag settings in Makefile.common.
 ROOT       := $(shell git rev-parse --show-toplevel)
 GO_VERSION := $(shell sed -ne 's/^go //gp' $(ROOT)/extensions/composer/go.mod)
 GO_TOOL    := go tool -modfile="$(ROOT)/tools/go.mod"
@@ -46,6 +47,7 @@ comma := ,
 
 # Shared variables used by both this Makefile and the main Makefile.
 include Makefile.common
+LINT_BUILD_TAGS := $(BUILD_TAGS)
 # Option to build lite version of the loader. Overriding NAME to composer-lite makes the image
 # repository, OCI title, library name and cache directory all follow automatically.
 ifeq ($(strip $(COMPOSER_LITE)),true)
@@ -98,8 +100,9 @@ format:
 lint:
 	@$(MAKE) -C "$(FFI_LINTER_DIR)" check
 	@echo "golangci-lint => ./..."
-	@lint_build_tags=$$($(GO_TOOL) yq '.linters.settings.custom.ffideadcode.settings.composer.build-tags | join(",")' "$(ROOT)/.golangci.yml") && \
-		$(GO_TOOL) golangci-lint run --enable=ffideadcode --build-tags="$$lint_build_tags" ./...
+	@go_flags="$$(go env GOFLAGS)" || exit $$?; \
+		GOFLAGS="$${go_flags:+$$go_flags }-tags=$(LINT_BUILD_TAGS)" \
+		$(GO_TOOL) golangci-lint run --enable=ffideadcode --build-tags="$(LINT_BUILD_TAGS)" ./...
 
 .PHONY: test
 test:

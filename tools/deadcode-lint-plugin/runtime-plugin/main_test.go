@@ -92,10 +92,11 @@ func TestRuntimePluginCommand(t *testing.T) {
 		t.Fatalf("write golangci config: %v", configWriteErr)
 	}
 
-	runLintFrom := func(directory string) ([]byte, error) {
+	runLintFrom := func(directory string, extraEnv ...string) ([]byte, error) {
 		cmd := exec.Command("go", "tool", "-modfile="+toolsMod, "golangci-lint", "run", "--config", configPath, "--enable", linterName, "./...") //nolint:gosec // Paths point to this test's temporary fixture, config, cache, and repository module file.
 		cmd.Dir = directory
-		cmd.Env = append(os.Environ(), "GOLANGCI_LINT_CACHE="+cacheDir)
+		cmd.Env = append(os.Environ(), "GOLANGCI_LINT_CACHE="+cacheDir, "GOFLAGS=-tags=")
+		cmd.Env = append(cmd.Env, extraEnv...)
 		return cmd.CombinedOutput()
 	}
 	runLint := func() ([]byte, error) { return runLintFrom(fixturePath) }
@@ -127,6 +128,33 @@ func TestRuntimePluginCommand(t *testing.T) {
 	}
 	nestedOutput, nestedErr := runLintFrom(filepath.Join(fixturePath, "probe"))
 	assertDiagnostics("module subdirectory", nestedOutput, nestedErr, want, []string{"genericLive"})
+
+	taggedFiles := map[string]string{
+		"probe/tagged.go": `//go:build ffideadcode_fixture
+
+// This tagged declaration verifies that golangci selects the scanner's reporting files.
+package probe
+func TaggedOrphan() {}
+`,
+		"probe/embedded/tagged.go": `//go:build ffideadcode_fixture
+
+// This tagged initializer changes reachability outside the reporting package.
+package host
+import impl "github.com/tetratelabs/built-on-envoy/cli/tools/deadcode-lint-plugin/fixture/probe"
+func init() { impl.ExportedTestOnly() }
+`,
+	}
+	for relative, contents := range taggedFiles {
+		if writeErr := os.WriteFile(filepath.Join(fixturePath, relative), []byte(contents), 0o600); writeErr != nil { //nolint:gosec // The files are confined to the copied temporary fixture.
+			t.Fatalf("write tagged source: %v", writeErr)
+		}
+	}
+	for _, label := range []string{"inherited build tag", "cached inherited build tag"} {
+		output, runErr := runLintFrom(fixturePath, "GOFLAGS=-tags=ffideadcode_fixture")
+		assertDiagnostics(label, output, runErr, []string{"ExportedOrphan", "unusedHelper", "unregisteredFilter).OnRequestHeaders", "TaggedOrphan"}, []string{"ExportedTestOnly", "genericLive"})
+	}
+	untaggedOutput, untaggedErr := runLint()
+	assertDiagnostics("cleared inherited build tag", untaggedOutput, untaggedErr, want, []string{"TaggedOrphan", "genericLive"})
 
 	pluginSourcePath := filepath.Join(fixturePath, "probe", "plugin.go")
 	pluginSource, pluginReadErr := os.ReadFile(pluginSourcePath) //nolint:gosec // The source file is in the copied temporary fixture.

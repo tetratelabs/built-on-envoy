@@ -263,10 +263,13 @@ func loadConfig(target *Target) (*packages.Config, error) {
 		}
 		env = append(env, key+"="+value)
 	}
-	return &packages.Config{
+	cfg := &packages.Config{
 		Dir: dir, Env: env, Tests: false,
-		BuildFlags: []string{"-tags=" + strings.Join(target.BuildTags, ",")},
-	}, nil
+	}
+	if target.BuildTags != nil {
+		cfg.BuildFlags = []string{"-tags=" + strings.Join(target.BuildTags, ",")}
+	}
+	return cfg, nil
 }
 
 func packagePaths(cfg *packages.Config, patterns []string) ([]string, error) {
