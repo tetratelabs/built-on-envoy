@@ -3,6 +3,7 @@
 // The full text of the Apache license is available in the LICENSE file at
 // the root of the repo.
 
+// These tests verify fault distributions without relying on random percentile estimates.
 package fault
 
 import (
@@ -26,62 +27,73 @@ func TestProbabilityDistribution_Sample(t *testing.T) {
 
 	dist := NewProbabilityDistribution(percentiles)
 
-	const numSamples = 100000
-	var samples []time.Duration
-	for range numSamples {
-		samples = append(samples, dist.Sample())
+	const numSamples = 10000
+	// Binomial(10000, q) bounds allocate at most 1e-9/6 failure probability to each of six tails.
+	checks := []struct {
+		name       string
+		boundary   time.Duration
+		lowerBound int
+		upperBound int
+		count      int
+	}{
+		{name: "p50", boundary: 10 * time.Millisecond, lowerBound: 4686, upperBound: 5314},
+		{name: "p90", boundary: 50 * time.Millisecond, lowerBound: 8807, upperBound: 9183},
+		{name: "p99", boundary: 200 * time.Millisecond, lowerBound: 9832, upperBound: 9956},
 	}
-
-	sortDurations(samples)
-
-	p50 := samples[int(float64(numSamples)*0.50)]
-	p90 := samples[int(float64(numSamples)*0.90)]
-	p99 := samples[int(float64(numSamples)*0.99)]
-
-	t.Logf("Actual p50: %v (expected ~10ms)", p50)
-	t.Logf("Actual p90: %v (expected ~50ms)", p90)
-	t.Logf("Actual p99: %v (expected ~200ms)", p99)
-
-	assertWithinTolerance(t, "p50", p50, 10*time.Millisecond, 0.3)
-	assertWithinTolerance(t, "p90", p90, 50*time.Millisecond, 0.3)
-	assertWithinTolerance(t, "p99", p99, 200*time.Millisecond, 0.3)
+	for range numSamples {
+		sample := dist.Sample()
+		if sample < 0 || sample > time.Second {
+			t.Fatalf("sample %s outside [0, %s]", sample, time.Second)
+		}
+		for i := range checks {
+			if sample < checks[i].boundary {
+				checks[i].count++
+			}
+		}
+	}
+	for _, check := range checks {
+		t.Run(check.name, func(t *testing.T) {
+			t.Logf("%d/%d samples below %s", check.count, numSamples, check.boundary)
+			require.GreaterOrEqual(t, check.count, check.lowerBound)
+			require.LessOrEqual(t, check.count, check.upperBound)
+		})
+	}
 }
 
 func TestProbabilityDistribution_SampleWithValue(t *testing.T) {
 	percentiles := []config.Percentile{
 		{Quantile: 0.0, Duration: 0},
 		{Quantile: 0.50, Duration: 10 * time.Millisecond},
-		{Quantile: 1.0, Duration: 200 * time.Millisecond},
+		{Quantile: 0.90, Duration: 50 * time.Millisecond},
+		{Quantile: 0.99, Duration: 200 * time.Millisecond},
+		{Quantile: 1.0, Duration: 1 * time.Second},
 	}
 
 	dist := NewProbabilityDistribution(percentiles)
 
 	tests := []struct {
-		name      string
-		value     float64
-		expected  time.Duration
-		tolerance float64
+		name     string
+		value    float64
+		expected time.Duration
 	}{
-		{"at zero", 0.0, 0, 0.01},
-		{"at p50", 0.50, 10 * time.Millisecond, 0.01},
-		{"at p100", 1.0, 200 * time.Millisecond, 0.01},
-		{"between p0 and p50 (at 0.25)", 0.25, 5 * time.Millisecond, 0.05},
-		{"between p50 and p100 (at 0.75)", 0.75, 105 * time.Millisecond, 0.05},
+		{name: "at zero", value: 0.0, expected: 0},
+		{name: "at p50", value: 0.50, expected: 10 * time.Millisecond},
+		{name: "at p90", value: 0.90, expected: 50 * time.Millisecond},
+		{name: "at p99", value: 0.99, expected: 200 * time.Millisecond},
+		{name: "at p100", value: 1.0, expected: time.Second},
+		{name: "between p0 and p50", value: 0.25, expected: 5 * time.Millisecond},
+		{name: "between p50 and p90", value: 0.70, expected: 30 * time.Millisecond},
+		{name: "between p90 and p99", value: 0.945, expected: 125 * time.Millisecond},
+		{name: "at the former p99 tolerance limit", value: 0.99075, expected: 260 * time.Millisecond},
+		{name: "halfway through the upper tail", value: 0.995, expected: 600 * time.Millisecond},
+		{name: "near the maximum", value: 0.999, expected: 920 * time.Millisecond},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := dist.SampleWithValue(tt.value)
-			if tt.expected == 0 {
-				if result != 0 {
-					t.Errorf("expected 0, got %v", result)
-				}
-				return
-			}
-			diff := math.Abs(float64(result-tt.expected)) / float64(tt.expected)
-			if diff > tt.tolerance {
-				t.Errorf("expected ~%v, got %v (diff: %.2f%%)", tt.expected, result, diff*100)
-			}
+			// Floating-point interpolation can truncate the result by one nanosecond.
+			require.InDelta(t, int64(tt.expected), int64(result), 1)
 		})
 	}
 }
