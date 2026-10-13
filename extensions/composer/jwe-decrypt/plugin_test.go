@@ -8,6 +8,7 @@ package impl
 import (
 	"encoding/base64"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -15,6 +16,8 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/fake"
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
 	"github.com/lestrrat-go/jwx/v3/jwa"
+	"github.com/lestrrat-go/jwx/v3/jwe"
+	"github.com/lestrrat-go/jwx/v3/jwk"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -39,22 +42,26 @@ func getTestSymmetricKey() string {
 }
 
 func createTestJWE(t *testing.T, payload string) string {
+	t.Helper()
 	pubKeyPath := getTestPublicKeyPath()
-	keyInput, err := boeJwe.ParsePublicKeyFromFile(pubKeyPath, jwa.RSA_OAEP().String())
+	keyBytes, err := os.ReadFile(pubKeyPath) //nolint:gosec // This path selects a fixed repository test fixture.
+	require.NoError(t, err)
+	publicKey, err := jwk.ParseKey(keyBytes, jwk.WithPEM(true))
 	require.NoError(t, err)
 
-	encrypted, err := keyInput.Encrypt([]byte(payload))
+	encrypted, err := jwe.Encrypt([]byte(payload), jwe.WithKey(jwa.RSA_OAEP(), publicKey))
 	require.NoError(t, err)
 
 	return string(encrypted)
 }
 
 func createTestJWEWithSymmetricKey(t *testing.T, payload string) string {
+	t.Helper()
 	keyStr := getTestSymmetricKey()
 	keyInput, err := boeJwe.ParsePrivateKey(keyStr, jwa.A256KW().String())
 	require.NoError(t, err)
 
-	encrypted, err := keyInput.Encrypt([]byte(payload))
+	encrypted, err := jwe.Encrypt([]byte(payload), jwe.WithKey(jwa.A256KW(), keyInput.PrivateKey))
 	require.NoError(t, err)
 
 	return string(encrypted)

@@ -169,6 +169,7 @@ push_image: create_builder  ## Push the Docker image to the registry
 
 .PHONY: lint
 lint: gen-code  ## Run the linters
+	@$(MAKE) -C "$(ROOT)/tools/deadcode-lint-plugin" build
 	@echo "golangci-lint => ./..."
 	@$(GO_TOOL) golangci-lint run --build-tags integration
 	@echo "golangci-lint => tools/gen-cli-docs/..."

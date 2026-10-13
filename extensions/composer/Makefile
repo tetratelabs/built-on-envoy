@@ -3,9 +3,11 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
+# Composer build and lint commands share the tag settings in Makefile.common.
 ROOT       := $(shell git rev-parse --show-toplevel)
 GO_VERSION := $(shell sed -ne 's/^go //gp' $(ROOT)/extensions/composer/go.mod)
-GO_TOOL    := go tool -modfile=$(ROOT)/tools/go.mod
+GO_TOOL    := go tool -modfile="$(ROOT)/tools/go.mod"
+FFI_LINTER_DIR := $(ROOT)/tools/deadcode-lint-plugin
 
 GO_TEST_ARGS ?=
 
@@ -45,6 +47,7 @@ comma := ,
 
 # Shared variables used by both this Makefile and the main Makefile.
 include Makefile.common
+LINT_BUILD_TAGS := $(BUILD_TAGS)
 # Option to build lite version of the loader. Overriding NAME to composer-lite makes the image
 # repository, OCI title, library name and cache directory all follow automatically.
 ifeq ($(strip $(COMPOSER_LITE)),true)
@@ -85,7 +88,7 @@ force_target_os ?= $(host_os)
 # Some IDEs like Goland place `.go` files in the `.idea` directory when using code templates. Using a
 # git command to find the files ensures that only relevant files are formatted and that git-ignored
 # files do not get in the way
-GO_FILES=$(shell git ls-files --cached --others --exclude-standard | grep '\.go$$')
+GO_FILES=$(wildcard $(shell git ls-files --cached --others --exclude-standard -- '*.go'))
 .PHONY: format
 format:
 	@echo "format => *.go"
@@ -95,8 +98,11 @@ format:
 
 .PHONY: lint
 lint:
+	@$(MAKE) -C "$(FFI_LINTER_DIR)" check
 	@echo "golangci-lint => ./..."
-	@$(GO_TOOL) golangci-lint run
+	@go_flags="$$(go env GOFLAGS)" || exit $$?; \
+		GOFLAGS="$${go_flags:+$$go_flags }-tags=$(LINT_BUILD_TAGS)" \
+		$(GO_TOOL) golangci-lint run --enable=ffideadcode --build-tags="$(LINT_BUILD_TAGS)" ./...
 
 .PHONY: test
 test:

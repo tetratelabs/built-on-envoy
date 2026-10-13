@@ -1,0 +1,21 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# This smoke check discovers the example through the same profile used for all Composer filters.
+version: "2"
+linters:
+  default: none
+  enable:
+    - ffideadcode
+  settings:
+    custom:
+      ffideadcode:
+        type: goplugin
+        path: ../out/ffideadcode.so
+        description: Reports functions unreachable from imported SDK FFI entrypoints.
+        settings:
+          composer:
+            directory: ../../extensions/composer
+            include: [example]

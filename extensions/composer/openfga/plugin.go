@@ -357,16 +357,6 @@ func (c *openfgaCallback) OnHttpCalloutDone(_ uint64, result shared.HttpCalloutR
 	c.handle.ContinueRequest()
 }
 
-// headerValue returns the first value for a key in an outbound HttpCallout request header list.
-func headerValue(headers [][2]string, key string) string {
-	for _, h := range headers {
-		if h[0] == key {
-			return h[1]
-		}
-	}
-	return ""
-}
-
 // sendDeny sends a local response using the configured deny status, body, and headers.
 func sendDeny(handle shared.HttpFilterHandle, cfg *parsedConfig, detail string) {
 	// Status is validated to 100-599 in parseConfig.
