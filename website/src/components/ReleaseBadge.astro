@@ -1,0 +1,54 @@
+---
+import { getLatestRelease, LATEST_RELEASE_API } from '../utils/release';
+
+const release = await getLatestRelease();
+---
+
+<a
+	class="release-badge"
+	href={release?.url ?? '#'}
+	target="_blank"
+	rel="noopener noreferrer"
+	title="Read the release notes"
+	aria-label={release ? `Release notes for ${release.tag}` : 'Release notes'}
+	hidden={!release}
+	data-api={LATEST_RELEASE_API}
+>
+	<span class="release-badge-dot" aria-hidden="true"></span>
+	<span class="release-badge-version">{release?.tag}</span>
+	<span class="release-badge-arrow" aria-hidden="true">&rarr;</span>
+</a>
+
+<script>
+	// The site is only rebuilt when the website changes, so refresh the badge at runtime in case
+	// a newer release has been published since the last build. Cached per session to stay well
+	// below the unauthenticated GitHub API rate limits.
+	const badge = document.querySelector<HTMLAnchorElement>('.release-badge');
+	const CACHE_KEY = 'boe-latest-release';
+
+	function render(release: { tag: string; url: string }) {
+		if (!badge || !release?.tag) return;
+		badge.href = release.url;
+		badge.querySelector('.release-badge-version')!.textContent = release.tag;
+		badge.setAttribute('aria-label', `Release notes for ${release.tag}`);
+		badge.hidden = false;
+	}
+
+	async function refresh() {
+		if (!badge?.dataset.api) return;
+		try {
+			const cached = sessionStorage.getItem(CACHE_KEY);
+			if (cached) return render(JSON.parse(cached));
+		} catch {}
+		try {
+			const res = await fetch(badge.dataset.api, { headers: { Accept: 'application/vnd.github+json' } });
+			if (!res.ok) return;
+			const data = await res.json();
+			const release = { tag: data.tag_name, url: data.html_url };
+			render(release);
+			try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(release)); } catch {}
+		} catch {}
+	}
+
+	refresh();
+</script>

@@ -122,6 +122,7 @@ header .container {
 
 header nav {
 	display: flex;
+	align-items: center;
 	gap: 32px;
 }
 
@@ -140,6 +141,58 @@ header nav a:focus {
 	outline: none;
 	box-shadow: var(--focus-ring);
 	border-radius: 4px;
+}
+
+/* Latest release chip */
+header nav a.release-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin-left: -8px;
+	padding: 3px 10px;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--primary);
+	background: var(--bg-subtle);
+	border: 1px solid var(--primary-ultra-light);
+	border-radius: 999px;
+	transition: border-color 0.2s, background 0.2s, color 0.2s;
+}
+
+header nav a.release-badge[hidden] {
+	display: none;
+}
+
+header nav a.release-badge:hover {
+	color: var(--primary-dark);
+	background: #fff;
+	border-color: var(--primary-light);
+}
+
+header nav a.release-badge:focus {
+	border-radius: 999px;
+}
+
+.release-badge-dot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--primary-pink);
+	box-shadow: 0 0 0 3px rgba(192, 108, 201, 0.2);
+}
+
+.release-badge-version {
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-weight: 700;
+	color: var(--primary-dark);
+}
+
+.release-badge-arrow {
+	transition: transform 0.2s;
+}
+
+.release-badge:hover .release-badge-arrow {
+	transform: translateX(2px);
 }
 
 .github-icon,
@@ -1186,6 +1239,16 @@ footer {
 	header nav .slack-icon {
 		padding: 12px 24px;
 		justify-content: flex-start;
+	}
+
+	header nav a.release-badge {
+		align-self: stretch;
+		margin-left: 0;
+		padding: 12px 24px;
+		font-size: 15px;
+		background: none;
+		border: none;
+		border-radius: 0;
 	}
 
 	/* Hero */
