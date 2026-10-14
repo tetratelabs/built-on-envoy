@@ -175,6 +175,7 @@ jobs:
           - dev
           - 1.38.7
           - 1.39.4
+          - 1.40.0
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
