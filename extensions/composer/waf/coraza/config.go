@@ -34,11 +34,17 @@ const (
 	ModeResponseOnly
 )
 
+// defaultRequestURIPathOnly is the default for request_uri_path_only.
+// It is planned to become true in a future release.
+const defaultRequestURIPathOnly = false
+
 // parsedConfig is the parsed WAF filter configuration.
 type parsedConfig struct {
 	// Directives are the Coraza directives, joined with newlines.
 	Directives string
 	Mode       WAFMode
+	// RequestURIPathOnly sets REQUEST_URI to the path and query instead of the absolute URL.
+	RequestURIPathOnly bool
 }
 
 // parseConfig parses the raw configuration bytes passed at the Envoy filter configuration.
@@ -47,8 +53,9 @@ func parseConfig(configBytes []byte, l *zap.Logger) (parsedConfig, error) {
 	var y struct {
 		// List of Coraza directive which will be joined with newlines. Use list here to
 		// simplify writing multi-line directives in JSON/YAML.
-		Directives []string `json:"directives"`
-		ModeString string   `json:"mode"`
+		Directives         []string `json:"directives"`
+		ModeString         string   `json:"mode"`
+		RequestURIPathOnly *bool    `json:"request_uri_path_only,omitempty"`
 	}
 	if err := json.Unmarshal(configBytes, &y); err != nil {
 		return parsedConfig{}, fmt.Errorf("failed to unmarshal config: %w", err)
@@ -70,23 +77,33 @@ func parseConfig(configBytes []byte, l *zap.Logger) (parsedConfig, error) {
 		return parsedConfig{}, fmt.Errorf("invalid mode: %s", y.ModeString)
 	}
 
+	requestURIPathOnly := defaultRequestURIPathOnly
+	if y.RequestURIPathOnly != nil {
+		requestURIPathOnly = *y.RequestURIPathOnly
+	}
+
 	// Join directives with newlines
-	return parsedConfig{Directives: strings.Join(y.Directives, "\n"), Mode: mode}, nil
+	return parsedConfig{
+		Directives:         strings.Join(y.Directives, "\n"),
+		Mode:               mode,
+		RequestURIPathOnly: requestURIPathOnly,
+	}, nil
 }
 
 // GetOrCreateSharedWAFFromConfig parses the raw configuration bytes passed at the Envoy filter
-// configuration and returns its WAF and mode. The WAF is shared: a live one built from the same
-// directives is reused if the files it was built from are unchanged.
-func GetOrCreateSharedWAFFromConfig(configBytes []byte, l *zap.Logger) (*SharedWAF, WAFMode, error) {
+// configuration and returns its WAF, mode and whether REQUEST_URI is the path only. The WAF is
+// shared: a live one built from the same directives is reused if the files it was built from are
+// unchanged.
+func GetOrCreateSharedWAFFromConfig(configBytes []byte, l *zap.Logger) (*SharedWAF, WAFMode, bool, error) {
 	cfg, err := parseConfig(configBytes, l)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, false, err
 	}
 	sharedWAF, err := sharedWAFs.getOrCreate(cfg.Directives, l, combinedDirectivesFS)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, false, err
 	}
-	return sharedWAF, cfg.Mode, nil
+	return sharedWAF, cfg.Mode, cfg.RequestURIPathOnly, nil
 }
 
 // newWAF creates a new WAF, reading included and data files from root.

@@ -49,10 +49,15 @@ func newPluginHandleWithPerRouteConfig(ctrl *gomock.Controller, perRouteConfig a
 // JSON marshalling.
 func newWAFFactory(t *testing.T, ctrl *gomock.Controller, directives []string, mode string) shared.HttpFilterFactory {
 	t.Helper()
-	config := map[string]interface{}{
+	return newWAFFactoryFromConfig(t, ctrl, map[string]any{
 		"directives": directives,
 		"mode":       mode,
-	}
+	})
+}
+
+// newWAFFactoryFromConfig creates a wafPluginFactory from a raw config map.
+func newWAFFactoryFromConfig(t *testing.T, ctrl *gomock.Controller, config map[string]any) shared.HttpFilterFactory {
+	t.Helper()
 	configBytes, err := json.Marshal(config)
 	require.NoError(t, err)
 
@@ -1513,7 +1518,8 @@ func Test_PerRouteConfigOverride(t *testing.T) {
 				"Include @crs-setup.conf",
 				"Include @owasp_crs/*.conf",
 			},
-			"mode": "REQUEST_ONLY",
+			"mode":                  "REQUEST_ONLY",
+			"request_uri_path_only": true,
 		}
 		perRouteBytes, err := json.Marshal(perRouteConfig)
 		require.NoError(t, err)
@@ -1535,6 +1541,7 @@ func Test_PerRouteConfigOverride(t *testing.T) {
 
 		// The per-route config should enable WAF processing with REQUEST_ONLY mode.
 		assert.Equal(t, waf.ModeRequestOnly, wafPlugin.mode)
+		assert.True(t, wafPlugin.requestURIPathOnly)
 
 		// Verify request headers are processed (WAF is enabled via per-route).
 		fakeHeaders := fake.NewFakeHeaderMap(map[string][]string{
@@ -2275,16 +2282,39 @@ func Test_ReleaseTransactionWithoutTransaction(t *testing.T) {
 	require.NotPanics(t, p.releaseTransaction)
 }
 
-// Test_RequestURIHasNoSchemeOrAuthority checks that REQUEST_URI is the path
-// and query, so that path-based rules such as "@beginsWith /" can match.
-func Test_RequestURIHasNoSchemeOrAuthority(t *testing.T) {
+// Test_RequestURI checks that REQUEST_URI is the absolute URL by default, and
+// the path and query with request_uri_path_only, so that path-based rules
+// such as "@beginsWith /" can match.
+func Test_RequestURI(t *testing.T) {
 	tests := []struct {
-		name    string
-		headers map[string][]string
-		want    string
+		name     string
+		pathOnly *bool
+		headers  map[string][]string
+		want     string
 	}{
 		{
-			name: "path and query",
+			name: "default: absolute URL",
+			headers: map[string][]string{
+				":authority": {"example.com:8080"},
+				":method":    {"POST"},
+				":path":      {"/api/v1/push?x=1"},
+				":scheme":    {"https"},
+			},
+			want: "https://example.com:8080/api/v1/push?x=1",
+		},
+		{
+			name:     "path only disabled: absolute URL",
+			pathOnly: new(false),
+			headers: map[string][]string{
+				":authority": {"example.com:8080"},
+				":method":    {"POST"},
+				":path":      {"/api/v1/push?x=1"},
+			},
+			want: "http://example.com:8080/api/v1/push?x=1",
+		},
+		{
+			name:     "path only: path and query",
+			pathOnly: new(true),
 			headers: map[string][]string{
 				":authority": {"example.com:8080"},
 				":method":    {"POST"},
@@ -2294,7 +2324,8 @@ func Test_RequestURIHasNoSchemeOrAuthority(t *testing.T) {
 			want: "/api/v1/push?x=1",
 		},
 		{
-			name: "CONNECT without path",
+			name:     "path only: CONNECT without path",
+			pathOnly: new(true),
 			headers: map[string][]string{
 				":authority": {"10.0.0.1:443"},
 				":method":    {"CONNECT"},
@@ -2321,7 +2352,11 @@ func Test_RequestURIHasNoSchemeOrAuthority(t *testing.T) {
 				`SecRule REQUEST_URI "!@streq ` + tt.want + `" "id:100501,phase:1,deny"`,
 				`SecRule URI_PARSE_ERROR "@eq 1" "id:100502,phase:1,deny"`,
 			}
-			p, ok := newWAFFactory(t, ctrl, directives, "FULL").Create(h).(*wafPlugin)
+			config := map[string]any{"directives": directives, "mode": "FULL"}
+			if tt.pathOnly != nil {
+				config["request_uri_path_only"] = *tt.pathOnly
+			}
+			p, ok := newWAFFactoryFromConfig(t, ctrl, config).Create(h).(*wafPlugin)
 			require.True(t, ok, "failed to cast plugin to wafPlugin")
 
 			require.Equal(t, shared.HeadersStatusContinue, p.OnRequestHeaders(fake.NewFakeHeaderMap(tt.headers), true))

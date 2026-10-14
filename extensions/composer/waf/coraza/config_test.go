@@ -28,7 +28,7 @@ func TestGetOrCreateSharedWAFFromConfig(t *testing.T) {
 		// Convert map to JSON bytes
 		wafConfig, _ := json.Marshal(config)
 
-		waf, mode, err := GetOrCreateSharedWAFFromConfig(wafConfig, logger.GetLogger())
+		waf, mode, _, err := GetOrCreateSharedWAFFromConfig(wafConfig, logger.GetLogger())
 		require.NoError(t, err)
 		require.NotNil(t, waf)
 		// REQUEST_ONLY is the default when no mode is set.
@@ -58,10 +58,34 @@ func TestGetOrCreateSharedWAFFromConfig(t *testing.T) {
 				}
 				wafConfig, _ := json.Marshal(config)
 
-				waf, mode, err := GetOrCreateSharedWAFFromConfig(wafConfig, logger.GetLogger())
+				waf, mode, _, err := GetOrCreateSharedWAFFromConfig(wafConfig, logger.GetLogger())
 				require.NoError(t, err)
 				require.NotNil(t, waf)
 				require.Equal(t, tc.expected, mode)
+			})
+		}
+	})
+
+	t.Run("request_uri_path_only", func(t *testing.T) {
+		for _, tc := range []struct {
+			name     string
+			value    any
+			expected bool
+		}{
+			{"unset", nil, defaultRequestURIPathOnly},
+			{"true", true, true},
+			{"false", false, false},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				config := map[string]interface{}{"directives": []string{"Include @coraza.conf"}}
+				if tc.value != nil {
+					config["request_uri_path_only"] = tc.value
+				}
+				wafConfig, _ := json.Marshal(config)
+
+				_, _, pathOnly, err := GetOrCreateSharedWAFFromConfig(wafConfig, logger.GetLogger())
+				require.NoError(t, err)
+				require.Equal(t, tc.expected, pathOnly)
 			})
 		}
 	})
@@ -73,7 +97,7 @@ func TestGetOrCreateSharedWAFFromConfig(t *testing.T) {
 		}
 		wafConfig, _ := json.Marshal(config)
 
-		waf, _, err := GetOrCreateSharedWAFFromConfig(wafConfig, logger.GetLogger())
+		waf, _, _, err := GetOrCreateSharedWAFFromConfig(wafConfig, logger.GetLogger())
 		require.ErrorContains(t, err, "invalid mode")
 		require.Nil(t, waf)
 	})
@@ -87,7 +111,7 @@ func TestGetOrCreateSharedWAFFromConfig(t *testing.T) {
 		// Convert map to JSON bytes
 		wafConfig, _ := json.Marshal(config)
 
-		waf, _, err := GetOrCreateSharedWAFFromConfig(wafConfig, logger.GetLogger())
+		waf, _, _, err := GetOrCreateSharedWAFFromConfig(wafConfig, logger.GetLogger())
 		require.ErrorContains(t, err, "failed to create WAF")
 		require.Nil(t, waf)
 	})

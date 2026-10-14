@@ -28,25 +28,29 @@ const (
 
 type wafPluginFactory struct {
 	shared.EmptyHttpFilterFactory
-	config  *waf.SharedWAF
-	mode    waf.WAFMode
-	metrics *metrics
+	config             *waf.SharedWAF
+	mode               waf.WAFMode
+	requestURIPathOnly bool
+	metrics            *metrics
 }
 
 type perRouteWafPluginConfig struct {
-	config *waf.SharedWAF
-	mode   waf.WAFMode
+	config             *waf.SharedWAF
+	mode               waf.WAFMode
+	requestURIPathOnly bool
 }
 
 func (f *wafPluginFactory) Create(handle shared.HttpFilterHandle) shared.HttpFilter {
 	config := f.config
 	mode := f.mode
+	requestURIPathOnly := f.requestURIPathOnly
 
 	// Check for per-route config and override if present.
 	perRouteWafPluginConfig := pkg.GetMostSpecificConfig[*perRouteWafPluginConfig](handle)
 	if perRouteWafPluginConfig != nil {
 		config = perRouteWafPluginConfig.config
 		mode = perRouteWafPluginConfig.mode
+		requestURIPathOnly = perRouteWafPluginConfig.requestURIPathOnly
 	}
 
 	if config == nil {
@@ -55,12 +59,13 @@ func (f *wafPluginFactory) Create(handle shared.HttpFilterHandle) shared.HttpFil
 	}
 
 	return &wafPlugin{
-		logger:            logger.GetLogger(),
-		handle:            handle,
-		config:            config,
-		mode:              mode,
-		metrics:           f.metrics,
-		metadataNamespace: defaultMetadataNamespace,
+		logger:             logger.GetLogger(),
+		handle:             handle,
+		config:             config,
+		mode:               mode,
+		requestURIPathOnly: requestURIPathOnly,
+		metrics:            f.metrics,
+		metadataNamespace:  defaultMetadataNamespace,
 	}
 }
 
@@ -71,10 +76,11 @@ type wafPluginConfigFactory struct {
 func (f *wafPluginConfigFactory) Create(handle shared.HttpFilterConfigHandle, unparsedConfig []byte) (shared.HttpFilterFactory, error) {
 	var wafConfig *waf.SharedWAF
 	var mode waf.WAFMode
+	var requestURIPathOnly bool
 
 	if len(unparsedConfig) > 0 {
 		var err error
-		wafConfig, mode, err = waf.GetOrCreateSharedWAFFromConfig(unparsedConfig, logger.GetLogger())
+		wafConfig, mode, requestURIPathOnly, err = waf.GetOrCreateSharedWAFFromConfig(unparsedConfig, logger.GetLogger())
 		if err != nil {
 			return nil, err
 		}
@@ -85,32 +91,35 @@ func (f *wafPluginConfigFactory) Create(handle shared.HttpFilterConfigHandle, un
 	}
 
 	return &wafPluginFactory{
-		config:  wafConfig,
-		mode:    mode,
-		metrics: newMetrics(handle),
+		config:             wafConfig,
+		mode:               mode,
+		requestURIPathOnly: requestURIPathOnly,
+		metrics:            newMetrics(handle),
 	}, nil
 }
 
 func (f *wafPluginConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, error) {
-	wafConfig, mode, err := waf.GetOrCreateSharedWAFFromConfig(unparsedConfig, logger.GetLogger())
+	wafConfig, mode, requestURIPathOnly, err := waf.GetOrCreateSharedWAFFromConfig(unparsedConfig, logger.GetLogger())
 	if err != nil {
 		return nil, err
 	}
 	return &perRouteWafPluginConfig{
-		config: wafConfig,
-		mode:   mode,
+		config:             wafConfig,
+		mode:               mode,
+		requestURIPathOnly: requestURIPathOnly,
 	}, nil
 }
 
 // The plugin struct that implements the actual logic.
 type wafPlugin struct {
 	shared.EmptyHttpFilter
-	logger            *logger.Logger
-	handle            shared.HttpFilterHandle
-	config            *waf.SharedWAF
-	mode              waf.WAFMode
-	metrics           *metrics
-	metadataNamespace string
+	logger             *logger.Logger
+	handle             shared.HttpFilterHandle
+	config             *waf.SharedWAF
+	mode               waf.WAFMode
+	requestURIPathOnly bool
+	metrics            *metrics
+	metadataNamespace  string
 
 	txContext             ctypes.Transaction
 	wafElapsed            time.Duration // summed time spent in the waf callbacks (WAF-added latency)
@@ -204,9 +213,17 @@ func (p *wafPlugin) OnRequestHeaders(headers shared.HeaderMap, endOfStream bool)
 	dstIP, dstPort := "127.0.0.1", 80
 
 	method := headers.GetOne(":method").ToString()
-	// REQUEST_URI is the path and query, without scheme and authority.
+	// Start from :path (path and query).
 	uri := headers.GetOne(":path").ToString()
-	if uri == "" {
+	if !p.requestURIPathOnly {
+		// Legacy fallback: REQUEST_URI is the absolute URL.
+		// This is currently the default behavior, and it will be flipped to path-only in a future release.
+		scheme := headers.GetOne(":scheme").ToString()
+		if scheme == "" {
+			scheme = "http"
+		}
+		uri = scheme + "://" + host + uri
+	} else if uri == "" {
 		// CONNECT has no :path. Use "//host:port" as net/http does, since a bare
 		// authority does not always parse as a URI.
 		uri = "//" + host

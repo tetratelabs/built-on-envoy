@@ -27,6 +27,7 @@ import (
 func TestWAFSmoke(t *testing.T) {
 	const config = `{
 	"mode": "FULL",
+	"request_uri_path_only": true,
 	"directives": [
 		"SecRuleEngine On",
 		"SecRequestBodyAccess On",

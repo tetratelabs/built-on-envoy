@@ -87,6 +87,17 @@ longDescription: |
   by itself. For example, `FULL` allows response-phase evaluation, but response body inspection still requires
   directives such as `SecResponseBodyAccess On`.
 
+  ## Request URI
+
+  The optional `request_uri_path_only` setting controls the value of `REQUEST_URI` (and `REQUEST_LINE`).
+
+  - `false` (default): the absolute URL, e.g. `https://example.com/api?x=1`.
+  - `true`: the path and query, e.g. `/api?x=1`, as in other Coraza and ModSecurity integrations. Path-based
+    rules such as `SecRule REQUEST_URI "@beginsWith /api/"` require it.
+
+  Note: the default will change to `true` in a future release. We recommend enabling it now and updating
+  any rules that match the scheme or host in `REQUEST_URI` (use `REQUEST_HEADERS:Host` for the host).
+
   ## Metadata
 
   The plugin emits the following filter dynamic metadata when requests are blocked by the WAF:
