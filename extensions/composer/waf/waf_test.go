@@ -33,6 +33,7 @@ func newPluginHandleWithoutPerRouteConfig(ctrl *gomock.Controller) *mocks.MockHt
 	pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	pluginHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
+	expectTxActiveGauge(pluginHandle)
 	return pluginHandle
 }
 
@@ -42,7 +43,15 @@ func newPluginHandleWithPerRouteConfig(ctrl *gomock.Controller, perRouteConfig a
 	pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	pluginHandle.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	pluginHandle.EXPECT().GetMostSpecificConfig().Return(perRouteConfig).AnyTimes()
+	expectTxActiveGauge(pluginHandle)
 	return pluginHandle
+}
+
+// expectTxActiveGauge allows the waf_tx_active gauge updates, which every
+// transaction emits on creation and release.
+func expectTxActiveGauge(h *mocks.MockHttpFilterHandle) {
+	h.EXPECT().IncrementGaugeValue(shared.MetricID(4), uint64(1)).Return(shared.MetricsSuccess).AnyTimes()
+	h.EXPECT().DecrementGaugeValue(shared.MetricID(4), uint64(1)).Return(shared.MetricsSuccess).AnyTimes()
 }
 
 // newWAFFactory creates a wafPluginFactory from raw directives, encapsulating the
@@ -65,6 +74,7 @@ func newWAFFactoryFromConfig(t *testing.T, ctrl *gomock.Controller, config map[s
 	configHandle.EXPECT().DefineCounter("waf_tx_total").Return(shared.MetricID(1), shared.MetricsSuccess)
 	configHandle.EXPECT().DefineCounter("waf_tx_blocked", "authority", "phase", "rule_id").Return(shared.MetricID(2), shared.MetricsSuccess)
 	configHandle.EXPECT().DefineHistogram("waf_tx_duration").Return(shared.MetricID(3), shared.MetricsSuccess)
+	configHandle.EXPECT().DefineGauge("waf_tx_active").Return(shared.MetricID(4), shared.MetricsSuccess)
 
 	factory, err := (&wafPluginConfigFactory{}).Create(configHandle, configBytes)
 	require.NoError(t, err)
@@ -899,6 +909,7 @@ func Test_BlockRequest(t *testing.T) {
 	configHandle.EXPECT().DefineCounter("waf_tx_total").Return(shared.MetricID(1), shared.MetricsSuccess)
 	configHandle.EXPECT().DefineCounter("waf_tx_blocked", "authority", "phase", "rule_id").Return(shared.MetricID(2), shared.MetricsSuccess)
 	configHandle.EXPECT().DefineHistogram("waf_tx_duration").Return(shared.MetricID(3), shared.MetricsSuccess)
+	configHandle.EXPECT().DefineGauge("waf_tx_active").Return(shared.MetricID(4), shared.MetricsSuccess)
 	m := newMetrics(configHandle)
 
 	t.Run("nil interruption sends 500 and records internal block metric", func(*testing.T) {
@@ -1703,6 +1714,7 @@ func Test_ProcessPartialBodyLimit(t *testing.T) {
 
 		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
 		pluginHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
+		expectTxActiveGauge(pluginHandle)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
 
@@ -1851,6 +1863,7 @@ func Test_ProcessPartialBodyLimit(t *testing.T) {
 
 		pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
 		pluginHandle.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
+		expectTxActiveGauge(pluginHandle)
 		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
 		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
 
@@ -2232,6 +2245,7 @@ func Test_TxReleasedEarlyOnLongLivedStreams(t *testing.T) {
 			logs := 0
 			h := mocks.NewMockHttpFilterHandle(ctrl)
 			h.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
+			expectTxActiveGauge(h)
 			h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).Do(func(...any) { logs++ }).AnyTimes()
 			h.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 			h.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
@@ -2361,6 +2375,87 @@ func Test_RequestURI(t *testing.T) {
 
 			require.Equal(t, shared.HeadersStatusContinue, p.OnRequestHeaders(fake.NewFakeHeaderMap(tt.headers), true))
 			p.OnStreamComplete()
+		})
+	}
+}
+
+// Test_TxActiveGauge checks that waf_tx_active tracks the transactions held by the
+// WAF: incremented on creation and decremented exactly once on release, so it
+// returns to 0 on every path, and drops as soon as a long-lived stream is analyzed.
+func Test_TxActiveGauge(t *testing.T) {
+	directives := []string{
+		"SecRuleEngine On",
+		`SecRule REQUEST_HEADERS:X-Block-Test "@streq block-me" "id:100001,phase:1,deny,status:403"`,
+	}
+	req := func(extra map[string][]string) shared.HeaderMap {
+		m := map[string][]string{":authority": {"example.com"}, ":method": {"GET"}, ":path": {"/"}}
+		maps.Copy(m, extra)
+		return fake.NewFakeHeaderMap(m)
+	}
+
+	for _, tc := range []struct {
+		name string
+		// drive runs the stream up to, but excluding, OnStreamComplete and returns
+		// the expected gauge value at that point.
+		drive func(t *testing.T, p *wafPlugin) int
+	}{
+		{
+			name: "clean pass, held until stream completion",
+			drive: func(t *testing.T, p *wafPlugin) int {
+				p.OnRequestHeaders(req(nil), true)
+				p.OnResponseHeaders(fake.NewFakeHeaderMap(map[string][]string{":status": {"200"}}), true)
+				return 1
+			},
+		},
+		{
+			name: "blocked request",
+			drive: func(t *testing.T, p *wafPlugin) int {
+				require.Equal(t, shared.HeadersStatusStop, p.OnRequestHeaders(req(map[string][]string{"x-block-test": {"block-me"}}), true))
+				return 1
+			},
+		},
+		{
+			name: "stream reset before the response",
+			drive: func(t *testing.T, p *wafPlugin) int {
+				p.OnRequestHeaders(req(nil), true)
+				return 1
+			},
+		},
+		{
+			name: "websocket released once analyzed",
+			drive: func(t *testing.T, p *wafPlugin) int {
+				p.OnRequestHeaders(req(map[string][]string{"connection": {"Upgrade"}, "upgrade": {"websocket"}}), false)
+				p.OnResponseHeaders(fake.NewFakeHeaderMap(map[string][]string{
+					":status": {"101"}, "connection": {"Upgrade"}, "upgrade": {"websocket"},
+				}), false)
+				return 0
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			active := 0
+			h := mocks.NewMockHttpFilterHandle(ctrl)
+			h.EXPECT().IncrementGaugeValue(shared.MetricID(4), uint64(1)).DoAndReturn(
+				func(shared.MetricID, uint64, ...string) shared.MetricsResult { active++; return shared.MetricsSuccess })
+			h.EXPECT().DecrementGaugeValue(shared.MetricID(4), uint64(1)).DoAndReturn(
+				func(shared.MetricID, uint64, ...string) shared.MetricsResult { active--; return shared.MetricsSuccess })
+			h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			h.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
+			h.EXPECT().GetAttributeString(gomock.Any()).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true).AnyTimes()
+			h.EXPECT().IncrementCounterValue(gomock.Any(), gomock.Any(), gomock.Any()).Return(shared.MetricsSuccess).AnyTimes()
+			h.EXPECT().RecordHistogramValue(gomock.Any(), gomock.Any()).Return(shared.MetricsSuccess).AnyTimes()
+			h.EXPECT().SetMetadata(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			h.EXPECT().SendLocalResponse(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+			p, ok := newWAFFactory(t, ctrl, directives, "FULL").Create(h).(*wafPlugin)
+			require.True(t, ok, "failed to cast plugin to wafPlugin")
+
+			require.Equal(t, tc.drive(t, p), active)
+			p.OnStreamComplete()
+			require.Equal(t, 0, active)
 		})
 	}
 }
