@@ -2120,7 +2120,12 @@ func Test_TxDoneBeforeStreamComplete(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			h := newPluginHandleWithoutPerRouteConfig(ctrl)
+			h := mocks.NewMockHttpFilterHandle(ctrl)
+			h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			h.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
+			active := 0
+			h.EXPECT().IncrementGaugeValue(shared.MetricID(4), uint64(1)).Do(func(shared.MetricID, uint64, ...string) { active++ }).Return(shared.MetricsSuccess).AnyTimes()
+			h.EXPECT().DecrementGaugeValue(shared.MetricID(4), uint64(1)).Do(func(shared.MetricID, uint64, ...string) { active-- }).Return(shared.MetricsSuccess).AnyTimes()
 			expectTxFinalized(h)
 			if tc.setup != nil {
 				tc.setup(h)
@@ -2137,11 +2142,13 @@ func Test_TxDoneBeforeStreamComplete(t *testing.T) {
 			// completion, outside the data path.
 			require.True(t, p.txDone, "tx must be done, with its metrics emitted, at the callback boundary")
 			require.NotNil(t, p.txContext, "transaction must stay live until OnStreamComplete for audit logging")
+			require.Equal(t, 1, active, "waf_tx_active must count the live transaction")
 
 			// OnStreamComplete runs audit logging and closes the transaction,
 			// without re-emitting the metrics (Times(1) guard).
 			p.OnStreamComplete()
 			require.Nil(t, p.txContext)
+			require.Zero(t, active, "waf_tx_active must drop once the transaction is released")
 		})
 	}
 }
@@ -2245,7 +2252,9 @@ func Test_TxReleasedEarlyOnLongLivedStreams(t *testing.T) {
 			logs := 0
 			h := mocks.NewMockHttpFilterHandle(ctrl)
 			h.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
-			expectTxActiveGauge(h)
+			active := 0
+			h.EXPECT().IncrementGaugeValue(shared.MetricID(4), uint64(1)).Do(func(shared.MetricID, uint64, ...string) { active++ }).Return(shared.MetricsSuccess).AnyTimes()
+			h.EXPECT().DecrementGaugeValue(shared.MetricID(4), uint64(1)).Do(func(shared.MetricID, uint64, ...string) { active-- }).Return(shared.MetricsSuccess).AnyTimes()
 			h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).Do(func(...any) { logs++ }).AnyTimes()
 			h.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString("HTTP/1.1"), true)
 			h.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
@@ -2260,14 +2269,17 @@ func Test_TxReleasedEarlyOnLongLivedStreams(t *testing.T) {
 
 			if !tc.released {
 				require.NotNil(t, p.txContext, "transaction must stay live until OnStreamComplete")
+				require.Equal(t, 1, active, "waf_tx_active must count the live transaction")
 				require.Zero(t, auditEntries())
 				p.OnStreamComplete()
 				require.Nil(t, p.txContext)
+				require.Zero(t, active, "waf_tx_active must drop once the transaction is released")
 				require.Equal(t, 1, auditEntries())
 				return
 			}
 
 			require.Nil(t, p.txContext, "transaction must be released once the analysis is done")
+			require.Zero(t, active, "waf_tx_active must drop as soon as the transaction is released")
 			require.Equal(t, 1, auditEntries(), "audit logging must run when the transaction is released")
 
 			// The rest of the stream passes through without logging, without
@@ -2285,6 +2297,7 @@ func Test_TxReleasedEarlyOnLongLivedStreams(t *testing.T) {
 			p.OnStreamComplete()
 			require.Zero(t, logs, "a released stream must not log on every callback")
 			require.Equal(t, 1, auditEntries(), "the transaction must not be logged again at stream end")
+			require.Zero(t, active, "waf_tx_active must not be decremented again at stream end")
 		})
 	}
 }
@@ -2375,87 +2388,6 @@ func Test_RequestURI(t *testing.T) {
 
 			require.Equal(t, shared.HeadersStatusContinue, p.OnRequestHeaders(fake.NewFakeHeaderMap(tt.headers), true))
 			p.OnStreamComplete()
-		})
-	}
-}
-
-// Test_TxActiveGauge checks that waf_tx_active tracks the transactions held by the
-// WAF: incremented on creation and decremented exactly once on release, so it
-// returns to 0 on every path, and drops as soon as a long-lived stream is analyzed.
-func Test_TxActiveGauge(t *testing.T) {
-	directives := []string{
-		"SecRuleEngine On",
-		`SecRule REQUEST_HEADERS:X-Block-Test "@streq block-me" "id:100001,phase:1,deny,status:403"`,
-	}
-	req := func(extra map[string][]string) shared.HeaderMap {
-		m := map[string][]string{":authority": {"example.com"}, ":method": {"GET"}, ":path": {"/"}}
-		maps.Copy(m, extra)
-		return fake.NewFakeHeaderMap(m)
-	}
-
-	for _, tc := range []struct {
-		name string
-		// drive runs the stream up to, but excluding, OnStreamComplete and returns
-		// the expected gauge value at that point.
-		drive func(t *testing.T, p *wafPlugin) int
-	}{
-		{
-			name: "clean pass, held until stream completion",
-			drive: func(t *testing.T, p *wafPlugin) int {
-				p.OnRequestHeaders(req(nil), true)
-				p.OnResponseHeaders(fake.NewFakeHeaderMap(map[string][]string{":status": {"200"}}), true)
-				return 1
-			},
-		},
-		{
-			name: "blocked request",
-			drive: func(t *testing.T, p *wafPlugin) int {
-				require.Equal(t, shared.HeadersStatusStop, p.OnRequestHeaders(req(map[string][]string{"x-block-test": {"block-me"}}), true))
-				return 1
-			},
-		},
-		{
-			name: "stream reset before the response",
-			drive: func(t *testing.T, p *wafPlugin) int {
-				p.OnRequestHeaders(req(nil), true)
-				return 1
-			},
-		},
-		{
-			name: "websocket released once analyzed",
-			drive: func(t *testing.T, p *wafPlugin) int {
-				p.OnRequestHeaders(req(map[string][]string{"connection": {"Upgrade"}, "upgrade": {"websocket"}}), false)
-				p.OnResponseHeaders(fake.NewFakeHeaderMap(map[string][]string{
-					":status": {"101"}, "connection": {"Upgrade"}, "upgrade": {"websocket"},
-				}), false)
-				return 0
-			},
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			active := 0
-			h := mocks.NewMockHttpFilterHandle(ctrl)
-			h.EXPECT().IncrementGaugeValue(shared.MetricID(4), uint64(1)).DoAndReturn(
-				func(shared.MetricID, uint64, ...string) shared.MetricsResult { active++; return shared.MetricsSuccess })
-			h.EXPECT().DecrementGaugeValue(shared.MetricID(4), uint64(1)).DoAndReturn(
-				func(shared.MetricID, uint64, ...string) shared.MetricsResult { active--; return shared.MetricsSuccess })
-			h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-			h.EXPECT().GetMostSpecificConfig().Return(nil).AnyTimes()
-			h.EXPECT().GetAttributeString(gomock.Any()).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true).AnyTimes()
-			h.EXPECT().IncrementCounterValue(gomock.Any(), gomock.Any(), gomock.Any()).Return(shared.MetricsSuccess).AnyTimes()
-			h.EXPECT().RecordHistogramValue(gomock.Any(), gomock.Any()).Return(shared.MetricsSuccess).AnyTimes()
-			h.EXPECT().SetMetadata(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-			h.EXPECT().SendLocalResponse(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-
-			p, ok := newWAFFactory(t, ctrl, directives, "FULL").Create(h).(*wafPlugin)
-			require.True(t, ok, "failed to cast plugin to wafPlugin")
-
-			require.Equal(t, tc.drive(t, p), active)
-			p.OnStreamComplete()
-			require.Equal(t, 0, active)
 		})
 	}
 }
