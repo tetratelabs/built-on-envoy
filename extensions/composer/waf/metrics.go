@@ -20,6 +20,7 @@ type metrics struct {
 	txTotal    *pkg.Metric
 	txBlocked  *pkg.Metric
 	txDuration *pkg.Metric
+	txActive   *pkg.Metric
 }
 
 // newMetrics initializes and registers the metrics for the WAF extension.
@@ -28,6 +29,7 @@ func newMetrics(h shared.HttpFilterConfigHandle) *metrics {
 		txTotal:    pkg.NewMetric(h, h.DefineCounter, "waf_tx_total"),
 		txBlocked:  pkg.NewMetric(h, h.DefineCounter, "waf_tx_blocked", "authority", "phase", "rule_id"),
 		txDuration: pkg.NewMetric(h, h.DefineHistogram, "waf_tx_duration"),
+		txActive:   pkg.NewMetric(h, h.DefineGauge, "waf_tx_active"),
 	}
 }
 
@@ -40,6 +42,18 @@ func newMetrics(h shared.HttpFilterConfigHandle) *metrics {
 func (m *metrics) RecordTx(h shared.HttpFilterHandle, elapsed time.Duration) {
 	m.txTotal.Record(h, h.IncrementCounterValue, 1)
 	m.txDuration.Record(h, h.RecordHistogramValue, uint64(elapsed.Microseconds())) //nolint:gosec // G115: elapsed is a non-negative duration
+}
+
+// RecordTxCreated increments the gauge of transactions currently held by the WAF.
+// This should be called once for every transaction created.
+func (m *metrics) RecordTxCreated(h shared.HttpFilterHandle) {
+	m.txActive.Record(h, h.IncrementGaugeValue, 1)
+}
+
+// RecordTxReleased decrements the gauge of transactions currently held by the WAF.
+// This should be called once for every transaction closed and returned to the pool.
+func (m *metrics) RecordTxReleased(h shared.HttpFilterHandle) {
+	m.txActive.Record(h, h.DecrementGaugeValue, 1)
 }
 
 // RecordBlockedByRule increments the blocked transaction counter with the appropriate labels.

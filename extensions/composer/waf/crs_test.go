@@ -38,6 +38,9 @@ func newPluginHandle(ctrl *gomock.Controller, sourceAddr, protocol string) *mock
 	h.EXPECT().IncrementCounterValue(gomock.Any(), gomock.Any()).Return(shared.MetricsSuccess).AnyTimes()
 	// waf_tx_duration (2 args)
 	h.EXPECT().RecordHistogramValue(gomock.Any(), gomock.Any()).Return(shared.MetricsSuccess).AnyTimes()
+	// waf_tx_active (2 args)
+	h.EXPECT().IncrementGaugeValue(gomock.Any(), gomock.Any()).Return(shared.MetricsSuccess).AnyTimes()
+	h.EXPECT().DecrementGaugeValue(gomock.Any(), gomock.Any()).Return(shared.MetricsSuccess).AnyTimes()
 	// waf_tx_blocked (5 args: id, value, authority, phase, rule_id)
 	h.EXPECT().IncrementCounterValue(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(shared.MetricsSuccess).AnyTimes()
 	h.EXPECT().SetMetadata(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
@@ -163,6 +166,7 @@ func Test_MandatoryRuleIDCheck(t *testing.T) {
 			configHandle.EXPECT().DefineCounter(gomock.Any(), gomock.Any()).Return(shared.MetricID(1), shared.MetricsSuccess).AnyTimes()
 			configHandle.EXPECT().DefineCounter(gomock.Any()).Return(shared.MetricID(2), shared.MetricsSuccess).AnyTimes()
 			configHandle.EXPECT().DefineHistogram(gomock.Any()).Return(shared.MetricID(3), shared.MetricsSuccess).AnyTimes()
+			configHandle.EXPECT().DefineGauge(gomock.Any()).Return(shared.MetricID(4), shared.MetricsSuccess).AnyTimes()
 
 			_, err = (&wafPluginConfigFactory{}).Create(configHandle, configBytes)
 			if tc.wantErr {

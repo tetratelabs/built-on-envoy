@@ -175,6 +175,7 @@ func (p *wafPlugin) initializeTransaction(headers shared.HeaderMap) {
 	}
 	id := headers.GetOne("x-request-id").ToString()
 	p.txContext = p.config.NewTransactionWithID(id)
+	p.metrics.RecordTxCreated(p.handle)
 	p.isUpgrade = p.checkUpgrade(headers)
 }
 
@@ -507,6 +508,7 @@ func (p *wafPlugin) releaseTransaction() {
 	if err := p.txContext.Close(); err != nil {
 		p.handle.Log(shared.LogLevelDebug, "Failed to close WAF transaction: %v", err.Error())
 	}
+	p.metrics.RecordTxReleased(p.handle)
 	p.txContext = nil
 	p.txReleased = true
 }

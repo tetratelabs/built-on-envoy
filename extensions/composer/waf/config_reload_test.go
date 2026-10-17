@@ -32,6 +32,7 @@ func newReloadTestConfigHandle(ctrl *gomock.Controller) *mocks.MockHttpFilterCon
 	h.EXPECT().DefineCounter(gomock.Any(), gomock.Any()).Return(shared.MetricID(1), shared.MetricsSuccess).AnyTimes()
 	h.EXPECT().DefineCounter(gomock.Any()).Return(shared.MetricID(1), shared.MetricsSuccess).AnyTimes()
 	h.EXPECT().DefineHistogram(gomock.Any()).Return(shared.MetricID(2), shared.MetricsSuccess).AnyTimes()
+	h.EXPECT().DefineGauge(gomock.Any()).Return(shared.MetricID(3), shared.MetricsSuccess).AnyTimes()
 	h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 	return h
 }
