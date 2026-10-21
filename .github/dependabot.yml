@@ -27,6 +27,9 @@ updates:
       go-extension-dependencies:
         patterns:
           - "*"
+    ignore:
+      # The CRS version must be updated manually, in accordance with the WAF extension.
+      - dependency-name: "github.com/corazawaf/coraza-coreruleset/crs/v4"
 
   - package-ecosystem: npm
     directory: /website
