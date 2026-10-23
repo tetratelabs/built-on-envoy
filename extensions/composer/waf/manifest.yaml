@@ -171,9 +171,35 @@ examples:
       By default WAF is configured in `DetectionOnly` mode, which means it will only log detected attacks without
       blocking them. To enable active blocking, this example sets `SecRuleEngine On` in the configuration. It also
       sets `SecResponseBodyAccess Off` to disable response body inspection as it's not needed for the example.
+      Standard request and response headers are omitted from the transcript.
+    config:
+      directives:
+        - Include @coraza.conf
+        - SecRuleEngine On
+        - SecResponseBodyAccess Off
+        - Include @crs-setup.conf
+        - Include @owasp_crs/*.conf
+    commands:
+      - comment: Try sending a SQL injection payload and see the request rejected.
+        argv:
+          - curl
+          - --silent
+          - --show-error
+          - --verbose
+          - --user-agent
+          - boe-example
+          - --max-time
+          - "10"
+          - --request
+          - POST
+          - --data
+          - "1%27%20ORDER%20BY%203--%2B"
+          - "${PROXY_URL}/post"
+    elideOutput: true
     code: |
-      # Start WAF with recommended OWASP CRS rules and enforcement enabled
-      boe run --extension coraza-waf --config '
+      ```sh
+      # Terminal 1
+      boe run --extension coraza-waf --envoy-version 1.38.0 --config '
         {
           "directives": [
             "Include @coraza.conf",
@@ -183,49 +209,120 @@ examples:
             "Include @owasp_crs/*.conf"
           ]
         }'
+      ```
 
-      # Try sending a SQL injection payload and see the request rejected
-      curl -v http://localhost:10000/post -X POST --data "1%27%20ORDER%20BY%203--%2B"
+      ```sh
+      # Terminal 2 (after Envoy is ready)
+      # Try sending a SQL injection payload and see the request rejected.
+      curl --silent --show-error --verbose --user-agent boe-example --max-time 10 \
+        --request POST --data '1%27%20ORDER%20BY%203--%2B' http://localhost:10000/post
+      ```
 
+      ```text
+      > POST /post HTTP/1.1
+      ...
       < HTTP/1.1 403 Forbidden
-      < content-length: 22
-      < content-type: text/plain
-      < date: Thu, 12 Feb 2026 10:28:16 GMT
-      < server: envoy
+      ...
       <
+      ```
+      <!-- stderr; Line endings: CRLF,LF,CRLF,LF,CRLF; Trailing whitespace: W3sibGluZSI6NCwidGV4dCI6IiAifV0= -->
   - title: CRS plugin from local filesystem
     description: |
       The following example demonstrates how to load a CRS plugin from the local filesystem and run the WAF plugin
       with recommended OWASP CRS rules.
 
-      It first downloads the WordPress rule exclusions plugin to a local file, enables blocking with
-      `SecRuleEngine On`, and includes the plugin using `Include /tmp/wordpress-plugin.conf`. The same SQL injection
+      It first downloads a pinned revision of the WordPress rule exclusions plugin to a local file, enables blocking with
+      `SecRuleEngine On`, and includes the downloaded plugin file. The same SQL injection
       payload that would normally be blocked is no longer blocked because the plugin excludes this specific attack
       vector.
+      With the default httpbin upstream, the forwarded WordPress path returns 404 rather than the WAF's 403.
+      Standard headers and the upstream's HTML error body are omitted from the transcript.
+    preStart:
+      - comment: Download the pinned WordPress rule exclusions plugin before starting WAF.
+        argv:
+          - curl
+          - --fail
+          - --silent
+          - --show-error
+          - --location
+          - --max-time
+          - "30"
+          - https://raw.githubusercontent.com/coreruleset/wordpress-rule-exclusions-plugin/25828bc20b745d6ec938920d6fe3e8a4aa049b8e/plugins/wordpress-rule-exclusions-before.conf
+          - --output
+          - "${WORK_DIR}/wordpress-plugin-before.conf"
+    config:
+      directives:
+        - Include @coraza.conf
+        - SecRuleEngine On
+        - SecResponseBodyAccess Off
+        - Include @crs-setup.conf
+        - Include ${WORK_DIR}/wordpress-plugin-before.conf
+        - Include @owasp_crs/*.conf
+    commands:
+      - comment: Send a WordPress request allowed by the plugin's rule exclusions.
+        argv:
+          - curl
+          - --silent
+          - --show-error
+          - --verbose
+          - --user-agent
+          - boe-example
+          - --max-time
+          - "10"
+          - --request
+          - POST
+          - --header
+          - "Content-Type: application/json"
+          - --data
+          - '{"content": "SELECT * FROM users WHERE id=1"}'
+          - "${PROXY_URL}/wp-json/wp/v2/posts/1"
+    volatileHeaders:
+      - x-envoy-upstream-service-time
+    elideOutput: true
     code: |
-      # Retrieve the file
-      curl https://raw.githubusercontent.com/coreruleset/wordpress-rule-exclusions-plugin/refs/heads/master/plugins/wordpress-rule-exclusions-before.conf -o /tmp/wordpress-plugin-before.conf
-      
-      # Start WAF with recommended OWASP CRS rules, enforcement enabled, and loading the plugin file
-      boe run --extension coraza-waf --config '
+      ```sh
+      # Terminal 1
+      # Download the pinned WordPress rule exclusions plugin before starting WAF.
+      curl --fail --silent --show-error --location --max-time 30 \
+        https://raw.githubusercontent.com/coreruleset/wordpress-rule-exclusions-plugin/25828bc20b745d6ec938920d6fe3e8a4aa049b8e/plugins/wordpress-rule-exclusions-before.conf \
+        --output ./wordpress-plugin-before.conf
+      ```
+
+      ```sh
+      # Start BOE in Terminal 1 after the pre-start commands complete.
+      boe run --extension coraza-waf --envoy-version 1.38.0 --config '
         {
           "directives": [
             "Include @coraza.conf",
             "SecRuleEngine On",
             "SecResponseBodyAccess Off",
             "Include @crs-setup.conf",
-            "Include /tmp/wordpress-plugin-before.conf",
+            "Include ./wordpress-plugin-before.conf",
             "Include @owasp_crs/*.conf"
           ]
         }'
+      ```
 
-      # Try sending a SQL injection payload and see the request rejected
-      curl -v "http://localhost:10000/wp-json/wp/v2/posts/1" -X POST -H "Content-Type: application/json" --data '{"content": "SELECT * FROM users WHERE id=1"}'
+      ```sh
+      # Terminal 2 (after Envoy is ready)
+      # Send a WordPress request allowed by the plugin's rule exclusions.
+      curl --silent --show-error --verbose --user-agent boe-example --max-time 10 \
+        --request POST --header 'Content-Type: application/json' --data \
+        '{"content": "SELECT * FROM users WHERE id=1"}' \
+        http://localhost:10000/wp-json/wp/v2/posts/1
+      ```
 
-      # The request is no longer blocked by the WAF as the rules in the plugin file are excluding the specific attack vector from being detected
-      < HTTP/1.1 404 Not Found
-      < date: Wed, 01 Apr 2026 13:10:33 GMT
-      < content-type: text/html
-      < content-length: 233
-      < server: envoy
+      ```text
       ...
+      ```
+      <!-- stdout; Line endings: LF -->
+
+
+      ```text
+      > POST /wp-json/wp/v2/posts/1 HTTP/1.1
+      ...
+      < HTTP/1.1 404 Not Found
+      ...
+      <
+      ```
+      <!-- stderr; Line endings: CRLF,LF,CRLF,LF,CRLF; Trailing whitespace: W3sibGluZSI6NCwidGV4dCI6IiAifV0= -->
