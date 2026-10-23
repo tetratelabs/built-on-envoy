@@ -910,7 +910,7 @@ func Test_BlockRequest(t *testing.T) {
 	configHandle.EXPECT().DefineCounter("waf_tx_blocked", "authority", "phase", "rule_id").Return(shared.MetricID(2), shared.MetricsSuccess)
 	configHandle.EXPECT().DefineHistogram("waf_tx_duration").Return(shared.MetricID(3), shared.MetricsSuccess)
 	configHandle.EXPECT().DefineGauge("waf_tx_active").Return(shared.MetricID(4), shared.MetricsSuccess)
-	m := newMetrics(configHandle)
+	m := newMetrics(configHandle, metricsConfig{})
 
 	t.Run("nil interruption sends 500 and records internal block metric", func(*testing.T) {
 		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)

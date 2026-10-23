@@ -77,9 +77,13 @@ func (f *wafPluginConfigFactory) Create(handle shared.HttpFilterConfigHandle, un
 	var wafConfig *waf.SharedWAF
 	var mode waf.WAFMode
 	var requestURIPathOnly bool
+	var metricsCfg metricsConfig
 
 	if len(unparsedConfig) > 0 {
 		var err error
+		if metricsCfg, err = parseMetricsConfig(unparsedConfig); err != nil {
+			return nil, err
+		}
 		wafConfig, mode, requestURIPathOnly, err = waf.GetOrCreateSharedWAFFromConfig(unparsedConfig, logger.GetLogger())
 		if err != nil {
 			return nil, err
@@ -94,13 +98,18 @@ func (f *wafPluginConfigFactory) Create(handle shared.HttpFilterConfigHandle, un
 		config:             wafConfig,
 		mode:               mode,
 		requestURIPathOnly: requestURIPathOnly,
-		metrics:            newMetrics(handle),
+		metrics:            newMetrics(handle, metricsCfg),
 	}, nil
 }
 
 func (f *wafPluginConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, error) {
 	wafConfig, mode, requestURIPathOnly, err := waf.GetOrCreateSharedWAFFromConfig(unparsedConfig, logger.GetLogger())
 	if err != nil {
+		return nil, err
+	}
+	// Per-route configurations do not override the metrics settings, but an invalid one is
+	// rejected here too rather than silently ignored.
+	if _, err := parseMetricsConfig(unparsedConfig); err != nil {
 		return nil, err
 	}
 	return &perRouteWafPluginConfig{

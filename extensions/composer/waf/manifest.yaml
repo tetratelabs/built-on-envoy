@@ -117,6 +117,26 @@ longDescription: |
   | `waf_tx_blocked` | `authority`, `phase`, `rule_id` | Counter | Total amount of transactions blocked by the WAF. The `rule_id` will not be set if the request is not blocked by a concrete rule but by a WAF internal error. |
   | `waf_tx_duration` | - | Histogram | Duration of WAF processing the transaction, in microseconds. |
 
+  ### Authority tag
+
+  By default the `authority` tag of `waf_tx_blocked` is the request `:authority` header without its port.
+  Clients choose that value, blocked requests included, so the number of series grows with the number of
+  distinct authorities the WAF sees. The optional `metrics` object bounds it:
+
+  - `authority_label` (default `true`): `false` defines the metric without the `authority` tag, so the
+    number of series no longer depends on the requests.
+
+  ```json
+  {
+    "directives": ["Include @coraza.conf", "Include @crs-setup.conf", "Include @owasp_crs/*.conf"],
+    "metrics": {"authority_label": false}
+  }
+  ```
+
+  Unknown keys in `metrics` reject the configuration. Metrics are defined per filter configuration, so these
+  settings are read from the filter configuration only: per-route configurations do not override them,
+  although an invalid `metrics` object is rejected there too.
+
   ### Histogram resolution
 
   Envoy records dynamic-module histograms without a unit, so its default bucket
