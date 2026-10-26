@@ -1,6 +1,6 @@
 # Extensions Directory
 
-This directory will contain community-contributed Envoy extensions.
+`composer/` contains bundled filters; other extensions live in top-level directories.
 
 ## Structure
 
@@ -16,25 +16,28 @@ extension-name/
 
 ## Extension e2e tests
 
-Extension e2e tests live in the [tests/e2e](./tests/e2e) directory. Take a look at the README file
-there for details on writing end-to-end tests for your extension.
+See [tests/e2e](./tests/e2e) for end-to-end tests and instructions for adding them.
+
+## Executable manifest examples
+
+Declare `config` and `commands` in `manifest.yaml` to generate `examples[].code`. From the
+repository root, run:
+
+```sh
+make -C extensions update-examples EXTENSION_PATH=composer/opa
+make -C extensions check-examples EXTENSION_PATH=composer/opa
+```
+
+Set `EXTENSION_PATH` to the extension's directory relative to `extensions/`, or `composer` for
+the bundle. Review generated changes before committing; `check-examples` checks without writing
+and is included in `check`.
+
+See [Executable Extension Examples](../website/src/pages/docs/writing-extension-examples.mdx)
+for authoring and output elision. The
+[generator contract](../cli/tools/gen-examples/README.md) defines implementation invariants.
 
 ## Contributing an Extension
 
-1. Fork this repository
-2. Create a new directory under `extensions/` with your extension name
-3. Add all required files (see structure above)
-4. Ensure your README includes:
-   - Description of what the extension does
-   - Installation/usage instructions
-   - Configuration options
-   - Examples
-5. Open a pull request
-
-## Extension Guidelines
-
-- Extensions should be focused on a single responsibility
-- Include comprehensive documentation
-- Provide working examples
-- Follow Envoy best practices
-- Include tests where applicable
+Keep each extension focused on one responsibility. Its README must document its purpose,
+setup, configuration, and usage examples. Follow the repository's
+[contribution guidelines](../CONTRIBUTING.md) for testing and submitting a pull request.

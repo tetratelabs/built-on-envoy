@@ -379,13 +379,96 @@
     "examples": [
       {
         "title": "SQL Injection Protection",
-        "description": "The following example demonstrates how to run the WAF plugin with recommended OWASP CRS rules and test SQL\ninjection protection by sending a malicious payload that should be blocked by the WAF.\n\nBy default WAF is configured in `DetectionOnly` mode, which means it will only log detected attacks without\nblocking them. To enable active blocking, this example sets `SecRuleEngine On` in the configuration. It also\nsets `SecResponseBodyAccess Off` to disable response body inspection as it's not needed for the example.\n",
-        "code": "# Start WAF with recommended OWASP CRS rules and enforcement enabled\nboe run --extension coraza-waf --config '\n  {\n    \"directives\": [\n      \"Include @coraza.conf\",\n      \"SecRuleEngine On\",\n      \"SecResponseBodyAccess Off\",\n      \"Include @crs-setup.conf\",\n      \"Include @owasp_crs/*.conf\"\n    ]\n  }'\n\n# Try sending a SQL injection payload and see the request rejected\ncurl -v http://localhost:10000/post -X POST --data \"1%27%20ORDER%20BY%203--%2B\"\n\n\u003c HTTP/1.1 403 Forbidden\n\u003c content-length: 22\n\u003c content-type: text/plain\n\u003c date: Thu, 12 Feb 2026 10:28:16 GMT\n\u003c server: envoy\n\u003c\n"
+        "description": "The following example demonstrates how to run the WAF plugin with recommended OWASP CRS rules and test SQL\ninjection protection by sending a malicious payload that should be blocked by the WAF.\n\nBy default WAF is configured in `DetectionOnly` mode, which means it will only log detected attacks without\nblocking them. To enable active blocking, this example sets `SecRuleEngine On` in the configuration. It also\nsets `SecResponseBodyAccess Off` to disable response body inspection as it's not needed for the example.\nStandard request and response headers are omitted from the transcript.\n",
+        "code": "```sh\n# Terminal 1\nboe run --extension coraza-waf --envoy-version 1.38.0 --config '\n  {\n    \"directives\": [\n      \"Include @coraza.conf\",\n      \"SecRuleEngine On\",\n      \"SecResponseBodyAccess Off\",\n      \"Include @crs-setup.conf\",\n      \"Include @owasp_crs/*.conf\"\n    ]\n  }'\n```\n\n```sh\n# Terminal 2 (after Envoy is ready)\n# Try sending a SQL injection payload and see the request rejected.\ncurl --silent --show-error --verbose --user-agent boe-example --max-time 10 \\\n  --request POST --data '1%27%20ORDER%20BY%203--%2B' http://localhost:10000/post\n```\n\n```text\n\u003e POST /post HTTP/1.1\n...\n\u003c HTTP/1.1 403 Forbidden\n...\n\u003c\n```\n\u003c!-- stderr; Line endings: CRLF,LF,CRLF,LF,CRLF; Trailing whitespace: W3sibGluZSI6NCwidGV4dCI6IiAifV0= --\u003e\n",
+        "config": {
+          "directives": [
+            "Include @coraza.conf",
+            "SecRuleEngine On",
+            "SecResponseBodyAccess Off",
+            "Include @crs-setup.conf",
+            "Include @owasp_crs/*.conf"
+          ]
+        },
+        "commands": [
+          {
+            "comment": "Try sending a SQL injection payload and see the request rejected.",
+            "argv": [
+              "curl",
+              "--silent",
+              "--show-error",
+              "--verbose",
+              "--user-agent",
+              "boe-example",
+              "--max-time",
+              "10",
+              "--request",
+              "POST",
+              "--data",
+              "1%27%20ORDER%20BY%203--%2B",
+              "${PROXY_URL}/post"
+            ]
+          }
+        ],
+        "elideOutput": true
       },
       {
         "title": "CRS plugin from local filesystem",
-        "description": "The following example demonstrates how to load a CRS plugin from the local filesystem and run the WAF plugin\nwith recommended OWASP CRS rules.\n\nIt first downloads the WordPress rule exclusions plugin to a local file, enables blocking with\n`SecRuleEngine On`, and includes the plugin using `Include /tmp/wordpress-plugin.conf`. The same SQL injection\npayload that would normally be blocked is no longer blocked because the plugin excludes this specific attack\nvector.\n",
-        "code": "# Retrieve the file\ncurl https://raw.githubusercontent.com/coreruleset/wordpress-rule-exclusions-plugin/refs/heads/master/plugins/wordpress-rule-exclusions-before.conf -o /tmp/wordpress-plugin-before.conf\n\n# Start WAF with recommended OWASP CRS rules, enforcement enabled, and loading the plugin file\nboe run --extension coraza-waf --config '\n  {\n    \"directives\": [\n      \"Include @coraza.conf\",\n      \"SecRuleEngine On\",\n      \"SecResponseBodyAccess Off\",\n      \"Include @crs-setup.conf\",\n      \"Include /tmp/wordpress-plugin-before.conf\",\n      \"Include @owasp_crs/*.conf\"\n    ]\n  }'\n\n# Try sending a SQL injection payload and see the request rejected\ncurl -v \"http://localhost:10000/wp-json/wp/v2/posts/1\" -X POST -H \"Content-Type: application/json\" --data '{\"content\": \"SELECT * FROM users WHERE id=1\"}'\n\n# The request is no longer blocked by the WAF as the rules in the plugin file are excluding the specific attack vector from being detected\n\u003c HTTP/1.1 404 Not Found\n\u003c date: Wed, 01 Apr 2026 13:10:33 GMT\n\u003c content-type: text/html\n\u003c content-length: 233\n\u003c server: envoy\n...\n"
+        "description": "The following example demonstrates how to load a CRS plugin from the local filesystem and run the WAF plugin\nwith recommended OWASP CRS rules.\n\nIt first downloads a pinned revision of the WordPress rule exclusions plugin to a local file, enables blocking with\n`SecRuleEngine On`, and includes the downloaded plugin file. The same SQL injection\npayload that would normally be blocked is no longer blocked because the plugin excludes this specific attack\nvector.\nWith the default httpbin upstream, the forwarded WordPress path returns 404 rather than the WAF's 403.\nStandard headers and the upstream's HTML error body are omitted from the transcript.\n",
+        "code": "```sh\n# Terminal 1\n# Download the pinned WordPress rule exclusions plugin before starting WAF.\ncurl --fail --silent --show-error --location --max-time 30 \\\n  https://raw.githubusercontent.com/coreruleset/wordpress-rule-exclusions-plugin/25828bc20b745d6ec938920d6fe3e8a4aa049b8e/plugins/wordpress-rule-exclusions-before.conf \\\n  --output ./wordpress-plugin-before.conf\n```\n\n```sh\n# Start BOE in Terminal 1 after the pre-start commands complete.\nboe run --extension coraza-waf --envoy-version 1.38.0 --config '\n  {\n    \"directives\": [\n      \"Include @coraza.conf\",\n      \"SecRuleEngine On\",\n      \"SecResponseBodyAccess Off\",\n      \"Include @crs-setup.conf\",\n      \"Include ./wordpress-plugin-before.conf\",\n      \"Include @owasp_crs/*.conf\"\n    ]\n  }'\n```\n\n```sh\n# Terminal 2 (after Envoy is ready)\n# Send a WordPress request allowed by the plugin's rule exclusions.\ncurl --silent --show-error --verbose --user-agent boe-example --max-time 10 \\\n  --request POST --header 'Content-Type: application/json' --data \\\n  '{\"content\": \"SELECT * FROM users WHERE id=1\"}' \\\n  http://localhost:10000/wp-json/wp/v2/posts/1\n```\n\n```text\n...\n```\n\u003c!-- stdout; Line endings: LF --\u003e\n\n\n```text\n\u003e POST /wp-json/wp/v2/posts/1 HTTP/1.1\n...\n\u003c HTTP/1.1 404 Not Found\n...\n\u003c\n```\n\u003c!-- stderr; Line endings: CRLF,LF,CRLF,LF,CRLF; Trailing whitespace: W3sibGluZSI6NCwidGV4dCI6IiAifV0= --\u003e\n",
+        "config": {
+          "directives": [
+            "Include @coraza.conf",
+            "SecRuleEngine On",
+            "SecResponseBodyAccess Off",
+            "Include @crs-setup.conf",
+            "Include ${WORK_DIR}/wordpress-plugin-before.conf",
+            "Include @owasp_crs/*.conf"
+          ]
+        },
+        "preStart": [
+          {
+            "comment": "Download the pinned WordPress rule exclusions plugin before starting WAF.",
+            "argv": [
+              "curl",
+              "--fail",
+              "--silent",
+              "--show-error",
+              "--location",
+              "--max-time",
+              "30",
+              "https://raw.githubusercontent.com/coreruleset/wordpress-rule-exclusions-plugin/25828bc20b745d6ec938920d6fe3e8a4aa049b8e/plugins/wordpress-rule-exclusions-before.conf",
+              "--output",
+              "${WORK_DIR}/wordpress-plugin-before.conf"
+            ]
+          }
+        ],
+        "commands": [
+          {
+            "comment": "Send a WordPress request allowed by the plugin's rule exclusions.",
+            "argv": [
+              "curl",
+              "--silent",
+              "--show-error",
+              "--verbose",
+              "--user-agent",
+              "boe-example",
+              "--max-time",
+              "10",
+              "--request",
+              "POST",
+              "--header",
+              "Content-Type: application/json",
+              "--data",
+              "{\"content\": \"SELECT * FROM users WHERE id=1\"}",
+              "${PROXY_URL}/wp-json/wp/v2/posts/1"
+            ]
+          }
+        ],
+        "volatileHeaders": [
+          "x-envoy-upstream-service-time"
+        ],
+        "elideOutput": true
       }
     ],
     "minEnvoyVersion": "1.38.0",
@@ -421,8 +504,82 @@
     "examples": [
       {
         "title": "Delay all success responses and introduce a 1% failure rate that returns quickly",
-        "description": "Wrap a succesfully and fast responding mock or stub service and make it a one matching the production performance and error ratio.\n",
-        "code": "CONFIG=$(cat \u003c\u003c-END\n{\n  \"endpoints\": [\n    {\n      \"match\": {\n        \"prefix\": \"/\"\n      },\n      \"responses\": [\n        {\n          \"status\": 200,\n          \"resolution\": 1000,\n          \"distribution\": {\n            \"p0.0\": \"30ms\",\n            \"p100.0\": \"500ms\"\n          }\n        },\n        {\n          \"status\": 503,\n          \"resolution\": 10,\n          \"distribution\": {\n            \"p0.0\": \"3ms\",\n            \"p100.0\": \"5ms\"\n          }\n        }\n      ]\n    }\n  ]\n}\nEND\n)\nboe run \\\n    --extension dynamic-fault-injection \\\n    --log-level dynamic_modules:debug \\\n    --config \"${CONFIG}\"\n\n❯ curl -v http://localhost:10000/status/200\n\u003e GET /status/200 HTTP/1.1\n\u003e Host: localhost:10000\n\u003e User-Agent: curl/8.7.1\n\u003e Accept: */*\n\u003e\n\u003c HTTP/1.1 200 OK\n\u003c date: Fri, 02 Oct 2026 19:11:25 GMT\n\u003c content-type: text/html; charset=utf-8\n\u003c content-length: 0\n\u003c server: envoy\n\u003c access-control-allow-origin: *\n\u003c access-control-allow-credentials: true\n\u003c x-envoy-upstream-service-time: 113\n\u003c x-fault-injected-delay: 326.1ms\n\u003c x-fault-actual-upstream: 114.130167ms\n\u003c x-fault-added-delay: 211.969833ms\n\u003c x-fault-status: 200\n\u003c x-fault-upstream-status: 200\n\u003c x-fault-requests-in-flight: 0\n\n# About 1% of requests sample the 503 response instead and get a local reply\n❯ curl -v http://localhost:10000/status/200\n\u003e GET /status/200 HTTP/1.1\n\u003e Host: localhost:10000\n\u003e User-Agent: curl/8.7.1\n\u003e Accept: */*\n\u003e\n\u003c HTTP/1.1 503 Service Unavailable\n\u003c content-type: text/plain\n\u003c x-fault-injected: abort\n\u003c x-fault-injected-delay: 4ms\n\u003c x-fault-actual-upstream: 182.419083ms\n\u003c x-fault-status: 503\n\u003c x-fault-upstream-status: 200\n\u003c x-fault-requests-in-flight: 0\n\u003c content-length: 24\n\u003c date: Fri, 02 Oct 2026 19:12:39 GMT\n\u003c server: envoy\n"
+        "description": "Apply sampled latency and an approximately 1% failure rate to successful upstream responses.\nCapture one 200 response and one injected 503 response by retrying until each status occurs.\nShow the request, response status, sampled timings, fault statuses, and abort body.\nStandard headers and the conditional added-delay header are omitted from the transcript.\nThis demonstrates both response cases without measuring the failure rate.\n",
+        "code": "```sh\n# Terminal 1\nboe run --extension dynamic-fault-injection --envoy-version 1.38.0 --config '\n  {\n    \"endpoints\": [\n      {\n        \"match\": {\n          \"prefix\": \"/\"\n        },\n        \"responses\": [\n          {\n            \"distribution\": {\n              \"p0.0\": \"30ms\",\n              \"p100.0\": \"500ms\"\n            },\n            \"resolution\": 1000,\n            \"status\": 200\n          },\n          {\n            \"distribution\": {\n              \"p0.0\": \"3ms\",\n              \"p100.0\": \"5ms\"\n            },\n            \"resolution\": 10,\n            \"status\": 503\n          }\n        ]\n      }\n    ]\n  }'\n```\n\n```sh\n# Terminal 2 (after Envoy is ready)\n# Capture a successful upstream response with the sampled latency.\n# Repeat until HTTP 200, up to 1000 attempts.\ncurl --disable --silent --show-error --verbose --user-agent boe-example \\\n  --max-time 10 http://localhost:10000/status/200\n```\n\n```text\n\u003e GET /status/200 HTTP/1.1\n...\n\u003c HTTP/1.1 200 OK\n...\n\u003c x-fault-injected-delay: 324.69ms\n\u003c x-fault-actual-upstream: 383.490542ms\n\u003c x-fault-status: 200\n\u003c x-fault-upstream-status: 200\n...\n\u003c\n```\n\u003c!-- stderr; Line endings: CRLF,LF,CRLF,LF,CRLF,CRLF,CRLF,CRLF,LF,CRLF; Trailing whitespace: W3sibGluZSI6OSwidGV4dCI6IiAifV0= --\u003e\n\n\n```sh\n# Capture a sampled failure replacing the successful upstream response.\n# Repeat until HTTP 503, up to 1000 attempts.\ncurl --disable --silent --show-error --verbose --user-agent boe-example \\\n  --max-time 10 http://localhost:10000/status/200\n```\n\n```text\nfault filter abort: 503\n```\n\u003c!-- stdout; Line endings: LF --\u003e\n\n\n```text\n\u003e GET /status/200 HTTP/1.1\n...\n\u003c HTTP/1.1 503 Service Unavailable\n...\n\u003c x-fault-injected: abort\n\u003c x-fault-injected-delay: 3.4ms\n\u003c x-fault-actual-upstream: 498.525958ms\n\u003c x-fault-status: 503\n\u003c x-fault-upstream-status: 200\n...\n\u003c\n```\n\u003c!-- stderr; Line endings: CRLF,LF,CRLF,LF,CRLF,CRLF,CRLF,CRLF,CRLF,LF,CRLF; Trailing whitespace: W3sibGluZSI6MTAsInRleHQiOiIgIn1d --\u003e\n",
+        "config": {
+          "endpoints": [
+            {
+              "match": {
+                "prefix": "/"
+              },
+              "responses": [
+                {
+                  "distribution": {
+                    "p0.0": "30ms",
+                    "p100.0": "500ms"
+                  },
+                  "resolution": 1000,
+                  "status": 200
+                },
+                {
+                  "distribution": {
+                    "p0.0": "3ms",
+                    "p100.0": "5ms"
+                  },
+                  "resolution": 10,
+                  "status": 503
+                }
+              ]
+            }
+          ]
+        },
+        "commands": [
+          {
+            "comment": "Capture a successful upstream response with the sampled latency.",
+            "argv": [
+              "curl",
+              "--disable",
+              "--silent",
+              "--show-error",
+              "--verbose",
+              "--user-agent",
+              "boe-example",
+              "--max-time",
+              "10",
+              "${PROXY_URL}/status/200"
+            ],
+            "retry": {
+              "httpStatus": 200,
+              "maxAttempts": 1000
+            }
+          },
+          {
+            "comment": "Capture a sampled failure replacing the successful upstream response.",
+            "argv": [
+              "curl",
+              "--disable",
+              "--silent",
+              "--show-error",
+              "--verbose",
+              "--user-agent",
+              "boe-example",
+              "--max-time",
+              "10",
+              "${PROXY_URL}/status/200"
+            ],
+            "retry": {
+              "httpStatus": 503,
+              "maxAttempts": 1000
+            }
+          }
+        ],
+        "volatileHeaders": [
+          "x-envoy-upstream-service-time",
+          "x-fault-injected-delay",
+          "x-fault-actual-upstream",
+          "x-fault-added-delay"
+        ],
+        "elideOutput": true
       }
     ],
     "minEnvoyVersion": "1.38.0",
@@ -895,8 +1052,49 @@
     "examples": [
       {
         "title": "Basic Authorization",
-        "description": "Run the OPA extension with a simple Rego policy that allows or denies\nrequests based on the request path. Create a policy file and reference\nit in the configuration.\n",
-        "code": "# Create a simple policy file\ncat \u003e /tmp/policy.rego \u003c\u003c 'EOF'\npackage envoy.authz\n\ndefault allow := false\n\nallow if {\n  input.parsed_path[0] == \"public\"\n}\nEOF\n\n# Run the extension\nboe run --extension opa --config '{\n  \"policies\": [{\"file\": \"/tmp/policy.rego\"}]\n}'\n\n# Test allowed request\ncurl http://localhost:10000/public/resource\n# =\u003e 200 OK (proxied to upstream)\n\n# Test denied request\ncurl http://localhost:10000/private/resource\n# =\u003e 403 Forbidden\n"
+        "description": "Run the OPA extension with a simple Rego policy that allows or denies\nrequests based on the request path. The inline policy allows requests\nto the default httpbin upstream's status endpoints and denies other paths.\nThe transcript shows request lines, response statuses, and the denial body; standard headers are omitted.\n",
+        "code": "```sh\n# Terminal 1\nboe run --extension opa --envoy-version 1.38.0 --config '\n  {\n    \"policies\": [\n      {\n        \"inline\": \"package envoy.authz\\n\\ndefault allow := false\\n\\nallow if {\\n  input.parsed_path[0] == \\\"status\\\"\\n}\\n\"\n      }\n    ]\n  }'\n```\n\n```sh\n# Terminal 2 (after Envoy is ready)\n# Request a status endpoint allowed by the policy.\ncurl --silent --show-error --verbose --user-agent boe-example --max-time 10 \\\n  http://localhost:10000/status/200\n```\n\n```text\n\u003e GET /status/200 HTTP/1.1\n...\n\u003c HTTP/1.1 200 OK\n...\n\u003c\n```\n\u003c!-- stderr; Line endings: CRLF,LF,CRLF,LF,CRLF; Trailing whitespace: W3sibGluZSI6NCwidGV4dCI6IiAifV0= --\u003e\n\n\n```sh\n# Request a private path and see it denied.\ncurl --silent --show-error --verbose --user-agent boe-example --max-time 10 \\\n  http://localhost:10000/private/resource\n```\n\n```text\nForbidden\n```\n\u003c!-- stdout; No trailing newline --\u003e\n\n\n```text\n\u003e GET /private/resource HTTP/1.1\n...\n\u003c HTTP/1.1 403 Forbidden\n...\n\u003c\n```\n\u003c!-- stderr; Line endings: CRLF,LF,CRLF,LF,CRLF; Trailing whitespace: W3sibGluZSI6NCwidGV4dCI6IiAifV0= --\u003e\n",
+        "config": {
+          "policies": [
+            {
+              "inline": "package envoy.authz\n\ndefault allow := false\n\nallow if {\n  input.parsed_path[0] == \"status\"\n}\n"
+            }
+          ]
+        },
+        "commands": [
+          {
+            "comment": "Request a status endpoint allowed by the policy.",
+            "argv": [
+              "curl",
+              "--silent",
+              "--show-error",
+              "--verbose",
+              "--user-agent",
+              "boe-example",
+              "--max-time",
+              "10",
+              "${PROXY_URL}/status/200"
+            ]
+          },
+          {
+            "comment": "Request a private path and see it denied.",
+            "argv": [
+              "curl",
+              "--silent",
+              "--show-error",
+              "--verbose",
+              "--user-agent",
+              "boe-example",
+              "--max-time",
+              "10",
+              "${PROXY_URL}/private/resource"
+            ]
+          }
+        ],
+        "volatileHeaders": [
+          "x-envoy-upstream-service-time"
+        ],
+        "elideOutput": true
       },
       {
         "title": "Custom Deny Response",
