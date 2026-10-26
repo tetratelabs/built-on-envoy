@@ -14,15 +14,15 @@ require (
 	github.com/corazawaf/coraza-coreruleset/crs/v4 v4.25.0
 	github.com/corazawaf/coraza/v3 v3.8.1
 	github.com/crewjam/saml v0.5.1
-	github.com/docker/cli v29.9.1+incompatible
+	github.com/docker/cli v29.9.2+incompatible
 	// This SDK is come from Envoy 1.39-dev but it's compatible with Envoy 1.38 because there is no API change
 	// between Envoy 1.38 and this SDK version.
 	github.com/envoyproxy/envoy/source/extensions/dynamic_modules v0.0.0-20260425100846-90594f45b3ed
-	github.com/getkin/kin-openapi v0.151.0
+	github.com/getkin/kin-openapi v0.152.0
 	github.com/google/go-containerregistry v0.22.1
 	github.com/jcchavezs/mergefs v0.1.1
 	github.com/lestrrat-go/jwx/v3 v3.3.0
-	github.com/open-policy-agent/opa v1.21.2
+	github.com/open-policy-agent/opa v1.21.3
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/stretchr/testify v1.12.1
 	go.uber.org/mock v0.6.0

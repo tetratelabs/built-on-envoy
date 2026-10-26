@@ -24,6 +24,17 @@
     "request_uri_path_only": {
       "type": "boolean",
       "description": "Set REQUEST_URI to the request path and query (e.g. \"/api?x=1\") instead of the absolute URL (e.g. \"https://example.com/api?x=1\"). Defaults to false. The default will change to true in a future release."
+    },
+    "metrics": {
+      "type": "object",
+      "description": "Settings of the WAF metrics. Read from the filter configuration only: per-route configurations do not override them.",
+      "additionalProperties": false,
+      "properties": {
+        "authority_label": {
+          "type": "boolean",
+          "description": "Tag waf_tx_blocked with the request authority: the :authority header without its port. Defaults to true. Clients choose that value, blocked requests included, so the number of series grows with the number of distinct authorities. When false, the metric is defined without the authority tag."
+        }
+      }
     }
   }
 }

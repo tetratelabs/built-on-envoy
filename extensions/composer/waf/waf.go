@@ -29,14 +29,14 @@ const (
 type wafPluginFactory struct {
 	shared.EmptyHttpFilterFactory
 	config             *waf.SharedWAF
-	mode               waf.WAFMode
+	mode               wafMode
 	requestURIPathOnly bool
 	metrics            *metrics
 }
 
 type perRouteWafPluginConfig struct {
 	config             *waf.SharedWAF
-	mode               waf.WAFMode
+	mode               wafMode
 	requestURIPathOnly bool
 }
 
@@ -74,14 +74,15 @@ type wafPluginConfigFactory struct {
 }
 
 func (f *wafPluginConfigFactory) Create(handle shared.HttpFilterConfigHandle, unparsedConfig []byte) (shared.HttpFilterFactory, error) {
+	var cfg config
 	var wafConfig *waf.SharedWAF
-	var mode waf.WAFMode
-	var requestURIPathOnly bool
 
 	if len(unparsedConfig) > 0 {
 		var err error
-		wafConfig, mode, requestURIPathOnly, err = waf.GetOrCreateSharedWAFFromConfig(unparsedConfig, logger.GetLogger())
-		if err != nil {
+		if cfg, err = parseConfig(unparsedConfig, logger.GetLogger()); err != nil {
+			return nil, err
+		}
+		if wafConfig, err = waf.GetOrCreateSharedWAFFromConfig(cfg.engine, logger.GetLogger()); err != nil {
 			return nil, err
 		}
 	}
@@ -92,21 +93,27 @@ func (f *wafPluginConfigFactory) Create(handle shared.HttpFilterConfigHandle, un
 
 	return &wafPluginFactory{
 		config:             wafConfig,
-		mode:               mode,
-		requestURIPathOnly: requestURIPathOnly,
-		metrics:            newMetrics(handle),
+		mode:               cfg.mode,
+		requestURIPathOnly: cfg.requestURIPathOnly,
+		metrics:            newMetrics(handle, cfg.metrics),
 	}, nil
 }
 
 func (f *wafPluginConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, error) {
-	wafConfig, mode, requestURIPathOnly, err := waf.GetOrCreateSharedWAFFromConfig(unparsedConfig, logger.GetLogger())
+	// Per-route configurations do not override the metrics settings, but an invalid metrics object is
+	// rejected here too, as parseConfig does for the whole configuration.
+	cfg, err := parseConfig(unparsedConfig, logger.GetLogger())
+	if err != nil {
+		return nil, err
+	}
+	wafConfig, err := waf.GetOrCreateSharedWAFFromConfig(cfg.engine, logger.GetLogger())
 	if err != nil {
 		return nil, err
 	}
 	return &perRouteWafPluginConfig{
 		config:             wafConfig,
-		mode:               mode,
-		requestURIPathOnly: requestURIPathOnly,
+		mode:               cfg.mode,
+		requestURIPathOnly: cfg.requestURIPathOnly,
 	}, nil
 }
 
@@ -116,7 +123,7 @@ type wafPlugin struct {
 	logger             *logger.Logger
 	handle             shared.HttpFilterHandle
 	config             *waf.SharedWAF
-	mode               waf.WAFMode
+	mode               wafMode
 	requestURIPathOnly bool
 	metrics            *metrics
 	metadataNamespace  string
@@ -205,7 +212,7 @@ func (p *wafPlugin) OnRequestHeaders(headers shared.HeaderMap, endOfStream bool)
 	// ModeResponseOnly (deprecated) still creates the transaction above so the
 	// response phase can run, but skips all request-phase rule evaluation.
 	//nolint:staticcheck // ModeResponseOnly is deprecated but intentionally still handled for backward compatibility.
-	if p.txContext.IsRuleEngineOff() || p.mode == waf.ModeResponseOnly {
+	if p.txContext.IsRuleEngineOff() || p.mode == modeResponseOnly {
 		return shared.HeadersStatusContinue
 	}
 
@@ -269,7 +276,7 @@ func (p *wafPlugin) OnRequestBody(body shared.BodyBuffer, endOfStream bool) shar
 		return shared.BodyStatusContinue
 	}
 	//nolint:staticcheck // ModeResponseOnly is deprecated but intentionally still handled for backward compatibility.
-	if p.txContext.IsRuleEngineOff() || p.mode == waf.ModeResponseOnly || p.requestBodyProcessed {
+	if p.txContext.IsRuleEngineOff() || p.mode == modeResponseOnly || p.requestBodyProcessed {
 		return shared.BodyStatusContinue
 	}
 
@@ -326,7 +333,7 @@ func (p *wafPlugin) OnRequestTrailers(_ shared.HeaderMap) shared.TrailersStatus 
 		return shared.TrailersStatusContinue
 	}
 	//nolint:staticcheck // ModeResponseOnly is deprecated but intentionally still handled for backward compatibility.
-	if p.txContext.IsRuleEngineOff() || p.mode == waf.ModeResponseOnly || p.requestBodyProcessed {
+	if p.txContext.IsRuleEngineOff() || p.mode == modeResponseOnly || p.requestBodyProcessed {
 		return shared.TrailersStatusContinue
 	}
 
@@ -357,7 +364,7 @@ func (p *wafPlugin) OnResponseHeaders(headers shared.HeaderMap, endOfStream bool
 			"Response headers phase reached without a previously initialized context. Passing through")
 		return shared.HeadersStatusContinue
 	}
-	if p.txContext.IsRuleEngineOff() || p.mode == waf.ModeRequestOnly {
+	if p.txContext.IsRuleEngineOff() || p.mode == modeRequestOnly {
 		return shared.HeadersStatusContinue
 	}
 
@@ -410,7 +417,7 @@ func (p *wafPlugin) OnResponseBody(body shared.BodyBuffer, endOfStream bool) sha
 			"Response body phase reached without a previously initialized context. Passing through")
 		return shared.BodyStatusContinue
 	}
-	if p.txContext.IsRuleEngineOff() || p.mode == waf.ModeRequestOnly || p.responseBodyProcessed {
+	if p.txContext.IsRuleEngineOff() || p.mode == modeRequestOnly || p.responseBodyProcessed {
 		return shared.BodyStatusContinue
 	}
 
@@ -467,7 +474,7 @@ func (p *wafPlugin) OnResponseTrailers(_ shared.HeaderMap) shared.TrailersStatus
 			"Response trailers phase reached without a previously initialized context. Passing through")
 		return shared.TrailersStatusContinue
 	}
-	if p.txContext.IsRuleEngineOff() || p.mode == waf.ModeRequestOnly || p.responseBodyProcessed {
+	if p.txContext.IsRuleEngineOff() || p.mode == modeRequestOnly || p.responseBodyProcessed {
 		return shared.TrailersStatusContinue
 	}
 
@@ -543,7 +550,7 @@ func (p *wafPlugin) trackAndMarkTxDone(start time.Time) {
 	if p.txContext.IsInterrupted() || // the WAF raised an interruption
 		p.txContext.IsRuleEngineOff() || // rule engine is off
 		p.responseBodyProcessed || // phase 4 has run
-		(p.mode == waf.ModeRequestOnly && p.requestBodyProcessed) { // phase 2 has run in request-only mode
+		(p.mode == modeRequestOnly && p.requestBodyProcessed) { // phase 2 has run in request-only mode
 		p.recordTxMetrics()
 		// The WAF does not inspect WebSocket frames or SSE events: once the analysis of a
 		// long-lived stream (upgraded or SSE) is done its transaction is idle, yet holding it

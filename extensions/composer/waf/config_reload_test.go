@@ -16,8 +16,6 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
-
-	waf "github.com/tetratelabs/built-on-envoy/extensions/composer/waf/coraza"
 )
 
 func reloadTestConfig(t *testing.T, mode string, directives ...string) []byte {
@@ -53,9 +51,9 @@ func Test_ConfigsShareWAF(t *testing.T) {
 	require.NoError(t, err)
 
 	main := factory.(*wafPluginFactory)
-	require.Equal(t, waf.ModeFull, main.mode)
+	require.Equal(t, modeFull, main.mode)
 	require.Same(t, main.config, perRoute.(*perRouteWafPluginConfig).config, "mode is not part of the WAF")
-	require.Equal(t, waf.ModeRequestOnly, perRoute.(*perRouteWafPluginConfig).mode)
+	require.Equal(t, modeRequestOnly, perRoute.(*perRouteWafPluginConfig).mode)
 	require.Same(t, main.config, nextGen.(*perRouteWafPluginConfig).config)
 	require.NotSame(t, main.config, otherRules.(*perRouteWafPluginConfig).config)
 }

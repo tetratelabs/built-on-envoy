@@ -24,7 +24,6 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/tetratelabs/built-on-envoy/extensions/composer/pkg"
-	waf "github.com/tetratelabs/built-on-envoy/extensions/composer/waf/coraza"
 )
 
 // newPluginHandleWithoutPerRouteConfig creates a mock HttpFilterHandle with default expectations including
@@ -910,7 +909,7 @@ func Test_BlockRequest(t *testing.T) {
 	configHandle.EXPECT().DefineCounter("waf_tx_blocked", "authority", "phase", "rule_id").Return(shared.MetricID(2), shared.MetricsSuccess)
 	configHandle.EXPECT().DefineHistogram("waf_tx_duration").Return(shared.MetricID(3), shared.MetricsSuccess)
 	configHandle.EXPECT().DefineGauge("waf_tx_active").Return(shared.MetricID(4), shared.MetricsSuccess)
-	m := newMetrics(configHandle)
+	m := newMetrics(configHandle, metricsConfig{})
 
 	t.Run("nil interruption sends 500 and records internal block metric", func(*testing.T) {
 		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
@@ -1503,7 +1502,7 @@ func Test_CreatePerRoute(t *testing.T) {
 		perRoute, ok := result.(*perRouteWafPluginConfig)
 		require.True(t, ok, "expected *perRouteWafPluginConfig")
 		require.NotNil(t, perRoute.config)
-		assert.Equal(t, waf.ModeRequestOnly, perRoute.mode)
+		assert.Equal(t, modeRequestOnly, perRoute.mode)
 	})
 
 	t.Run("invalid config returns error", func(t *testing.T) {
@@ -1551,7 +1550,7 @@ func Test_PerRouteConfigOverride(t *testing.T) {
 		require.True(t, ok)
 
 		// The per-route config should enable WAF processing with REQUEST_ONLY mode.
-		assert.Equal(t, waf.ModeRequestOnly, wafPlugin.mode)
+		assert.Equal(t, modeRequestOnly, wafPlugin.mode)
 		assert.True(t, wafPlugin.requestURIPathOnly)
 
 		// Verify request headers are processed (WAF is enabled via per-route).

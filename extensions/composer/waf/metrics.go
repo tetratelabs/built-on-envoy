@@ -17,6 +17,9 @@ import (
 
 // metrics contains the metrics definitions for the WAF extension. These metrics are
 type metrics struct {
+	// authority decides the authority tag of the metrics tagged with it.
+	authority authorityLabel
+
 	txTotal    *pkg.Metric
 	txBlocked  *pkg.Metric
 	txDuration *pkg.Metric
@@ -24,10 +27,13 @@ type metrics struct {
 }
 
 // newMetrics initializes and registers the metrics for the WAF extension.
-func newMetrics(h shared.HttpFilterConfigHandle) *metrics {
+func newMetrics(h shared.HttpFilterConfigHandle, cfg metricsConfig) *metrics {
+	a := cfg.authority
 	return &metrics{
+		authority: a,
+
 		txTotal:    pkg.NewMetric(h, h.DefineCounter, "waf_tx_total"),
-		txBlocked:  pkg.NewMetric(h, h.DefineCounter, "waf_tx_blocked", "authority", "phase", "rule_id"),
+		txBlocked:  pkg.NewMetric(h, h.DefineCounter, "waf_tx_blocked", a.tagNames("phase", "rule_id")...),
 		txDuration: pkg.NewMetric(h, h.DefineHistogram, "waf_tx_duration"),
 		txActive:   pkg.NewMetric(h, h.DefineGauge, "waf_tx_active"),
 	}
@@ -61,9 +67,10 @@ func (m *metrics) RecordTxReleased(h shared.HttpFilterHandle) {
 // labels for the phase and rule ID that caused the block.
 func (m *metrics) RecordBlockedByRule(h shared.HttpFilterHandle, authority string, phase ctypes.RulePhase, ruleID int) {
 	m.txBlocked.Record(h, h.IncrementCounterValue, 1,
-		authority,
-		strconv.Itoa(int(phase)),
-		strconv.Itoa(ruleID),
+		m.authority.tags(authority,
+			strconv.Itoa(int(phase)),
+			strconv.Itoa(ruleID),
+		)...,
 	)
 }
 
@@ -72,8 +79,9 @@ func (m *metrics) RecordBlockedByRule(h shared.HttpFilterHandle, authority strin
 // rule execution.
 func (m *metrics) RecordBlockInternal(h shared.HttpFilterHandle, authority string, phase ctypes.RulePhase) {
 	m.txBlocked.Record(h, h.IncrementCounterValue, 1,
-		authority,
-		strconv.Itoa(int(phase)),
-		"",
+		m.authority.tags(authority,
+			strconv.Itoa(int(phase)),
+			"",
+		)...,
 	)
 }

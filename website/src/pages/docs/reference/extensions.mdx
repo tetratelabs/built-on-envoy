@@ -678,6 +678,32 @@ List of Coraza SecLang directives. Each entry is a single directive string. Spec
 
 [↑ Top](#) | [↑ Coraza WAF Configuration](#coraza-waf) {/* if .SubProperties */}
 
+### metrics
+
+Settings of the WAF metrics. Read from the filter configuration only: per-route configurations do not override them.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Coraza WAF Configuration](#coraza-waf)
+
+
+
+#### metrics.authority_label
+
+Tag waf_tx_blocked with the request authority: the :authority header without its port. Defaults to true. Clients choose that value, blocked requests included, so the number of series grows with the number of distinct authorities. When false, the metric is defined without the authority tag.
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Coraza WAF Configuration](#coraza-waf)
+
+   {/* range .SubProperties */} {/* if .SubProperties */}
+
 ### mode
 
 WAF inspection mode. Defaults to "REQUEST_ONLY" if not set. "RESPONSE_ONLY" is deprecated and will be removed in a future release.

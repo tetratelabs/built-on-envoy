@@ -26,7 +26,7 @@ func Test_RecordTx_RecordsMicroseconds(t *testing.T) {
 	configHandle.EXPECT().DefineCounter("waf_tx_blocked", "authority", "phase", "rule_id").Return(shared.MetricID(2), shared.MetricsSuccess)
 	configHandle.EXPECT().DefineHistogram("waf_tx_duration").Return(shared.MetricID(3), shared.MetricsSuccess)
 	configHandle.EXPECT().DefineGauge("waf_tx_active").Return(shared.MetricID(4), shared.MetricsSuccess)
-	m := newMetrics(configHandle)
+	m := newMetrics(configHandle, metricsConfig{})
 
 	pluginHandle := mocks.NewMockHttpFilterHandle(ctrl)
 	pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess).Times(2)
