@@ -41,8 +41,10 @@ func TestConfigSchema(t *testing.T) {
 	t.Run("metrics authority settings", func(t *testing.T) {
 		for _, metrics := range []string{
 			`{}`,
-			`{"authority_label": true}`,
-			`{"authority_label": false}`,
+			`{"authority_label": "authority"}`,
+			`{"authority_label": "route_name"}`,
+			`{"authority_label": "virtual_host_name"}`,
+			`{"authority_label": "none"}`,
 		} {
 			internaltesting.AssertSchemaValid(t, "config.schema.json", `{
 				"directives": ["SecRuleEngine On"],
@@ -53,9 +55,11 @@ func TestConfigSchema(t *testing.T) {
 	t.Run("invalid metrics", func(t *testing.T) {
 		for _, metrics := range []string{
 			`true`,
-			`{"authority_label": "false"}`,
+			`{"authority_label": false}`,
+			`{"authority_label": "host"}`,
 			`{"authority_lable": false}`,
 			`{"authority_literal": "shop"}`,
+			`{"label_source": "route_name"}`,
 		} {
 			internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{
 				"directives": ["SecRuleEngine On"],

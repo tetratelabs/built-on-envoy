@@ -9,6 +9,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"go.uber.org/zap"
@@ -107,7 +109,7 @@ func parseMetrics(raw json.RawMessage) (metricsConfig, error) {
 		return cfg, nil
 	}
 	var m struct {
-		AuthorityLabel *bool `json:"authority_label"`
+		AuthorityLabel *string `json:"authority_label"`
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
@@ -115,8 +117,13 @@ func parseMetrics(raw json.RawMessage) (metricsConfig, error) {
 		return metricsConfig{}, fmt.Errorf("invalid metrics: %w", err)
 	}
 
-	if m.AuthorityLabel != nil && !*m.AuthorityLabel {
-		cfg.authority.disabled = true
+	if m.AuthorityLabel != nil {
+		label, ok := authorityLabels[*m.AuthorityLabel]
+		if !ok {
+			names := slices.Sorted(maps.Keys(authorityLabels))
+			return metricsConfig{}, fmt.Errorf("invalid metrics: metrics.authority_label %q is not one of %s", *m.AuthorityLabel, strings.Join(names, ", "))
+		}
+		cfg.authority = label
 	}
 	return cfg, nil
 }
