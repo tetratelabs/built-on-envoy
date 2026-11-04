@@ -78,7 +78,7 @@ func Test_ParseConfig(t *testing.T) {
 			"directives":            []string{"Include @coraza.conf"},
 			"mode":                  "FULL",
 			"request_uri_path_only": true,
-			"metrics":               map[string]any{"authority_label": false},
+			"metrics":               map[string]any{"authority_label": "none"},
 		}), logger.GetLogger())
 		require.NoError(t, err)
 		require.Equal(t, modeFull, cfg.mode)

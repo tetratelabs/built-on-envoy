@@ -123,13 +123,17 @@ longDescription: |
   Clients choose that value, blocked requests included, so the number of series grows with the number of
   distinct authorities the WAF sees. The optional `metrics` object bounds it:
 
-  - `authority_label` (default `true`): `false` defines the metric without the `authority` tag, so the
-    number of series no longer depends on the requests.
+  - `authority_label` (default `authority`) sets the tag's value. `route_name` is the name of the matched
+    route, and `virtual_host_name` the name of the matched virtual host (Envoy 1.40 and later; earlier
+    versions do not expose it to the filter). These values come from the configuration, so the number of
+    series stays bounded while each route or virtual host keeps its own. A request whose route or virtual
+    host has no name, or an Envoy that does not expose it, is tagged `unresolved`. `none` defines the
+    metric without the `authority` tag, so the number of series no longer depends on the requests.
 
   ```json
   {
     "directives": ["Include @coraza.conf", "Include @crs-setup.conf", "Include @owasp_crs/*.conf"],
-    "metrics": {"authority_label": false}
+    "metrics": {"authority_label": "virtual_host_name"}
   }
   ```
 

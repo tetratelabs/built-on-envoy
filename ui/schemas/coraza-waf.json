@@ -31,8 +31,9 @@
       "additionalProperties": false,
       "properties": {
         "authority_label": {
-          "type": "boolean",
-          "description": "Tag waf_tx_blocked with the request authority: the :authority header without its port. Defaults to true. Clients choose that value, blocked requests included, so the number of series grows with the number of distinct authorities. When false, the metric is defined without the authority tag."
+          "type": "string",
+          "enum": ["authority", "route_name", "virtual_host_name", "none"],
+          "description": "The value of the authority tag of waf_tx_blocked. Defaults to authority, the :authority header without its port: clients choose that value, blocked requests included, so the number of series grows with the number of distinct authorities. route_name is the name of the matched route and virtual_host_name the name of the matched virtual host (Envoy 1.40 and later). These come from the configuration, so the number of series stays bounded; a request whose route or virtual host has no name, or an Envoy that does not expose the name, is tagged unresolved. none defines the metric without the authority tag."
         }
       }
     }
