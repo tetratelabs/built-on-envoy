@@ -63,7 +63,7 @@ type DebugOptions struct {
 	// Port is the port the debug server listens on.
 	Port uint32
 	// ServerPath is the path to the debug server binary: dlv for Delve, gdbserver or debugserver for the GDB
-	// remote debugger. If empty, boe builds a patched Delve in InstallDir, or looks for the GDB remote debug server.
+	// remote debugger. If empty, boe builds Delve DelveVersion in InstallDir, or looks for the GDB remote debug server.
 	ServerPath string
 	// InstallDir is the directory where boe builds Delve.
 	InstallDir string

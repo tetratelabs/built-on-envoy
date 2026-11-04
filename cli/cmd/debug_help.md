@@ -9,8 +9,8 @@ Debug builds are stored separately in the cache and are never used by `boe run`.
 Only local extensions (`--local`) are supported: Go extensions, composer sub-extensions, or Rust extensions.
 Go and Rust extensions can't be debugged in the same session. All other flags behave as in `boe run`.
 
-- **Go extensions** are debugged with Delve. `boe debug` builds its own patched Delve the first time it runs,
-  so it does not need to be installed. Use `--rebuild-dlv` to force rebuilding it.
+- **Go extensions** are debugged with Delve. `boe debug` builds Delve the first time it runs, so it does not need
+  to be installed. Use `--rebuild-dlv` to force rebuilding it.
 - **Rust extensions** are debugged with the platform's native debug server, which speaks the GDB remote protocol:
   `gdbserver` on Linux (it must be installed), and LLDB's `debugserver` on macOS (from the Xcode Command Line Tools).
   The debug server is only attached to Envoy while a debugger is connected, so Envoy keeps running normally

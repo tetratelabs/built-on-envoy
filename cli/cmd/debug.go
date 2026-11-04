@@ -25,8 +25,8 @@ import (
 type Debug struct {
 	RunOpts         Run    `embed:""`
 	DebugPort       uint32 `name:"debug-port" env:"BOE_DEBUG_PORT" help:"Port for the debug server attached to Envoy." default:"2345"`
-	DebugServerPath string `name:"debug-server-path" env:"BOE_DEBUG_SERVER_PATH" help:"Path to the debug server binary: dlv for Go extensions (instead of the patched Delve that boe builds; unpatched versions may not be able to list goroutines), or gdbserver (Linux) or debugserver (macOS) for Rust extensions."`
-	RebuildDelve    bool   `name:"rebuild-dlv" env:"BOE_REBUILD_DLV" help:"Rebuild the patched Delve used for Go extensions even if it is already in the cache."`
+	DebugServerPath string `name:"debug-server-path" env:"BOE_DEBUG_SERVER_PATH" help:"Path to the debug server binary: dlv for Go extensions (instead of the Delve that boe builds; it must include go-delve/delve#4456, or it may not be able to list goroutines), or gdbserver (Linux) or debugserver (macOS) for Rust extensions."`
+	RebuildDelve    bool   `name:"rebuild-dlv" env:"BOE_REBUILD_DLV" help:"Rebuild the Delve used for Go extensions even if it is already in the cache."`
 
 	// goos is the OS used to decide whether Envoy must run in a container. Overridable for testing.
 	goos string `kong:"-"`

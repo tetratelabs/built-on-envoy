@@ -9,7 +9,6 @@ require (
 
 require (
 	cel.dev/expr v0.25.2 // indirect
-	github.com/bluekeyes/go-gitdiff v0.9.0 // indirect
 	github.com/cncf/xds/go v0.0.0-20260202195803-dba9d589def2 // indirect
 	github.com/ebitengine/purego v0.11.2 // indirect
 	github.com/envoyproxy/go-control-plane/envoy v1.40.0 // indirect

@@ -19,8 +19,8 @@ Debug builds are stored separately in the cache and are never used by `boe run`.
 Only local extensions (`--local`) are supported: Go extensions, composer sub-extensions, or Rust extensions.
 Go and Rust extensions can't be debugged in the same session. All other flags behave as in `boe run`.
 
-- **Go extensions** are debugged with Delve. `boe debug` builds its own patched Delve the first time it runs,
-  so it does not need to be installed. Use `--rebuild-dlv` to force rebuilding it.
+- **Go extensions** are debugged with Delve. `boe debug` builds Delve the first time it runs, so it does not need
+  to be installed. Use `--rebuild-dlv` to force rebuilding it.
 - **Rust extensions** are debugged with the platform's native debug server, which speaks the GDB remote protocol:
   `gdbserver` on Linux (it must be installed), and LLDB's `debugserver` on macOS (from the Xcode Command Line Tools).
   The debug server is only attached to Envoy while a debugger is connected, so Envoy keeps running normally
@@ -126,6 +126,6 @@ boe debug --help
 | `--username` | Username for the OCI registry. | `string` | - | `BOE_REGISTRY_USERNAME` | No |
 | `--password` | Password for the OCI registry. | `string` | - | `BOE_REGISTRY_PASSWORD` | No |
 | `--debug-port` | Port for the debug server attached to Envoy. | `uint32` | `2345` | `BOE_DEBUG_PORT` | No |
-| `--debug-server-path` | Path to the debug server binary: dlv for Go extensions (instead of the patched Delve that boe builds; unpatched versions may not be able to list goroutines), or gdbserver (Linux) or debugserver (macOS) for Rust extensions. | `string` | - | `BOE_DEBUG_SERVER_PATH` | No |
-| `--rebuild-dlv` | Rebuild the patched Delve used for Go extensions even if it is already in the cache. | `bool` | - | `BOE_REBUILD_DLV` | No |
+| `--debug-server-path` | Path to the debug server binary: dlv for Go extensions (instead of the Delve that boe builds; it must include go-delve/delve#4456, or it may not be able to list goroutines), or gdbserver (Linux) or debugserver (macOS) for Rust extensions. | `string` | - | `BOE_DEBUG_SERVER_PATH` | No |
+| `--rebuild-dlv` | Rebuild the Delve used for Go extensions even if it is already in the cache. | `bool` | - | `BOE_REBUILD_DLV` | No |
 
