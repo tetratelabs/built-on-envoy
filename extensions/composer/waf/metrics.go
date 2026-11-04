@@ -67,7 +67,7 @@ func (m *metrics) RecordTxReleased(h shared.HttpFilterHandle) {
 // labels for the phase and rule ID that caused the block.
 func (m *metrics) RecordBlockedByRule(h shared.HttpFilterHandle, authority string, phase ctypes.RulePhase, ruleID int) {
 	m.txBlocked.Record(h, h.IncrementCounterValue, 1,
-		m.authority.tags(authority,
+		m.authority.tags(h, authority,
 			strconv.Itoa(int(phase)),
 			strconv.Itoa(ruleID),
 		)...,
@@ -79,7 +79,7 @@ func (m *metrics) RecordBlockedByRule(h shared.HttpFilterHandle, authority strin
 // rule execution.
 func (m *metrics) RecordBlockInternal(h shared.HttpFilterHandle, authority string, phase ctypes.RulePhase) {
 	m.txBlocked.Record(h, h.IncrementCounterValue, 1,
-		m.authority.tags(authority,
+		m.authority.tags(h, authority,
 			strconv.Itoa(int(phase)),
 			"",
 		)...,
