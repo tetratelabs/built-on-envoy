@@ -821,7 +821,7 @@
   },
   {
     "name": "lookup",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "parent": "dns-gateway",
     "categories": [
       "Network",
@@ -861,7 +861,7 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.1.0",
+    "composerVersion": "0.2.0",
     "sourcePath": "dns-gateway/manifests/lookup",
     "configReferencePath": "/docs/reference/extensions#lookup"
   },
@@ -1073,7 +1073,7 @@
   },
   {
     "name": "resolver",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "parent": "dns-gateway",
     "categories": [
       "Network",
@@ -1113,7 +1113,7 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.1.0",
+    "composerVersion": "0.2.0",
     "sourcePath": "dns-gateway/manifests/resolver",
     "configReferencePath": "/docs/reference/extensions#resolver"
   },

@@ -4,7 +4,7 @@
 # the root of the repo.
 
 name: dns-gateway
-version: 0.1.0
+version: 0.2.0
 minEnvoyVersion: 1.38.0
 categories:
   - Network
