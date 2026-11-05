@@ -122,13 +122,17 @@ struct CacheEntry {
 /// Thread-safe cache for virtual IP allocation and lookup.
 ///
 /// Allocates sequential IPs from per-domain CIDR ranges. Works for both IPv4 and IPv6.
-/// Deduplicates allocations by domain name. Bounded and rate limited; see the module docs.
+/// Deduplicates allocations by `(domain, address family)`, so a single domain can hold both
+/// an IPv4 (A) and an IPv6 (AAAA) virtual IP simultaneously (dual-stack). Bounded and rate
+/// limited; see the module docs.
 pub struct VirtualIpCache {
     // Maps between an allocated virtual IP and its associated domain and metadata.
     ip_to_dest: DashMap<IpAddr, CacheEntry>,
 
-    // Maps between a domain and its allocated virtual IP. Used to prevent repeat allocations for the same domain.
-    domain_to_ip: DashMap<String, IpAddr>,
+    // Maps between a (domain, is_ipv6) pair and its allocated virtual IP. Used to prevent repeat
+    // allocations for the same domain within an address family, while still allowing the same
+    // domain to hold one IPv4 and one IPv6 virtual IP (dual-stack).
+    domain_to_ip: DashMap<(String, bool), IpAddr>,
 
     // Tracks the next available offset for each CIDR range.
     // Virtual IPs are allocated incrementally, so this number monotonically increases until the range is exhausted.
@@ -192,8 +196,9 @@ impl VirtualIpCache {
 
     /// Allocates a virtual IP for the given destination within the specified CIDR range.
     ///
-    /// `base_ip` may be IPv4 or IPv6; the allocated address inherits the same family.
-    /// Returns the same IP if the domain was previously allocated (and refreshes its idle timer).
+    /// The address family of `base_ip` selects the family of the allocated virtual IP.
+    /// Returns the same IP if the domain was previously allocated *in this address family*
+    /// (so a domain can hold one IPv4 and one IPv6 virtual IP), and refreshes its idle timer.
     /// Returns `None` — minting nothing, so the caller fails closed — if the range is exhausted,
     /// the entry cap is reached, or the allocation rate limit is exceeded.
     pub fn allocate(
@@ -215,9 +220,13 @@ impl VirtualIpCache {
         prefix_len: u8,
         now: u64,
     ) -> Option<IpAddr> {
+        // Dedup per (domain, address family): the same FQDN may hold both an A and an AAAA
+        // virtual IP, but repeat queries within one family reuse the existing allocation.
+        let key = (domain.clone(), base_ip.is_ipv6());
+
         // Fast path: known domain. Refresh its idle timer and return the existing IP. Known
         // domains are never rate limited or cap-rejected — they consume no new resources.
-        if let Some(ip) = self.domain_to_ip.get(&domain) {
+        if let Some(ip) = self.domain_to_ip.get(&key) {
             if let Some(e) = self.ip_to_dest.get(&*ip) {
                 e.last_used_ms.store(now, Ordering::Relaxed);
             }
@@ -248,7 +257,7 @@ impl VirtualIpCache {
             }
         }
 
-        match self.domain_to_ip.entry(domain.clone()) {
+        match self.domain_to_ip.entry(key) {
             Entry::Occupied(entry) => {
                 // Raced with another allocation for the same domain; reuse it.
                 let ip = *entry.get();
@@ -360,21 +369,20 @@ impl VirtualIpCache {
         }
 
         // Collect first to avoid holding shard locks across the paired removals.
-        let stale: Vec<(IpAddr, String)> = self
+        let stale: Vec<(IpAddr, (String, bool))> = self
             .ip_to_dest
             .iter()
             .filter(|e| {
                 now.saturating_sub(e.value().last_used_ms.load(Ordering::Relaxed)) >= ttl_ms
             })
-            .map(|e| (*e.key(), e.value().domain.clone()))
+            .map(|e| (*e.key(), (e.value().domain.clone(), e.key().is_ipv6())))
             .collect();
 
-        for (ip, domain) in &stale {
+        for (ip, key) in &stale {
             self.ip_to_dest.remove(ip);
             // Only drop the reverse mapping if it still points at this IP (guards against a
             // concurrent re-allocation of the same domain).
-            self.domain_to_ip
-                .remove_if(domain, |_, mapped| mapped == ip);
+            self.domain_to_ip.remove_if(key, |_, mapped| mapped == ip);
         }
         if !stale.is_empty() {
             envoy_log_info!("Evicted {} idle virtual IP mapping(s)", stale.len());
@@ -785,5 +793,50 @@ mod tests {
         assert!(cache
             .allocate_at("c.com".into(), HashMap::new(), v4("10.0.0.0"), 24, 30)
             .is_some());
+    }
+
+    #[test]
+    fn test_dual_stack_same_domain_holds_both_families() {
+        let cache = VirtualIpCache::new();
+
+        // The same FQDN allocates independently in each address family.
+        let v4ip = cache
+            .allocate(
+                "dual.example.com".into(),
+                HashMap::new(),
+                v4("10.0.0.0"),
+                24,
+            )
+            .unwrap();
+        let v6ip = cache
+            .allocate("dual.example.com".into(), HashMap::new(), v6("fd00::"), 64)
+            .unwrap();
+
+        assert!(v4ip.is_ipv4());
+        assert!(v6ip.is_ipv6());
+        assert_ne!(v4ip, v6ip);
+
+        // Both virtual IPs reverse-map to the same domain.
+        assert_eq!(cache.lookup(v4ip).unwrap().0, "dual.example.com");
+        assert_eq!(cache.lookup(v6ip).unwrap().0, "dual.example.com");
+
+        // Repeat queries within a family are deduped to the existing IP (not a new allocation).
+        assert_eq!(
+            cache
+                .allocate(
+                    "dual.example.com".into(),
+                    HashMap::new(),
+                    v4("10.0.0.0"),
+                    24
+                )
+                .unwrap(),
+            v4ip
+        );
+        assert_eq!(
+            cache
+                .allocate("dual.example.com".into(), HashMap::new(), v6("fd00::"), 64)
+                .unwrap(),
+            v6ip
+        );
     }
 }
