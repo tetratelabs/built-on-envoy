@@ -380,7 +380,7 @@ func convertProperty(name string, prop *Property, required bool, allOf []*Condit
 		constraints = append(constraints, Constraint{Name: "Min items", Value: fmt.Sprintf("%d", *prop.MinItems)})
 	}
 	if prop.Pattern != "" {
-		constraints = append(constraints, Constraint{Name: "Pattern", Value: fmt.Sprintf("`%s`", prop.Pattern)})
+		constraints = append(constraints, Constraint{Name: "Pattern", Value: markdownCodeForTable(prop.Pattern)})
 	}
 	if prop.UniqueItems {
 		constraints = append(constraints, Constraint{Name: "Unique items", Value: "Yes"})
@@ -397,7 +397,7 @@ func convertProperty(name string, prop *Property, required bool, allOf []*Condit
 			docProp.EnumValues = prop.Items.Enum
 		}
 		if prop.Items.Pattern != "" {
-			constraints = append(constraints, Constraint{Name: "Item pattern", Value: fmt.Sprintf("`%s`", prop.Items.Pattern)})
+			constraints = append(constraints, Constraint{Name: "Item pattern", Value: markdownCodeForTable(prop.Items.Pattern)})
 		}
 		if prop.Items.MinLength != nil {
 			constraints = append(constraints, Constraint{Name: "Item min length", Value: fmt.Sprintf("%d", *prop.Items.MinLength)})
@@ -454,6 +454,30 @@ func convertProperty(name string, prop *Property, required bool, allOf []*Condit
 	}
 
 	return docProp
+}
+
+func markdownCodeForTable(value string) string {
+	longestRun := 0
+	for i := 0; i < len(value); {
+		if value[i] != '`' {
+			i++
+			continue
+		}
+		end := i + 1
+		for end < len(value) && value[end] == '`' {
+			end++
+		}
+		if run := end - i; run > longestRun {
+			longestRun = run
+		}
+		i = end
+	}
+	fence := strings.Repeat("`", longestRun+1)
+	code := strings.ReplaceAll(value, "|", `\|`)
+	if strings.HasPrefix(value, "`") || strings.HasSuffix(value, "`") || strings.HasPrefix(value, " ") || strings.HasSuffix(value, " ") {
+		code = " " + code + " "
+	}
+	return fence + code + fence
 }
 
 // collectOneOfOptions collects the required fields from oneOf constraints for documentation.
