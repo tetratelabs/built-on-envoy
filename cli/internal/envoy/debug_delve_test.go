@@ -6,7 +6,6 @@
 package envoy
 
 import (
-	"encoding/json"
 	"net"
 	"os"
 	"os/exec"
@@ -55,42 +54,6 @@ func TestDelveArgs(t *testing.T) {
 	require.Contains(t, s.args(1234), "--listen=0.0.0.0:40000")
 }
 
-func TestPatchDelve(t *testing.T) {
-	// Apply the patches to the actual Delve sources of the pinned version.
-	out, err := exec.Command("go", "mod", "download", "-json", delveModule+"@"+DelveVersion).Output()
-	if err != nil {
-		t.Skipf("could not download Delve sources: %v", err)
-	}
-	var mod struct{ Dir string }
-	require.NoError(t, json.Unmarshal(out, &mod))
-	src := t.TempDir()
-	require.NoError(t, os.CopyFS(src, os.DirFS(mod.Dir)))
-
-	require.NoError(t, patchDelve(src))
-	read := func(file string) string {
-		content, err := os.ReadFile(filepath.Clean(filepath.Join(src, file)))
-		require.NoError(t, err)
-		return string(content)
-	}
-	require.Contains(t, read("pkg/proc/goroutine_cache.go"), "for _, image := range bi.Images {")
-	require.Contains(t, read("pkg/proc/target.go"), "func (t *Target) InitGoImage() {")
-	require.Contains(t, read("pkg/proc/native/proc_linux.go"), "sel.InitGoImage()")
-	require.Contains(t, read("pkg/proc/bininfo.go"), "func (bi *BinaryInfo) setGStructOffsetElfSharedLib(")
-
-	// The patched sources must compile on the platforms boe debug supports.
-	for _, goarch := range []string{"amd64", "arm64"} {
-		// #nosec G204
-		cmd := exec.Command("go", "build", "-o", os.DevNull, "./cmd/dlv")
-		cmd.Dir = src
-		cmd.Env = append(os.Environ(), "GOOS=linux", "GOARCH="+goarch, "CGO_ENABLED=0", "GOFLAGS=-mod=mod")
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "linux/%s: %s", goarch, out)
-	}
-
-	// Patching twice fails, as the sources no longer match the patches.
-	require.ErrorContains(t, patchDelve(src), "failed to apply Delve patch 0001")
-}
-
 func TestInstallDelveCached(t *testing.T) {
 	// A cached binary is reused without building it.
 	dir := t.TempDir()
@@ -124,7 +87,7 @@ func TestNewDelveServer(t *testing.T) {
 		require.ErrorContains(t, err, "not found")
 	})
 
-	t.Run("cached patched delve", func(t *testing.T) {
+	t.Run("cached delve", func(t *testing.T) {
 		dir := t.TempDir()
 		cached := filepath.Join(dir, "dlv-"+DelveVersion)
 		require.NoError(t, os.WriteFile(cached, nil, 0o600))
@@ -170,7 +133,7 @@ func TestDelveServerStartNotReady(t *testing.T) {
 }
 
 func TestInstallDelve(t *testing.T) {
-	// Build the patched Delve for the current platform.
+	// Build Delve for the current platform.
 	if _, err := exec.Command("go", "mod", "download", delveModule+"@"+DelveVersion).CombinedOutput(); err != nil {
 		t.Skipf("could not download Delve sources: %v", err)
 	}

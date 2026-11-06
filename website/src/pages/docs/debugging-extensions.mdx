@@ -36,10 +36,18 @@ Your IDE then connects to the debug server as it would to any remote debugging s
 sub-extensions, or Rust. Go and Rust extensions can't be debugged in the same session.
 
 <Callout type="note">
-`boe debug` builds its own copy of Delve the first time it runs, so it does not need to be installed. Upstream Delve
-cannot yet properly debug a Go runtime that lives in a shared library loaded by a non-Go process such as Envoy, so
-`boe` applies a few patches to it. Use `--rebuild-dlv` to force rebuilding it, or `--debug-server-path` to use your
-own Delve binary instead (it may not be able to list goroutines or show where the program stopped).
+`boe debug` builds Delve the first time it runs, so it does not need to be installed. Use `--rebuild-dlv` to force
+rebuilding it, or `--debug-server-path` to use your own Delve binary instead. Debugging Go extensions requires a Delve
+version that includes [go-delve/delve#4456](https://github.com/go-delve/delve/pull/4456), which fixes debugging a Go
+runtime that lives in a shared library loaded by a non-Go process such as Envoy. This fix is not yet part of a Delve
+release (it is newer than `v1.27.2`), so install Delve from commit
+[`749588d`](https://github.com/go-delve/delve/commit/749588dac9874b39e50b4c168f9ec064a4ddfad1) or later:
+
+```shell
+go install github.com/go-delve/delve/cmd/dlv@749588dac9874b39e50b4c168f9ec064a4ddfad1
+```
+
+Older Delve versions may not be able to list goroutines or show where the program stopped.
 </Callout>
 
 ## Prerequisites
