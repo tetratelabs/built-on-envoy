@@ -17,7 +17,7 @@ longDescription: |
   a separate authorization sidecar.
 
   Works with [Envoy](https://www.envoyproxy.io/), [Envoy Gateway](https://gateway.envoyproxy.io/),
-  and [Envoy AI Gateway](https://aigateway.envoyproxy.io/) (AIGatewayRoute, HTTPRoute, MCPRoute).
+  and [Agent Router](https://theagentrouter.ai/) (AIGatewayRoute, HTTPRoute, MCPRoute).
   The extension extracts user, relation, and object from request headers, URL path segments,
   query parameters, or static values, then delegates the authorization decision to OpenFGA.
 
@@ -112,7 +112,7 @@ longDescription: |
 
   ## Filter Chain Ordering
 
-  When deploying with Envoy AI Gateway, filter chain order determines which headers are
+  When deploying with Agent Router Gateway, filter chain order determines which headers are
   available when the openfga filter runs.
 
   **Recommended order:**
@@ -206,7 +206,7 @@ examples:
       Control which users can access specific AI models (for example on an AIGatewayRoute).
       The user identity comes from a header set by upstream authentication; the model name
       comes from a header you choose (here `x-ai-model`, often set by the client or an
-      upstream filter). For Envoy AI Gateway’s body-derived model header (`x-ai-eg-model`),
+      upstream filter). For Agent Router's body-derived model header (`x-ai-eg-model`),
       use the multi-rule example below or place openfga after the AI Gateway ExtProc.
     code: |
       boe run --extension openfga \
