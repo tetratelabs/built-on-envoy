@@ -47,6 +47,8 @@ type echoedRequest struct {
 }
 
 func TestSwitchyard(t *testing.T) {
+	internaltesting.SkipIfEnvoyNotSupportedByExtension(t, "switchyard")
+
 	// Let enough for the extension to be compiled and loaded.
 	internaltesting.RunEnvoyTimeout.Set(t, 5*time.Minute)
 
