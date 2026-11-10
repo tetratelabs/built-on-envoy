@@ -47,6 +47,9 @@ type echoedRequest struct {
 }
 
 func TestSwitchyard(t *testing.T) {
+	// Let enough for the extension to be compiled and loaded.
+	internaltesting.RunEnvoyTimeout.Set(t, 5*time.Minute)
+
 	ports := internaltesting.FreePorts(t, 2)
 	proxyPort, adminPort := ports[0], ports[1]
 
