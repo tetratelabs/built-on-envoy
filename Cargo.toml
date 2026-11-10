@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "extensions/dns-gateway",
     "extensions/ip-restriction",
+    "extensions/switchyard",
 ]
 
 [workspace.package]

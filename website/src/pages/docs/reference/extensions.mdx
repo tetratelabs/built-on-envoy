@@ -2480,6 +2480,229 @@ Data provided directly as a string.
 
 
 
+<a id="switchyard"></a>
+## Switchyard Configuration
+
+Configuration for the Switchyard extension. Resolves virtual models to target models with NVIDIA NeMo Switchyard routing algorithms.
+
+### clear_route_cache
+
+Whether to clear the route cache after a model is selected. Not needed with Agent Router, which clears it itself. Defaults to false.
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard) {/* if .SubProperties */}
+
+### decision_headers
+
+Whether to add the x-switchyard-virtual-model, x-switchyard-selected-model and x-switchyard-reason request headers. Defaults to true.
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard) {/* if .SubProperties */}
+
+### endpoints
+
+Request path suffixes handled by the filter, mapped to the API format of their bodies. Defaults to the OpenAI chat completions, OpenAI responses and Anthropic messages endpoints.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard) {/* if .SubProperties */}
+
+### model_header
+
+Optional request header set to the selected model, for routing on plain Envoy. Not needed with Agent Router.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard) {/* if .SubProperties */}
+
+### session
+
+How the session identity used by stateful algorithms is read from the request headers.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### session.agent_id_header
+
+Header carrying the agent ID. Defaults to x-switchyard-agent-id.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### session.fallback_id_headers
+
+Headers checked, in order, when id_header is not set. Defaults to ["agent-session-id"].
+
+| | |
+|---|---|
+| **Type** | `[]string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### session.id_header
+
+Header carrying the session ID. Defaults to x-switchyard-session-id.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### session.scope_headers
+
+Headers whose values prefix the session ID, for example a tenant header, so that sessions are never shared across scopes.
+
+| | |
+|---|---|
+| **Type** | `[]string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### session.subagent_header
+
+Header flagging sub-agent requests with "true" or "1". Defaults to x-switchyard-is-subagent.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+   {/* range .SubProperties */} {/* if .SubProperties */}
+
+### virtual_models
+
+Virtual models resolved by the filter. The first entry whose name and match_headers match the request wins.
+
+| | |
+|---|---|
+| **Type** | `[]object` |
+| **Required** | Yes |
+| **Min items** | 1 |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### virtual_models.algorithm
+
+The Switchyard algorithm, in Switchyard's route configuration format. Only algorithms that decide without calling a model are supported.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### virtual_models.default_model
+
+Model used when routing fails and failure_mode is use_default. Must be one of the target models.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### virtual_models.failure_mode
+
+What to do when routing fails. Defaults to use_default when default_model is set, and to passthrough otherwise.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### virtual_models.match_headers
+
+Request headers that must have the given values for this virtual model to apply.
+
+| | |
+|---|---|
+| **Type** | `[]object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### virtual_models.name
+
+The model name clients send in the request body, for example "coding-auto".
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Min length** | 1 |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### virtual_models.targets
+
+Switchyard target names, as used in the algorithm configuration, mapped to the model names they route to.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+   {/* range .SubProperties */} {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */}
+
+
+
+
 <a id="token-exchange"></a>
 ## Token Exchange Configuration
 

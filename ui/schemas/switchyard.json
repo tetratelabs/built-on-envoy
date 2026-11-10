@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/switchyard/config.schema.json",
+  "title": "Switchyard Configuration",
+  "description": "Configuration for the Switchyard extension. Resolves virtual models to target models with NVIDIA NeMo Switchyard routing algorithms.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["virtual_models"],
+  "properties": {
+    "virtual_models": {
+      "type": "array",
+      "description": "Virtual models resolved by the filter. The first entry whose name and match_headers match the request wins.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "targets", "algorithm"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The model name clients send in the request body, for example \"coding-auto\"."
+          },
+          "targets": {
+            "type": "object",
+            "minProperties": 1,
+            "description": "Switchyard target names, as used in the algorithm configuration, mapped to the model names they route to.",
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "algorithm": {
+            "type": "object",
+            "required": ["type"],
+            "description": "The Switchyard algorithm, in Switchyard's route configuration format. Only algorithms that decide without calling a model are supported.",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["auto", "passthrough", "plan_execute", "random", "stage_router"]
+              }
+            }
+          },
+          "default_model": {
+            "type": "string",
+            "description": "Model used when routing fails and failure_mode is use_default. Must be one of the target models."
+          },
+          "failure_mode": {
+            "type": "string",
+            "enum": ["use_default", "passthrough", "reject"],
+            "description": "What to do when routing fails. Defaults to use_default when default_model is set, and to passthrough otherwise."
+          },
+          "match_headers": {
+            "type": "array",
+            "description": "Request headers that must have the given values for this virtual model to apply.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "value"],
+              "properties": {
+                "name": { "type": "string", "minLength": 1 },
+                "value": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "How the session identity used by stateful algorithms is read from the request headers.",
+      "properties": {
+        "id_header": {
+          "type": "string",
+          "description": "Header carrying the session ID. Defaults to x-switchyard-session-id."
+        },
+        "fallback_id_headers": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Headers checked, in order, when id_header is not set. Defaults to [\"agent-session-id\"]."
+        },
+        "scope_headers": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Headers whose values prefix the session ID, for example a tenant header, so that sessions are never shared across scopes."
+        },
+        "agent_id_header": {
+          "type": "string",
+          "description": "Header carrying the agent ID. Defaults to x-switchyard-agent-id."
+        },
+        "subagent_header": {
+          "type": "string",
+          "description": "Header flagging sub-agent requests with \"true\" or \"1\". Defaults to x-switchyard-is-subagent."
+        }
+      }
+    },
+    "endpoints": {
+      "type": "object",
+      "minProperties": 1,
+      "description": "Request path suffixes handled by the filter, mapped to the API format of their bodies. Defaults to the OpenAI chat completions, OpenAI responses and Anthropic messages endpoints.",
+      "additionalProperties": {
+        "type": "string",
+        "enum": ["openai_chat", "openai_responses", "anthropic_messages"]
+      }
+    },
+    "model_header": {
+      "type": "string",
+      "description": "Optional request header set to the selected model, for routing on plain Envoy. Not needed with Agent Router."
+    },
+    "clear_route_cache": {
+      "type": "boolean",
+      "description": "Whether to clear the route cache after a model is selected. Not needed with Agent Router, which clears it itself. Defaults to false."
+    },
+    "decision_headers": {
+      "type": "boolean",
+      "description": "Whether to add the x-switchyard-virtual-model, x-switchyard-selected-model and x-switchyard-reason request headers. Defaults to true."
+    }
+  }
+}

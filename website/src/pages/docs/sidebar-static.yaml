@@ -24,5 +24,7 @@ sections:
         href: /docs/custom-registry
       - title: Packaging and using extensions in prod
         href: /docs/packaging-prod
+      - title: Using extensions with Envoy Gateway
+        href: /docs/envoy-gateway
       - title: Security considerations
         href: /docs/security-considerations

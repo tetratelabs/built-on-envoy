@@ -36,6 +36,13 @@ RUN ORIGINAL_NAME=$(grep "^name:" manifest.yaml | sed 's/[^:]*:[[:space:]]*//g' 
     RUST_LIB_NAME=$(echo "$ORIGINAL_NAME" | tr '-' '_'); \
     cp ./target/release/lib${RUST_LIB_NAME}.so /output/lib${ORIGINAL_NAME}.so
 
+# Distroless Envoy images, such as Envoy Gateway's default one, have no libgcc_s, which Rust links
+# against. Extensions that set an $ORIGIN RUNPATH get libgcc_s.so.1 next to the module, so the image
+# can be mounted (for example as a Kubernetes image volume) and loaded by any Envoy image.
+RUN if readelf -d /output/*.so | grep -q 'RUNPATH.*\$ORIGIN'; then \
+        cp "$(gcc -print-file-name=libgcc_s.so.1)" /output/; \
+    fi
+
 # Collect all sub-extension manifest.yaml and config.schema.json files preserving their directory structure.
 RUN mkdir -p /metadatas; find . -mindepth 2 \( -name 'manifest.yaml' -o -name 'config.schema.json' \) \
     -exec sh -c 'install -D "$1" /metadatas/"$1"' _ {} \;
@@ -45,7 +52,7 @@ FROM scratch AS final
 ARG EXTENSION_PATH
 
 # Copy the compiled library from builder
-COPY --from=builder /output/*.so /
+COPY --from=builder /output/*.so* /
 COPY --from=builder /workspace/extensions/${EXTENSION_PATH}/manifest.yaml /
 COPY --from=builder /metadatas/ /metadatas/
 # Use a wildcard to copy config.schema.json if it exists, since COPY will fail if the file does not exist and we want to

@@ -1,0 +1,219 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: switchyard
+version: 0.1.0
+minEnvoyVersion: 1.39.0
+categories:
+  - AI
+  - Traffic Control
+author: NVIDIA Corporation & Tetrate
+featured: true
+description: Route LLM requests to the right model per request with NVIDIA NeMo Switchyard
+longDescription: |
+  This extension resolves **virtual models** with [NVIDIA NeMo Switchyard](https://github.com/NVIDIA-NeMo/Switchyard)
+  routing algorithms. Clients send a virtual model name, such as `coding-auto`, and the filter
+  decides, for every request, which target model serves it. For example, it can send agent steps
+  that only read tool output to an efficient model and the rest to a capable model.
+
+  ## How It Works
+
+  1. The filter buffers the body of LLM API requests (OpenAI chat completions, OpenAI responses
+     and Anthropic messages).
+  2. If the request's `model` is a configured virtual model, the filter runs its Switchyard
+     algorithm on the request, in process.
+  3. The filter rewrites the `model` field of the body to the selected model and adds
+     `x-switchyard-*` decision headers.
+
+  Filters that route by the model in the body, such as [Agent Router](https://github.com/theagentrouter/agent-router)'s,
+  then route the request to the selected model. On plain Envoy, set `model_header` and
+  `clear_route_cache` so that routes can match the selected model on a header.
+
+  ## Supported Algorithms
+
+  Algorithms that decide from the request alone: `auto`, `stage_router` (without a classifier),
+  `plan_execute` (without a judge), `random` and `passthrough`. The configuration uses
+  Switchyard's own route format. Algorithms that call a judge model are not supported.
+
+  ## Sessions
+
+  Stateful algorithms keep per-session state in the Envoy process. The session ID comes from the
+  `x-switchyard-session-id` header, falling back to `agent-session-id`, and can be scoped by tenant
+  headers. Requests of a session must reach the same Envoy instance to share state.
+
+  ## Observability
+
+  * Request headers `x-switchyard-virtual-model`, `x-switchyard-selected-model` and `x-switchyard-reason`.
+  * Dynamic metadata in the `io.builtonenvoy.switchyard` namespace, for access logs.
+  * The `switchyard_decisions` counter, by virtual model, selected model and outcome.
+
+  ## Using with Agent Router
+
+  [Agent Router](https://github.com/theagentrouter/agent-router) works with this extension
+  unchanged. Agent Router reads the model from the request body, so when this filter runs first
+  and rewrites the body, Agent Router routes the request to the selected model, with that model's
+  credentials, translation, rate limits and costs.
+
+  The extension is added to the Gateway with Envoy Gateway's dynamic module support (Envoy Gateway
+  v1.9 or later). Two settings matter:
+
+  * **Filter order.** The module must run before Agent Router's `ext_proc` filter, which Agent
+    Router inserts before the first `lua`, `ext_proc` or `wasm` filter of the listener. The
+    `EnvoyProxy` `filterOrder` moves the module before them.
+  * **Gateway-wide policy.** Envoy picks the filters for a request from the first route it matches,
+    before the model is known. For Agent Router that is usually the catch-all `route-not-found`
+    rule, so the `EnvoyExtensionPolicy` must target the whole Gateway.
+
+  The module is loaded from the extension image, mounted as a Kubernetes
+  [image volume](https://kubernetes.io/docs/concepts/storage/volumes/#image) (enabled by default
+  since Kubernetes 1.35). The image also ships `libgcc_s.so.1`, which distroless Envoy images lack.
+
+  Your `AIGatewayRoute` needs a rule for each target model, as in any Agent Router setup. A rule for
+  the virtual model is optional: it lists it in `/v1/models`.
+
+  See the examples below to try it in a local kind cluster or to add it to an existing Gateway, and
+  the [README](https://github.com/tetratelabs/built-on-envoy/tree/main/extensions/switchyard#using-with-agent-router)
+  for the full setup and telemetry options.
+tags:
+  - ai
+  - llm
+  - model-routing
+  - switchyard
+  - rust
+  - dynamic-module
+license: Apache-2.0
+type: rust
+examples:
+  - title: Try It with Agent Router in kind
+    description: |
+      Creates a kind cluster, installs Envoy Gateway and Agent Router, deploys two fake model
+      backends and a Gateway with the extension, and checks that coding-auto requests reach the
+      model Switchyard selects. Requires docker, kind, kubectl and helm.
+    code: |
+      git clone https://github.com/tetratelabs/built-on-envoy.git
+      cd built-on-envoy
+      ./extensions/switchyard/examples/agent-router/kind.sh
+
+      # Then send requests through the gateway (the script leaves the cluster running).
+      kubectl port-forward -n envoy-gateway-system \
+        "$(kubectl get svc -n envoy-gateway-system -l gateway.envoyproxy.io/owning-gateway-name=switchyard -o name)" 8080:80 &
+      curl -i localhost:8080/v1/chat/completions -H 'content-type: application/json' \
+        -d '{"model": "coding-auto", "messages": [{"role": "user", "content": "write a hello world in Go"}]}'
+  - title: Add It to an Agent Router Gateway
+    description: |
+      Adds the extension to a Gateway managed by Envoy Gateway and Agent Router. The Gateway must
+      reference this EnvoyProxy in spec.infrastructure.parametersRef, and the AIGatewayRoute must
+      have rules for the gpt-4.1-mini and gpt-5 target models.
+    code: |
+      kubectl apply -f - <<EOF
+      apiVersion: gateway.envoyproxy.io/v1alpha1
+      kind: EnvoyProxy
+      metadata:
+        name: switchyard
+        namespace: default
+      spec:
+        dynamicModules:
+          - name: switchyard
+            source:
+              type: Local
+              local:
+                path: /var/boe/extensions/switchyard/libswitchyard.so
+            doNotClose: true
+        # Run the module before Agent Router's ext_proc filter.
+        filterOrder:
+          - {name: envoy.filters.http.dynamic_modules, before: envoy.filters.http.lua}
+          - {name: envoy.filters.http.dynamic_modules, before: envoy.filters.http.ext_proc}
+          - {name: envoy.filters.http.dynamic_modules, before: envoy.filters.http.wasm}
+        provider:
+          type: Kubernetes
+          kubernetes:
+            envoyDeployment:
+              pod:
+                volumes:
+                  - name: switchyard
+                    image:
+                      reference: ghcr.io/tetratelabs/built-on-envoy/extension-switchyard:0.1.0
+              container:
+                volumeMounts:
+                  - name: switchyard
+                    mountPath: /var/boe/extensions/switchyard
+                    readOnly: true
+      ---
+      apiVersion: gateway.envoyproxy.io/v1alpha1
+      kind: EnvoyExtensionPolicy
+      metadata:
+        name: switchyard
+        namespace: default
+      spec:
+        # Must target the whole Gateway.
+        targetRefs:
+          - group: gateway.networking.k8s.io
+            kind: Gateway
+            name: my-gateway
+        dynamicModule:
+          - name: switchyard
+            filterName: switchyard
+            config:
+              virtual_models:
+                - name: coding-auto
+                  targets:
+                    efficient: gpt-4.1-mini
+                    capable: gpt-5
+                  algorithm:
+                    type: auto
+                    capable_target: capable
+                    efficient_target: efficient
+                  default_model: gpt-4.1-mini
+      EOF
+  - title: Automatic Tier Selection
+    description: Route coding-auto requests to an efficient or a capable model
+    code: |
+      boe run --extension switchyard --config '
+        {
+          "virtual_models": [
+            {
+              "name": "coding-auto",
+              "targets": {"efficient": "gpt-4.1-mini", "capable": "gpt-5"},
+              "algorithm": {"type": "auto", "capable_target": "capable", "efficient_target": "efficient"},
+              "default_model": "gpt-4.1-mini"
+            }
+          ]
+        }'
+  - title: Weighted Split Routed by Header
+    description: Split traffic between two models and expose the selected one in a header for routing
+    code: |
+      boe run --extension switchyard --config '
+        {
+          "virtual_models": [
+            {
+              "name": "chat-split",
+              "targets": {"a": "model-a", "b": "model-b"},
+              "algorithm": {"type": "random", "targets": ["a", "b"], "weights": [0.9, 0.1]}
+            }
+          ],
+          "model_header": "x-model",
+          "clear_route_cache": true
+        }'
+  - title: Tenant-Scoped Sessions
+    description: Use per-tenant session state and a cheaper policy for the free tier
+    code: |
+      boe run --extension switchyard --config '
+        {
+          "virtual_models": [
+            {
+              "name": "coding-auto",
+              "match_headers": [{"name": "x-tier", "value": "free"}],
+              "targets": {"only": "gpt-4.1-mini"},
+              "algorithm": {"type": "passthrough", "target": "only"}
+            },
+            {
+              "name": "coding-auto",
+              "targets": {"efficient": "gpt-4.1-mini", "capable": "gpt-5"},
+              "algorithm": {"type": "auto", "capable_target": "capable", "efficient_target": "efficient"},
+              "default_model": "gpt-4.1-mini"
+            }
+          ],
+          "session": {"scope_headers": ["x-tenant-id"]}
+        }'
