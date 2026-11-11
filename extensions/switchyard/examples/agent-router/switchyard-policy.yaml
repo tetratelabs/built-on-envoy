@@ -1,0 +1,50 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# Adds the Switchyard filter to the Gateway.
+#
+# The policy must target the whole Gateway. Envoy picks the filters that run on a request from
+# the first route it matches, before the model is known. For Agent Router routes, that first
+# match is usually the route's catch-all "route-not-found" rule, so a policy that targets only
+# some routes or rules would not run on those requests.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyExtensionPolicy
+metadata:
+  name: switchyard
+  namespace: default
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: switchyard
+  dynamicModule:
+    - name: switchyard
+      filterName: switchyard
+      config:
+        virtual_models:
+          # Free-tier tenants always get the efficient model.
+          - name: coding-auto
+            match_headers:
+              - name: x-tier
+                value: free
+            targets:
+              efficient: gpt-4.1-mini
+            algorithm:
+              type: passthrough
+              target: efficient
+          # Everyone else gets the tier Switchyard picks for each agent step.
+          - name: coding-auto
+            targets:
+              efficient: gpt-4.1-mini
+              capable: gpt-5
+            algorithm:
+              type: auto
+              capable_target: capable
+              efficient_target: efficient
+            default_model: gpt-4.1-mini
+        session:
+          # Sessions of different tenants never share routing state.
+          scope_headers:
+            - x-tenant-id

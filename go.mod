@@ -15,6 +15,7 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.45.0
 	github.com/tetratelabs/func-e v1.6.0
+	go.yaml.in/yaml/v2 v2.4.2
 	golang.org/x/mod v0.42.0
 	golang.org/x/tools v0.52.0
 	google.golang.org/protobuf v1.36.12
@@ -71,7 +72,6 @@ require (
 	go.opentelemetry.io/otel v1.44.0 // indirect
 	go.opentelemetry.io/otel/metric v1.44.0 // indirect
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
-	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect

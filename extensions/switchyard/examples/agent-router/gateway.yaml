@@ -1,0 +1,88 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# A Gateway whose Envoy pods can load the Switchyard dynamic module.
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: switchyard
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: switchyard
+  namespace: default
+spec:
+  gatewayClassName: switchyard
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+  infrastructure:
+    parametersRef:
+      group: gateway.envoyproxy.io
+      kind: EnvoyProxy
+      name: switchyard
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: switchyard
+  namespace: default
+spec:
+  # The modules EnvoyExtensionPolicies may use. The module is read from the image volume below.
+  dynamicModules:
+    - name: switchyard
+      source:
+        type: Local
+        local:
+          path: /var/boe/extensions/switchyard/libswitchyard.so
+      # The module keeps routers, and their session state, across configuration updates.
+      doNotClose: true
+  # The module must run before Agent Router's extproc filter, which reads the model from the body.
+  # Agent Router inserts that filter before the first lua, ext_proc or wasm filter of the listener,
+  # so the module is placed before them. Rules whose filters are not on the listener are ignored.
+  filterOrder:
+    - name: envoy.filters.http.dynamic_modules
+      before: envoy.filters.http.lua
+    - name: envoy.filters.http.dynamic_modules
+      before: envoy.filters.http.ext_proc
+    - name: envoy.filters.http.dynamic_modules
+      before: envoy.filters.http.wasm
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyDeployment:
+        pod:
+          volumes:
+            # Mounts the extension's OCI image. Requires the Kubernetes ImageVolume feature.
+            - name: switchyard
+              image:
+                reference: ghcr.io/tetratelabs/built-on-envoy/extension-switchyard:0.1.0
+                pullPolicy: IfNotPresent
+        container:
+          volumeMounts:
+            - name: switchyard
+              mountPath: /var/boe/extensions/switchyard
+              readOnly: true
+          # Clears the default resource requests, for local tests only.
+          resources: {}
+---
+# By default, Envoy Gateway limits buffered bodies to 32KiB, which is too small for LLM requests.
+# The limit applies to the body buffered by the Switchyard module and by Agent Router.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: ClientTrafficPolicy
+metadata:
+  name: switchyard-buffer-limit
+  namespace: default
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: switchyard
+  connection:
+    bufferLimit: 50Mi

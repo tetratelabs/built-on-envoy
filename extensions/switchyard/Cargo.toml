@@ -1,0 +1,28 @@
+[package]
+name = "switchyard"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/tetratelabs/built-on-envoy"
+
+[dependencies]
+# The SDK version must match the Envoy version due to the strict compatibility requirements.
+# This is the Envoy v1.39.1 release, the default Envoy version of Envoy Gateway v1.9.
+envoy-proxy-dynamic-modules-rust-sdk = { git = "https://github.com/envoyproxy/envoy", rev = "b579d07d3ad7ee11d32b105e91a5a39ad24718d7" }
+# NVIDIA NeMo Switchyard. All crates must be pinned to the same revision so that their types match.
+switchyard-libsy = { git = "https://github.com/NVIDIA-NeMo/Switchyard.git", rev = "4f23dedaa822a3d030aa44f409d778f13dceb33a" }
+switchyard-protocol = { git = "https://github.com/NVIDIA-NeMo/Switchyard.git", rev = "4f23dedaa822a3d030aa44f409d778f13dceb33a" }
+switchyard-runner = { git = "https://github.com/NVIDIA-NeMo/Switchyard.git", rev = "4f23dedaa822a3d030aa44f409d778f13dceb33a" }
+switchyard-translation = { git = "https://github.com/NVIDIA-NeMo/Switchyard.git", rev = "4f23dedaa822a3d030aa44f409d778f13dceb33a" }
+futures = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["preserve_order"] }
+tokio = { version = "1", features = ["rt-multi-thread", "time"] }
+
+[dev-dependencies]
+jsonschema = "0.28"
+
+[lib]
+name = "switchyard"
+path = "src/lib.rs"
+crate-type = ["cdylib"]

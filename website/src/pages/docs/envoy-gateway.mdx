@@ -1,0 +1,152 @@
+---
+layout: ../../layouts/DocsLayout.astro
+title: Using extensions with Envoy Gateway
+description: Loading Built On Envoy Dynamic Modules in Envoy Gateway proxies
+---
+
+import ToC from '../../components/ToC.astro';
+import Callout from '../../components/Callout.astro';
+
+# Using extensions with Envoy Gateway
+
+[Envoy Gateway](https://gateway.envoyproxy.io) can add Dynamic Modules to the Envoy proxies it manages. This page shows
+how to make a Built On Envoy extension available to the proxies and how to enable it on a Gateway or a route. The
+examples use the [switchyard](/extensions/switchyard) extension, which needs Envoy Gateway v1.9 or later.
+
+<ToC maxDepth="3"/>
+
+## Overview
+
+Three Envoy Gateway resources are involved:
+
+1. The **`EnvoyProxy`** registers the Dynamic Modules the proxies may load, and where to load them from. Only the
+   infrastructure operator who owns the `EnvoyProxy` decides which modules can run.
+2. The **`EnvoyExtensionPolicy`** adds a registered module to the filter chain of a Gateway or a route, with its
+   configuration.
+3. The module itself must be available to the Envoy pods, as a file in the container or as an HTTP download.
+
+## Making the module available to Envoy
+
+Extension images contain the module at their root, for example `/libswitchyard.so`. The images are built `FROM scratch`,
+so they cannot run as init containers. Use one of these options.
+
+### Option 1: Mount the extension image as a volume
+
+Kubernetes can mount an OCI image as a read-only [image volume](https://kubernetes.io/docs/concepts/storage/volumes/#image).
+The feature is enabled by default since Kubernetes 1.35.
+
+```yaml
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: switchyard
+  namespace: default
+spec:
+  dynamicModules:
+    - name: switchyard
+      source:
+        type: Local
+        local:
+          path: /var/boe/extensions/switchyard/libswitchyard.so
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyDeployment:
+        pod:
+          volumes:
+            - name: switchyard
+              image:
+                reference: ghcr.io/tetratelabs/built-on-envoy/extension-switchyard:0.1.0
+                pullPolicy: IfNotPresent
+        container:
+          volumeMounts:
+            - name: switchyard
+              mountPath: /var/boe/extensions/switchyard
+              readOnly: true
+```
+
+Reference the `EnvoyProxy` from the Gateway with `spec.infrastructure.parametersRef`, or from the `GatewayClass`.
+
+### Option 2: Build a custom Envoy image
+
+Copy the module into an Envoy image, as described in [Packaging and using extensions in prod](/docs/packaging-prod), and
+set it as the `envoyDeployment.container.image` of the `EnvoyProxy`. Register the module with a `Local` source pointing to
+the path in the image.
+
+### Option 3: Download the module over HTTP
+
+A `Remote` source makes Envoy download the module from an HTTP(S) URL and check its SHA-256:
+
+```yaml
+spec:
+  dynamicModules:
+    - name: switchyard
+      source:
+        type: Remote
+        remote:
+          url: https://example.com/modules/libswitchyard.so
+          sha256: <sha256 of the file>
+```
+
+<Callout type="warning" title="Rust modules and distroless images">
+Rust modules link against `libgcc_s.so.1`, which distroless Envoy images, including Envoy Gateway's default image, do not
+have. Extension images that need it, such as switchyard, ship `libgcc_s.so.1` next to the module, and the module finds it
+there. Options 1 and 2 keep the two files together. With option 3, use an Envoy image that has `libgcc_s.so.1`.
+</Callout>
+
+## Enabling the module
+
+An `EnvoyExtensionPolicy` adds the module to the filter chain. `filterName` selects the filter in the module, and `config`
+is the extension configuration, the same JSON as with `boe run --config`:
+
+```yaml
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyExtensionPolicy
+metadata:
+  name: switchyard
+  namespace: default
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: switchyard
+  dynamicModule:
+    - name: switchyard
+      filterName: switchyard
+      config:
+        virtual_models:
+          - name: coding-auto
+            targets:
+              efficient: gpt-4.1-mini
+              capable: gpt-5
+            algorithm:
+              type: auto
+              capable_target: capable
+              efficient_target: efficient
+```
+
+The policy can target a Gateway, a listener, or a route. Envoy decides which filters run on a request from the first
+route it matches. If a filter changes what the request is routed by, and makes Envoy pick the route again, the filter must
+be enabled on the routes requests first match, and not only on the routes they end up on. Targeting the Gateway does that.
+
+## Ordering the filters
+
+Envoy Gateway places Dynamic Modules after its `lua`, `ext_proc` and `wasm` filters. To run a module earlier, for example
+before an external processor that reads what the module changes, set `filterOrder` in the `EnvoyProxy`:
+
+```yaml
+spec:
+  filterOrder:
+    - name: envoy.filters.http.dynamic_modules
+      before: envoy.filters.http.ext_proc
+```
+
+Rules that refer to filters the listener does not have are ignored.
+
+## Example: model routing with Agent Router
+
+[Agent Router](https://github.com/theagentrouter/agent-router) routes LLM requests by the model in the request body,
+using an external processor that Envoy Gateway runs before its own `ext_proc` filters. The switchyard extension rewrites
+that model before Agent Router reads it, so that clients can ask for a virtual model and get the model a Switchyard
+routing algorithm picks. The [switchyard README](https://github.com/tetratelabs/built-on-envoy/tree/main/extensions/switchyard#using-with-agent-router)
+has the complete setup and a script that runs it in a kind cluster.

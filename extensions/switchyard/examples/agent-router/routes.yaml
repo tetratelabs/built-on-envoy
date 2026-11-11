@@ -1,0 +1,90 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# Agent Router routes for the target models. Nothing here is specific to Switchyard: the filter
+# rewrites the model in the request body, and Agent Router routes the request as if the client had
+# asked for that model.
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: AIGatewayRoute
+metadata:
+  name: switchyard
+  namespace: default
+spec:
+  parentRefs:
+    - name: switchyard
+      kind: Gateway
+      group: gateway.networking.k8s.io
+  rules:
+    - matches:
+        - headers:
+            - type: Exact
+              name: x-ai-eg-model
+              value: gpt-4.1-mini
+      backendRefs:
+        - name: efficient
+    - matches:
+        - headers:
+            - type: Exact
+              name: x-ai-eg-model
+              value: gpt-5
+      backendRefs:
+        - name: capable
+    # Optional. Lists the virtual model in /v1/models, and serves requests the filter leaves
+    # unchanged, for example when routing fails and the failure mode is passthrough.
+    - matches:
+        - headers:
+            - type: Exact
+              name: x-ai-eg-model
+              value: coding-auto
+      backendRefs:
+        - name: efficient
+---
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: AIServiceBackend
+metadata:
+  name: efficient
+  namespace: default
+spec:
+  schema:
+    name: OpenAI
+  backendRef:
+    name: efficient
+    kind: Backend
+    group: gateway.envoyproxy.io
+---
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: AIServiceBackend
+metadata:
+  name: capable
+  namespace: default
+spec:
+  schema:
+    name: OpenAI
+  backendRef:
+    name: capable
+    kind: Backend
+    group: gateway.envoyproxy.io
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: efficient
+  namespace: default
+spec:
+  endpoints:
+    - fqdn:
+        hostname: efficient.default.svc.cluster.local
+        port: 80
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: capable
+  namespace: default
+spec:
+  endpoints:
+    - fqdn:
+        hostname: capable.default.svc.cluster.local
+        port: 80
