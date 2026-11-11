@@ -4,10 +4,10 @@ import Head from '../components/Head.astro';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 import ExtensionCard from '../components/ExtensionCard.astro';
-import { loadExtensions } from '../utils/extensions';
+import { applyHighlights, loadExtensions } from '../utils/extensions';
 import '../styles/extensions.css';
 
-const extensions = loadExtensions();
+const extensions = applyHighlights(loadExtensions());
 
 // Collect unique types from extensions and sort alphabetically
 const sortedTypes = [...new Set(extensions.map(ext => ext.type))]
@@ -101,6 +101,7 @@ function formatTypeName(type: string): string {
 											parent={ext.parent}
 											tags={ext.tags}
 											filterTypes={ext.filterType}
+											highlight={ext.highlight}
 										/>
 									</div>
 								))}
