@@ -48,6 +48,11 @@ pub struct RawFilterConfig {
     /// Whether to add the `x-switchyard-*` decision headers to the request.
     #[serde(default = "default_true")]
     pub decision_headers: bool,
+    /// Whether to rewrite the `model` field of the request body to the selected model. When false,
+    /// the body keeps the virtual model and the decision is only carried by the headers, dynamic
+    /// metadata and filter state, for a later filter to act on.
+    #[serde(default = "default_true")]
+    pub rewrite_body: bool,
 }
 
 /// A virtual model: a model name that clients send and that the filter resolves to a target model.
@@ -157,6 +162,7 @@ pub struct Config {
     pub model_header: Option<String>,
     pub clear_route_cache: bool,
     pub decision_headers: bool,
+    pub rewrite_body: bool,
 }
 
 /// A compiled virtual model.
@@ -221,6 +227,7 @@ impl Config {
             model_header: raw.model_header.map(|h| h.to_ascii_lowercase()),
             clear_route_cache: raw.clear_route_cache,
             decision_headers: raw.decision_headers,
+            rewrite_body: raw.rewrite_body,
         })
     }
 
@@ -383,6 +390,7 @@ mod tests {
         );
         assert_eq!(config.virtual_models[0].match_headers[0].name, "x-tier");
         assert!(config.decision_headers);
+        assert!(config.rewrite_body);
         assert!(!config.clear_route_cache);
         assert_eq!(config.model_header, None);
         assert_eq!(
@@ -488,11 +496,13 @@ mod tests {
                 "endpoints": {"/chat": "openai_chat", "/v2/chat": "anthropic_messages"},
                 "model_header": "X-Model",
                 "clear_route_cache": true,
-                "decision_headers": false
+                "decision_headers": false,
+                "rewrite_body": false
             }"#,
         )
         .unwrap();
         assert_eq!(config.virtual_models[0].failure_mode, FailureMode::Reject);
+        assert!(!config.rewrite_body);
         assert_eq!(config.model_header.as_deref(), Some("x-model"));
         assert!(config.clear_route_cache);
         assert!(!config.decision_headers);
@@ -572,7 +582,8 @@ mod tests {
                 "endpoints": {"/chat": "openai_chat"},
                 "model_header": "x-model",
                 "clear_route_cache": true,
-                "decision_headers": false
+                "decision_headers": false,
+                "rewrite_body": false
             }"#,
         )
         .unwrap();

@@ -22,6 +22,12 @@ pub const VIRTUAL_MODEL_HEADER: &str = "x-switchyard-virtual-model";
 pub const SELECTED_MODEL_HEADER: &str = "x-switchyard-selected-model";
 /// Request header carrying the reason for the decision.
 pub const REASON_HEADER: &str = "x-switchyard-reason";
+/// Filter state key of the virtual model the client requested.
+pub const VIRTUAL_MODEL_FILTER_STATE: &str = "io.builtonenvoy.switchyard.virtual_model";
+/// Filter state key of the selected model.
+pub const SELECTED_MODEL_FILTER_STATE: &str = "io.builtonenvoy.switchyard.selected_model";
+/// Filter state key of the reason for the decision.
+pub const REASON_FILTER_STATE: &str = "io.builtonenvoy.switchyard.reason";
 
 /// Outcome label values of the decisions counter.
 const OUTCOME_ROUTED: &str = "routed";
@@ -197,7 +203,7 @@ impl Filter {
         }
     }
 
-    /// Rewrites the request for the selected model.
+    /// Applies the decision: rewrites the body, when enabled, and records the decision.
     fn apply<EHF: EnvoyHttpFilter>(
         &self,
         envoy: &mut EHF,
@@ -207,35 +213,63 @@ impl Filter {
         outcome: &str,
         in_body_callback: bool,
     ) {
-        let bytes = match &decision.body {
-            Some(rewritten) => serde_json::to_vec(rewritten),
-            None => {
-                body["model"] = Value::from(decision.model.as_str());
-                serde_json::to_vec(body)
-            }
-        };
-        // Leave the request untouched rather than sending a broken body upstream.
-        let bytes = match bytes {
-            Ok(bytes) => bytes,
-            Err(err) => {
-                envoy_log_warn!(
-                    "switchyard: could not encode the request body for {}: {err}",
-                    vm.name
-                );
-                self.count(envoy, &vm.name, "", OUTCOME_PASSTHROUGH);
-                return;
-            }
-        };
-        Self::replace_body(envoy, &bytes, in_body_callback);
-
-        if self.config.decision_headers {
-            envoy.set_request_header(VIRTUAL_MODEL_HEADER, vm.name.as_bytes());
-            envoy.set_request_header(SELECTED_MODEL_HEADER, decision.model.as_bytes());
-            envoy.set_request_header(REASON_HEADER, decision.reason.as_bytes());
+        if self.config.rewrite_body {
+            let bytes = match &decision.body {
+                Some(rewritten) => serde_json::to_vec(rewritten),
+                None => {
+                    body["model"] = Value::from(decision.model.as_str());
+                    serde_json::to_vec(body)
+                }
+            };
+            // Leave the request untouched rather than sending a broken body upstream.
+            let bytes = match bytes {
+                Ok(bytes) => bytes,
+                Err(err) => {
+                    envoy_log_warn!(
+                        "switchyard: could not encode the request body for {}: {err}",
+                        vm.name
+                    );
+                    self.count(envoy, &vm.name, "", OUTCOME_PASSTHROUGH);
+                    return;
+                }
+            };
+            Self::replace_body(envoy, &bytes, in_body_callback);
+        } else if decision.body.is_some() {
+            envoy_log_debug!(
+                "switchyard: rewrite_body is disabled, dropping the request changes of the {} algorithm",
+                vm.name
+            );
         }
-        envoy.set_dynamic_metadata_string(METADATA_NAMESPACE, "virtual_model", &vm.name);
-        envoy.set_dynamic_metadata_string(METADATA_NAMESPACE, "selected_model", &decision.model);
-        envoy.set_dynamic_metadata_string(METADATA_NAMESPACE, "reason", &decision.reason);
+
+        let fields = [
+            (
+                "virtual_model",
+                VIRTUAL_MODEL_HEADER,
+                VIRTUAL_MODEL_FILTER_STATE,
+                vm.name.as_str(),
+            ),
+            (
+                "selected_model",
+                SELECTED_MODEL_HEADER,
+                SELECTED_MODEL_FILTER_STATE,
+                decision.model.as_str(),
+            ),
+            (
+                "reason",
+                REASON_HEADER,
+                REASON_FILTER_STATE,
+                decision.reason.as_str(),
+            ),
+        ];
+        for (key, header, filter_state, value) in fields {
+            if self.config.decision_headers {
+                envoy.set_request_header(header, value.as_bytes());
+            }
+            envoy.set_dynamic_metadata_string(METADATA_NAMESPACE, key, value);
+            if !envoy.set_filter_state_bytes(filter_state.as_bytes(), value.as_bytes()) {
+                envoy_log_warn!("switchyard: could not set the {filter_state} filter state");
+            }
+        }
         if let Some(header) = &self.config.model_header {
             envoy.set_request_header(header, decision.model.as_bytes());
         }
@@ -335,6 +369,7 @@ mod tests {
         headers: HashMap<String, String>,
         removed_headers: Vec<String>,
         metadata: HashMap<String, String>,
+        filter_state: HashMap<String, String>,
         cleared_route_cache: bool,
         counters: Vec<Vec<String>>,
         local_reply: Option<(u32, String)>,
@@ -495,6 +530,16 @@ mod tests {
             });
         let r = Arc::clone(&recorded);
         envoy
+            .expect_set_filter_state_bytes()
+            .returning(move |k, v| {
+                r.lock().unwrap().filter_state.insert(
+                    String::from_utf8_lossy(k).into_owned(),
+                    String::from_utf8_lossy(v).into_owned(),
+                );
+                true
+            });
+        let r = Arc::clone(&recorded);
+        envoy
             .expect_clear_route_cache()
             .returning(move || r.lock().unwrap().cleared_route_cache = true);
         let r = Arc::clone(&recorded);
@@ -574,10 +619,36 @@ mod tests {
         assert_eq!(rec.metadata["virtual_model"], "coding-auto");
         assert_eq!(rec.metadata["selected_model"], "large-model");
         assert!(!rec.cleared_route_cache);
+        assert_eq!(rec.filter_state[VIRTUAL_MODEL_FILTER_STATE], "coding-auto");
+        assert_eq!(rec.filter_state[SELECTED_MODEL_FILTER_STATE], "large-model");
         assert_eq!(
             rec.counters,
             vec![vec!["coding-auto", "large-model", "routed"]]
         );
+    }
+
+    #[test]
+    fn decision_only_keeps_the_body() {
+        let config = r#"{
+            "virtual_models": [{"name": "v", "targets": {"a": "m"}, "algorithm": {"type": "passthrough", "target": "a"}}],
+            "rewrite_body": false,
+            "model_header": "x-model"
+        }"#;
+        let (headers, body, _, rec) = run(
+            &mut filter(config),
+            Request::chat(r#"{"model":"v","messages":[{"role":"user","content":"hi"}]}"#),
+        );
+        assert_eq!(headers, HeadersStatus::StopIteration);
+        assert_eq!(body, Some(BodyStatus::Continue));
+        assert!(rec.body.is_none());
+        assert!(!rec.headers.contains_key("content-length"));
+        assert_eq!(rec.headers["x-model"], "m");
+        assert_eq!(rec.headers[VIRTUAL_MODEL_HEADER], "v");
+        assert_eq!(rec.headers[SELECTED_MODEL_HEADER], "m");
+        assert_eq!(rec.metadata["selected_model"], "m");
+        assert_eq!(rec.filter_state[VIRTUAL_MODEL_FILTER_STATE], "v");
+        assert_eq!(rec.filter_state[SELECTED_MODEL_FILTER_STATE], "m");
+        assert!(rec.filter_state[REASON_FILTER_STATE].starts_with("passthrough"));
     }
 
     #[test]

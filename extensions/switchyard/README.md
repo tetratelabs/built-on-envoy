@@ -15,6 +15,9 @@ routes that follow it:
   Agent Router reads the model from the body after this filter has rewritten it. See
   [Using with Agent Router](#using-with-agent-router).
 - On plain Envoy, set `model_header` and `clear_route_cache`, and match routes on that header.
+- To let a later filter make the final choice, set `rewrite_body` to false. The body keeps the
+  virtual model, and the decision is only carried in headers, dynamic metadata and filter state. See
+  [Decision-only mode](#decision-only-mode).
 
 ## How It Works
 
@@ -22,10 +25,12 @@ routes that follow it:
    buffers the body. Other requests are not buffered.
 2. If the body's `model` is a configured virtual model (and its `match_headers` match), the filter
    decodes the request with Switchyard's translation layer and runs the algorithm.
-3. The filter replaces the body's `model` with the selected model and updates `content-length`.
-   When the algorithm changes the request beyond the model, the filter sends Switchyard's encoding
-   of the request. Otherwise it keeps every other byte of the client's body.
-4. It adds the decision headers and dynamic metadata, and lets the request continue.
+3. Unless `rewrite_body` is false, the filter replaces the body's `model` with the selected model
+   and updates `content-length`. When the algorithm changes the request beyond the model, the
+   filter sends Switchyard's encoding of the request. Otherwise it keeps every other byte of the
+   client's body.
+4. It records the decision in dynamic metadata, filter state and, when enabled, the decision
+   headers, and lets the request continue.
 
 Requests for any other model pass through unchanged.
 
@@ -66,7 +71,8 @@ request alone are supported.
   },
   "model_header": null,
   "clear_route_cache": false,
-  "decision_headers": true
+  "decision_headers": true,
+  "rewrite_body": true
 }
 ```
 
@@ -113,6 +119,49 @@ Requests whose `subagent_header` is `true` or `1` are sub-agent requests. When t
 must also carry the agent ID in `agent_id_header` to keep its own session state; without it, the
 request is routed statelessly.
 
+### Decision-only mode
+
+By default, the filter rewrites the body, so the filters after it only see the selected model. Set
+`rewrite_body` to false to keep the virtual model in the body and only record the decision. A later
+filter then sees both the virtual model and the decision, and can apply its own policy, such as
+quotas, budgets or fallbacks, before it picks the backend:
+
+```json
+{
+  "virtual_models": [{
+    "name": "coding-auto",
+    "targets": {"efficient": "gpt-4.1-mini", "capable": "gpt-5"},
+    "algorithm": {"type": "auto", "capable_target": "capable", "efficient_target": "efficient"}
+  }],
+  "rewrite_body": false,
+  "decision_headers": false
+}
+```
+
+The decision is always available to later filters as:
+
+- Dynamic metadata in the `io.builtonenvoy.switchyard` namespace.
+- Filter state, as plain strings under the `io.builtonenvoy.switchyard.virtual_model`,
+  `io.builtonenvoy.switchyard.selected_model` and `io.builtonenvoy.switchyard.reason` keys. Filter
+  state is never sent upstream, and is available to other filters, to access logs with
+  `%FILTER_STATE(io.builtonenvoy.switchyard.selected_model:PLAIN)%`, to header formatters, and to
+  CEL expressions as `filter_state['io.builtonenvoy.switchyard.selected_model']`.
+
+The decision headers and `model_header` carry it too, when enabled. Headers are easy to consume
+from any filter, including ext_proc and ext_authz services, but they are also sent to the upstream
+unless a later filter removes them.
+
+Clients can never set the decision: the filter removes client-sent decision headers, and dynamic
+metadata and filter state are only set by filters. Envoy does not, however, protect filter state or
+dynamic metadata from other filters: since Envoy removed read-only filter state, a filter can
+overwrite any key. Treat the decision as trusted only if the filters after this one are.
+
+When the algorithm changes the request beyond the model, those changes are dropped in this mode,
+as only the decision is passed on.
+
+With Agent Router, the body's model is what Agent Router routes on, so in this mode Agent Router
+routes the virtual model unless a filter between the two acts on the decision.
+
 ### Observability
 
 - Request headers, when `decision_headers` is true: `x-switchyard-virtual-model`,
@@ -120,7 +169,11 @@ request is routed statelessly.
   `decision_headers` to false to avoid that. These headers are always removed from the client
   request, so the upstream only sees the values set by the filter.
 - Dynamic metadata in the `io.builtonenvoy.switchyard` namespace, with the keys `virtual_model`,
-  `selected_model` and `reason`. Use them in access logs with `%DYNAMIC_METADATA(io.builtonenvoy.switchyard:selected_model)%`.
+  `selected_model` and `reason`. Use them in access logs with
+  `%DYNAMIC_METADATA(io.builtonenvoy.switchyard:selected_model)%`.
+- Filter state under the `io.builtonenvoy.switchyard.virtual_model`,
+  `io.builtonenvoy.switchyard.selected_model` and `io.builtonenvoy.switchyard.reason` keys. Use
+  them in access logs with `%FILTER_STATE(io.builtonenvoy.switchyard.selected_model:PLAIN)%`.
 - The `switchyard_decisions` counter, with the labels `virtual_model`, `selected_model` and
   `outcome` (`routed`, `default`, `passthrough` or `rejected`).
 

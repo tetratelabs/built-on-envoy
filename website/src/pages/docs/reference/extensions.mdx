@@ -2529,6 +2529,17 @@ Optional request header set to the selected model, for routing on plain Envoy. N
 
 [↑ Top](#) | [↑ Switchyard Configuration](#switchyard) {/* if .SubProperties */}
 
+### rewrite_body
+
+Whether to rewrite the model field of the request body to the selected model. Set to false to keep the virtual model in the body and carry the decision only in the decision headers, model_header, dynamic metadata and filter state, so that a later filter can apply its own policy before it picks the backend. Defaults to true.
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard) {/* if .SubProperties */}
+
 ### session
 
 How the session identity used by stateful algorithms is read from the request headers.

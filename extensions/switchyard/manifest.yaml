@@ -31,6 +31,11 @@ longDescription: |
   then route the request to the selected model. On plain Envoy, set `model_header` and
   `clear_route_cache` so that routes can match the selected model on a header.
 
+  To let a later filter make the final choice, set `rewrite_body` to `false`. The body keeps the
+  virtual model, and the decision is carried only in dynamic metadata, filter state and, when
+  enabled, the decision headers and `model_header`. A later filter then sees both, and can apply its own policy, such as
+  quotas or fallbacks, before it picks the backend.
+
   ## Supported Algorithms
 
   Algorithms that decide from the request alone: `auto`, `stage_router` (without a classifier),
@@ -47,6 +52,9 @@ longDescription: |
 
   * Request headers `x-switchyard-virtual-model`, `x-switchyard-selected-model` and `x-switchyard-reason`.
   * Dynamic metadata in the `io.builtonenvoy.switchyard` namespace, for access logs.
+  * Filter state under the `io.builtonenvoy.switchyard.virtual_model`,
+    `io.builtonenvoy.switchyard.selected_model` and `io.builtonenvoy.switchyard.reason` keys,
+    which is never sent upstream.
   * The `switchyard_decisions` counter, by virtual model, selected model and outcome.
 
   ## Using with Agent Router
@@ -195,6 +203,21 @@ examples:
           ],
           "model_header": "x-model",
           "clear_route_cache": true
+        }'
+  - title: Decision Only, for a Later Filter
+    description: Keep the virtual model in the body and pass the decision to later filters as filter state
+    code: |
+      boe run --extension switchyard --config '
+        {
+          "virtual_models": [
+            {
+              "name": "coding-auto",
+              "targets": {"efficient": "gpt-4.1-mini", "capable": "gpt-5"},
+              "algorithm": {"type": "auto", "capable_target": "capable", "efficient_target": "efficient"}
+            }
+          ],
+          "rewrite_body": false,
+          "decision_headers": false
         }'
   - title: Tenant-Scoped Sessions
     description: Use per-tenant session state and a cheaper policy for the free tier
