@@ -1,0 +1,253 @@
+---
+layout: ../../layouts/DocsLayout.astro
+title: Executable Extension Examples
+description: Generate and check manifest examples, with rules for varying values and omitted output
+---
+
+{/* Authoring steps live here; generator invariants stay with the tool. */}
+
+import ToC from '../../components/ToC.astro';
+
+# Executable Extension Examples
+
+Declare `config` and `commands` in `manifest.yaml`. The generator starts BOE and Envoy, runs the
+commands, and writes their invocation and output to `examples[].code` for the extension catalog.
+
+<ToC maxDepth="3"/>
+
+## Define an example
+
+Use a repository checkout with the extension's
+[build prerequisites](/docs/running-local-extensions) installed. For OPA, define an example as
+follows. Forwarded requests use `httpbin.org` and require network access.
+
+```yaml
+examples:
+  - title: Path-based authorization
+    description: Allow status requests and deny private paths.
+    config:
+      policies:
+        - inline: |
+            package envoy.authz
+
+            default allow := false
+
+            allow if {
+              input.parsed_path[0] == "status"
+            }
+    commands:
+      - comment: Request a path allowed by the policy.
+        argv: [curl, --disable, --silent, --show-error, --verbose,
+          --user-agent, boe-example, --max-time, "10",
+          "${PROXY_URL}/status/200"]
+      - comment: Request a private path and see it denied.
+        argv: [curl, --disable, --silent, --show-error, --verbose,
+          --user-agent, boe-example, --max-time, "10",
+          "${PROXY_URL}/private/resource"]
+    volatileHeaders:
+      - x-envoy-upstream-service-time
+```
+
+Leave out `code` for the first generation. Use `config: {}` when no settings are needed;
+code-only entries remain hand-written examples. The YAML fragments below are fields within an
+`examples` entry.
+
+Commands run sequentially. Each `argv` item is one argument, with no shell evaluation. For pipes
+or redirection, invoke `sh -c` explicitly and handle script failures. `comment` is display text;
+edit it and `argv` in their source fields. The expected exit code is `0` unless `expectedExit` is
+set. Curl normally returns `0` for HTTP errors such as 403; add `--fail` when they should fail the
+command.
+
+Use `--verbose` to capture curl's `>` request and `<` response lines, `--disable` first to ignore
+local curl configuration, and a stable user agent. Transport diagnostics and byte-count markers
+are omitted; curl errors remain in the transcript.
+
+## Generate and check
+
+Run from the repository root:
+
+```sh
+make -C extensions update-examples EXTENSION_PATH=composer/opa
+git diff -- extensions/composer/opa/manifest.yaml
+make -C extensions check-examples EXTENSION_PATH=composer/opa
+make -C cli gen-docs
+```
+
+`EXTENSION_PATH` is relative to `extensions/`. Set it to `composer` to select the bundle's root
+and child manifests. The normal `check` target includes `check-examples`.
+
+`update-examples` writes `code` after every selected example succeeds. `check-examples` reports
+differences without writing files. `gen-docs` refreshes the website catalog; commit its generated
+files and the reviewed transcript with the source changes.
+
+Generated shell blocks place BOE in Terminal 1 and requests in Terminal 2 after Envoy is ready.
+Execution checks the local extension; the displayed `--extension` invocation uses the published
+name and default ports, so unreleased behavior may differ. Keep the HTML comments after output
+blocks: they record streams and byte formatting and are hidden by the website.
+
+## Choose what to check
+
+| What matters? | Use | What is checked? |
+| --- | --- | --- |
+| A header's presence and date/duration format, while its value varies. | `volatileHeaders` | The retained header stays visible; value changes are allowed only within the recognized format. |
+| A date or duration in response text, while its value varies. | `comparison` | The selected value's format and the surrounding literal text. |
+| Lines that are irrelevant to the example. | `elideOutput: true` with `...` | Omitted lines are unchecked, including their presence, values, and format. |
+
+Combine these by retaining important timing headers as volatile and eliding incidental output.
+A `volatileHeaders` declaration does not validate a header hidden by elision.
+
+## Allow varying dates and timings
+
+HTTP `Date` headers are handled automatically. List other varying response headers by name:
+
+```yaml
+volatileHeaders:
+  - x-envoy-upstream-service-time
+  - x-fault-inserted-latency
+```
+
+Names are case-insensitive. Recognized dates and durations may change value if their format
+stays the same. Millisecond precision may also vary: `12.345ms`, `98.7ms`, and `100ms` compare
+equal. A change from `ms` to `s` or a different date layout produces drift; unrecognized values
+compare exactly. Bare numbers count as durations, so listing a numeric ID or count also ignores
+its value changes.
+
+For a value in response text, use a Go regular expression with one named `value` capture:
+
+```yaml
+comparison:
+  - type: duration
+    pattern: '(?m)^elapsed: (?P<value>\S+)$'
+```
+
+`type` is `date` or `duration`. Both compared values must match the rule; only the capture is
+normalized. Rules apply to output, never to commands, configuration, or recognized HTTP status
+lines.
+
+Ordering between different response header names is ignored. Repeated headers retain their
+order and count. The displayed transcript keeps the captured order.
+
+## Shorten output with elision
+
+Elided lines and their formatting are not checked. State what you omit in the example's
+`description`.
+
+1. Run `update-examples` to capture the full transcript.
+2. Set `elideOutput: true` on the example.
+3. Replace incidental whole lines inside fenced `text` blocks with `...`.
+   Keep command blocks, fences, and HTML comments in place.
+4. Run `update-examples` to refresh metadata, then `check-examples`.
+
+For example, shorten this output:
+
+```text
+> GET /status/200 HTTP/1.1
+> Host: localhost:10000
+> User-Agent: boe-example
+> Accept: */*
+>
+< HTTP/1.1 200 OK
+< date: Sun, 18 Oct 2026 10:00:00 GMT
+< server: envoy
+< content-length: 0
+< x-envoy-upstream-service-time: 42
+<
+```
+
+Replace it with:
+
+```text
+> GET /status/200 HTTP/1.1
+...
+< HTTP/1.1 200 OK
+...
+< x-envoy-upstream-service-time: 42
+<
+```
+
+Each `...` must occupy a line without spaces inside the output block; retain the YAML indentation
+under `code: |`. A marker matches one or more whole lines, including blank lines. Inline dots
+remain literal, as do standalone dots without `elideOutput: true`.
+
+Keep recognized HTTP response status lines visible. When retaining headers, keep the terminator
+(`<` for verbose curl, a blank line for plain HTTP) so header order can vary. Retained lines still follow
+comparison rules and byte-format checks. Elision does not suppress failed commands, timeouts,
+stream changes, or unmet retry targets.
+
+When retained content changes, `check-examples` fails and `update-examples` expands that output
+block to the full capture for review. Reapply omissions after reviewing the change. Changes only
+to retained byte metadata refresh the excerpt without expanding it.
+
+## Prepare startup files
+
+Place fixtures in the extension's `examples/` directory. Each example gets a temporary copy;
+symlinks are rejected. `preStart` commands run there before BOE starts, and `commands` run there
+afterward.
+
+For a checked-in `examples/settings.template.json`, prepare a settings file with:
+
+```yaml
+preStart:
+  - argv: [cp, settings.template.json, settings.json]
+```
+
+Reference the result as `${WORK_DIR}/settings.json` in `config`. For downloads, pin an immutable
+revision and fail on HTTP errors; see the WAF manifest's
+[WordPress CRS example](https://github.com/tetratelabs/built-on-envoy/blob/main/extensions/composer/waf/manifest.yaml).
+
+These placeholders expand in configuration strings and command arguments; unknown names fail:
+
+| Placeholder | Value |
+| --- | --- |
+| `${PROXY_URL}` | Allocated proxy URL; displayed as `http://localhost:10000`. |
+| `${ADMIN_URL}` | Allocated admin URL; displayed as `http://127.0.0.1:9901`. |
+| `${UPSTREAM_ADDRESS}` | `httpbin.org:443`. |
+| `${WORK_DIR}` | Temporary working directory; displayed as a repository-relative path or `.`. |
+
+## Capture an HTTP outcome
+
+For randomized behavior, give each desired status a command with a bounded retry:
+
+```yaml
+commands:
+  - argv: [curl, --disable, --silent, --show-error, --verbose,
+      --user-agent, boe-example, --max-time, "10",
+      "${PROXY_URL}/status/200"]
+    retry:
+      httpStatus: 200
+      maxAttempts: 100
+```
+
+A fault-injection example can add a second command with `httpStatus: 503` to capture both outcomes.
+This checks their occurrence within the attempt limit, not their probability. Only the matching
+attempt is recorded. Unexpected exits, timeouts, unparseable responses, or exhausted attempts
+fail generation. The command timeout covers all attempts; the displayed curl command runs once,
+with a comment explaining the capture retry.
+
+Retries require direct curl invocation, `--disable` first, one HTTP(S) URL, and a supported capture
+mode such as `--verbose`. For other modes and rejected options, see the
+[retry contract](https://github.com/tetratelabs/built-on-envoy/blob/main/cli/tools/gen-examples/README.md#http-status-retries).
+
+## Execution options and limits
+
+Pass options through `EXAMPLES_ARGS`:
+
+```sh
+make -C extensions check-examples EXTENSION_PATH=composer/opa \
+  EXAMPLES_ARGS="-timeout 5m"
+```
+
+| Option | Purpose | Default |
+| --- | --- | --- |
+| `-timeout` | Limit startup and each command. | `2m` |
+| `-envoy-version` | Select the Envoy version. | `1.38.0` |
+| `-envoy-path` | Use a local Envoy binary. | Download; reuse `extensions/out/example-envoy-cache/`. |
+| `-boe` | Use a prebuilt BOE binary. | Build BOE from the checkout. |
+
+The runner supports one extension configuration per example. Additional BOE flags, routes or
+clusters, companion services, browser interaction, credential expansion/redaction, and teardown are not
+supported. Keep examples needing these capabilities hand-written.
+
+See the [Manifest Reference](/docs/reference/manifest#examples) for fields and the
+[generator contract](https://github.com/tetratelabs/built-on-envoy/blob/main/cli/tools/gen-examples/README.md)
+for execution and comparison invariants.
