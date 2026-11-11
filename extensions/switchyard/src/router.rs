@@ -227,6 +227,7 @@ fn validate_algorithm(algorithm: &Value) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::SessionConfig;
     use serde_json::json;
 
     fn targets() -> BTreeMap<String, String> {
@@ -337,6 +338,43 @@ mod tests {
             decision.reason.starts_with("passthrough"),
             "{}",
             decision.reason
+        );
+    }
+
+    #[test]
+    fn route_subagents() {
+        let router = Router::build(
+            "subagents",
+            &json!({
+                "type": "passthrough",
+                "target": "capable",
+                "subagents": {"type": "passthrough", "target": "efficient"}
+            }),
+            &targets(),
+        )
+        .unwrap();
+        let session = SessionConfig {
+            id_headers: vec!["x-session".into()],
+            scope_headers: vec![],
+            agent_id_header: "x-agent".into(),
+            subagent_header: "x-sub".into(),
+        };
+        let route = |headers: &[(&str, &str)]| {
+            let metadata = session.metadata(|name| {
+                headers
+                    .iter()
+                    .find(|(n, _)| *n == name)
+                    .map(|(_, v)| v.to_string())
+            });
+            router
+                .route(WireFormat::OpenAiChat, &chat("hello"), metadata)
+                .unwrap()
+                .model
+        };
+        assert_eq!(route(&[("x-session", "s1")]), "large-model");
+        assert_eq!(
+            route(&[("x-session", "s1"), ("x-agent", "a1"), ("x-sub", "true")]),
+            "small-model"
         );
     }
 

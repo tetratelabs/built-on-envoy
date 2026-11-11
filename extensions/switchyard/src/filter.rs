@@ -75,9 +75,6 @@ impl Filter {
         if header_value(envoy, ":method").as_deref() != Some("POST") {
             return None;
         }
-        let format = self
-            .config
-            .endpoint_format(&header_value(envoy, ":path").unwrap_or_default())?;
         let content_type = header_value(envoy, "content-type").unwrap_or_default();
         if !content_type.to_ascii_lowercase().contains("json") {
             return None;
@@ -88,26 +85,8 @@ impl Filter {
         {
             return None;
         }
-        Some(format)
-    }
-
-    /// Reads the whole request body. `in_body_callback` is whether this is called from the body
-    /// callback, where the last chunk is not yet in the buffered body.
-    fn read_body<EHF: EnvoyHttpFilter>(envoy: &mut EHF, in_body_callback: bool) -> Vec<u8> {
-        let mut body = Vec::new();
-        if let Some(chunks) = envoy.get_buffered_request_body() {
-            for chunk in chunks {
-                body.extend_from_slice(chunk.as_slice());
-            }
-        }
-        if in_body_callback && !envoy.received_buffered_request_body() {
-            if let Some(chunks) = envoy.get_received_request_body() {
-                for chunk in chunks {
-                    body.extend_from_slice(chunk.as_slice());
-                }
-            }
-        }
-        body
+        self.config
+            .endpoint_format(&header_value(envoy, ":path").unwrap_or_default())
     }
 
     /// Replaces the whole request body.
@@ -131,7 +110,7 @@ impl Filter {
         let Some(format) = self.format.take() else {
             return Action::Continue;
         };
-        let raw = Self::read_body(envoy, in_body_callback);
+        let raw = utility::read_whole_request_body(envoy);
         // Requests that are not valid JSON, or that have no model, are left to the next filters.
         let Ok(mut body) = serde_json::from_slice::<Value>(&raw) else {
             return Action::Continue;
@@ -228,14 +207,25 @@ impl Filter {
         outcome: &str,
         in_body_callback: bool,
     ) {
-        let new_body = match decision.body {
-            Some(rewritten) => rewritten,
+        let bytes = match &decision.body {
+            Some(rewritten) => serde_json::to_vec(rewritten),
             None => {
                 body["model"] = Value::from(decision.model.as_str());
-                std::mem::take(body)
+                serde_json::to_vec(body)
             }
         };
-        let bytes = serde_json::to_vec(&new_body).unwrap_or_default();
+        // Leave the request untouched rather than sending a broken body upstream.
+        let bytes = match bytes {
+            Ok(bytes) => bytes,
+            Err(err) => {
+                envoy_log_warn!(
+                    "switchyard: could not encode the request body for {}: {err}",
+                    vm.name
+                );
+                self.count(envoy, &vm.name, "", OUTCOME_PASSTHROUGH);
+                return;
+            }
+        };
         Self::replace_body(envoy, &bytes, in_body_callback);
 
         if self.config.decision_headers {
@@ -274,6 +264,11 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for Filter {
         envoy: &mut EHF,
         end_of_stream: bool,
     ) -> abi::envoy_dynamic_module_type_on_http_filter_request_headers_status {
+        // The decision headers are set only by this filter. Remove the ones sent by the client so
+        // they never reach the upstream when the filter does not route the request.
+        for header in [VIRTUAL_MODEL_HEADER, SELECTED_MODEL_HEADER, REASON_HEADER] {
+            envoy.remove_request_header(header);
+        }
         if end_of_stream {
             return abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::Continue;
         }
@@ -338,6 +333,7 @@ mod tests {
     struct Recorded {
         body: Option<Vec<u8>>,
         headers: HashMap<String, String>,
+        removed_headers: Vec<String>,
         metadata: HashMap<String, String>,
         cleared_route_cache: bool,
         counters: Vec<Vec<String>>,
@@ -423,14 +419,14 @@ mod tests {
             });
 
         // The body is split in two chunks: the first is buffered, the second is received in the
-        // last body callback, unless trailers follow, in which case it is all buffered.
+        // last body callback, unless trailers follow, in which case it is all buffered and, as
+        // in Envoy, there is no received body in the trailers callback.
         let (first, second) = req.body.split_at(req.body.len() / 2);
-        let buffered: &'static mut [u8] = if req.trailers {
-            req.body.clone().leak()
+        let (buffered, received): (&'static mut [u8], &'static mut [u8]) = if req.trailers {
+            (req.body.clone().leak(), Vec::new().leak())
         } else {
-            first.to_vec().leak()
+            (first.to_vec().leak(), second.to_vec().leak())
         };
-        let received: &'static mut [u8] = second.to_vec().leak();
         let buffered_ptr = buffered as *mut [u8] as *mut u8 as usize;
         let buffered_len = buffered.len();
         let received_ptr = received as *mut [u8] as *mut u8 as usize;
@@ -474,6 +470,11 @@ mod tests {
                 r.lock().unwrap().body = Some(b.to_vec());
                 true
             });
+        let r = Arc::clone(&recorded);
+        envoy.expect_remove_request_header().returning(move |k| {
+            r.lock().unwrap().removed_headers.push(k.to_string());
+            true
+        });
         let r = Arc::clone(&recorded);
         envoy.expect_set_request_header().returning(move |k, v| {
             r.lock()
@@ -580,6 +581,22 @@ mod tests {
     }
 
     #[test]
+    fn removes_client_decision_headers() {
+        // Even requests the filter does not handle never carry client-set decision headers.
+        let (headers, _, _, rec) = run(
+            &mut filter(CONFIG),
+            Request::chat(r#"{"model":"not-virtual"}"#)
+                .with_header(":method", "GET")
+                .with_header(SELECTED_MODEL_HEADER, "spoofed"),
+        );
+        assert_eq!(headers, HeadersStatus::Continue);
+        assert_eq!(
+            rec.removed_headers,
+            vec![VIRTUAL_MODEL_HEADER, SELECTED_MODEL_HEADER, REASON_HEADER]
+        );
+    }
+
+    #[test]
     fn header_match_selects_the_variant() {
         let (_, _, _, rec) = run(
             &mut filter(CONFIG),
@@ -637,6 +654,7 @@ mod tests {
 
         // Headers-only requests.
         let mut envoy = MockEnvoyHttpFilter::new();
+        envoy.expect_remove_request_header().returning(|_| true);
         assert_eq!(
             filter(CONFIG).on_request_headers(&mut envoy, true),
             HeadersStatus::Continue

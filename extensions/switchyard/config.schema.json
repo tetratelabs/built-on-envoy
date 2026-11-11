@@ -87,11 +87,11 @@
         },
         "agent_id_header": {
           "type": "string",
-          "description": "Header carrying the agent ID. Defaults to x-switchyard-agent-id."
+          "description": "Header carrying the agent ID. Sub-agent requests need it to keep their own session state. Defaults to x-switchyard-agent-id."
         },
         "subagent_header": {
           "type": "string",
-          "description": "Header flagging sub-agent requests with \"true\" or \"1\". Defaults to x-switchyard-is-subagent."
+          "description": "Header flagging sub-agent requests with \"true\" or \"1\". Sub-agent requests are routed by the subagents block of the algorithm, when set. Defaults to x-switchyard-is-subagent."
         }
       }
     },

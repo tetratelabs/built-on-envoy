@@ -324,6 +324,9 @@ impl SessionConfig {
             session_id,
             agent_id,
             is_subagent,
+            // Switchyard routes sub-agent requests to the `subagents` algorithm only when they
+            // are flagged as delegated work, as it does for an explicit sub-agent header.
+            is_delegated_work: is_subagent,
             ..Default::default()
         }
     }
@@ -519,6 +522,7 @@ mod tests {
         assert_eq!(md.session_id, None);
         assert_eq!(md.agent_id, None);
         assert!(!md.is_subagent);
+        assert!(!md.is_subagent_work());
 
         let md = session.metadata(headers(&[
             ("x-switchyard-session-id", ""),
@@ -529,6 +533,7 @@ mod tests {
         assert_eq!(md.session_id.as_deref(), Some("s1"));
         assert_eq!(md.agent_id.as_deref(), Some("a1"));
         assert!(md.is_subagent);
+        assert!(md.is_subagent_work());
 
         let md = session.metadata(headers(&[
             ("x-switchyard-session-id", "s0"),

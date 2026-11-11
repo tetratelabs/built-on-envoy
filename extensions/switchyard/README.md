@@ -108,11 +108,17 @@ Session state lives in the memory of each Envoy process. Send the requests of a 
 Envoy instance, for example with session affinity on the session header. Without a session ID,
 requests are routed from their own content only.
 
+Requests whose `subagent_header` is `true` or `1` are sub-agent requests. When the algorithm has a
+`subagents` block, they are routed by it instead of by the parent algorithm. A sub-agent request
+must also carry the agent ID in `agent_id_header` to keep its own session state; without it, the
+request is routed statelessly.
+
 ### Observability
 
 - Request headers, when `decision_headers` is true: `x-switchyard-virtual-model`,
   `x-switchyard-selected-model` and `x-switchyard-reason`. They are also sent to the upstream; set
-  `decision_headers` to false to avoid that.
+  `decision_headers` to false to avoid that. These headers are always removed from the client
+  request, so the upstream only sees the values set by the filter.
 - Dynamic metadata in the `io.builtonenvoy.switchyard` namespace, with the keys `virtual_model`,
   `selected_model` and `reason`. Use them in access logs with `%DYNAMIC_METADATA(io.builtonenvoy.switchyard:selected_model)%`.
 - The `switchyard_decisions` counter, with the labels `virtual_model`, `selected_model` and

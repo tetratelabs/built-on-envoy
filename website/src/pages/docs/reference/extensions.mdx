@@ -2544,7 +2544,7 @@ How the session identity used by stateful algorithms is read from the request he
 
 #### session.agent_id_header
 
-Header carrying the agent ID. Defaults to x-switchyard-agent-id.
+Header carrying the agent ID. Sub-agent requests need it to keep their own session state. Defaults to x-switchyard-agent-id.
 
 | | |
 |---|---|
@@ -2596,7 +2596,7 @@ Headers whose values prefix the session ID, for example a tenant header, so that
 
 #### session.subagent_header
 
-Header flagging sub-agent requests with "true" or "1". Defaults to x-switchyard-is-subagent.
+Header flagging sub-agent requests with "true" or "1". Sub-agent requests are routed by the subagents block of the algorithm, when set. Defaults to x-switchyard-is-subagent.
 
 | | |
 |---|---|
