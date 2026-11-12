@@ -2496,6 +2496,126 @@ Whether to clear the route cache after a model is selected. Not needed with Agen
 
 [↑ Top](#) | [↑ Switchyard Configuration](#switchyard) {/* if .SubProperties */}
 
+### decision_calls
+
+How the filter calls the decision API of decision judges, such as a System One endpoint or OpenAI's Decisions API.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### decision_calls.authority
+
+The host of the calls. Defaults to the client request's.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### decision_calls.cluster
+
+The Envoy cluster the calls are sent to.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Min length** | 1 |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### decision_calls.format
+
+The API format of the decision API.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### decision_calls.forward_headers
+
+Client request headers copied to every call, such as credentials, tenant and session headers, so that the gateway authenticates and charges the call like the client request.
+
+| | |
+|---|---|
+| **Type** | `[]string` |
+| **Required** | No |
+| **Item min length** | 1 |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### decision_calls.headers
+
+Headers added to every call.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### decision_calls.path
+
+The path of the decision API, such as /v1/systemone or /v1/decisions.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Pattern** | `^/` |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### decision_calls.timeout_ms
+
+Timeout of each call, in milliseconds. Defaults to 10000.
+
+| | |
+|---|---|
+| **Type** | `integer` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### decision_calls.trace_context
+
+Trace context headers added to every call, so that it joins the client request's trace: w3c (traceparent) or b3. Defaults to w3c.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+   {/* range .SubProperties */} {/* if .SubProperties */}
+
 ### decision_headers
 
 Whether to add the x-switchyard-virtual-model, x-switchyard-selected-model and x-switchyard-reason request headers. Defaults to true.
@@ -2503,6 +2623,17 @@ Whether to add the x-switchyard-virtual-model, x-switchyard-selected-model and x
 | | |
 |---|---|
 | **Type** | `boolean` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard) {/* if .SubProperties */}
+
+### eligible_models_header
+
+Request header with the comma-separated models a request may be routed to, for example the models of a tenant's plan. The algorithm only routes to target models in the list. The header must be set by a trusted filter, such as ext_authz, and never by the client.
+
+| | |
+|---|---|
+| **Type** | `string` |
 | **Required** | No |
 
 [↑ Top](#) | [↑ Switchyard Configuration](#switchyard) {/* if .SubProperties */}
@@ -2518,6 +2649,126 @@ Request path suffixes handled by the filter, mapped to the API format of their b
 
 [↑ Top](#) | [↑ Switchyard Configuration](#switchyard) {/* if .SubProperties */}
 
+### model_calls
+
+How the filter calls models for the algorithms that need it: judges, verifiers, advisors and the efficient attempts of vgr. Calls are HTTP callouts to an Envoy cluster, usually one that loops back to the gateway so that it applies its credentials, rate limits, costs and telemetry to them.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### model_calls.authority
+
+The host of the calls. Defaults to the client request's.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### model_calls.cluster
+
+The Envoy cluster the calls are sent to.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Min length** | 1 |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### model_calls.format
+
+The API format of the calls. Defaults to the client request's.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### model_calls.forward_headers
+
+Client request headers copied to every call, such as credentials, tenant and session headers, so that the gateway authenticates and charges the call like the client request.
+
+| | |
+|---|---|
+| **Type** | `[]string` |
+| **Required** | No |
+| **Item min length** | 1 |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### model_calls.headers
+
+Headers added to every call.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### model_calls.path
+
+The path of the calls. Defaults to the client request's path, or to the standard path of format when it differs from the client's.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+| **Pattern** | `^/` |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### model_calls.timeout_ms
+
+Timeout of each call, in milliseconds. Defaults to 10000.
+
+| | |
+|---|---|
+| **Type** | `integer` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### model_calls.trace_context
+
+Trace context headers added to every call, so that it joins the client request's trace: w3c (traceparent) or b3. Defaults to w3c.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+   {/* range .SubProperties */} {/* if .SubProperties */}
+
 ### model_header
 
 Optional request header set to the selected model, for routing on plain Envoy. Not needed with Agent Router.
@@ -2532,6 +2783,17 @@ Optional request header set to the selected model, for routing on plain Envoy. N
 ### rewrite_body
 
 Whether to rewrite the model field of the request body to the selected model. Set to false to keep the virtual model in the body and carry the decision only in the decision headers, model_header, dynamic metadata and filter state, so that a later filter can apply its own policy before it picks the backend. Defaults to true.
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard) {/* if .SubProperties */}
+
+### routing_headers
+
+Whether to add x-switchyard-routing-calls, x-switchyard-routing-input-tokens, x-switchyard-routing-output-tokens and x-switchyard-routing-total-tokens response headers with the cost of the routing calls. Defaults to false.
 
 | | |
 |---|---|
@@ -2634,7 +2896,7 @@ Virtual models resolved by the filter. The first entry whose name and match_head
 
 #### virtual_models.algorithm
 
-The Switchyard algorithm, in Switchyard's route configuration format. Only algorithms that decide without calling a model are supported.
+The Switchyard algorithm, in Switchyard's route configuration format. Algorithms that call a judge, a verifier or an executor model need model_calls, and algorithms with a decision judge need decision_calls.
 
 | | |
 |---|---|

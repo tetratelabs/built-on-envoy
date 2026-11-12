@@ -15,7 +15,9 @@ use std::sync::Arc;
 use envoy_proxy_dynamic_modules_rust_sdk::*;
 
 mod config;
+mod decisions;
 mod filter;
+mod host;
 mod router;
 
 use config::Config;

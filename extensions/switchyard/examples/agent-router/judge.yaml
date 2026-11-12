@@ -1,0 +1,123 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# A fake judge model for local tests. It serves the OpenAI chat completions API for the judge,
+# verifier and advisor calls of the Switchyard algorithms, and a System One decision API.
+#
+# Its verdicts depend on whether the task contains "[hard]":
+#   - Capability judges: the efficient model can solve the task, unless it is [hard].
+#   - Decision judges: the capable model has no advantage, unless the task is [hard].
+#   - vgr's verifiers: the efficient answer is correct, unless the task is [hard].
+#   - The advisor approves every answer.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: judge
+  namespace: default
+data:
+  judge.py: |
+    import json
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    def completion(model, content):
+        return {
+            "id": "judge-1", "object": "chat.completion", "created": 0, "model": model,
+            "choices": [{"index": 0, "finish_reason": "stop",
+                         "message": {"role": "assistant", "content": content}}],
+            "usage": {"prompt_tokens": 100, "completion_tokens": 5, "total_tokens": 105},
+        }
+
+    def decision(request, hard):
+        answers = {}
+        for name, question in request.get("questions", {}).items():
+            options = list(question.get("criteria", {}))
+            choice = options[0] if hard else options[-1]
+            others = (1 - 0.9) / max(len(options) - 1, 1)
+            answers[name] = {"type": "choice", "choice": choice,
+                             "probabilities": {o: 0.9 if o == choice else others for o in options}}
+        return {"model": request.get("model"), "answers": answers,
+                "usage": {"input_tokens": 50, "output_tokens": 1, "total_tokens": 51}}
+
+    def verdict(text, hard):
+        if "CapabilityClassifierDecision" in text:
+            return json.dumps({"crux": "fake", "primary_rule": "LIM-1" if hard else "SUP-1",
+                               "capability_boundary": "unsupported" if hard else "supported",
+                               "p_solve": 0.05 if hard else 0.95})
+        if "You classify a user request" in text:
+            return "answer"
+        if "strict answer verifier" in text or "strict verifier" in text:
+            return "no" if hard else "yes"
+        if "senior reviewer" in text:
+            return "APPROVE"
+        return "I am the judge."
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.reply(200, {"status": "ok"})
+
+        def do_POST(self):
+            raw = self.rfile.read(int(self.headers.get("content-length", 0))).decode()
+            request = json.loads(raw or "{}")
+            hard = "[hard]" in raw
+            if self.path.endswith("/v1/systemone"):
+                self.reply(200, decision(request, hard))
+            else:
+                self.reply(200, completion(request.get("model", "judge"), verdict(raw, hard)))
+
+        def reply(self, status, body):
+            data = json.dumps(body).encode()
+            self.send_response(status)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+    ThreadingHTTPServer(("", 8080), Handler).serve_forever()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: judge
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: judge
+  template:
+    metadata:
+      labels:
+        app: judge
+    spec:
+      containers:
+        - name: judge
+          image: docker.io/library/python:3.13-alpine
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-u", "/judge/judge.py"]
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+          volumeMounts:
+            - name: judge
+              mountPath: /judge
+      volumes:
+        - name: judge
+          configMap:
+            name: judge
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: judge
+  namespace: default
+spec:
+  selector:
+    app: judge
+  ports:
+    - port: 80
+      targetPort: 8080

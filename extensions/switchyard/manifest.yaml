@@ -38,9 +38,19 @@ longDescription: |
 
   ## Supported Algorithms
 
-  Algorithms that decide from the request alone: `auto`, `stage_router` (without a classifier),
-  `plan_execute` (without a judge), `random` and `passthrough`. The configuration uses
-  Switchyard's own route format. Algorithms that call a judge model are not supported.
+  All Switchyard algorithms except `prefill_router`, in Switchyard's own route format:
+
+  * Algorithms that decide from the request alone: `auto`, `stage_router`, `plan_execute`, `random`
+    and `passthrough`.
+  * Algorithms that call a judge model or a decision judge: `llm_classifier`, `composite`, and
+    `stage_router` and `plan_execute` with a judge.
+  * Algorithms that may answer the request themselves: `vgr`, `advisor` and `noop`. The filter
+    sends their answer to the client in the client's API format, streamed or not.
+
+  Model and decision calls are made asynchronously, as HTTP callouts to a configured cluster,
+  usually the gateway itself, so that its credentials, rate limits, costs and telemetry apply to
+  them. The calls carry the client's identity headers and trace context, and their token usage is
+  recorded on the client request.
 
   ## Sessions
 
@@ -56,6 +66,7 @@ longDescription: |
     `io.builtonenvoy.switchyard.selected_model` and `io.builtonenvoy.switchyard.reason` keys,
     which is never sent upstream.
   * The `switchyard_decisions` counter, by virtual model, selected model and outcome.
+  * The calls and tokens spent on routing, in dynamic metadata and, optionally, response headers.
 
   ## Using with Agent Router
 
@@ -96,19 +107,22 @@ type: rust
 examples:
   - title: Try It with Agent Router in kind
     description: |
-      Creates a kind cluster, installs Envoy Gateway and Agent Router, deploys two fake model
-      backends and a Gateway with the extension, and checks that coding-auto requests reach the
-      model Switchyard selects. Requires docker, kind, kubectl and helm.
+      Creates a kind cluster, installs Envoy Gateway and Agent Router, deploys fake model backends,
+      a fake judge and a Gateway with the extension, and checks that coding-auto requests reach the
+      model Switchyard selects. The policies directory has a policy per algorithm and feature: pass
+      their names to the script to check them, or "all". Requires docker, kind, kubectl and helm.
     code: |
       git clone https://github.com/tetratelabs/built-on-envoy.git
       cd built-on-envoy
-      ./extensions/switchyard/examples/agent-router/kind.sh
+      ./extensions/switchyard/examples/agent-router/kind.sh auto llm-classifier vgr advisor
 
-      # Then send requests through the gateway (the script leaves the cluster running).
+      # Then switch policies and send your own requests (the script leaves the cluster running).
+      # Tasks that contain "[hard]" are rated as hard by the fake judge.
+      kubectl apply -f extensions/switchyard/examples/agent-router/policies/composite.yaml
       kubectl port-forward -n envoy-gateway-system \
         "$(kubectl get svc -n envoy-gateway-system -l gateway.envoyproxy.io/owning-gateway-name=switchyard -o name)" 8080:80 &
       curl -i localhost:8080/v1/chat/completions -H 'content-type: application/json' \
-        -d '{"model": "coding-auto", "messages": [{"role": "user", "content": "write a hello world in Go"}]}'
+        -d '{"model": "coding-auto", "messages": [{"role": "user", "content": "[hard] design a lock-free queue"}]}'
   - title: Add It to an Agent Router Gateway
     description: |
       Adds the extension to a Gateway managed by Envoy Gateway and Agent Router. The Gateway must
@@ -188,6 +202,26 @@ examples:
               "default_model": "gpt-4.1-mini"
             }
           ]
+        }'
+  - title: Judge-Based Routing Through the Gateway
+    description: |
+      A judge model picks the model of each coding-auto request. The judge is called through the
+      gateway, with the client's credentials and tenant, so the gateway accounts for it like any
+      other request. gateway_loopback is a cluster that points at the gateway's own listener.
+    code: |
+      boe run --extension switchyard --config '
+        {
+          "virtual_models": [
+            {
+              "name": "coding-auto",
+              "targets": {"efficient": "gpt-4.1-mini", "capable": "gpt-5", "judge": "gpt-4.1-nano"},
+              "algorithm": {"type": "llm_classifier", "classifier_target": "judge",
+                            "strong_target": "capable", "weak_target": "efficient", "base_threshold": 0.5},
+              "default_model": "gpt-5"
+            }
+          ],
+          "model_calls": {"cluster": "gateway_loopback", "forward_headers": ["authorization", "x-tenant-id"]},
+          "routing_headers": true
         }'
   - title: Weighted Split Routed by Header
     description: Split traffic between two models and expose the selected one in a header for routing

@@ -11,6 +11,7 @@ use std::sync::Arc;
 use serde::Deserialize;
 use switchyard_protocol::{Metadata, WireFormat};
 
+use crate::decisions::DecisionFormat;
 use crate::router::Router;
 
 /// Default header carrying the session ID.
@@ -21,6 +22,9 @@ pub const DEFAULT_FALLBACK_SESSION_ID_HEADER: &str = "agent-session-id";
 pub const DEFAULT_AGENT_ID_HEADER: &str = "x-switchyard-agent-id";
 /// Default header flagging sub-agent requests.
 pub const DEFAULT_SUBAGENT_HEADER: &str = "x-switchyard-is-subagent";
+
+/// Default timeout of model and decision calls.
+pub const DEFAULT_CALL_TIMEOUT_MS: u64 = 10_000;
 
 /// Separator between the scope values and the session ID. It cannot appear in header values, so
 /// scoped session IDs cannot collide.
@@ -53,6 +57,81 @@ pub struct RawFilterConfig {
     /// metadata and filter state, for a later filter to act on.
     #[serde(default = "default_true")]
     pub rewrite_body: bool,
+    /// How the filter calls models for the algorithms that need it, such as judges.
+    #[serde(default)]
+    pub model_calls: Option<RawModelCalls>,
+    /// How the filter calls the decision API for the algorithms that use a decision judge.
+    #[serde(default)]
+    pub decision_calls: Option<RawDecisionCalls>,
+    /// Request header with the comma-separated models a request may be routed to. It must be set
+    /// by a trusted filter, such as ext_authz.
+    #[serde(default)]
+    pub eligible_models_header: Option<String>,
+    /// Whether to add the `x-switchyard-routing-*` headers, with the cost of the routing calls, to
+    /// the response.
+    #[serde(default)]
+    pub routing_headers: bool,
+}
+
+/// How model calls are made: as HTTP callouts to an Envoy cluster, usually one that loops back to
+/// the gateway.
+#[derive(Deserialize, Debug)]
+#[serde(deny_unknown_fields)]
+pub struct RawModelCalls {
+    /// The Envoy cluster the calls are sent to.
+    pub cluster: String,
+    /// The `:authority` of the calls. Defaults to the client request's.
+    #[serde(default)]
+    pub authority: Option<String>,
+    /// The path of the calls. Defaults to the client request's path, or to the standard path of
+    /// `format` when it differs from the client's.
+    #[serde(default)]
+    pub path: Option<String>,
+    /// The API format of the calls. Defaults to the client request's.
+    #[serde(default)]
+    pub format: Option<WireFormat>,
+    #[serde(default = "default_call_timeout_ms")]
+    pub timeout_ms: u64,
+    /// Client request headers copied to the calls, such as credentials and tenant headers.
+    #[serde(default)]
+    pub forward_headers: Vec<String>,
+    /// Headers added to the calls.
+    #[serde(default)]
+    pub headers: BTreeMap<String, String>,
+    #[serde(default)]
+    pub trace_context: TraceContext,
+}
+
+/// How decision calls are made.
+#[derive(Deserialize, Debug)]
+#[serde(deny_unknown_fields)]
+pub struct RawDecisionCalls {
+    pub cluster: String,
+    #[serde(default)]
+    pub authority: Option<String>,
+    /// The path of the decision API, such as `/v1/systemone` or `/v1/decisions`.
+    pub path: String,
+    pub format: DecisionFormat,
+    #[serde(default = "default_call_timeout_ms")]
+    pub timeout_ms: u64,
+    #[serde(default)]
+    pub forward_headers: Vec<String>,
+    #[serde(default)]
+    pub headers: BTreeMap<String, String>,
+    #[serde(default)]
+    pub trace_context: TraceContext,
+}
+
+/// The trace context headers added to calls, so that they join the client request's trace.
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum TraceContext {
+    /// W3C `traceparent`, as used by OpenTelemetry.
+    #[default]
+    W3c,
+    /// Zipkin B3 headers.
+    B3,
+    None,
 }
 
 /// A virtual model: a model name that clients send and that the filter resolves to a target model.
@@ -145,6 +224,10 @@ fn default_subagent_header() -> String {
     DEFAULT_SUBAGENT_HEADER.to_string()
 }
 
+fn default_call_timeout_ms() -> u64 {
+    DEFAULT_CALL_TIMEOUT_MS
+}
+
 fn default_endpoints() -> BTreeMap<String, WireFormat> {
     BTreeMap::from([
         ("/v1/chat/completions".to_string(), WireFormat::OpenAiChat),
@@ -163,6 +246,103 @@ pub struct Config {
     pub clear_route_cache: bool,
     pub decision_headers: bool,
     pub rewrite_body: bool,
+    pub model_calls: Option<ModelCalls>,
+    pub decision_calls: Option<DecisionCalls>,
+    pub eligible_models_header: Option<String>,
+    pub routing_headers: bool,
+}
+
+/// Where and how calls are sent. Header names are lowercase.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Callouts {
+    pub cluster: String,
+    pub authority: Option<String>,
+    pub path: Option<String>,
+    pub timeout_ms: u64,
+    pub forward_headers: Vec<String>,
+    pub headers: Vec<(String, String)>,
+    pub trace_context: TraceContext,
+}
+
+/// The compiled model calls configuration.
+#[derive(Debug, PartialEq, Eq)]
+pub struct ModelCalls {
+    pub callouts: Callouts,
+    pub format: Option<WireFormat>,
+}
+
+impl ModelCalls {
+    /// The API format and path of the model calls for a client request.
+    pub fn format_and_path(
+        &self,
+        client_format: WireFormat,
+        client_path: &str,
+    ) -> (WireFormat, String) {
+        let format = self.format.unwrap_or(client_format);
+        let path = match &self.callouts.path {
+            Some(path) => path.clone(),
+            None if format == client_format => client_path.to_string(),
+            None => standard_path(format).to_string(),
+        };
+        (format, path)
+    }
+}
+
+/// The compiled decision calls configuration.
+#[derive(Debug, PartialEq, Eq)]
+pub struct DecisionCalls {
+    pub callouts: Callouts,
+    pub format: DecisionFormat,
+}
+
+/// The standard path of an API format.
+fn standard_path(format: WireFormat) -> &'static str {
+    match format {
+        WireFormat::OpenAiChat => "/v1/chat/completions",
+        WireFormat::OpenAiResponses => "/v1/responses",
+        WireFormat::AnthropicMessages => "/v1/messages",
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn callouts(
+    block: &str,
+    cluster: String,
+    authority: Option<String>,
+    path: Option<String>,
+    timeout_ms: u64,
+    forward_headers: Vec<String>,
+    headers: BTreeMap<String, String>,
+    trace_context: TraceContext,
+) -> Result<Callouts, String> {
+    if cluster.is_empty() {
+        return Err(format!("{block}.cluster must not be empty"));
+    }
+    if timeout_ms == 0 {
+        return Err(format!("{block}.timeout_ms must be greater than zero"));
+    }
+    if let Some(path) = path.as_ref().filter(|p| !p.starts_with('/')) {
+        return Err(format!("{block}.path {path:?} must start with '/'"));
+    }
+    let names = forward_headers.iter().chain(headers.keys());
+    if let Some(name) = names
+        .into_iter()
+        .find(|n| n.is_empty() || n.starts_with(':'))
+    {
+        return Err(format!("{block}: invalid header name {name:?}"));
+    }
+    Ok(Callouts {
+        cluster,
+        authority,
+        path,
+        timeout_ms,
+        forward_headers: lowercase_all(forward_headers),
+        headers: headers
+            .into_iter()
+            .map(|(k, v)| (k.to_ascii_lowercase(), v))
+            .collect(),
+        trace_context,
+    })
 }
 
 /// A compiled virtual model.
@@ -211,6 +391,57 @@ impl Config {
         // Longest suffix first, so the most specific endpoint wins.
         endpoints.sort_by_key(|(path, _)| std::cmp::Reverse(path.len()));
 
+        for vm in &virtual_models {
+            if vm.router.needs_model_calls && raw.model_calls.is_none() {
+                return Err(format!(
+                    "virtual model {:?}: the algorithm calls models, which requires model_calls",
+                    vm.name
+                ));
+            }
+            if vm.router.needs_decision_calls && raw.decision_calls.is_none() {
+                return Err(format!(
+                    "virtual model {:?}: the algorithm calls a decision judge, which requires decision_calls",
+                    vm.name
+                ));
+            }
+        }
+        let model_calls = raw
+            .model_calls
+            .map(|m| -> Result<ModelCalls, String> {
+                Ok(ModelCalls {
+                    callouts: callouts(
+                        "model_calls",
+                        m.cluster,
+                        m.authority,
+                        m.path,
+                        m.timeout_ms,
+                        m.forward_headers,
+                        m.headers,
+                        m.trace_context,
+                    )?,
+                    format: m.format,
+                })
+            })
+            .transpose()?;
+        let decision_calls = raw
+            .decision_calls
+            .map(|d| -> Result<DecisionCalls, String> {
+                Ok(DecisionCalls {
+                    callouts: callouts(
+                        "decision_calls",
+                        d.cluster,
+                        d.authority,
+                        Some(d.path),
+                        d.timeout_ms,
+                        d.forward_headers,
+                        d.headers,
+                        d.trace_context,
+                    )?,
+                    format: d.format,
+                })
+            })
+            .transpose()?;
+
         let session = raw.session;
         let mut id_headers = vec![session.id_header];
         id_headers.extend(session.fallback_id_headers);
@@ -228,7 +459,27 @@ impl Config {
             clear_route_cache: raw.clear_route_cache,
             decision_headers: raw.decision_headers,
             rewrite_body: raw.rewrite_body,
+            model_calls,
+            decision_calls,
+            eligible_models_header: raw.eligible_models_header.map(|h| h.to_ascii_lowercase()),
+            routing_headers: raw.routing_headers,
         })
+    }
+
+    /// Reads the eligible models of a request, when the filter is configured to limit them.
+    pub fn eligible_models(
+        &self,
+        header: impl Fn(&str) -> Option<String>,
+    ) -> Option<std::collections::BTreeSet<String>> {
+        let value = header(self.eligible_models_header.as_deref()?)?;
+        Some(
+            value
+                .split(',')
+                .map(str::trim)
+                .filter(|m| !m.is_empty())
+                .map(str::to_string)
+                .collect(),
+        )
     }
 
     /// Returns the API format of the request path, if the filter handles it.
@@ -359,6 +610,9 @@ mod tests {
         move |name| map.get(name).cloned()
     }
 
+    const CLASSIFIER: &str = r#"{"name": "v", "targets": {"a": "m", "b": "n", "j": "judge"}, "algorithm": {"type": "llm_classifier", "classifier_target": "j", "strong_target": "a", "weak_target": "b", "base_threshold": 0.5}}"#;
+    const DECISION_CLASSIFIER: &str = r#"{"name": "v", "targets": {"a": "m", "b": "n", "j": "judge"}, "algorithm": {"type": "llm_classifier", "classifier_target": "j", "strong_target": "a", "weak_target": "b", "decision": {"cutoff": 0.5, "candidates": {"x": "a", "y": "b"}, "evidence": {}}}}"#;
+
     const VALID: &str = r#"{
         "virtual_models": [
             {
@@ -445,7 +699,7 @@ mod tests {
 
     #[test]
     fn parse_errors() {
-        let cases = [
+        let cases: [(&str, &str); 17] = [
             ("not json", "invalid configuration"),
             (
                 r#"{"virtual_models": []}"#,
@@ -477,8 +731,46 @@ mod tests {
                 "must start with '/'",
             ),
             (
-                r#"{"virtual_models": [{"name": "v", "targets": {"a": "m"}, "algorithm": {"type": "llm_classifier"}}]}"#,
-                "virtual model \"v\": algorithm type \"llm_classifier\" is not supported",
+                r#"{"virtual_models": [{"name": "v", "targets": {"a": "m"}, "algorithm": {"type": "prefill_router"}}]}"#,
+                "virtual model \"v\": algorithm type \"prefill_router\" is not supported",
+            ),
+            (
+                &format!(r#"{{"virtual_models": [{CLASSIFIER}]}}"#),
+                "requires model_calls",
+            ),
+            (
+                &format!(r#"{{"virtual_models": [{DECISION_CLASSIFIER}]}}"#),
+                "requires decision_calls",
+            ),
+            (
+                &format!(
+                    r#"{{"virtual_models": [{CLASSIFIER}], "model_calls": {{"cluster": ""}}}}"#
+                ),
+                "model_calls.cluster must not be empty",
+            ),
+            (
+                &format!(
+                    r#"{{"virtual_models": [{CLASSIFIER}], "model_calls": {{"cluster": "c", "timeout_ms": 0}}}}"#
+                ),
+                "model_calls.timeout_ms must be greater than zero",
+            ),
+            (
+                &format!(
+                    r#"{{"virtual_models": [{CLASSIFIER}], "model_calls": {{"cluster": "c", "path": "v1"}}}}"#
+                ),
+                "must start with '/'",
+            ),
+            (
+                &format!(
+                    r#"{{"virtual_models": [{CLASSIFIER}], "model_calls": {{"cluster": "c", "forward_headers": [":path"]}}}}"#
+                ),
+                "invalid header name",
+            ),
+            (
+                &format!(
+                    r#"{{"virtual_models": [{DECISION_CLASSIFIER}], "model_calls": {{"cluster": "c"}}, "decision_calls": {{"cluster": "d", "path": "/v1/systemone", "format": "grpc"}}}}"#
+                ),
+                "unknown variant",
             ),
         ];
         for (input, want) in cases {
@@ -517,6 +809,77 @@ mod tests {
             config.endpoint_format("/v1/chat"),
             Some(WireFormat::OpenAiChat)
         );
+    }
+
+    #[test]
+    fn model_calls_format_and_path() {
+        let config = Config::parse(
+            format!(r#"{{"virtual_models": [{CLASSIFIER}], "model_calls": {{"cluster": "c", "forward_headers": ["Authorization"], "headers": {{"X-A": "b"}}}}, "eligible_models_header": "X-Models"}}"#).as_bytes(),
+        )
+        .unwrap();
+        let calls = config.model_calls.as_ref().unwrap();
+        assert_eq!(
+            calls.callouts.forward_headers,
+            vec!["authorization".to_string()]
+        );
+        assert_eq!(
+            calls.callouts.headers,
+            vec![("x-a".to_string(), "b".to_string())]
+        );
+        assert_eq!(calls.callouts.timeout_ms, DEFAULT_CALL_TIMEOUT_MS);
+        assert_eq!(calls.callouts.trace_context, TraceContext::W3c);
+        assert_eq!(
+            calls.format_and_path(WireFormat::AnthropicMessages, "/anthropic/v1/messages"),
+            (
+                WireFormat::AnthropicMessages,
+                "/anthropic/v1/messages".to_string()
+            )
+        );
+
+        let with_format = ModelCalls {
+            format: Some(WireFormat::OpenAiChat),
+            callouts: Callouts {
+                path: None,
+                ..clone_callouts(&calls.callouts)
+            },
+        };
+        assert_eq!(
+            with_format.format_and_path(WireFormat::AnthropicMessages, "/anthropic/v1/messages"),
+            (WireFormat::OpenAiChat, "/v1/chat/completions".to_string())
+        );
+        let with_path = ModelCalls {
+            format: None,
+            callouts: Callouts {
+                path: Some("/judge".into()),
+                ..clone_callouts(&calls.callouts)
+            },
+        };
+        assert_eq!(
+            with_path
+                .format_and_path(WireFormat::OpenAiResponses, "/v1/responses")
+                .1,
+            "/judge"
+        );
+        assert_eq!(standard_path(WireFormat::OpenAiResponses), "/v1/responses");
+        assert_eq!(standard_path(WireFormat::AnthropicMessages), "/v1/messages");
+
+        assert_eq!(config.eligible_models(headers(&[])), None);
+        assert_eq!(
+            config.eligible_models(headers(&[("x-models", " a, b,,c ")])),
+            Some(["a", "b", "c"].iter().map(|m| m.to_string()).collect())
+        );
+    }
+
+    fn clone_callouts(c: &Callouts) -> Callouts {
+        Callouts {
+            cluster: c.cluster.clone(),
+            authority: c.authority.clone(),
+            path: c.path.clone(),
+            timeout_ms: c.timeout_ms,
+            forward_headers: c.forward_headers.clone(),
+            headers: c.headers.clone(),
+            trace_context: c.trace_context,
+        }
     }
 
     #[test]
@@ -566,6 +929,31 @@ mod tests {
         assert_eq!(md.session_id.as_deref(), Some("t\0\0s"));
     }
 
+    /// The configurations of the example policies are valid.
+    #[test]
+    fn example_policies() {
+        let schema: serde_json::Value =
+            serde_json::from_str(include_str!("../config.schema.json")).unwrap();
+        let schema = jsonschema::validator_for(&schema).unwrap();
+        let dir = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/examples/agent-router/policies"
+        );
+        let mut count = 0;
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            let policy: serde_json::Value =
+                serde_yaml::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+            let config = &policy["spec"]["dynamicModule"][0]["config"];
+            assert!(schema.is_valid(config), "{}", path.display());
+            if let Err(err) = Config::parse(config.to_string().as_bytes()) {
+                panic!("{}: {err}", path.display());
+            }
+            count += 1;
+        }
+        assert!(count > 10, "{count} policies");
+    }
+
     #[test]
     fn config_schema() {
         let schema: serde_json::Value =
@@ -583,11 +971,19 @@ mod tests {
                 "model_header": "x-model",
                 "clear_route_cache": true,
                 "decision_headers": false,
-                "rewrite_body": false
+                "rewrite_body": false,
+                "model_calls": {"cluster": "c", "authority": "a", "path": "/p", "format": "openai_chat", "timeout_ms": 5, "forward_headers": ["authorization"], "headers": {"x": "y"}, "trace_context": "b3"},
+                "decision_calls": {"cluster": "c", "path": "/v1/systemone", "format": "system_one"},
+                "eligible_models_header": "x-models",
+                "routing_headers": true
             }"#,
         )
         .unwrap();
         assert!(compiled.is_valid(&full));
+        // The full configuration is also accepted by the filter.
+        let mut accepted = full.clone();
+        accepted["virtual_models"][0]["default_model"] = serde_json::Value::from("m");
+        assert!(Config::parse(accepted.to_string().as_bytes()).is_ok());
 
         for invalid in [
             r#"{}"#,
@@ -596,6 +992,9 @@ mod tests {
             r#"{"virtual_models": [{"name": "v", "targets": {"a": "m"}, "algorithm": {"type": "auto"}, "failure_mode": "retry"}]}"#,
             r#"{"virtual_models": [{"name": "v", "targets": {"a": "m"}, "algorithm": {"type": "auto"}}], "endpoints": {"/x": "grpc"}}"#,
             r#"{"virtual_models": [{"name": "v", "targets": {"a": "m"}, "algorithm": {"type": "auto"}}], "unknown": true}"#,
+            r#"{"virtual_models": [{"name": "v", "targets": {"a": "m"}, "algorithm": {"type": "prefill_router"}}]}"#,
+            r#"{"virtual_models": [{"name": "v", "targets": {"a": "m"}, "algorithm": {"type": "auto"}}], "model_calls": {}}"#,
+            r#"{"virtual_models": [{"name": "v", "targets": {"a": "m"}, "algorithm": {"type": "auto"}}], "decision_calls": {"cluster": "c", "path": "/d", "format": "grpc"}}"#,
         ] {
             let value: serde_json::Value = serde_json::from_str(invalid).unwrap();
             assert!(!compiled.is_valid(&value), "{invalid} should be invalid");

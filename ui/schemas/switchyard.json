@@ -33,11 +33,11 @@
           "algorithm": {
             "type": "object",
             "required": ["type"],
-            "description": "The Switchyard algorithm, in Switchyard's route configuration format. Only algorithms that decide without calling a model are supported.",
+            "description": "The Switchyard algorithm, in Switchyard's route configuration format. Algorithms that call a judge, a verifier or an executor model need model_calls, and algorithms with a decision judge need decision_calls.",
             "properties": {
               "type": {
                 "type": "string",
-                "enum": ["auto", "passthrough", "plan_execute", "random", "stage_router"]
+                "enum": ["advisor", "auto", "composite", "llm_classifier", "noop", "passthrough", "plan_execute", "random", "stage_router", "vgr"]
               }
             }
           },
@@ -119,6 +119,108 @@
     "rewrite_body": {
       "type": "boolean",
       "description": "Whether to rewrite the model field of the request body to the selected model. Set to false to keep the virtual model in the body and carry the decision only in the decision headers, model_header, dynamic metadata and filter state, so that a later filter can apply its own policy before it picks the backend. Defaults to true."
+    },
+    "model_calls": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cluster"],
+      "description": "How the filter calls models for the algorithms that need it: judges, verifiers, advisors and the efficient attempts of vgr. Calls are HTTP callouts to an Envoy cluster, usually one that loops back to the gateway so that it applies its credentials, rate limits, costs and telemetry to them.",
+      "properties": {
+        "cluster": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The Envoy cluster the calls are sent to."
+        },
+        "authority": {
+          "type": "string",
+          "description": "The host of the calls. Defaults to the client request's."
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/",
+          "description": "The path of the calls. Defaults to the client request's path, or to the standard path of format when it differs from the client's."
+        },
+        "format": {
+          "type": "string",
+          "enum": ["openai_chat", "openai_responses", "anthropic_messages"],
+          "description": "The API format of the calls. Defaults to the client request's."
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Timeout of each call, in milliseconds. Defaults to 10000."
+        },
+        "forward_headers": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Client request headers copied to every call, such as credentials, tenant and session headers, so that the gateway authenticates and charges the call like the client request."
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Headers added to every call."
+        },
+        "trace_context": {
+          "type": "string",
+          "enum": ["w3c", "b3", "none"],
+          "description": "Trace context headers added to every call, so that it joins the client request's trace: w3c (traceparent) or b3. Defaults to w3c."
+        }
+      }
+    },
+    "decision_calls": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cluster", "path", "format"],
+      "description": "How the filter calls the decision API of decision judges, such as a System One endpoint or OpenAI's Decisions API.",
+      "properties": {
+        "cluster": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The Envoy cluster the calls are sent to."
+        },
+        "authority": {
+          "type": "string",
+          "description": "The host of the calls. Defaults to the client request's."
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/",
+          "description": "The path of the decision API, such as /v1/systemone or /v1/decisions."
+        },
+        "format": {
+          "type": "string",
+          "enum": ["system_one", "openai_decisions"],
+          "description": "The API format of the decision API."
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Timeout of each call, in milliseconds. Defaults to 10000."
+        },
+        "forward_headers": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Client request headers copied to every call, such as credentials, tenant and session headers, so that the gateway authenticates and charges the call like the client request."
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Headers added to every call."
+        },
+        "trace_context": {
+          "type": "string",
+          "enum": ["w3c", "b3", "none"],
+          "description": "Trace context headers added to every call, so that it joins the client request's trace: w3c (traceparent) or b3. Defaults to w3c."
+        }
+      }
+    },
+    "eligible_models_header": {
+      "type": "string",
+      "description": "Request header with the comma-separated models a request may be routed to, for example the models of a tenant's plan. The algorithm only routes to target models in the list. The header must be set by a trusted filter, such as ext_authz, and never by the client."
+    },
+    "routing_headers": {
+      "type": "boolean",
+      "description": "Whether to add x-switchyard-routing-calls, x-switchyard-routing-input-tokens, x-switchyard-routing-output-tokens and x-switchyard-routing-total-tokens response headers with the cost of the routing calls. Defaults to false."
     }
   }
 }

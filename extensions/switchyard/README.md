@@ -34,9 +34,16 @@ routes that follow it:
 
 Requests for any other model pass through unchanged.
 
-The algorithms run on a small Tokio runtime owned by the module. Envoy worker threads block on it
-for the duration of a decision, which never waits on I/O: only algorithms that decide from the
-request alone are supported.
+Some algorithms call models before they decide: a judge that classifies the task, a verifier, or
+an advisor that reviews an answer. Some even write the answer themselves. For those, the filter
+holds the request and makes the calls as HTTP callouts to the cluster set in `model_calls`, usually
+the gateway itself. When the algorithm is done, the filter either rewrites the model and resumes
+the request, or sends the algorithm's answer to the client. See
+[Algorithms that call models](#algorithms-that-call-models).
+
+The algorithms run on a small Tokio runtime owned by the module. Envoy worker threads only wait
+for the algorithm's first step, which never waits on I/O. Model calls are made asynchronously and
+never block a worker thread.
 
 ## Configuration
 
@@ -72,7 +79,11 @@ request alone are supported.
   "model_header": null,
   "clear_route_cache": false,
   "decision_headers": true,
-  "rewrite_body": true
+  "rewrite_body": true,
+  "model_calls": null,
+  "decision_calls": null,
+  "eligible_models_header": null,
+  "routing_headers": false
 }
 ```
 
@@ -91,16 +102,124 @@ Only `virtual_models` is required. The other values above are the defaults.
 
 ### Supported algorithms
 
-| Type | Behaviour |
-|---|---|
-| `auto` | Switchyard's recommended preset: a `stage_router` that starts on the efficient tier and escalates on errors and stalls. Needs `capable_target` and `efficient_target`. |
-| `stage_router` | Picks a tier per turn by scoring recent tool results. The `classifier` option, which calls a judge model, is not supported. |
-| `plan_execute` | Plans on the capable target and hands off to the efficient one after the first edit. The `judge` trigger is not supported. |
-| `random` | Weighted split across `targets`. |
-| `passthrough` | Always the same `target`. |
+| Type | Behaviour | Calls models |
+|---|---|---|
+| `auto` | Switchyard's recommended preset: a `stage_router` that starts on the efficient tier and escalates on errors and stalls. Needs `capable_target` and `efficient_target`. | No |
+| `stage_router` | Picks a tier per turn by scoring recent tool results. | With a `classifier` |
+| `plan_execute` | Plans on the capable target and hands off to the efficient one after the first edit, or when a judge approves. | With a `judge` |
+| `random` | Weighted split across `targets`. | No |
+| `passthrough` | Always the same `target`. | No |
+| `llm_classifier` | A judge model, or a decision judge, picks the target. | Yes |
+| `composite` | A judge picks the tier at each user turn, and a stage router runs the turns within it. | Yes |
+| `vgr` | Tries the efficient model, verifies its answer, and escalates to the capable model when the verification fails. Answers with the efficient model's answer otherwise. | Yes, may answer |
+| `advisor` | An executor model answers, and an advisor model reviews some answers before the client sees them. | Yes, answers |
+| `noop` | Answers `OK` without calling a model, for smoke tests. | No, answers |
 
-Algorithms that call a judge model (`llm_classifier`, `composite`, `vgr`) or produce the answer
-themselves (`advisor`) need the gateway to make model calls on their behalf, and are rejected.
+`prefill_router`, which runs a PyTorch model in process, is not supported.
+
+### Algorithms that call models
+
+Judges, verifiers and advisors are called through `model_calls`. Decision judges, configured with a
+`decision` block, are called through `decision_calls`. The filter rejects a configuration whose
+algorithms need calls that are not configured.
+
+```json
+{
+  "virtual_models": [{
+    "name": "coding-auto",
+    "targets": {"efficient": "gpt-4.1-mini", "capable": "gpt-5", "judge": "gpt-4.1-nano"},
+    "algorithm": {"type": "llm_classifier", "classifier_target": "judge",
+                  "strong_target": "capable", "weak_target": "efficient", "base_threshold": 0.5},
+    "default_model": "gpt-5"
+  }],
+  "model_calls": {
+    "cluster": "gateway_loopback",
+    "timeout_ms": 10000,
+    "forward_headers": ["authorization", "x-tenant-id", "agent-session-id"],
+    "trace_context": "w3c"
+  },
+  "routing_headers": true
+}
+```
+
+`model_calls`:
+
+| Field | Description |
+|---|---|
+| `cluster` | The Envoy cluster the calls are sent to. Point it at the gateway itself, so that the gateway applies credentials, provider translation, rate limits, costs and telemetry to the calls like to any other request. The judge is then a regular model of the gateway. |
+| `authority` | The host of the calls. Defaults to the client request's. |
+| `path` | The path of the calls. Defaults to the client request's path, or to the standard path of `format` when it differs from the client's. |
+| `format` | The API format of the calls: `openai_chat`, `openai_responses` or `anthropic_messages`. Defaults to the client request's. |
+| `timeout_ms` | Timeout of each call. Defaults to 10000. |
+| `forward_headers` | Client request headers copied to the calls, such as credentials, tenant and session headers, so that the gateway authenticates and charges each call like the client request. |
+| `headers` | Headers added to the calls. |
+| `trace_context` | `w3c` (`traceparent`), `b3` or `none`. Makes the calls join the client request's trace. Defaults to `w3c`. |
+
+`decision_calls` has the same fields, except that `path` (such as `/v1/systemone` or
+`/v1/decisions`) and `format` (`system_one` or `openai_decisions`) are required.
+
+Every call also carries:
+
+- `x-switchyard-call`: `judge` for a model that only decides, `model` for a model that may answer
+  the client, such as the efficient attempt of `vgr` or the executor of `advisor`, and `decision`
+  for decision judges.
+- `x-switchyard-parent-id`: the `x-request-id` of the client request, to join a call to the
+  request it was made for.
+
+Calls are always buffered, even when the client asked for a stream. When the algorithm writes the
+answer, the filter sends it to the client as a local response in the client's API format, as
+server-sent events when the client asked for a stream. The decision is recorded with the outcome
+`answered`.
+
+When a call fails, the algorithm applies its own fallback policy, such as `fail_open`. When the
+algorithm fails, the virtual model's `failure_mode` applies.
+
+Algorithms that call models only run while the request is held, so their judges add latency to
+every routed request. Set the judge's own deadline, such as `judge_deadline_ms` or `vgr`'s
+`deadline_seconds`, below `timeout_ms`.
+
+#### Calling the gateway itself
+
+With Envoy Gateway, an `EnvoyPatchPolicy` adds a cluster that points at the Gateway's own listener:
+
+```yaml
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyPatchPolicy
+metadata:
+  name: switchyard-loopback
+spec:
+  targetRef: {group: gateway.networking.k8s.io, kind: Gateway, name: switchyard}
+  type: JSONPatch
+  jsonPatches:
+    - type: type.googleapis.com/envoy.config.cluster.v3.Cluster
+      name: gateway_loopback
+      operation:
+        op: add
+        path: ""
+        value:
+          name: gateway_loopback
+          type: STATIC
+          connect_timeout: 1s
+          load_assignment:
+            cluster_name: gateway_loopback
+            endpoints:
+              - lb_endpoints:
+                  - endpoint:
+                      address:
+                        socket_address: {address: 127.0.0.1, port_value: 10080}
+```
+
+`10080` is the container port of a Gateway listener on port 80. Agent Router routes the calls by
+their model, so the judge must be a model of an `AIGatewayRoute`, not a virtual model.
+
+### Eligible models
+
+Set `eligible_models_header` to limit, per request, the models a request may be routed to, for
+example to the models of a tenant's plan. The header holds comma-separated model names. The
+algorithm only sees the eligible targets, and routing fails when none is eligible. Judges are not
+limited, as they never answer. The header must be set by a trusted filter, such as an ext_authz
+service, and never by the client. For a few static sets, `match_headers` gives each set its own
+virtual model instead.
 
 ### Sessions
 
@@ -175,7 +294,12 @@ routes the virtual model unless a filter between the two acts on the decision.
   `io.builtonenvoy.switchyard.selected_model` and `io.builtonenvoy.switchyard.reason` keys. Use
   them in access logs with `%FILTER_STATE(io.builtonenvoy.switchyard.selected_model:PLAIN)%`.
 - The `switchyard_decisions` counter, with the labels `virtual_model`, `selected_model` and
-  `outcome` (`routed`, `default`, `passthrough` or `rejected`).
+  `outcome` (`routed`, `answered`, `default`, `passthrough` or `rejected`).
+- For algorithms that call models, the cost of the routing calls in the `io.builtonenvoy.switchyard`
+  dynamic metadata: `routing_calls`, `routing_input_tokens`, `routing_output_tokens`,
+  `routing_total_tokens`, `routing_latency_ms` and `routing_models`. With `routing_headers`, the
+  response also carries `x-switchyard-routing-calls`, `x-switchyard-routing-input-tokens`,
+  `x-switchyard-routing-output-tokens` and `x-switchyard-routing-total-tokens`.
 
 ## Running Locally
 
@@ -232,14 +356,49 @@ The [`examples/agent-router`](examples/agent-router) directory has a complete se
 
 - [`gateway.yaml`](examples/agent-router/gateway.yaml): the `Gateway`, and an `EnvoyProxy` that
   registers the module, sets the filter order, and mounts the extension image as a volume.
-- [`switchyard-policy.yaml`](examples/agent-router/switchyard-policy.yaml): the
-  `EnvoyExtensionPolicy` with the filter configuration.
+- [`policies/`](examples/agent-router/policies): an `EnvoyExtensionPolicy` per feature. They all
+  share the name `switchyard`, so applying one replaces the previous one.
 - [`routes.yaml`](examples/agent-router/routes.yaml): the `AIGatewayRoute` with a rule per target
-  model, like any other Agent Router setup. A rule for the virtual model is optional: it lists the
-  virtual model in `/v1/models`, and serves requests the filter leaves unchanged.
-- [`testupstream.yaml`](examples/agent-router/testupstream.yaml): fake model servers for local tests.
+  model and for the judge, like any other Agent Router setup. A rule for the virtual model is
+  optional: it lists the virtual model in `/v1/models`, and serves requests the filter leaves
+  unchanged.
+- [`loopback.yaml`](examples/agent-router/loopback.yaml): an `EnvoyPatchPolicy` with the clusters
+  the algorithms call: the Gateway's own listener, for judge, verifier and advisor calls, and the
+  decision API.
+- [`testupstream.yaml`](examples/agent-router/testupstream.yaml) and
+  [`judge.yaml`](examples/agent-router/judge.yaml): fake model servers and a fake judge for local
+  tests. The fake judge rates tasks that contain `[hard]` as beyond the efficient model.
 - [`kind.sh`](examples/agent-router/kind.sh): creates a kind cluster, installs Envoy Gateway and
-  Agent Router, applies the example, and checks the routing.
+  Agent Router, applies the example, and checks the routing of the given policies.
+
+| Policy | Shows |
+|---|---|
+| [`auto`](examples/agent-router/policies/auto.yaml) | The recommended preset, a free tier with its own policy, and tenant-scoped sessions. |
+| [`passthrough`](examples/agent-router/policies/passthrough.yaml) | Every request to one model. |
+| [`random`](examples/agent-router/policies/random.yaml) | A weighted split. |
+| [`stage-router`](examples/agent-router/policies/stage-router.yaml) | A tier per agent step, from the tool results. |
+| [`stage-router-judge`](examples/agent-router/policies/stage-router-judge.yaml) | A judge decides the steps the tool results cannot. |
+| [`plan-execute`](examples/agent-router/policies/plan-execute.yaml) | Planning on the capable model, and a hand-off on the first edit. |
+| [`plan-execute-judge`](examples/agent-router/policies/plan-execute-judge.yaml) | A judge decides the hand-off. |
+| [`llm-classifier`](examples/agent-router/policies/llm-classifier.yaml) | A judge model picks the model. |
+| [`decision-judge`](examples/agent-router/policies/decision-judge.yaml) | A System One decision API picks the model. |
+| [`composite`](examples/agent-router/policies/composite.yaml) | A judge per user turn, and a stage router within it. |
+| [`vgr`](examples/agent-router/policies/vgr.yaml) | Verified answers of the efficient model, served by the filter, and escalation otherwise. |
+| [`advisor`](examples/agent-router/policies/advisor.yaml) | An executor's answers, reviewed by an advisor. |
+| [`noop`](examples/agent-router/policies/noop.yaml) | A fixed answer, without a model. |
+| [`subagents`](examples/agent-router/policies/subagents.yaml) | A different policy for sub-agents. |
+| [`eligible-models`](examples/agent-router/policies/eligible-models.yaml) | Eligible models limited per request. |
+| [`decision-only`](examples/agent-router/policies/decision-only.yaml) | The decision passed on, without rewriting the body. |
+
+```shell
+# Set up the cluster and check a policy.
+./examples/agent-router/kind.sh vgr
+# Check other policies on the same cluster, or all of them.
+./examples/agent-router/kind.sh llm-classifier advisor
+./examples/agent-router/kind.sh all
+# Or apply a policy, and send your own requests.
+kubectl apply -f examples/agent-router/policies/composite.yaml
+```
 
 The key parts of the `EnvoyProxy`:
 
@@ -305,6 +464,29 @@ the Agent Router helm chart:
 
 Agent Router records the selected model as both the original and the request model, because it never
 sees the virtual model. The `switchyard.virtual_model` attribute keeps it.
+
+When the algorithm calls models through the Gateway, Agent Router handles each call as its own
+request: it applies the judge's credentials, records its token usage and cost, and counts it against
+the rate limits of the headers in `forward_headers`. To tell routing calls apart from answers, and
+join each call to the request it was made for, add the call headers to Agent Router's telemetry:
+
+```shell
+--set controller.requestHeaderAttributes='x-switchyard-call:switchyard.call' \
+--set controller.spanRequestHeaderAttributes='x-switchyard-parent-id:switchyard.parent_id' \
+--set controller.logRequestHeaderAttributes='x-switchyard-parent-id:switchyard.parent_id'
+```
+
+With `trace_context`, the calls are part of the client request's trace. The client request's
+access log line can show the cost of the answer next to the cost of routing it:
+
+```yaml
+answer_total_tokens: "%DYNAMIC_METADATA(io.envoy.ai_gateway:llm_total_token)%"
+routing_total_tokens: "%DYNAMIC_METADATA(io.builtonenvoy.switchyard:routing_total_tokens)%"
+routing_models: "%DYNAMIC_METADATA(io.builtonenvoy.switchyard:routing_models)%"
+```
+
+When the algorithm answers, the answer comes from a call that Agent Router already processed and
+accounted for, and the client's request is answered by the filter, before it reaches Agent Router.
 
 ## Compatibility
 
