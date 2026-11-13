@@ -462,7 +462,8 @@ func TestSwitchyardAlgorithms(t *testing.T) {
 		// Only the efficient model is eligible, so the even split always picks it.
 		{
 			"eligible models limit the pick", chatBody("split", prompt, false),
-			[]string{"x-switchyard-eligible-models", "small-model"}, "small-model", "random", false,
+			[]string{"x-switchyard-eligible-models", "small-model"},
+			"small-model", "random", false,
 		},
 		// The tool signals are never confident enough, so the judge decides.
 		{
@@ -474,15 +475,18 @@ func TestSwitchyardAlgorithms(t *testing.T) {
 		// Within a turn, the judge hands off to the efficient model.
 		{
 			"plan_execute with a judge", toolTurnBody("plan-execute-judge"),
-			[]string{"x-switchyard-session-id", "plan"}, "small-model", "plan_execute", false,
+			[]string{"x-switchyard-session-id", "plan"},
+			"small-model", "plan_execute", false,
 		},
 		{
 			"llm_classifier with a gateway judge", chatBody("llm-classifier", prompt, false),
-			[]string{"x-tenant-id", "acme"}, "small-model", "llm_task_classifier:llm-classifier", true,
+			[]string{"x-tenant-id", "acme"},
+			"small-model", "llm_task_classifier:llm-classifier", true,
 		},
 		{
 			"llm_classifier with a judge target", chatBody("judge-target", prompt, false),
-			[]string{"x-tenant-id", "acme"}, "small-model", "llm_task_classifier:llm-classifier", true,
+			[]string{"x-tenant-id", "acme"},
+			"small-model", "llm_task_classifier:llm-classifier", true,
 		},
 		// fakeJudge gives the capable model the advantage for "refactor" prompts.
 		{
@@ -492,7 +496,8 @@ func TestSwitchyardAlgorithms(t *testing.T) {
 		},
 		{
 			"composite", chatBody("composite", prompt, false),
-			[]string{"x-switchyard-session-id", "composite"}, "small-model", "composite:llm-classifier", true,
+			[]string{"x-switchyard-session-id", "composite"},
+			"small-model", "composite:llm-classifier", true,
 		},
 		// The verifiers reject the efficient answer, so the request escalates.
 		{"vgr escalates", chatBody("vgr", prompt, false), []string{"x-verdict", "no"}, "large-model", "vgr", true},
@@ -568,7 +573,8 @@ func TestSwitchyardAlgorithms(t *testing.T) {
 		{"vgr answers", chatBody("vgr", prompt, false), nil, "small-model", "answer from small-model", true},
 		// The executor answers, and the advisor approves it.
 		{
-			"advisor", chatBody("advisor", prompt, false), []string{"x-switchyard-session-id", "advisor"},
+			"advisor", chatBody("advisor", prompt, false),
+			[]string{"x-switchyard-session-id", "advisor"},
 			"small-model", "answer from small-model", true,
 		},
 		{"noop", chatBody("noop", prompt, false), nil, "noop", "OK", false},

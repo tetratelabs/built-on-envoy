@@ -109,7 +109,14 @@ struct Run {
     model_headers: Vec<(String, Vec<u8>)>,
     /// The headers every call carries: the parent request ID and the trace context, by format.
     parent_id: Option<String>,
-    trace: Option<(String, String)>,
+    trace: Option<Trace>,
+}
+
+/// The trace context of the client request.
+struct Trace {
+    trace_id: String,
+    span_id: String,
+    sampled: bool,
 }
 
 /// State shared between the routing task and the filter.
@@ -130,6 +137,33 @@ impl Transport for EnvoyTransport {
     fn send(&self, callout: Callout) {
         lock(&self.shared).queue.push(callout);
         self.scheduler.commit(EVENT_CALLOUTS);
+    }
+}
+
+/// The sampling decision the client sent in its trace context, if any. The SDK does not expose
+/// Envoy's own decision, so calls follow the client's, and are sampled when it sent none.
+fn client_sampled(header: impl Fn(&str) -> Option<String>) -> Option<bool> {
+    if let Some(flags) = header("traceparent").and_then(|v| {
+        let flags = v.trim().split('-').nth(3)?.to_string();
+        u8::from_str_radix(&flags, 16).ok()
+    }) {
+        return Some(flags & 1 == 1);
+    }
+    let b3_sampled = |v: &str| match v.trim() {
+        "0" | "false" => Some(false),
+        "1" | "true" | "d" => Some(true),
+        _ => None,
+    };
+    if let Some(sampled) = header("x-b3-sampled").and_then(|v| b3_sampled(&v)) {
+        return Some(sampled);
+    }
+    // Single header: `{trace}-{span}-{sampled}[-{parent}]`, or the sampling state alone.
+    let b3 = header("b3")?;
+    let parts: Vec<&str> = b3.trim().split('-').collect();
+    match parts.as_slice() {
+        [state] => b3_sampled(state),
+        [_, _, state, ..] => b3_sampled(state),
+        _ => None,
     }
 }
 
@@ -305,9 +339,13 @@ impl Filter {
             None => (format, Vec::new()),
         };
         let parent_id = header_value(envoy, "x-request-id");
-        let trace = envoy
-            .get_active_span()
-            .and_then(|span| Some((span.get_trace_id()?, span.get_span_id()?)));
+        let trace = envoy.get_active_span().and_then(|span| {
+            Some(Trace {
+                trace_id: span.get_trace_id()?,
+                span_id: span.get_span_id()?,
+                sampled: client_sampled(|h| header_value(envoy, h)).unwrap_or(true),
+            })
+        });
 
         let shared = Arc::new(Mutex::new(Shared::default()));
         let scheduler: Arc<dyn EnvoyHttpFilterScheduler> = Arc::new(envoy.new_scheduler());
@@ -387,16 +425,26 @@ impl Filter {
         if let Some(id) = &run.parent_id {
             headers.push((PARENT_ID_HEADER.into(), id.clone().into_bytes()));
         }
-        if let Some((trace, span)) = &run.trace {
+        if let Some(Trace {
+            trace_id,
+            span_id,
+            sampled,
+        }) = &run.trace
+        {
             match trace_context {
                 TraceContext::W3c => headers.push((
                     "traceparent".into(),
-                    format!("00-{trace:0>32}-{span:0>16}-01").into_bytes(),
+                    format!(
+                        "00-{trace_id:0>32}-{span_id:0>16}-{}",
+                        if *sampled { "01" } else { "00" }
+                    )
+                    .into_bytes(),
                 )),
                 TraceContext::B3 => {
-                    headers.push(("x-b3-traceid".into(), trace.clone().into_bytes()));
-                    headers.push(("x-b3-spanid".into(), span.clone().into_bytes()));
-                    headers.push(("x-b3-sampled".into(), b"1".to_vec()));
+                    headers.push(("x-b3-traceid".into(), trace_id.clone().into_bytes()));
+                    headers.push(("x-b3-spanid".into(), span_id.clone().into_bytes()));
+                    let sampled: &[u8] = if *sampled { b"1" } else { b"0" };
+                    headers.push(("x-b3-sampled".into(), sampled.to_vec()));
                 }
                 TraceContext::None => {}
             }
@@ -1979,5 +2027,64 @@ mod tests {
         assert_eq!(headers[ROUTING_OUTPUT_TOKENS_HEADER], "20");
         assert_eq!(headers[ROUTING_TOTAL_TOKENS_HEADER], "220");
         assert_eq!(rec.metadata_numbers["routing_calls"], 2.0);
+    }
+    #[test]
+    fn client_sampling_decision() {
+        let cases: &[(&[(&str, &str)], Option<bool>)] = &[
+            (&[], None),
+            (
+                &[(
+                    "traceparent",
+                    "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
+                )],
+                Some(true),
+            ),
+            (
+                &[(
+                    "traceparent",
+                    "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-00",
+                )],
+                Some(false),
+            ),
+            (&[("traceparent", "garbage")], None),
+            (&[("x-b3-sampled", "0")], Some(false)),
+            (&[("x-b3-sampled", "true")], Some(true)),
+            (
+                &[("b3", "80f198ee56343ba864fe8b2a57d3eff7-e457b5a2e4d86bd1-0")],
+                Some(false),
+            ),
+            (
+                &[(
+                    "b3",
+                    "80f198ee56343ba864fe8b2a57d3eff7-e457b5a2e4d86bd1-d-05e3ac9a4f6e3b90",
+                )],
+                Some(true),
+            ),
+            (&[("b3", "0")], Some(false)),
+            (
+                &[("b3", "80f198ee56343ba864fe8b2a57d3eff7-e457b5a2e4d86bd1")],
+                None,
+            ),
+            // traceparent wins over B3.
+            (
+                &[
+                    (
+                        "traceparent",
+                        "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-00",
+                    ),
+                    ("x-b3-sampled", "1"),
+                ],
+                Some(false),
+            ),
+        ];
+        for (headers, want) in cases {
+            let got = client_sampled(|name| {
+                headers
+                    .iter()
+                    .find(|(n, _)| *n == name)
+                    .map(|(_, v)| v.to_string())
+            });
+            assert_eq!(got, *want, "{headers:?}");
+        }
     }
 }

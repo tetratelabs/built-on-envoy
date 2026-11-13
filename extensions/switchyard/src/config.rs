@@ -347,14 +347,34 @@ impl Config {
             .collect();
         let judges = crate::judge::compile(raw.decision_targets, raw.judge_targets)?;
         let model_calls = raw.model_calls.map(ModelCalls::new).transpose()?;
+        let virtual_model_names: std::collections::BTreeSet<String> = raw
+            .virtual_models
+            .iter()
+            .map(|vm| vm.name.clone())
+            .collect();
         let mut virtual_models = Vec::with_capacity(raw.virtual_models.len());
         for vm in raw.virtual_models {
+            // Gateway calls usually loop back through this filter. A call to a virtual model would
+            // start another routing run, which could call back again.
+            let looping = vm
+                .targets
+                .values()
+                .find(|m| virtual_model_names.contains(*m))
+                .cloned();
             let vm = VirtualModel::new(vm, &judges)?;
-            if vm.router.needs_model_calls && model_calls.is_none() {
-                return Err(format!(
-                    "virtual model {:?}: the algorithm calls models through the gateway, which requires model_calls",
-                    vm.name
-                ));
+            if vm.router.needs_model_calls {
+                if model_calls.is_none() {
+                    return Err(format!(
+                        "virtual model {:?}: the algorithm calls models through the gateway, which requires model_calls",
+                        vm.name
+                    ));
+                }
+                if let Some(model) = looping {
+                    return Err(format!(
+                        "virtual model {:?}: target model {model:?} is a virtual model, and the algorithm would call it back through model_calls",
+                        vm.name
+                    ));
+                }
             }
             virtual_models.push(vm);
         }
@@ -920,6 +940,24 @@ mod tests {
         let mut configured = value;
         configured["model_calls"] = serde_json::json!({"cluster":"loopback"});
         assert!(Config::parse(configured.to_string().as_bytes()).is_ok());
+    }
+
+    #[test]
+    fn gateway_calls_to_virtual_models_are_rejected() {
+        let mut value = serde_json::json!({
+            "model_calls": {"cluster": "loopback"},
+            "virtual_models": [
+                {"name":"v","targets":{"a":"m","b":"w"},"algorithm":{"type":"advisor","executor_target":"a","advisor_target":"b"}},
+                {"name":"w","targets":{"a":"m"},"algorithm":{"type":"passthrough","target":"a"}}
+            ]
+        });
+        let error = Config::parse(value.to_string().as_bytes()).err().unwrap();
+        assert_eq!(error, "virtual model \"v\": target model \"w\" is a virtual model, and the algorithm would call it back through model_calls");
+
+        // Algorithms that make no gateway calls may still route to another virtual model.
+        value["virtual_models"][0]["algorithm"] =
+            serde_json::json!({"type":"passthrough","target":"b"});
+        assert!(Config::parse(value.to_string().as_bytes()).is_ok());
     }
 
     #[test]

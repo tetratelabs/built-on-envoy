@@ -119,6 +119,49 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn cached_input_tokens_are_counted_once() {
+        // OpenAI's prompt_tokens include the cached tokens, while Anthropic's input_tokens do
+        // not. Both must add up to the whole prompt.
+        let cases = [
+            (
+                WireFormat::OpenAiChat,
+                json!({"id": "c1", "object": "chat.completion", "model": "m",
+                    "choices": [{"index": 0, "message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}],
+                    "usage": {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110,
+                              "prompt_tokens_details": {"cached_tokens": 40}}}),
+                (100, 10, 110),
+            ),
+            (
+                WireFormat::AnthropicMessages,
+                json!({"id": "m1", "type": "message", "role": "assistant", "model": "m",
+                    "content": [{"type": "text", "text": "ok"}], "stop_reason": "end_turn",
+                    "usage": {"input_tokens": 55, "cache_read_input_tokens": 40,
+                              "cache_creation_input_tokens": 5, "output_tokens": 10}}),
+                (100, 10, 110),
+            ),
+        ];
+        for (format, reply, (input, output, total)) in cases {
+            let transport = FnTransport::new(move |_, _, _| {
+                Ok(HttpReply {
+                    status: 200,
+                    body: reply.to_string().into_bytes(),
+                })
+            });
+            let mut host = host(transport, false);
+            host.gateway_format = format;
+            host.call_models(&request(false), &[ModelId::from("m")])
+                .await
+                .unwrap();
+            let usage = host.usage.lock().unwrap().clone();
+            assert_eq!(
+                (usage.input_tokens, usage.output_tokens, usage.total_tokens),
+                (input, output, total),
+                "{format:?}"
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn model_calls_fall_back_to_the_next_candidate() {
         let transport = FnTransport::new(|role, _, body| {
             assert_eq!(role, CallRole::Model);

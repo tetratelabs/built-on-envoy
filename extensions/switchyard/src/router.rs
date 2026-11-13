@@ -33,6 +33,10 @@ const CALLING_ALGORITHMS: &[&str] = &["advisor", "vgr"];
 /// the algorithm takes its first step, which is short as algorithms do no I/O of their own. When
 /// that step is a model call, the rest of the run continues on this runtime, and the worker thread
 /// is free until the outcome is ready.
+///
+/// One thread serves the runs of every worker. Runs spend their time waiting on calls, which Envoy
+/// makes on the worker threads, so this thread only decodes the call responses, steps the
+/// algorithms and encodes the answers. That is short compared to the model calls it waits on.
 pub fn runtime() -> &'static Runtime {
     static RUNTIME: OnceLock<Runtime> = OnceLock::new();
     RUNTIME.get_or_init(|| {
@@ -150,6 +154,9 @@ struct Finisher {
     /// The models the request may be routed to.
     allowed: BTreeSet<String>,
     eligible: Option<BTreeSet<String>>,
+    /// Whether the algorithm routes to models. Algorithms that do not, such as `noop`, answer
+    /// without one.
+    routes: bool,
 }
 
 impl Router {
@@ -285,6 +292,7 @@ impl Router {
             input,
             allowed,
             eligible,
+            routes: !self.routing_models.is_empty(),
         };
 
         let algorithm = Arc::clone(&self.algorithm);
@@ -352,9 +360,7 @@ impl Finisher {
                 .served_model()
                 .map(ModelId::to_string)
                 .unwrap_or(model);
-            // Algorithms that route to no model, such as noop, answer without one.
-            let routes = !self.allowed.is_empty() || self.eligible.is_none();
-            if routes && self.eligible.as_ref().is_some_and(|e| !e.contains(&model)) {
+            if self.routes && self.eligible.as_ref().is_some_and(|e| !e.contains(&model)) {
                 return Err(format!(
                     "the answer is from {model:?}, which is not eligible"
                 ));
@@ -1168,6 +1174,45 @@ mod tests {
         let body: Value = serde_json::from_slice(&answer.body).unwrap();
         assert_eq!(body["choices"][0]["message"]["content"], "OK");
         assert!(!router.needs_model_calls);
+
+        // noop routes to no model, so eligible models do not apply to its answer.
+        let outcome = route_with(
+            &router,
+            WireFormat::OpenAiChat,
+            &chat("hi"),
+            Metadata::default(),
+            Some(BTreeSet::from(["other-model".to_string()])),
+            no_calls(),
+        )
+        .unwrap();
+        assert!(matches!(outcome, Outcome::Answer(_)), "{outcome:?}");
+    }
+
+    #[test]
+    fn route_advisor_rejects_ineligible_answers() {
+        let router =
+            Router::build("advisor-eligible", &advisor(), &targets(), &Judges::new()).unwrap();
+        let transport = FnTransport::new(|_, _, body| {
+            let model = body["model"].as_str().unwrap();
+            chat_completion(
+                model,
+                if model == "judge-model" {
+                    "APPROVE"
+                } else {
+                    "the answer"
+                },
+            )
+        });
+        // No target is eligible: the answer must not reach the client.
+        let result = route_with(
+            &router,
+            WireFormat::OpenAiChat,
+            &chat("explain the code"),
+            Metadata::default(),
+            Some(BTreeSet::from(["other-model".to_string()])),
+            transport,
+        );
+        assert!(!matches!(result, Ok(Outcome::Answer(_))), "{result:?}");
     }
 
     #[test]

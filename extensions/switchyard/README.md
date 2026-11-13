@@ -192,7 +192,10 @@ stops the run.
 
 Every call carries `x-switchyard-call` (`judge`, `model` or `decision`), `x-switchyard-parent-id`
 (the client request's `x-request-id`) and, when Envoy traces the request, trace context in the
-format of its `trace_context`.
+format of its `trace_context`. Calls are sampled unless the client's trace context says it is not.
+
+The algorithms of a virtual model that calls models through `model_calls` cannot route to another
+virtual model: the call would loop back through the filter and start another routing run.
 
 When `vgr`, `advisor` or `noop` writes the answer, the filter sends it to the client as a 200
 response in the client's API format, as server-sent events when the client asked for a stream.
