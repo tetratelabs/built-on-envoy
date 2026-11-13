@@ -390,7 +390,7 @@ spec:
           volumes:
             - name: switchyard
               image:
-                reference: ghcr.io/tetratelabs/built-on-envoy/extension-switchyard:0.1.0
+                reference: ghcr.io/tetratelabs/built-on-envoy/extension-switchyard:0.1.1
         container:
           volumeMounts:
             - name: switchyard
@@ -409,7 +409,7 @@ Without image volumes, build an Envoy image that contains the module and set it 
 `envoyDeployment.container.image` of the `EnvoyProxy`:
 
 ```dockerfile
-FROM ghcr.io/tetratelabs/built-on-envoy/extension-switchyard:0.1.0 AS switchyard
+FROM ghcr.io/tetratelabs/built-on-envoy/extension-switchyard:0.1.1 AS switchyard
 FROM docker.io/envoyproxy/envoy:distroless-v1.39.1
 COPY --from=switchyard /libswitchyard.so /libgcc_s.so.1 /var/boe/extensions/switchyard/
 ```

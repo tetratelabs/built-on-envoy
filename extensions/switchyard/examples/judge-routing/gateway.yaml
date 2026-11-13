@@ -156,7 +156,7 @@ spec:
             # Mounts the extension's OCI image. Requires the Kubernetes ImageVolume feature.
             - name: switchyard
               image:
-                reference: ghcr.io/tetratelabs/built-on-envoy/extension-switchyard:0.1.0
+                reference: ghcr.io/tetratelabs/built-on-envoy/extension-switchyard:${SWITCHYARD_VERSION}
                 pullPolicy: IfNotPresent
             # The judge API keys, created by run.sh from JEV_API_KEY_FILE and
             # INFERENCE_API_KEY_FILE.

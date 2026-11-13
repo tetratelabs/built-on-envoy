@@ -2031,7 +2031,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "switchyard"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "envoy-proxy-dynamic-modules-rust-sdk 0.1.0 (git+https://github.com/envoyproxy/envoy?rev=b579d07d3ad7ee11d32b105e91a5a39ad24718d7)",
  "futures",

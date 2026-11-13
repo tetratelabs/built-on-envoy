@@ -36,11 +36,15 @@
 #   AR_REF                 Agent Router git ref for the Envoy Gateway values file (default: main).
 #   KEEP_CLUSTER           Set to "false" to delete the cluster when done (default: true).
 #   PORT                   Local port forwarded to the Gateway (default: 18081).
+#   SWITCHYARD_VERSION     Tag of the extension image built and mounted in Envoy (default: the
+#                          version in the extension's manifest.yaml).
 #
 # The keys are stored in Secrets and are never printed.
 
 set -euo pipefail
 
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SWITCHYARD_VERSION="${SWITCHYARD_VERSION:-$(sed -ne 's/^version: *//p' "${HERE}/../../manifest.yaml")}"
 CLUSTER="${CLUSTER:-switchyard-judges}"
 NODE_IMAGE="${NODE_IMAGE:-kindest/node:v1.37.0}"
 EG_VERSION="${EG_VERSION:-v1.9.2}"
@@ -54,11 +58,9 @@ CLASSIFIER_MODEL="${CLASSIFIER_MODEL:-claude-haiku-5-5}"
 ANSWER_MAX_TOKENS="${ANSWER_MAX_TOKENS:-1200}"
 REASONING_EFFORT="${REASONING_EFFORT-low}"
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUT="${HERE}/out"
 MANIFESTS="${OUT}/manifests"
-# Must match the image volume reference in gateway.yaml.
-IMAGE="ghcr.io/tetratelabs/built-on-envoy/extension-switchyard:0.1.0"
+IMAGE="ghcr.io/tetratelabs/built-on-envoy/extension-switchyard:${SWITCHYARD_VERSION}"
 # Judge id -> virtual model. Must match switchyard-policy.yaml.
 JUDGES=(jev:coding-jev classifier:coding-classifier)
 
@@ -117,6 +119,7 @@ render_manifests() {
       -e "s|\${EFFICIENT_MODEL}|${EFFICIENT_MODEL}|g" \
       -e "s|\${CAPABLE_MODEL}|${CAPABLE_MODEL}|g" \
       -e "s|\${CLASSIFIER_MODEL}|${CLASSIFIER_MODEL}|g" \
+      -e "s|\${SWITCHYARD_VERSION}|${SWITCHYARD_VERSION}|g" \
       "${HERE}/${file}" > "${MANIFESTS}/${file}"
     if grep -nE '\$\{[A-Z_]+\}' "${MANIFESTS}/${file}" >&2; then
       die "Unrendered placeholders in ${MANIFESTS}/${file}"

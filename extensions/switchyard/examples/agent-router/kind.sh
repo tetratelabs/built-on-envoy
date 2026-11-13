@@ -24,9 +24,13 @@
 #   AR_VERSION       Agent Router helm chart version (default: v0.0.0-latest, built from main).
 #   AR_REF           Agent Router git ref for the Envoy Gateway values file (default: main).
 #   KEEP_CLUSTER     Set to "false" to delete the cluster when done (default: true).
+#   SWITCHYARD_VERSION  Tag of the extension image built and mounted in Envoy (default: the version
+#                    in the extension's manifest.yaml).
 
 set -euo pipefail
 
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SWITCHYARD_VERSION="${SWITCHYARD_VERSION:-$(sed -ne 's/^version: *//p' "${HERE}/../../manifest.yaml")}"
 CLUSTER="${CLUSTER:-switchyard}"
 NODE_IMAGE="${NODE_IMAGE:-kindest/node:v1.37.0}"
 EG_VERSION="${EG_VERSION:-v1.9.2}"
@@ -36,7 +40,6 @@ KEEP_CLUSTER="${KEEP_CLUSTER:-true}"
 POLICIES=("$@")
 [[ ${#POLICIES[@]} -eq 0 ]] && POLICIES=(auto)
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ "${POLICIES[*]}" == "all" ]]; then
   POLICIES=()
   for f in "${HERE}"/policies/*.yaml; do POLICIES+=("$(basename "${f}" .yaml)"); done
@@ -45,8 +48,8 @@ for policy in "${POLICIES[@]}"; do
   [[ -f "${HERE}/policies/${policy}.yaml" ]] || { echo "unknown policy ${policy}"; exit 1; }
 done
 ROOT="$(git -C "${HERE}" rev-parse --show-toplevel)"
-# Must match the image volume reference in gateway.yaml.
-IMAGE="ghcr.io/tetratelabs/built-on-envoy/extension-switchyard:0.1.0"
+# The image volume reference in gateway.yaml is rewritten to this tag when it is applied.
+IMAGE="ghcr.io/tetratelabs/built-on-envoy/extension-switchyard:${SWITCHYARD_VERSION}"
 RUST_VERSION="$(sed -ne 's/^channel = "\(.*\)"/\1/p' "${ROOT}/rust-toolchain.toml")"
 ARCH="$(docker version --format '{{.Server.Arch}}')"
 
@@ -97,7 +100,8 @@ log "Applying the example"
 kubectl apply -f "${HERE}/testupstream.yaml"
 # Also creates the judge-keys Secret, which the Envoy pods mount, so it comes before the Gateway.
 kubectl apply -f "${HERE}/judge.yaml"
-kubectl apply -f "${HERE}/gateway.yaml"
+sed -e "s|extension-switchyard:[^[:space:]]*|extension-switchyard:${SWITCHYARD_VERSION}|" \
+  "${HERE}/gateway.yaml" | kubectl apply -f -
 kubectl apply -f "${HERE}/routes.yaml"
 kubectl apply -f "${HERE}/loopback.yaml"
 kubectl apply -f "${HERE}/policies/${POLICIES[0]}.yaml"
