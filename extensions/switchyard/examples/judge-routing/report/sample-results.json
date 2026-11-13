@@ -1,0 +1,736 @@
+{
+  "generated_at": "2026-11-12T22:54:22Z",
+  "environment": "kind + Envoy Gateway + Agent Router",
+  "targets": {
+    "efficient": "gpt-6.1-terra",
+    "capable": "claude-opus-5-5"
+  },
+  "judges": [
+    {
+      "id": "jev",
+      "virtual_model": "coding-jev",
+      "kind": "decision",
+      "format": "system_one",
+      "model": "jev-latest",
+      "algorithm": {
+        "type": "llm_classifier",
+        "mode": "capability",
+        "cutoff": 0.15
+      }
+    },
+    {
+      "id": "classifier",
+      "virtual_model": "coding-classifier",
+      "kind": "llm",
+      "format": "openai_chat",
+      "model": "claude-haiku-5-5",
+      "algorithm": {
+        "type": "llm_classifier",
+        "mode": "capability",
+        "base_threshold": 0.6
+      }
+    }
+  ],
+  "cases": [
+    {
+      "id": "rename-variable",
+      "title": "Rename a variable",
+      "prompt": "In src/billing/invoice.ts, rename the local variable `tmp` in `computeTotals` to `subtotalCents`. Don't change anything else.",
+      "expected_tier": "efficient",
+      "runs": {
+        "jev": {
+          "selected_model": "gpt-6.1-terra",
+          "served_model": "gpt-6.1-terra",
+          "reason": "llm_task_classifier:decision_classifier",
+          "evidence": {
+            "evidence": {
+              "source": "decision_classifier",
+              "verdict": "relative_advantage",
+              "selected_candidate": "candidate_b",
+              "score_option": "advantage",
+              "score": 0.09,
+              "threshold": 0.15
+            },
+            "judgments": [
+              {
+                "target": "gpt-6.1-terra",
+                "category": "efficient",
+                "evidence": {
+                  "source": "decision_classifier",
+                  "verdict": "relative_advantage",
+                  "selected_candidate": "candidate_b",
+                  "score_option": "advantage",
+                  "score": 0.09,
+                  "threshold": 0.15
+                }
+              }
+            ]
+          },
+          "status": 200,
+          "latency_ms": 7920,
+          "upstream_latency_ms": 7679,
+          "answer": "I can’t access or edit `src/billing/invoice.ts` in this chat.",
+          "finish_reason": "stop"
+        },
+        "classifier": {
+          "selected_model": "gpt-6.1-terra",
+          "served_model": "gpt-6.1-terra",
+          "reason": "llm_task_classifier:llm-classifier",
+          "evidence": {
+            "evidence": {
+              "source": "llm-classifier",
+              "score": 0.85,
+              "threshold": 0.6
+            },
+            "judgments": [
+              {
+                "target": "gpt-6.1-terra",
+                "category": "efficient",
+                "evidence": {
+                  "source": "llm-classifier",
+                  "score": 0.85,
+                  "threshold": 0.6
+                }
+              }
+            ]
+          },
+          "status": 200,
+          "latency_ms": 10505,
+          "upstream_latency_ms": 7069,
+          "answer": "I can’t access or edit `src/billing/invoice.ts` in this session. Please provide the file or enable repository access.",
+          "finish_reason": "stop"
+        }
+      }
+    },
+    {
+      "id": "fix-typo-readme",
+      "title": "Fix typos in the README",
+      "prompt": "Fix the spelling mistakes in README.md (\"recieve\", \"seperate\", \"dependancy\"). Keep the wording otherwise identical.",
+      "expected_tier": "efficient",
+      "runs": {
+        "jev": {
+          "selected_model": "gpt-6.1-terra",
+          "served_model": "gpt-6.1-terra",
+          "reason": "llm_task_classifier:decision_classifier",
+          "evidence": {
+            "evidence": {
+              "source": "decision_classifier",
+              "verdict": "relative_advantage",
+              "selected_candidate": "candidate_b",
+              "score_option": "advantage",
+              "score": 0.08,
+              "threshold": 0.15
+            },
+            "judgments": [
+              {
+                "target": "gpt-6.1-terra",
+                "category": "efficient",
+                "evidence": {
+                  "source": "decision_classifier",
+                  "verdict": "relative_advantage",
+                  "selected_candidate": "candidate_b",
+                  "score_option": "advantage",
+                  "score": 0.08,
+                  "threshold": 0.15
+                }
+              }
+            ]
+          },
+          "status": 200,
+          "latency_ms": 5747,
+          "upstream_latency_ms": 5646,
+          "answer": "I can’t access or edit `README.md` from this conversation. The spelling-only replacements are:\n\n- `recieve` → `receive`\n- `seperate` → `separate`\n- `dependancy` → `dependency`",
+          "finish_reason": "stop"
+        },
+        "classifier": {
+          "selected_model": "gpt-6.1-terra",
+          "served_model": "gpt-6.1-terra",
+          "reason": "llm_task_classifier:llm-classifier",
+          "evidence": {
+            "evidence": {
+              "source": "llm-classifier",
+              "score": 0.93,
+              "threshold": 0.6
+            },
+            "judgments": [
+              {
+                "target": "gpt-6.1-terra",
+                "category": "efficient",
+                "evidence": {
+                  "source": "llm-classifier",
+                  "score": 0.93,
+                  "threshold": 0.6
+                }
+              }
+            ]
+          },
+          "status": 200,
+          "latency_ms": 9249,
+          "upstream_latency_ms": 6654,
+          "answer": "I can’t access or edit `README.md` from here. The corrections are:\n\n- `recieve` → `receive`\n- `seperate` → `separate`\n- `dependancy` → `dependency`",
+          "finish_reason": "stop"
+        }
+      }
+    },
+    {
+      "id": "docstring-helpers",
+      "title": "Add docstrings to helpers",
+      "prompt": "Add Google-style docstrings to the three public functions in utils/strings.py (slugify, truncate, normalize_whitespace). Describe arguments and return values; do not change behaviour.",
+      "expected_tier": "efficient",
+      "runs": {
+        "jev": {
+          "selected_model": "claude-opus-5-5",
+          "served_model": "claude-opus-5-5",
+          "reason": "llm_task_classifier:decision_classifier",
+          "evidence": {
+            "evidence": {
+              "source": "decision_classifier",
+              "verdict": "relative_advantage",
+              "selected_candidate": "candidate_a",
+              "score_option": "advantage",
+              "score": 0.18,
+              "threshold": 0.15
+            },
+            "judgments": [
+              {
+                "target": "claude-opus-5-5",
+                "category": "capable",
+                "evidence": {
+                  "source": "decision_classifier",
+                  "verdict": "relative_advantage",
+                  "selected_candidate": "candidate_a",
+                  "score_option": "advantage",
+                  "score": 0.18,
+                  "threshold": 0.15
+                }
+              }
+            ]
+          },
+          "status": 200,
+          "latency_ms": 4971,
+          "upstream_latency_ms": 4860,
+          "answer": "I don't have file access in this session, so I can't read or edit `utils/strings.py` directly. I don't want to guess at the signatures, since inventing parameters or defaults could produce docstrings that don't match the actual behaviour.\n\nIf you paste the three functions (or the whole file), I'll return them with Google-style docstrings added and the code itself unchanged.\n\nFor reference, here's the format I'll follow:\n\n```python\ndef truncate(text: str, max_length: int, suffix: str = \"...\") -> str:\n    \"\"\"Shortens text to a maximum length, appending a suffix if truncated.\n\n    Args:\n        text: The input string to truncate.\n        max_length: Maximum length of the returned string, including the suffix.\n        suffix: String appended when truncation occurs. Defaults to \"...\".\n\n    Returns:\n        The original string if it fits within ``max_length``, otherwise a\n        truncated string ending with ``suffix``.\n\n    Raises:\n        ValueError: If ``max_length`` is shorter than ``suffix``.\n    \"\"\"\n```\n\nI'll include `Raises:` sections only where the code actually raises.",
+          "finish_reason": "stop"
+        },
+        "classifier": {
+          "selected_model": "gpt-6.1-terra",
+          "served_model": "gpt-6.1-terra",
+          "reason": "llm_task_classifier:llm-classifier",
+          "evidence": {
+            "evidence": {
+              "source": "llm-classifier",
+              "score": 0.9,
+              "threshold": 0.6
+            },
+            "judgments": [
+              {
+                "target": "gpt-6.1-terra",
+                "category": "efficient",
+                "evidence": {
+                  "source": "llm-classifier",
+                  "score": 0.9,
+                  "threshold": 0.6
+                }
+              }
+            ]
+          },
+          "status": 200,
+          "latency_ms": 5272,
+          "upstream_latency_ms": 3491,
+          "answer": "I can’t access `utils/strings.py` from this conversation. Please paste its contents, and I’ll add Google-style docstrings without changing behavior.",
+          "finish_reason": "stop"
+        }
+      }
+    },
+    {
+      "id": "unit-test-parser",
+      "title": "Unit test for a date parser",
+      "prompt": "Write table-driven Go tests for `ParseISODate` in internal/dates/parse.go covering valid dates, leap days, and an invalid month. Use the standard testing package only.",
+      "expected_tier": "efficient",
+      "runs": {
+        "jev": {
+          "selected_model": "gpt-6.1-terra",
+          "served_model": "gpt-6.1-terra",
+          "reason": "llm_task_classifier:decision_classifier",
+          "evidence": {
+            "evidence": {
+              "source": "decision_classifier",
+              "verdict": "relative_advantage",
+              "selected_candidate": "candidate_b",
+              "score_option": "advantage",
+              "score": 0.1,
+              "threshold": 0.15
+            },
+            "judgments": [
+              {
+                "target": "gpt-6.1-terra",
+                "category": "efficient",
+                "evidence": {
+                  "source": "decision_classifier",
+                  "verdict": "relative_advantage",
+                  "selected_candidate": "candidate_b",
+                  "score_option": "advantage",
+                  "score": 0.1,
+                  "threshold": 0.15
+                }
+              }
+            ]
+          },
+          "status": 200,
+          "latency_ms": 11387,
+          "upstream_latency_ms": 11298,
+          "answer": "Add the following as `internal/dates/parse_test.go`:\n\n```go\npackage dates\n\nimport (\n\t\"testing\"\n\t\"time\"\n)\n\nfunc TestParseISODate(t *testing.T) {\n\ttests := []struct {\n\t\tname    string\n\t\tinput   string\n\t\twant    time.Time\n\t\twantErr bool\n\t}{\n\t\t{\n\t\t\tname:  \"ordinary date\",\n\t\t\tinput: \"2023-07-15\",\n\t\t\twant:  time.Date(2023, time.July, 15, 0, 0, 0, 0, time.UTC),\n\t\t},\n\t\t{\n\t\t\tname:  \"first day of year\",\n\t\t\tinput: \"2024-01-01\",\n\t\t\twant:  time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC),\n\t\t},\n\t\t{\n\t\t\tname:  \"valid leap day\",\n\t\t\tinput: \"2024-02-29\",\n\t\t\twant:  time.Date(2024, time.February, 29, 0, 0, 0, 0, time.UTC),\n\t\t},\n\t\t{\n\t\t\tname:    \"leap day in non-leap year\",\n\t\t\tinput:   \"2023-02-29\",\n\t\t\twantErr: true,\n\t\t},\n\t\t{\n\t\t\tname:    \"invalid month\",\n\t\t\tinput:   \"2024-13-01\",\n\t\t\twantErr: true,\n\t\t},\n\t}\n\n\tfor _, tt := range tests {\n\t\tt.Run(tt.name, func(t *testing.T) {\n\t\t\tgot, err := ParseISODate(tt.input)\n\t\t\tif tt.wantErr {\n\t\t\t\tif err == nil {\n\t\t\t\t\tt.Fatalf(\"ParseISODate(%q) returned no error; want an error\", tt.input)\n\t\t\t\t}\n\t\t\t\treturn\n\t\t\t}\n\n\t\t\tif err != nil {\n\t\t\t\tt.Fatalf(\"ParseISODate(%q) returned an unexpected error: %v\", tt.input, err)\n\t\t\t}\n\t\t\tif !got.Equal(tt.want) {\n\t\t\t\tt.Errorf(\"ParseISOD",
+          "finish_reason": "stop"
+        },
+        "classifier": {
+          "selected_model": "claude-opus-5-5",
+          "served_model": "claude-opus-5-5",
+          "reason": "llm_task_classifier:llm-classifier",
+          "evidence": {
+            "evidence": {
+              "source": "llm-classifier",
+              "score": 0.6,
+              "threshold": 0.7
+            },
+            "judgments": [
+              {
+                "target": "claude-opus-5-5",
+                "category": "capable",
+                "evidence": {
+                  "source": "llm-classifier",
+                  "score": 0.6,
+                  "threshold": 0.7
+                }
+              }
+            ]
+          },
+          "status": 200,
+          "latency_ms": 9771,
+          "upstream_latency_ms": 8482,
+          "answer": "I don't have the contents of `internal/dates/parse.go` in this session, so I'm assuming this signature:\n\n```go\nfunc ParseISODate(s string) (time.Time, error)\n```\n\nIf yours differs (for example, it returns a custom `Date` struct or uses a different package name), let me know and I'll adjust.\n\n```go\n// internal/dates/parse_test.go\npackage dates\n\nimport (\n\t\"testing\"\n\t\"time\"\n)\n\nfunc TestParseISODate(t *testing.T) {\n\ttests := []struct {\n\t\tname    string\n\t\tinput   string\n\t\twant    time.Time\n\t\twantErr bool\n\t}{\n\t\t// Valid dates\n\t\t{name: \"ordinary date\", input: \"2024-03-15\", want: date(2024, time.March, 15)},\n\t\t{name: \"first day of year\", input: \"2023-01-01\", want: date(2023, time.January, 1)},\n\t\t{name: \"last day of year\", input: \"2023-12-31\", want: date(2023, time.December, 31)},\n\n\t\t// Leap days\n\t\t{name: \"leap day in leap year\", input: \"2024-02-29\", want: date(2024, time.February, 29)},\n\t\t{name: \"leap day in year divisible by 400\", input: \"2000-02-29\", want: date(2000, time.February, 29)},\n\t\t{name: \"leap day in non-leap year\", input: \"2023-02-29\", wantErr: true},\n\t\t{name: \"leap day in century non-leap year\", input: \"1900-02-29\", wantErr: true},\n\n\t\t// Invalid month\n\t\t{name: \"month 13\", inpu",
+          "finish_reason": "stop"
+        }
+      }
+    },
+    {
+      "id": "bump-dependency",
+      "title": "Bump a patch dependency",
+      "prompt": "Bump serde_json from 1.0.120 to 1.0.128 in Cargo.toml, run cargo update -p serde_json, and make sure cargo test still passes.",
+      "expected_tier": "efficient",
+      "runs": {
+        "jev": {
+          "selected_model": "gpt-6.1-terra",
+          "served_model": "gpt-6.1-terra",
+          "reason": "llm_task_classifier:decision_classifier",
+          "evidence": {
+            "evidence": {
+              "source": "decision_classifier",
+              "verdict": "relative_advantage",
+              "selected_candidate": "candidate_b",
+              "score_option": "advantage",
+              "score": 0.13,
+              "threshold": 0.15
+            },
+            "judgments": [
+              {
+                "target": "gpt-6.1-terra",
+                "category": "efficient",
+                "evidence": {
+                  "source": "decision_classifier",
+                  "verdict": "relative_advantage",
+                  "selected_candidate": "candidate_b",
+                  "score_option": "advantage",
+                  "score": 0.13,
+                  "threshold": 0.15
+                }
+              }
+            ]
+          },
+          "status": 200,
+          "latency_ms": 8537,
+          "upstream_latency_ms": 8436,
+          "answer": "I can’t access the repository or run Cargo commands in this session, so I haven’t made the change or verified the tests.\n\nTo complete it, update `serde_json` from `1.0.120` to `1.0.128` in `Cargo.toml`, then run:\n\n```sh\ncargo update -p serde_json\ncargo test\n```",
+          "finish_reason": "stop"
+        },
+        "classifier": {
+          "selected_model": "gpt-6.1-terra",
+          "served_model": "gpt-6.1-terra",
+          "reason": "llm_task_classifier:llm-classifier",
+          "evidence": {
+            "evidence": {
+              "source": "llm-classifier",
+              "score": 0.87,
+              "threshold": 0.6
+            },
+            "judgments": [
+              {
+                "target": "gpt-6.1-terra",
+                "category": "efficient",
+                "evidence": {
+                  "source": "llm-classifier",
+                  "score": 0.87,
+                  "threshold": 0.6
+                }
+              }
+            ]
+          },
+          "status": 200,
+          "latency_ms": 8906,
+          "upstream_latency_ms": 6775,
+          "answer": "I can’t access the repository or run Cargo commands in this session, so I haven’t made the change or verified the tests.\n\nTo complete it, update the `serde_json` version in `Cargo.toml` from `1.0.120` to `1.0.128`, then run:\n\n```sh\ncargo update -p serde_json\ncargo test\n```",
+          "finish_reason": "stop"
+        }
+      }
+    },
+    {
+      "id": "split-monolith-module",
+      "title": "Split a monolithic module",
+      "prompt": "Our orders service keeps pricing, inventory reservation and payment capture in one 3,000-line orders.py with shared mutable globals. Split it into pricing, inventory and payments modules with explicit interfaces, remove the globals, keep the public HTTP API unchanged, and update the 40 call sites and the integration tests across the repo.",
+      "expected_tier": "capable",
+      "runs": {
+        "jev": {
+          "selected_model": "claude-opus-5-5",
+          "served_model": "claude-opus-5-5",
+          "reason": "llm_task_classifier:decision_classifier",
+          "evidence": {
+            "evidence": {
+              "source": "decision_classifier",
+              "verdict": "relative_advantage",
+              "selected_candidate": "candidate_a",
+              "score_option": "advantage",
+              "score": 0.39,
+              "threshold": 0.15
+            },
+            "judgments": [
+              {
+                "target": "claude-opus-5-5",
+                "category": "capable",
+                "evidence": {
+                  "source": "decision_classifier",
+                  "verdict": "relative_advantage",
+                  "selected_candidate": "candidate_a",
+                  "score_option": "advantage",
+                  "score": 0.39,
+                  "threshold": 0.15
+                }
+              }
+            ]
+          },
+          "status": 200,
+          "latency_ms": 13900,
+          "upstream_latency_ms": 13801,
+          "answer": "I don't have the repository contents in this session, so I can't see `orders.py`, the 40 call sites, or the tests yet. Here is the plan I'd follow. Once you share the code (or confirm I should start reading the repo), I'll carry it out step by step.\n\n## Plan\n\n**1. Map before moving anything**\n- Inventory every module-level global in `orders.py`: what it holds, who reads it, and who writes it. Shared mutable globals are where hidden coupling lives. For example, pricing may read a cache that payments mutates.\n- Tag each function as pricing, inventory, payments, or cross-cutting orchestration.\n- Find all 40 call sites (`grep -rn \"from orders import\\|import orders\\|orders\\.\"`) and record which symbols each one uses.\n- Run the integration tests and record a green baseline.\n\n**2. Define explicit interfaces**\n- `pricing`: a `PricingService` with pure-ish methods such as `quote(items, customer) -> PriceBreakdown`.\n- `inventory`: an `InventoryService` with `reserve(items) -> Reservation`, `release(reservation)`, and `commit(reservation)`.\n- `payments`: a `PaymentService` with `authorize(amount, method)`, `capture(auth_id)`, and `refund(...)`.\n- Small dataclasses for the values passed betwee",
+          "finish_reason": "length"
+        },
+        "classifier": {
+          "selected_model": "claude-opus-5-5",
+          "served_model": "claude-opus-5-5",
+          "reason": "llm_task_classifier:llm-classifier",
+          "evidence": {
+            "evidence": {
+              "source": "llm-classifier",
+              "score": 0.2,
+              "threshold": 0.8
+            },
+            "judgments": [
+              {
+                "target": "claude-opus-5-5",
+                "category": "capable",
+                "evidence": {
+                  "source": "llm-classifier",
+                  "score": 0.2,
+                  "threshold": 0.8
+                }
+              }
+            ]
+          },
+          "status": 200,
+          "latency_ms": 15972,
+          "upstream_latency_ms": 13008,
+          "answer": "This is a large refactor, so I want to do it in safe, verifiable steps. In this session I don't see the repository contents or tool output yet, so I can't read `orders.py` or the call sites. I'll start by mapping the code before moving anything. Here's the plan.\n\n## Phase 1: Map before moving (no code changes)\n1. **Inventory the globals.** List every module-level mutable in `orders.py` (caches, dicts, counters, clients, config). For each one, record which functions read or write it and whether it's per-request, per-process, or effectively config.\n2. **Cluster functions by domain.** Tag each function as pricing, inventory, payments, or orchestration/HTTP. Functions that touch more than one domain are the important ones. They become the orchestration layer.\n3. **Find the 40 call sites.** Use `grep -rn \"from .*orders import\\|orders\\.\" --include=*.py` and record which symbols each one uses. This shows the real public surface we must preserve or redirect.\n4. **Snapshot behavior.** Run the integration suite and record a green baseline. If HTTP coverage is thin, add golden-response tests for each endpoint first, so \"API unchanged\" is checked by tests, not by eye.\n\n## Phase 2: Target struc",
+          "finish_reason": "length"
+        }
+      }
+    },
+    {
+      "id": "race-condition-cache",
+      "title": "Fix a cache race condition",
+      "prompt": "Under load our Rust service occasionally returns stale user permissions. The permission cache in src/authz/cache.rs uses an RwLock<HashMap> plus a background refresher task, and invalidation messages arrive over a tokio broadcast channel. Find the race between refresh and invalidation, fix it without a global lock on the hot path, and add a deterministic test that reproduces the interleaving.",
+      "expected_tier": "capable",
+      "runs": {
+        "jev": {
+          "selected_model": "claude-opus-5-5",
+          "served_model": "claude-opus-5-5",
+          "reason": "llm_task_classifier:decision_classifier",
+          "evidence": {
+            "evidence": {
+              "source": "decision_classifier",
+              "verdict": "relative_advantage",
+              "selected_candidate": "candidate_a",
+              "score_option": "advantage",
+              "score": 0.42,
+              "threshold": 0.15
+            },
+            "judgments": [
+              {
+                "target": "claude-opus-5-5",
+                "category": "capable",
+                "evidence": {
+                  "source": "decision_classifier",
+                  "verdict": "relative_advantage",
+                  "selected_candidate": "candidate_a",
+                  "score_option": "advantage",
+                  "score": 0.42,
+                  "threshold": 0.15
+                }
+              }
+            ]
+          },
+          "status": 200,
+          "latency_ms": 13031,
+          "upstream_latency_ms": 12923,
+          "answer": "# Permission cache race: likely cause, fix, and deterministic test\n\nI can't see `src/authz/cache.rs` in this conversation. Paste it, or let me read it, and I'll make the exact edit. Until then, here is the race this design almost always has, a fix that adds no global lock, and a test that reproduces the interleaving.\n\n## The race\n\nThe background refresher does a read, then a slow fetch, then a write, and those steps aren't atomic with respect to invalidation:\n\n```\nrefresher                         invalidation listener\n---------                         ---------------------\nfetch perms for user U (old)  ─┐\n   ... awaiting DB/RPC ...     │   recv Invalidate(U)\n                               │   cache.write().remove(U)   // correct\ncache.write().insert(U, old) ◄─┘   // stale value resurrected\n```\n\nThe invalidation is applied, then overwritten by a fetch that started before the permission change. The stale entry then lives until the next refresh or TTL. This appears only under load because fetches get slower and the window gets wider.\n\nThere's a second, related bug to check for. `tokio::sync::broadcast` drops messages when a receiver falls behind and returns `RecvError::Lagged(n)`. If",
+          "finish_reason": "length"
+        },
+        "classifier": {
+          "selected_model": "claude-opus-5-5",
+          "served_model": "claude-opus-5-5",
+          "reason": "llm_task_classifier:llm-classifier",
+          "evidence": {
+            "evidence": {
+              "source": "llm-classifier",
+              "score": 0.4,
+              "threshold": 0.7
+            },
+            "judgments": [
+              {
+                "target": "claude-opus-5-5",
+                "category": "capable",
+                "evidence": {
+                  "source": "llm-classifier",
+                  "score": 0.4,
+                  "threshold": 0.7
+                }
+              }
+            ]
+          },
+          "status": 200,
+          "latency_ms": 17354,
+          "upstream_latency_ms": 12743,
+          "answer": "I don't have file access in this session, so I can't open `src/authz/cache.rs` yet. If you paste it, or re-run me with repo access, I'll fit this to your exact code. Your setup (RwLock map, background refresher, broadcast invalidation) almost always has the same two bugs, so here's the diagnosis, a fix, and a deterministic test you can adapt.\n\n## The race(s)\n\n**1. Refresh overwrites a newer invalidation (lost invalidation).**\n```\nrefresher                         invalidation listener\n---------                         ---------------------\nfetch perms(user) from DB  ─┐\n   (slow, no lock held)      │    recv Invalidate(user)\n                             │    map.write().remove(user)\nmap.write().insert(user, ◄───┘    // the fetched value is now stale\n   stale_perms)\n```\nThe refresher read the data before the permission change and wrote it back after the invalidation. That stale entry stays until the next refresh cycle. Under load, DB latency widens this window, which matches \"occasionally stale\".\n\n**2. `RecvError::Lagged` is ignored.**\nIf the listener does `while let Ok(msg) = rx.recv().await` or skips `Lagged(n)`, a burst of invalidations overflowing the broadcast buffer silently dr",
+          "finish_reason": "length"
+        }
+      }
+    },
+    {
+      "id": "deadlock-worker-pool",
+      "title": "Diagnose a worker pool deadlock",
+      "prompt": "Our Go job runner deadlocks roughly once a day. Workers take a per-tenant mutex, then call into a rate limiter that may block on a channel the dispatcher only drains while holding the same tenant mutex. Here is a goroutine dump excerpt showing 64 goroutines in sync.(*Mutex).Lock and chan send. Explain the lock ordering problem and restructure the dispatcher so it cannot deadlock, keeping per-tenant fairness.",
+      "expected_tier": "capable",
+      "runs": {
+        "jev": {
+          "selected_model": "claude-opus-5-5",
+          "served_model": "claude-opus-5-5",
+          "reason": "llm_task_classifier:decision_classifier",
+          "evidence": {
+            "evidence": {
+              "source": "decision_classifier",
+              "verdict": "relative_advantage",
+              "selected_candidate": "candidate_a",
+              "score_option": "advantage",
+              "score": 0.31,
+              "threshold": 0.15
+            },
+            "judgments": [
+              {
+                "target": "claude-opus-5-5",
+                "category": "capable",
+                "evidence": {
+                  "source": "decision_classifier",
+                  "verdict": "relative_advantage",
+                  "selected_candidate": "candidate_a",
+                  "score_option": "advantage",
+                  "score": 0.31,
+                  "threshold": 0.15
+                }
+              }
+            ]
+          },
+          "status": 200,
+          "latency_ms": 13892,
+          "upstream_latency_ms": 13753,
+          "answer": "# Fixing the Tenant-Mutex / Rate-Limiter Deadlock\n\nThe goroutine dump excerpt didn't come through, only the description. That description is enough to identify the cycle. If you paste the dump and the dispatcher code, I can map this onto your actual types.\n\n## The lock ordering problem\n\nYou have two resources, and goroutines acquire them in opposite orders:\n\n| Goroutine | Holds | Waits for |\n|---|---|---|\n| Worker | tenant mutex `M[t]` | send on limiter channel `C` (full or unbuffered) |\n| Dispatcher | (wants to drain `C`) | `M[t]` before it will receive from `C` |\n\nThat is a classic wait-for cycle: `Worker → C → Dispatcher → M[t] → Worker`. Go's runtime only detects deadlock when *every* goroutine is blocked. Your HTTP server, tickers, and other goroutines are still alive, so you get a silent partial deadlock. It also cascades. Every other worker for tenant `t` piles up in `sync.(*Mutex).Lock`, and every worker for other tenants piles up in `chan send` once `C` fills. That matches your 64 goroutines split between those two states.\n\nIt only happens \"once a day\" because it needs `C` to be full at the moment a worker holding `M[t]` sends, *and* the dispatcher to be about to service t",
+          "finish_reason": "length"
+        },
+        "classifier": {
+          "selected_model": "claude-opus-5-5",
+          "served_model": "claude-opus-5-5",
+          "reason": "llm_task_classifier:llm-classifier",
+          "evidence": {
+            "evidence": {
+              "source": "llm-classifier",
+              "score": 0.55,
+              "threshold": 0.7
+            },
+            "judgments": [
+              {
+                "target": "claude-opus-5-5",
+                "category": "capable",
+                "evidence": {
+                  "source": "llm-classifier",
+                  "score": 0.55,
+                  "threshold": 0.7
+                }
+              }
+            ]
+          },
+          "status": 200,
+          "latency_ms": 18496,
+          "upstream_latency_ms": 12948,
+          "answer": "# Lock-ordering deadlock in the job runner, and a dispatcher that can't deadlock\n\nThe goroutine dump didn't come through, only the description. If you paste it, or point me at the dispatcher and limiter files, I can map this onto your actual code. The description is enough to identify the cycle, though.\n\n## The deadlock\n\nThere are two resources, and the two sides acquire them in opposite order:\n\n| Goroutine | Holds | Waits for |\n|---|---|---|\n| Worker | `tenant.mu` | send on `limiter.ch` (full) |\n| Dispatcher | nothing yet | `tenant.mu`, which it needs before it will drain `limiter.ch` |\n\nSo each side waits on the other:\n\n- The worker holds the mutex and needs the channel drained.\n- The dispatcher needs the mutex before it will drain the channel.\n\nA channel send is a lock acquisition in disguise. It blocks until someone else makes progress. Holding a mutex across it creates a lock-order edge `tenant.mu → limiter.ch`. The dispatcher creates the reverse edge `limiter.ch-drain → tenant.mu`, which closes the cycle.\n\nIt only happens about once a day because the channel must be **full** at the moment a worker holding the lock sends. Most of the time the buffer has slack. A burst on one t",
+          "finish_reason": "length"
+        }
+      }
+    },
+    {
+      "id": "jwt-to-paseto-migration",
+      "title": "Migrate session tokens off HS256 JWT",
+      "prompt": "We sign session tokens as HS256 JWTs with a secret shared by six services, and one service accepts alg=none by mistake. Plan and implement a migration to asymmetric PASETO v4.public tokens: key generation and rotation, a dual-verify window so existing sessions keep working, removal of the alg=none path, and tests that prove forged and downgraded tokens are rejected.",
+      "expected_tier": "capable",
+      "runs": {
+        "jev": {
+          "selected_model": "claude-opus-5-5",
+          "served_model": "claude-opus-5-5",
+          "reason": "llm_task_classifier:decision_classifier",
+          "evidence": {
+            "evidence": {
+              "source": "decision_classifier",
+              "verdict": "relative_advantage",
+              "selected_candidate": "candidate_a",
+              "score_option": "advantage",
+              "score": 0.3,
+              "threshold": 0.15
+            },
+            "judgments": [
+              {
+                "target": "claude-opus-5-5",
+                "category": "capable",
+                "evidence": {
+                  "source": "decision_classifier",
+                  "verdict": "relative_advantage",
+                  "selected_candidate": "candidate_a",
+                  "score_option": "advantage",
+                  "score": 0.3,
+                  "threshold": 0.15
+                }
+              }
+            ]
+          },
+          "status": 200,
+          "latency_ms": 14413,
+          "upstream_latency_ms": 14276,
+          "answer": null,
+          "finish_reason": "length"
+        },
+        "classifier": {
+          "selected_model": "claude-opus-5-5",
+          "served_model": "claude-opus-5-5",
+          "reason": "llm_task_classifier:llm-classifier",
+          "evidence": {
+            "evidence": {
+              "source": "llm-classifier",
+              "score": 0.3,
+              "threshold": 0.7
+            },
+            "judgments": [
+              {
+                "target": "claude-opus-5-5",
+                "category": "capable",
+                "evidence": {
+                  "source": "llm-classifier",
+                  "score": 0.3,
+                  "threshold": 0.7
+                }
+              }
+            ]
+          },
+          "status": 200,
+          "latency_ms": 17637,
+          "upstream_latency_ms": 14077,
+          "answer": "# Migrating from HS256 JWT to PASETO v4.public\n\nI don't have your repository in front of me, so this assumes **Node/TypeScript** with `jsonwebtoken` and uses `paseto` (panva) for v4. The design carries over to other stacks; tell me yours and I'll adapt it to your actual files.\n\n## 0. Fix alg=none now, separately\n\nDon't make this wait for the migration. Ship this hotfix today:\n\n```ts\n// The vulnerable service\njwt.verify(token, SECRET, { algorithms: ['HS256'] }); // pin the algorithm explicitly\n```\n\nAlso grep every service for `jwt.decode(` being used where verification is intended, and for verify calls without `algorithms`.\n\n## 1. Plan\n\n| Phase | Action | Exit criterion |\n|---|---|---|\n| 0 | alg=none hotfix and pinned algorithms in all 6 services | Tests in §5 pass on HS256 path |\n| 1 | Generate an Ed25519 keypair. Distribute the **public key only** to all 6 services. Deploy the dual verifier (§4). The auth service still issues HS256. | All 6 services run the dual verifier |\n| 2 | The auth service issues v4.public tokens | Issuance metrics show 0 HS256 tokens |\n| 3 | Wait for max session lifetime plus clock skew. Optionally force re-auth for stragglers. | HS256 verify count is ~0 |\n",
+          "finish_reason": "length"
+        }
+      }
+    },
+    {
+      "id": "sql-injection-audit",
+      "title": "Remove SQL injection from a reporting API",
+      "prompt": "The reporting endpoints in api/reports/*.php build SQL with string concatenation from query parameters, including ORDER BY columns and IN lists. Convert every query to parameterized PDO statements, allow-list sortable columns, keep the existing response format, and add regression tests for injection payloads.",
+      "expected_tier": "capable",
+      "runs": {
+        "jev": {
+          "selected_model": "claude-opus-5-5",
+          "served_model": "claude-opus-5-5",
+          "reason": "llm_task_classifier:decision_classifier",
+          "evidence": {
+            "evidence": {
+              "source": "decision_classifier",
+              "verdict": "relative_advantage",
+              "selected_candidate": "candidate_a",
+              "score_option": "advantage",
+              "score": 0.3,
+              "threshold": 0.15
+            },
+            "judgments": [
+              {
+                "target": "claude-opus-5-5",
+                "category": "capable",
+                "evidence": {
+                  "source": "decision_classifier",
+                  "verdict": "relative_advantage",
+                  "selected_candidate": "candidate_a",
+                  "score_option": "advantage",
+                  "score": 0.3,
+                  "threshold": 0.15
+                }
+              }
+            ]
+          },
+          "status": 200,
+          "latency_ms": 13042,
+          "upstream_latency_ms": 12950,
+          "answer": "I'll start by surveying the reporting endpoints and existing test setup before changing anything, so the conversion matches how the code actually builds queries and formats responses.\n\n**Plan**\n\n1. **Inventory** – Read every file in `api/reports/*.php` and note each query: where parameters enter (`$_GET`/`$_POST`), how `WHERE`, `ORDER BY`, `LIMIT`, and `IN (...)` clauses are built, and how the response is shaped (keys, types, ordering, error format).\n2. **Shared helper** – Add a small helper, e.g. `api/reports/lib/QueryHelpers.php`:\n   - `inPlaceholders(array $values, string $prefix): array` returns `[':p0, :p1, ...', [':p0' => ..., ...]]`. Empty lists yield a safe `1=0` condition instead of invalid SQL.\n   - `resolveSort(?string $col, array $allowed, string $default): string` maps user-facing names to fixed SQL column expressions. Anything else falls back to the default.\n   - `resolveDirection(?string $dir): string` returns only `ASC` or `DESC`.\n   - `LIMIT`/`OFFSET` are cast to bounded ints and bound with `PDO::PARAM_INT`.\n3. **Convert each endpoint** – Replace concatenated values with named placeholders and `prepare()`/`execute()`. Identifiers (sort columns) come only from the a",
+          "finish_reason": "length"
+        },
+        "classifier": {
+          "selected_model": "claude-opus-5-5",
+          "served_model": "claude-opus-5-5",
+          "reason": "llm_task_classifier:llm-classifier",
+          "evidence": {
+            "evidence": {
+              "source": "llm-classifier",
+              "score": 0.55,
+              "threshold": 0.7
+            },
+            "judgments": [
+              {
+                "target": "claude-opus-5-5",
+                "category": "capable",
+                "evidence": {
+                  "source": "llm-classifier",
+                  "score": 0.55,
+                  "threshold": 0.7
+                }
+              }
+            ]
+          },
+          "status": 200,
+          "latency_ms": 14361,
+          "upstream_latency_ms": 11449,
+          "answer": "I don't have the contents of `api/reports/*.php` in this session yet, and I'd rather not guess at your queries or response shapes. Rewriting SQL without seeing it could break the response format you want to keep. Here is the plan I'll apply to each file once I can read them. You can paste the files, or run me in a session with file access and I'll do the edits directly.\n\n## Plan per endpoint\n\n**1. Values in WHERE/HAVING/LIMIT become bound parameters**\n```php\n$stmt = $pdo->prepare('SELECT ... FROM orders WHERE status = :status AND created_at >= :from');\n$stmt->execute([':status' => $status, ':from' => $from]);\n```\nFor `LIMIT`/`OFFSET`, cast with `(int)` and bind with `PDO::PARAM_INT`. With emulated prepares, MySQL would otherwise quote them as strings.\n\n**2. IN lists get generated placeholders**\n```php\n$ids = array_values(array_filter((array)($_GET['ids'] ?? []), 'ctype_digit'));\nif (!$ids) { /* return the same empty-result shape the endpoint returns today */ }\n$in = implode(',', array_fill(0, count($ids), '?'));\n$stmt = $pdo->prepare(\"SELECT ... WHERE region_id IN ($in)\");\n$stmt->execute($ids);\n```\nUse positional `?` throughout any query that has an IN list, because PDO can't mix n",
+          "finish_reason": "length"
+        }
+      }
+    }
+  ]
+}

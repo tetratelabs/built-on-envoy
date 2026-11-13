@@ -1,0 +1,189 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# Template, rendered by run.sh into out/manifests/. ${...} placeholders come from the environment,
+# and the lines between the https-only markers are kept only when INFERENCE_BASE_URL uses https.
+#
+# The agent-router Gateway, plus what the judges need: static "typesafe" and "inference" clusters
+# the Switchyard module calls the judges through, the judge API keys mounted from a Secret, and a
+# JSON access log that records each routing decision.
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: switchyard
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: switchyard
+  namespace: default
+spec:
+  gatewayClassName: switchyard
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+  infrastructure:
+    parametersRef:
+      group: gateway.envoyproxy.io
+      kind: EnvoyProxy
+      name: switchyard
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: switchyard
+  namespace: default
+spec:
+  # The modules EnvoyExtensionPolicies may use. The module is read from the image volume below.
+  dynamicModules:
+    - name: switchyard
+      source:
+        type: Local
+        local:
+          path: /var/boe/extensions/switchyard/libswitchyard.so
+      # The module keeps routers, and their session state, across configuration updates.
+      doNotClose: true
+  # The module must run before Agent Router's extproc filter, which reads the model from the body.
+  filterOrder:
+    - name: envoy.filters.http.dynamic_modules
+      before: envoy.filters.http.lua
+    - name: envoy.filters.http.dynamic_modules
+      before: envoy.filters.http.ext_proc
+    - name: envoy.filters.http.dynamic_modules
+      before: envoy.filters.http.wasm
+  # The module calls the judges through these clusters, named by the judge targets in
+  # switchyard-policy.yaml. A static bootstrap cluster exists before any filter configuration
+  # arrives.
+  bootstrap:
+    type: JSONPatch
+    jsonPatches:
+      # Jev, the decision judge.
+      - op: add
+        path: /static_resources/clusters/-
+        value:
+          name: typesafe
+          type: LOGICAL_DNS
+          dns_lookup_family: V4_PREFERRED
+          connect_timeout: 5s
+          load_assignment:
+            cluster_name: typesafe
+            endpoints:
+              - lb_endpoints:
+                  - endpoint:
+                      address:
+                        socket_address:
+                          address: api.typesafe.ai
+                          port_value: 443
+          transport_socket:
+            name: envoy.transport_sockets.tls
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+              sni: api.typesafe.ai
+              common_tls_context:
+                validation_context:
+                  trusted_ca:
+                    filename: /etc/ssl/certs/ca-certificates.crt
+                  match_typed_subject_alt_names:
+                    - san_type: DNS
+                      matcher:
+                        exact: api.typesafe.ai
+      # The OpenAI-compatible endpoint that serves the LLM classifier judge.
+      - op: add
+        path: /static_resources/clusters/-
+        value:
+          name: inference
+          type: LOGICAL_DNS
+          dns_lookup_family: V4_PREFERRED
+          connect_timeout: 5s
+          load_assignment:
+            cluster_name: inference
+            endpoints:
+              - lb_endpoints:
+                  - endpoint:
+                      address:
+                        socket_address:
+                          address: "${INFERENCE_HOST}"
+                          port_value: ${INFERENCE_PORT}
+          # https-only-begin
+          transport_socket:
+            name: envoy.transport_sockets.tls
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+              sni: "${INFERENCE_HOST}"
+              common_tls_context:
+                validation_context:
+                  trusted_ca:
+                    filename: /etc/ssl/certs/ca-certificates.crt
+                  match_typed_subject_alt_names:
+                    - san_type: DNS
+                      matcher:
+                        exact: "${INFERENCE_HOST}"
+          # https-only-end
+  # One JSON line per request with the Switchyard decision. run.sh matches lines by x-demo-case.
+  telemetry:
+    accessLog:
+      settings:
+        - format:
+            type: JSON
+            json:
+              case: "%REQ(X-DEMO-CASE)%"
+              status: "%RESPONSE_CODE%"
+              duration_ms: "%DURATION%"
+              # Time spent on the target model: from the first byte sent upstream to the last
+              # byte received. The judge call happens before, in the Switchyard filter.
+              upstream_latency_ms: "%COMMON_DURATION(US_TX_BEG:US_RX_END:ms)%"
+              virtual_model: "%DYNAMIC_METADATA(io.builtonenvoy.switchyard:virtual_model)%"
+              selected_model: "%DYNAMIC_METADATA(io.builtonenvoy.switchyard:selected_model)%"
+              reason: "%DYNAMIC_METADATA(io.builtonenvoy.switchyard:reason)%"
+              evidence: "%DYNAMIC_METADATA(io.builtonenvoy.switchyard:evidence)%"
+              # The model Agent Router routed the request to.
+              served_model: "%REQ(X-AI-EG-MODEL)%"
+          sinks:
+            - type: File
+              file:
+                path: /dev/stdout
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyDeployment:
+        pod:
+          volumes:
+            # Mounts the extension's OCI image. Requires the Kubernetes ImageVolume feature.
+            - name: switchyard
+              image:
+                reference: ghcr.io/tetratelabs/built-on-envoy/extension-switchyard:0.1.0
+                pullPolicy: IfNotPresent
+            # The judge API keys, created by run.sh from JEV_API_KEY_FILE and
+            # INFERENCE_API_KEY_FILE.
+            - name: judge-keys
+              secret:
+                secretName: judge-keys
+        container:
+          volumeMounts:
+            - name: switchyard
+              mountPath: /var/boe/extensions/switchyard
+              readOnly: true
+            - name: judge-keys
+              mountPath: /etc/switchyard
+              readOnly: true
+          # Clears the default resource requests, for local tests only.
+          resources: {}
+---
+# By default, Envoy Gateway limits buffered bodies to 32KiB, which is too small for LLM requests.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: ClientTrafficPolicy
+metadata:
+  name: switchyard-buffer-limit
+  namespace: default
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: switchyard
+  connection:
+    bufferLimit: 50Mi

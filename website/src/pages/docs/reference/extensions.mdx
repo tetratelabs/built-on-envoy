@@ -2507,6 +2507,29 @@ Whether to add the x-switchyard-virtual-model, x-switchyard-selected-model and x
 
 [↑ Top](#) | [↑ Switchyard Configuration](#switchyard) {/* if .SubProperties */}
 
+### decision_targets
+
+Judge models that return typed decisions, such as Jev, by judge name. Algorithms refer to them by name, for example in classifier_target.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard) {/* if .SubProperties */}
+
+### eligible_models_header
+
+Optional request header holding comma-separated model names. The algorithm only sees eligible targets, and routing fails when none is eligible. Judges are not limited. Must be set by a trusted filter, never by the client.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+| **Min length** | 1 |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard) {/* if .SubProperties */}
+
 ### endpoints
 
 Request path suffixes handled by the filter, mapped to the API format of their bodies. Defaults to the OpenAI chat completions, OpenAI responses and Anthropic messages endpoints.
@@ -2517,6 +2540,138 @@ Request path suffixes handled by the filter, mapped to the API format of their b
 | **Required** | No |
 
 [↑ Top](#) | [↑ Switchyard Configuration](#switchyard) {/* if .SubProperties */}
+
+### judge_targets
+
+Judge models called with a chat request, by judge name. A name must not also appear in decision_targets.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard) {/* if .SubProperties */}
+
+### model_calls
+
+How the filter calls target models of the gateway: judges named by a target key, vgr's efficient attempt, and advisor's executor and advisor. Required when an algorithm makes such calls. Point the cluster at the gateway itself, so that it applies credentials, rate limits, costs and telemetry to the calls.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### model_calls.authority
+
+The :authority of the calls. Defaults to the client request's.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+| **Min length** | 1 |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### model_calls.cluster
+
+The Envoy cluster the calls are sent to, usually a loopback cluster to the gateway.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | Yes |
+| **Min length** | 1 |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### model_calls.format
+
+API format of the calls. Defaults to the client request's.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### model_calls.forward_headers
+
+Client request headers copied to the calls, such as credentials, tenant and session headers.
+
+| | |
+|---|---|
+| **Type** | `[]string` |
+| **Required** | No |
+| **Item min length** | 1 |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### model_calls.headers
+
+Extra request headers added to the calls.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### model_calls.path
+
+Request path. Defaults to the client request's path, or to the standard path of format when it differs from the client's.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+| **Pattern** | `^/` |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### model_calls.timeout_ms
+
+Timeout of each call, in milliseconds. Defaults to 10000.
+
+| | |
+|---|---|
+| **Type** | `integer` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+
+
+#### model_calls.trace_context
+
+
+
+| | |
+|---|---|
+| **Type** | [TraceContext](#switchyard-TraceContext) |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+   {/* range .SubProperties */} {/* if .SubProperties */}
 
 ### model_header
 
@@ -2532,6 +2687,17 @@ Optional request header set to the selected model, for routing on plain Envoy. N
 ### rewrite_body
 
 Whether to rewrite the model field of the request body to the selected model. Set to false to keep the virtual model in the body and carry the decision only in the decision headers, model_header, dynamic metadata and filter state, so that a later filter can apply its own policy before it picks the backend. Defaults to true.
+
+| | |
+|---|---|
+| **Type** | `boolean` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard) {/* if .SubProperties */}
+
+### routing_headers
+
+Whether to add the x-switchyard-routing-calls, -input-tokens, -output-tokens and -total-tokens response headers to routed responses and answers. Defaults to false.
 
 | | |
 |---|---|
@@ -2634,7 +2800,7 @@ Virtual models resolved by the filter. The first entry whose name and match_head
 
 #### virtual_models.algorithm
 
-The Switchyard algorithm, in Switchyard's route configuration format. Only algorithms that decide without calling a model are supported.
+The Switchyard algorithm, in Switchyard's route configuration format. Every Switchyard algorithm except prefill_router is supported. Judges resolve to decision_targets, then judge_targets, then the virtual model's own targets, which are called through model_calls.
 
 | | |
 |---|---|
@@ -2709,7 +2875,44 @@ Switchyard target names, as used in the algorithm configuration, mapped to the m
 
 [↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
 
-   {/* range .SubProperties */} {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */}
+   {/* range .SubProperties */} {/* if .SubProperties */} {/* range .Properties */}
+
+
+
+<a id="switchyard-DataSource"></a>
+### Custom type: DataSource
+
+A value given inline or read from a file. A file is read once at config load and trimmed of surrounding whitespace.
+**Requires one of:** `inline`, `file`
+
+#### file
+
+
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+| **Min length** | 1 |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard)
+
+#### inline
+
+
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+| **Min length** | 1 |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard) {/* range .Properties */}
+
+<a id="switchyard-TraceContext"></a>
+### Custom type: TraceContext
+
+Trace context sent with each call: w3c (traceparent), b3 (x-b3-* headers) or none. Defaults to w3c. {/* range .Properties */} {/* range .CustomTypes */} {/* if .CustomTypes */}
 
 
 

@@ -1,0 +1,62 @@
+[
+  {
+    "id": "rename-variable",
+    "title": "Rename a variable",
+    "prompt": "In src/billing/invoice.ts, rename the local variable `tmp` in `computeTotals` to `subtotalCents`. Don't change anything else.",
+    "expected_tier": "efficient"
+  },
+  {
+    "id": "fix-typo-readme",
+    "title": "Fix typos in the README",
+    "prompt": "Fix the spelling mistakes in README.md (\"recieve\", \"seperate\", \"dependancy\"). Keep the wording otherwise identical.",
+    "expected_tier": "efficient"
+  },
+  {
+    "id": "docstring-helpers",
+    "title": "Add docstrings to helpers",
+    "prompt": "Add Google-style docstrings to the three public functions in utils/strings.py (slugify, truncate, normalize_whitespace). Describe arguments and return values; do not change behaviour.",
+    "expected_tier": "efficient"
+  },
+  {
+    "id": "unit-test-parser",
+    "title": "Unit test for a date parser",
+    "prompt": "Write table-driven Go tests for `ParseISODate` in internal/dates/parse.go covering valid dates, leap days, and an invalid month. Use the standard testing package only.",
+    "expected_tier": "efficient"
+  },
+  {
+    "id": "bump-dependency",
+    "title": "Bump a patch dependency",
+    "prompt": "Bump serde_json from 1.0.120 to 1.0.128 in Cargo.toml, run cargo update -p serde_json, and make sure cargo test still passes.",
+    "expected_tier": "efficient"
+  },
+  {
+    "id": "split-monolith-module",
+    "title": "Split a monolithic module",
+    "prompt": "Our orders service keeps pricing, inventory reservation and payment capture in one 3,000-line orders.py with shared mutable globals. Split it into pricing, inventory and payments modules with explicit interfaces, remove the globals, keep the public HTTP API unchanged, and update the 40 call sites and the integration tests across the repo.",
+    "expected_tier": "capable"
+  },
+  {
+    "id": "race-condition-cache",
+    "title": "Fix a cache race condition",
+    "prompt": "Under load our Rust service occasionally returns stale user permissions. The permission cache in src/authz/cache.rs uses an RwLock<HashMap> plus a background refresher task, and invalidation messages arrive over a tokio broadcast channel. Find the race between refresh and invalidation, fix it without a global lock on the hot path, and add a deterministic test that reproduces the interleaving.",
+    "expected_tier": "capable"
+  },
+  {
+    "id": "deadlock-worker-pool",
+    "title": "Diagnose a worker pool deadlock",
+    "prompt": "Our Go job runner deadlocks roughly once a day. Workers take a per-tenant mutex, then call into a rate limiter that may block on a channel the dispatcher only drains while holding the same tenant mutex. Here is a goroutine dump excerpt showing 64 goroutines in sync.(*Mutex).Lock and chan send. Explain the lock ordering problem and restructure the dispatcher so it cannot deadlock, keeping per-tenant fairness.",
+    "expected_tier": "capable"
+  },
+  {
+    "id": "jwt-to-paseto-migration",
+    "title": "Migrate session tokens off HS256 JWT",
+    "prompt": "We sign session tokens as HS256 JWTs with a secret shared by six services, and one service accepts alg=none by mistake. Plan and implement a migration to asymmetric PASETO v4.public tokens: key generation and rotation, a dual-verify window so existing sessions keep working, removal of the alg=none path, and tests that prove forged and downgraded tokens are rejected.",
+    "expected_tier": "capable"
+  },
+  {
+    "id": "sql-injection-audit",
+    "title": "Remove SQL injection from a reporting API",
+    "prompt": "The reporting endpoints in api/reports/*.php build SQL with string concatenation from query parameters, including ORDER BY columns and IN lists. Convert every query to parameterized PDO statements, allow-list sortable columns, keep the existing response format, and add regression tests for injection payloads.",
+    "expected_tier": "capable"
+  }
+]

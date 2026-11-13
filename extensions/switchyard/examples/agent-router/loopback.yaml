@@ -1,0 +1,62 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# Envoy clusters for the calls the Switchyard algorithms make, referenced by the model_calls block
+# and the decision_targets of the policies.
+#
+#   - gateway_loopback: the Gateway's own listener. Judges that name a target of the virtual model,
+#     and the verifier, executor and advisor calls, go back through the Gateway, so Agent Router
+#     applies its credentials, translation, rate limits, costs and telemetry to them, as to any
+#     other request.
+#   - fake_decisions: the fake decision API (see judge.yaml), called directly with the decision
+#     target's own key. Agent Router does not route decision APIs, such as System One.
+#
+# EnvoyPatchPolicy must be enabled in Envoy Gateway (config.envoyGateway.extensionApis.
+# enableEnvoyPatchPolicy), as Agent Router's Envoy Gateway values do.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyPatchPolicy
+metadata:
+  name: switchyard-clusters
+  namespace: default
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: switchyard
+  type: JSONPatch
+  jsonPatches:
+    - type: type.googleapis.com/envoy.config.cluster.v3.Cluster
+      name: gateway_loopback
+      operation:
+        op: add
+        path: ""
+        value:
+          name: gateway_loopback
+          type: STATIC
+          connect_timeout: 1s
+          load_assignment:
+            cluster_name: gateway_loopback
+            endpoints:
+              - lb_endpoints:
+                  - endpoint:
+                      address:
+                        # Envoy Gateway listens on the Gateway's port plus 10000 for ports below 1024.
+                        socket_address: {address: 127.0.0.1, port_value: 10080}
+    - type: type.googleapis.com/envoy.config.cluster.v3.Cluster
+      name: fake_decisions
+      operation:
+        op: add
+        path: ""
+        value:
+          name: fake_decisions
+          type: STRICT_DNS
+          connect_timeout: 1s
+          load_assignment:
+            cluster_name: fake_decisions
+            endpoints:
+              - lb_endpoints:
+                  - endpoint:
+                      address:
+                        socket_address: {address: judge.default.svc.cluster.local, port_value: 80}
