@@ -1,0 +1,61 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# llm_classifier with a decision judge: a System One endpoint, such as TypeSafe's Jev API, answers
+# whether the capable model has an advantage on the task. Decision calls go directly to the
+# decision API, on its own cluster and with its own key (see loopback.yaml), as Agent Router does
+# not route decision APIs, and they never carry the client's headers. The fake decision API answers
+# that tasks that contain "[hard]" need the capable model.
+# All the policies in this directory are named "switchyard", so applying one replaces the other.
+# The policy must target the whole Gateway: Envoy picks the filters for a request from the first
+# route it matches, before the model is known, and for Agent Router that is usually the catch-all
+# "route-not-found" rule.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyExtensionPolicy
+metadata:
+  name: switchyard
+  namespace: default
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: switchyard
+  dynamicModule:
+    - name: switchyard
+      filterName: switchyard
+      config:
+        decision_targets:
+          jev:
+            format: system_one
+            model: jev-latest
+            cluster: fake_decisions
+            authority: judge.default.svc.cluster.local
+            path: /v1/systemone
+            # Mounted from the judge-keys Secret (see judge.yaml and gateway.yaml). The key is sent
+            # as a Bearer token, which the fake decision API ignores.
+            api_key:
+              file: /etc/switchyard/jev
+            timeout_ms: 5000
+            trace_context: w3c
+        virtual_models:
+          - name: coding-auto
+            targets:
+              efficient: gpt-4.1-mini
+              capable: gpt-5
+            algorithm:
+              type: llm_classifier
+              classifier_target: jev
+              strong_target: capable
+              weak_target: efficient
+              fail_open: false
+              decision:
+                cutoff: 0.5
+                candidates:
+                  capable_first: capable
+                  efficient_first: efficient
+                evidence:
+                  description: Whether the capable model is needed to solve the task.
+            default_model: gpt-5
+        routing_headers: true

@@ -3,9 +3,10 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-# Agent Router routes for the target models. Nothing here is specific to Switchyard: the filter
-# rewrites the model in the request body, and Agent Router routes the request as if the client had
-# asked for that model.
+# Agent Router routes for the target models and the judge. Nothing here is specific to Switchyard:
+# the filter rewrites the model in the request body, and Agent Router routes the request as if the
+# client had asked for that model. The judge, verifier and advisor calls of the algorithms loop
+# back through the Gateway, and are routed the same way.
 apiVersion: aigateway.envoyproxy.io/v1beta1
 kind: AIGatewayRoute
 metadata:
@@ -31,6 +32,14 @@ spec:
               value: gpt-5
       backendRefs:
         - name: capable
+    # The model the algorithms call to judge, verify or review. Never a routing target.
+    - matches:
+        - headers:
+            - type: Exact
+              name: x-ai-eg-model
+              value: judge-model
+      backendRefs:
+        - name: judge
     # Optional. Lists the virtual model in /v1/models, and serves requests the filter leaves
     # unchanged, for example when routing fails and the failure mode is passthrough.
     - matches:
@@ -67,6 +76,19 @@ spec:
     kind: Backend
     group: gateway.envoyproxy.io
 ---
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: AIServiceBackend
+metadata:
+  name: judge
+  namespace: default
+spec:
+  schema:
+    name: OpenAI
+  backendRef:
+    name: judge
+    kind: Backend
+    group: gateway.envoyproxy.io
+---
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: Backend
 metadata:
@@ -87,4 +109,15 @@ spec:
   endpoints:
     - fqdn:
         hostname: capable.default.svc.cluster.local
+        port: 80
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: judge
+  namespace: default
+spec:
+  endpoints:
+    - fqdn:
+        hostname: judge.default.svc.cluster.local
         port: 80

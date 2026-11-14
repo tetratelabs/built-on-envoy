@@ -1,0 +1,37 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# stage_router: picks a tier per agent step by scoring the recent tool results. A step that only
+# reads goes to the efficient model, and failing tool calls escalate to the capable one. The tier
+# is held for the session, keyed on x-switchyard-session-id or agent-session-id.
+# All the policies in this directory are named "switchyard", so applying one replaces the other.
+# The policy must target the whole Gateway: Envoy picks the filters for a request from the first
+# route it matches, before the model is known, and for Agent Router that is usually the catch-all
+# "route-not-found" rule.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyExtensionPolicy
+metadata:
+  name: switchyard
+  namespace: default
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: switchyard
+  dynamicModule:
+    - name: switchyard
+      filterName: switchyard
+      config:
+        virtual_models:
+          - name: coding-auto
+            targets:
+              efficient: gpt-4.1-mini
+              capable: gpt-5
+            algorithm:
+              type: stage_router
+              capable_target: capable
+              efficient_target: efficient
+              picker: efficient_first
+              confidence_threshold: 0.5

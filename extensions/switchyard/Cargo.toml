@@ -1,6 +1,6 @@
 [package]
 name = "switchyard"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "Apache-2.0"
 repository = "https://github.com/tetratelabs/built-on-envoy"
@@ -15,12 +15,14 @@ switchyard-protocol = { git = "https://github.com/NVIDIA-NeMo/Switchyard.git", r
 switchyard-runner = { git = "https://github.com/NVIDIA-NeMo/Switchyard.git", rev = "4f23dedaa822a3d030aa44f409d778f13dceb33a" }
 switchyard-translation = { git = "https://github.com/NVIDIA-NeMo/Switchyard.git", rev = "4f23dedaa822a3d030aa44f409d778f13dceb33a" }
 futures = "0.3"
+http = "1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["preserve_order"] }
-tokio = { version = "1", features = ["rt-multi-thread", "time"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
 
 [dev-dependencies]
 jsonschema = "0.28"
+serde_yaml = "0.9"
 
 [lib]
 name = "switchyard"

@@ -3,12 +3,14 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
-# Adds the Switchyard filter to the Gateway.
+# auto: Switchyard's recommended preset. Agent steps that only read go to the efficient model, and
+# critical tool errors escalate to the capable model. Free-tier tenants always get the efficient
+# model, and sessions of different tenants never share routing state.
 #
-# The policy must target the whole Gateway. Envoy picks the filters that run on a request from
-# the first route it matches, before the model is known. For Agent Router routes, that first
-# match is usually the route's catch-all "route-not-found" rule, so a policy that targets only
-# some routes or rules would not run on those requests.
+# All the policies in this directory are named "switchyard", so applying one replaces the other.
+# The policy must target the whole Gateway: Envoy picks the filters for a request from the first
+# route it matches, before the model is known, and for Agent Router that is usually the catch-all
+# "route-not-found" rule.
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: EnvoyExtensionPolicy
 metadata:

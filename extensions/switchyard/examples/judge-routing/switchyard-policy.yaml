@@ -1,0 +1,95 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# Template, rendered by run.sh into out/manifests/. ${...} placeholders come from the environment.
+#
+# Adds the Switchyard filter to the Gateway, with two virtual models that route the same requests
+# to the same two targets, each with a different judge:
+#
+# - coding-jev asks Jev, a decision judge, whether the capable model has a clear advantage on the
+#   task.
+# - coding-classifier asks an LLM, through an OpenAI-compatible chat API, how likely the efficient
+#   model is to solve the task.
+#
+# The policy targets the whole Gateway for the reason given in ../agent-router/switchyard-policy.yaml.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyExtensionPolicy
+metadata:
+  name: switchyard
+  namespace: default
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: switchyard
+  dynamicModule:
+    - name: switchyard
+      filterName: switchyard
+      config:
+        decision_targets:
+          jev:
+            format: system_one
+            model: jev-latest
+            # The static clusters are added in gateway.yaml.
+            cluster: typesafe
+            authority: api.typesafe.ai
+            # Mounted from the judge-keys Secret. Read once when the configuration loads.
+            api_key:
+              file: /etc/switchyard/jev-api-key
+            timeout_ms: 5000
+        judge_targets:
+          classifier:
+            format: openai_chat
+            model: "${CLASSIFIER_MODEL}"
+            cluster: inference
+            authority: "${INFERENCE_HOST}"
+            path: "${INFERENCE_CHAT_PATH}"
+            api_key:
+              file: /etc/switchyard/inference-api-key
+            timeout_ms: 30000
+        virtual_models:
+          - name: coding-jev
+            targets:
+              efficient: "${EFFICIENT_MODEL}"
+              capable: "${CAPABLE_MODEL}"
+            algorithm:
+              type: llm_classifier
+              mode: capability
+              classifier_target: jev
+              strong_target: capable
+              weak_target: efficient
+              classify_trigger: every_request
+              # Jev sees the opening task only.
+              recent_turn_window: 0
+              # A failed judge call routes to the capable model.
+              fail_open: true
+              decision:
+                # Lowest advantage score of candidate A that routes to the capable model.
+                cutoff: 0.15
+                candidates:
+                  candidate_a: capable
+                  candidate_b: efficient
+                evidence: {}
+            default_model: "${EFFICIENT_MODEL}"
+            failure_mode: use_default
+          - name: coding-classifier
+            targets:
+              efficient: "${EFFICIENT_MODEL}"
+              capable: "${CAPABLE_MODEL}"
+            algorithm:
+              type: llm_classifier
+              mode: capability
+              classifier_target: classifier
+              strong_target: capable
+              weak_target: efficient
+              # Lowest probability that the efficient model solves the task for it to keep the
+              # request.
+              base_threshold: 0.6
+              threshold_step: 0.1
+              classify_trigger: every_request
+              fail_open: true
+              response_format_type: json_schema
+            default_model: "${EFFICIENT_MODEL}"
+            failure_mode: use_default

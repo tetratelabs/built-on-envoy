@@ -1,0 +1,53 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# vgr (verify, gate, route): the efficient model answers first, and judge models verify its
+# answer. When the answer is verified, the filter sends it to the client, and the request never
+# reaches a backend. Otherwise the request escalates to the capable model. The fake verifiers reject
+# the answers to tasks that contain "[hard]".
+#
+# The active mode serves verified answers. Switchyard requires the active_approval attestation to
+# turn it on: validate vgr on your traffic, with the evaluate or shadow modes, before you do.
+# All the policies in this directory are named "switchyard", so applying one replaces the other.
+# The policy must target the whole Gateway: Envoy picks the filters for a request from the first
+# route it matches, before the model is known, and for Agent Router that is usually the catch-all
+# "route-not-found" rule.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyExtensionPolicy
+metadata:
+  name: switchyard
+  namespace: default
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: switchyard
+  dynamicModule:
+    - name: switchyard
+      filterName: switchyard
+      config:
+        virtual_models:
+          - name: coding-auto
+            targets:
+              efficient: gpt-4.1-mini
+              capable: gpt-5
+              judge: judge-model
+            algorithm:
+              type: vgr
+              efficient_target: efficient
+              capable_target: capable
+              judge_target: judge
+              capable_judge_target: judge
+              mode: active
+              active_approval: prospective-validation-and-canary-approved
+            default_model: gpt-5
+        # Judges that name a target, and the verifier and executor calls, loop back through the
+        # Gateway (see loopback.yaml) with the client's credentials, tenant and session, so Agent
+        # Router routes, charges and records them like any other request.
+        model_calls:
+          cluster: gateway_loopback
+          forward_headers: [authorization, x-tenant-id, agent-session-id]
+        # Adds the calls and tokens spent on routing to the response headers.
+        routing_headers: true

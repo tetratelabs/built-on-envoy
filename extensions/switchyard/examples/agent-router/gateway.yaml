@@ -62,12 +62,19 @@ spec:
             # Mounts the extension's OCI image. Requires the Kubernetes ImageVolume feature.
             - name: switchyard
               image:
-                reference: ghcr.io/tetratelabs/built-on-envoy/extension-switchyard:0.1.0
+                reference: ghcr.io/tetratelabs/built-on-envoy/extension-switchyard:0.1.1
                 pullPolicy: IfNotPresent
+            # The decision judge's API key, from the judge-keys Secret in judge.yaml.
+            - name: judge-keys
+              secret:
+                secretName: judge-keys
         container:
           volumeMounts:
             - name: switchyard
               mountPath: /var/boe/extensions/switchyard
+              readOnly: true
+            - name: judge-keys
+              mountPath: /etc/switchyard
               readOnly: true
           # Clears the default resource requests, for local tests only.
           resources: {}
