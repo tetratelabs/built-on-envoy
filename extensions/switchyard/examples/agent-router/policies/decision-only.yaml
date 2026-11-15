@@ -1,0 +1,36 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# Decision only: the body keeps the virtual model, and the decision is passed to the later filters
+# in dynamic metadata, filter state and the x-switchyard-* headers. Agent Router then routes the
+# virtual model itself, here to the efficient backend. A filter between the two can act on the
+# decision, for example to apply quotas before it picks the model.
+# All the policies in this directory are named "switchyard", so applying one replaces the other.
+# The policy must target the whole Gateway: Envoy picks the filters for a request from the first
+# route it matches, before the model is known, and for Agent Router that is usually the catch-all
+# "route-not-found" rule.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyExtensionPolicy
+metadata:
+  name: switchyard
+  namespace: default
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: switchyard
+  dynamicModule:
+    - name: switchyard
+      filterName: switchyard
+      config:
+        rewrite_body: false
+        virtual_models:
+          - name: coding-auto
+            targets:
+              efficient: gpt-4.1-mini
+              capable: gpt-5
+            algorithm:
+              type: passthrough
+              target: capable

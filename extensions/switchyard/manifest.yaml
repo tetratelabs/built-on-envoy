@@ -4,7 +4,7 @@
 # the root of the repo.
 
 name: switchyard
-version: 0.1.0
+version: 0.1.1
 minEnvoyVersion: 1.39.0
 categories:
   - AI
@@ -38,9 +38,10 @@ longDescription: |
 
   ## Supported Algorithms
 
-  Algorithms that decide from the request alone: `auto`, `stage_router` (without a classifier),
-  `plan_execute` (without a judge), `random` and `passthrough`. The configuration uses
-  Switchyard's own route format. Algorithms that call a judge model are not supported.
+  All Switchyard algorithms except `prefill_router`, in Switchyard's own route format. Judges, such
+  as Jev, are called with non-blocking HTTP callouts, either on their own endpoint with their own key
+  (`decision_targets`, `judge_targets`) or through the gateway itself (`model_calls`). `vgr`,
+  `advisor` and `noop` may answer the request themselves, streamed when the client asks.
 
   ## Sessions
 
@@ -56,6 +57,8 @@ longDescription: |
     `io.builtonenvoy.switchyard.selected_model` and `io.builtonenvoy.switchyard.reason` keys,
     which is never sent upstream.
   * The `switchyard_decisions` counter, by virtual model, selected model and outcome.
+  * For judge algorithms, the judge's evidence, the `switchyard_judge_calls` counter, and the calls
+    and tokens spent on routing.
 
   ## Using with Agent Router
 
@@ -142,7 +145,7 @@ examples:
                 volumes:
                   - name: switchyard
                     image:
-                      reference: ghcr.io/tetratelabs/built-on-envoy/extension-switchyard:0.1.0
+                      reference: ghcr.io/tetratelabs/built-on-envoy/extension-switchyard:0.1.1
               container:
                 volumeMounts:
                   - name: switchyard
@@ -185,6 +188,26 @@ examples:
               "name": "coding-auto",
               "targets": {"efficient": "gpt-4.1-mini", "capable": "gpt-5"},
               "algorithm": {"type": "auto", "capable_target": "capable", "efficient_target": "efficient"},
+              "default_model": "gpt-4.1-mini"
+            }
+          ]
+        }'
+  - title: Judge Routing with Jev
+    description: Ask Jev whether each new session needs the capable model
+    code: |
+      boe run --extension switchyard --cluster api.typesafe.ai:443 --config '
+        {
+          "decision_targets": {
+            "jev": {"format": "system_one", "model": "jev-latest", "cluster": "api.typesafe.ai:443",
+                    "authority": "api.typesafe.ai", "api_key": {"file": "/tmp/jev-api-key"}}
+          },
+          "virtual_models": [
+            {
+              "name": "coding-auto",
+              "targets": {"efficient": "gpt-4.1-mini", "capable": "gpt-5"},
+              "algorithm": {"type": "llm_classifier", "mode": "capability", "classifier_target": "jev",
+                            "strong_target": "capable", "weak_target": "efficient", "classify_trigger": "new_session",
+                            "decision": {"cutoff": 0.05, "candidates": {"candidate_a": "capable", "candidate_b": "efficient"}, "evidence": {}}},
               "default_model": "gpt-4.1-mini"
             }
           ]
