@@ -655,7 +655,7 @@
   },
   {
     "name": "ip-restriction",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "categories": [
       "Security"
     ],
@@ -698,8 +698,8 @@
         "code": "boe run --extension ip-restriction --config '\n  {\n    \"allow_addresses\": [\n      \"127.0.0.1\",\n      \"::1\",\n      \"2001:db8::1\"\n    ]\n  }'\n"
       }
     ],
-    "minEnvoyVersion": "1.37.1",
-    "maxEnvoyVersion": "1.38.0",
+    "minEnvoyVersion": "1.39.0",
+    "maxEnvoyVersion": "1.40.0",
     "sourcePath": "ip-restriction",
     "configReferencePath": "/docs/reference/extensions#ip-restriction"
   },

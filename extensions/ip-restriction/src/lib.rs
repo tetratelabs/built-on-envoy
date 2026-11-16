@@ -149,7 +149,7 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for Filter {
         if downstream_addr.is_none() || downstream_port.is_none() {
             envoy_filter.send_response(
                 403,
-                vec![],
+                &[],
                 Some(b"No remote address and request is forbidden."),
                 None,
             );
@@ -192,7 +192,7 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for Filter {
             Err(_) => {
                 envoy_filter.send_response(
                     403,
-                    vec![],
+                    &[],
                     Some(b"No remote address and request is forbidden."),
                     None,
                 );
@@ -210,7 +210,7 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for Filter {
                 &cfg.allow_addresses_cidr,
             )
         {
-            envoy_filter.send_response(403, vec![], Some(b"Request is forbidden."), None);
+            envoy_filter.send_response(403, &[], Some(b"Request is forbidden."), None);
             return abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::StopIteration;
         }
 
@@ -220,7 +220,7 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for Filter {
             &cfg.deny_addresses_exact,
             &cfg.deny_addresses_cidr,
         ) {
-            envoy_filter.send_response(403, vec![], Some(b"Request is forbidden."), None);
+            envoy_filter.send_response(403, &[], Some(b"Request is forbidden."), None);
             return abi::envoy_dynamic_module_type_on_http_filter_request_headers_status::StopIteration;
         }
 
@@ -404,7 +404,7 @@ mod tests {
         mock_envoy_filter
             .expect_get_attribute_string()
             .times(1)
-            .returning(|_| Some(EnvoyBuffer::new("127.0.0.1:80")));
+            .returning(|_| Some(EnvoyBuffer::new(b"127.0.0.1:80")));
         mock_envoy_filter
             .expect_get_attribute_int()
             .times(1)
@@ -418,7 +418,7 @@ mod tests {
         mock_envoy_filter
             .expect_get_attribute_string()
             .times(1)
-            .returning(|_| Some(EnvoyBuffer::new("192.168.1.1:80")));
+            .returning(|_| Some(EnvoyBuffer::new(b"192.168.1.1:80")));
         mock_envoy_filter
             .expect_get_attribute_int()
             .times(1)
@@ -455,7 +455,7 @@ mod tests {
         mock_envoy_filter
             .expect_get_attribute_string()
             .times(1)
-            .returning(|_| Some(EnvoyBuffer::new("192.168.1.1:80")));
+            .returning(|_| Some(EnvoyBuffer::new(b"192.168.1.1:80")));
         mock_envoy_filter
             .expect_get_attribute_int()
             .times(1)
@@ -473,7 +473,7 @@ mod tests {
         mock_envoy_filter
             .expect_get_attribute_string()
             .times(1)
-            .returning(|_| Some(EnvoyBuffer::new("127.0.0.1:80")));
+            .returning(|_| Some(EnvoyBuffer::new(b"127.0.0.1:80")));
         mock_envoy_filter
             .expect_get_attribute_int()
             .times(1)
@@ -506,7 +506,7 @@ mod tests {
         mock_envoy_filter
             .expect_get_attribute_string()
             .times(1)
-            .returning(|_| Some(EnvoyBuffer::new("192.168.1.100:8080")));
+            .returning(|_| Some(EnvoyBuffer::new(b"192.168.1.100:8080")));
         mock_envoy_filter
             .expect_get_attribute_int()
             .times(1)
@@ -520,7 +520,7 @@ mod tests {
         mock_envoy_filter
             .expect_get_attribute_string()
             .times(1)
-            .returning(|_| Some(EnvoyBuffer::new("192.168.2.1:8080")));
+            .returning(|_| Some(EnvoyBuffer::new(b"192.168.2.1:8080")));
         mock_envoy_filter
             .expect_get_attribute_int()
             .times(1)
@@ -556,7 +556,7 @@ mod tests {
         mock_envoy_filter
             .expect_get_attribute_string()
             .times(1)
-            .returning(|_| Some(EnvoyBuffer::new("10.42.1.5:12345")));
+            .returning(|_| Some(EnvoyBuffer::new(b"10.42.1.5:12345")));
         mock_envoy_filter
             .expect_get_attribute_int()
             .times(1)
@@ -574,7 +574,7 @@ mod tests {
         mock_envoy_filter
             .expect_get_attribute_string()
             .times(1)
-            .returning(|_| Some(EnvoyBuffer::new("192.168.1.1:12345")));
+            .returning(|_| Some(EnvoyBuffer::new(b"192.168.1.1:12345")));
         mock_envoy_filter
             .expect_get_attribute_int()
             .times(1)
@@ -607,7 +607,7 @@ mod tests {
         mock_envoy_filter
             .expect_get_attribute_string()
             .times(1)
-            .returning(|_| Some(EnvoyBuffer::new("127.0.0.1:9000")));
+            .returning(|_| Some(EnvoyBuffer::new(b"127.0.0.1:9000")));
         mock_envoy_filter
             .expect_get_attribute_int()
             .times(1)
@@ -621,7 +621,7 @@ mod tests {
         mock_envoy_filter
             .expect_get_attribute_string()
             .times(1)
-            .returning(|_| Some(EnvoyBuffer::new("10.100.200.1:9000")));
+            .returning(|_| Some(EnvoyBuffer::new(b"10.100.200.1:9000")));
         mock_envoy_filter
             .expect_get_attribute_int()
             .times(1)
@@ -635,7 +635,7 @@ mod tests {
         mock_envoy_filter
             .expect_get_attribute_string()
             .times(1)
-            .returning(|_| Some(EnvoyBuffer::new("192.168.1.1:9000")));
+            .returning(|_| Some(EnvoyBuffer::new(b"192.168.1.1:9000")));
         mock_envoy_filter
             .expect_get_attribute_int()
             .times(1)
@@ -671,7 +671,7 @@ mod tests {
         mock_envoy_filter
             .expect_get_attribute_string()
             .times(1)
-            .returning(|_| Some(EnvoyBuffer::new("[2001:db8::1]:80")));
+            .returning(|_| Some(EnvoyBuffer::new(b"[2001:db8::1]:80")));
         mock_envoy_filter
             .expect_get_attribute_int()
             .times(1)
@@ -685,7 +685,7 @@ mod tests {
         mock_envoy_filter
             .expect_get_attribute_string()
             .times(1)
-            .returning(|_| Some(EnvoyBuffer::new("[2001:db9::1]:80")));
+            .returning(|_| Some(EnvoyBuffer::new(b"[2001:db9::1]:80")));
         mock_envoy_filter
             .expect_get_attribute_int()
             .times(1)
@@ -801,7 +801,7 @@ mod tests {
         mock_envoy_filter
             .expect_get_attribute_string()
             .times(1)
-            .returning(|_| Some(EnvoyBuffer::new("192.168.1.1:80")));
+            .returning(|_| Some(EnvoyBuffer::new(b"192.168.1.1:80")));
         mock_envoy_filter
             .expect_get_attribute_int()
             .times(1)
