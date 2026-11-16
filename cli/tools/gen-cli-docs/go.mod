@@ -29,8 +29,8 @@ require (
 	github.com/ulikunitz/lz v0.6.11 // indirect
 	github.com/ulikunitz/xz/v2 v2.0.0-dev.4 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	go.yaml.in/yaml/v2 v2.4.2 // indirect
-	golang.org/x/mod v0.42.0 // indirect
+	go.yaml.in/yaml/v2 v2.4.5 // indirect
+	golang.org/x/mod v0.43.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
