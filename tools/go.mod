@@ -1,6 +1,6 @@
 module github.com/tetratelabs/built-on-envoy/cli/tools
 
-go 1.27.3
+go 1.27.4
 
 tool (
 	github.com/apache/skywalking-eyes/cmd/license-eye
