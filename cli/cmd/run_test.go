@@ -58,6 +58,10 @@ Flags:
       --log-format=STRING          Envoy log format ($ENVOY_LOG_FORMAT).
       --run-id=STRING              Run identifier for this invocation. Overrides
                                    the default timestamp-based ID ($BOE_RUN_ID).
+      --listen-address="127.0.0.1"
+                                   IP address for Envoy listener to accept
+                                   incoming traffic. Use 0.0.0.0 to accept
+                                   traffic on all interfaces.
       --listen-port=10000          Port for Envoy listener to accept incoming
                                    traffic.
       --admin-port=9901            Port for Envoy admin interface
@@ -156,6 +160,7 @@ func TestParseCmdRunDefaults(t *testing.T) {
 
 	// Verify default values are set
 	require.Equal(t, "all:error", cli.Run.LogLevel)
+	require.Equal(t, "127.0.0.1", cli.Run.ListenAddr)
 	require.Equal(t, uint32(10000), cli.Run.ListenPort)
 	require.Equal(t, uint32(9901), cli.Run.AdminPort)
 	require.Empty(t, cli.Run.Envoy.Version)
@@ -258,6 +263,7 @@ func TestParseCmdRunCustomValues(t *testing.T) {
 	_, err = parser.Parse([]string{
 		"run",
 		"--log-level=all:debug,upstream:trace",
+		"--listen-address=0.0.0.0",
 		"--listen-port=8080",
 		"--admin-port=9000",
 		"--envoy-version=1.31.0",
@@ -268,6 +274,7 @@ func TestParseCmdRunCustomValues(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, "all:debug,upstream:trace", cli.Run.LogLevel)
+	require.Equal(t, "0.0.0.0", cli.Run.ListenAddr)
 	require.Equal(t, uint32(8080), cli.Run.ListenPort)
 	require.Equal(t, uint32(9000), cli.Run.AdminPort)
 	require.Equal(t, "1.31.0", cli.Run.Envoy.Version)
@@ -314,6 +321,21 @@ func TestRunValidateMutualExclusion(t *testing.T) {
 				},
 			},
 			expectedErr: "--docker-image-version can only be used with --docker",
+		},
+		{
+			name: "listen address is a hostname",
+			run: Run{
+				LogLevel:   "all:error",
+				ListenAddr: "localhost",
+			},
+			expectedErr: `--listen-address must be an IP address: "localhost"`,
+		},
+		{
+			name: "listen address is empty",
+			run: Run{
+				LogLevel: "all:error",
+			},
+			expectedErr: `--listen-address must be an IP address: ""`,
 		},
 	}
 
@@ -385,7 +407,7 @@ func TestValidateLogLevel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cmd := Run{LogLevel: tt.logLevel}
+			cmd := Run{LogLevel: tt.logLevel, ListenAddr: "127.0.0.1"}
 			err := cmd.Validate()
 			if tt.expectedErr == "" {
 				require.NoError(t, err)

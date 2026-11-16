@@ -151,6 +151,7 @@ func (g *GenConfig) Run(ctx context.Context, dirs *xdg.Directories, logger *slog
 	config, err := envoy.RenderConfig(&envoy.ConfigGenerationParams{
 		Logger:                  logger,
 		AdminAddress:            adminAddress,
+		ListenerAddress:         "0.0.0.0",
 		ListenerPort:            g.ListenPort,
 		Dirs:                    dirs,
 		Extensions:              resolvedExtensions,

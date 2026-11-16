@@ -102,6 +102,7 @@ boe debug --help
 | `--log-level` | Envoy component log level. | `string` | `all:error` | `ENVOY_LOG_LEVEL` | No |
 | `--log-format` | Envoy log format. | `string` | - | `ENVOY_LOG_FORMAT` | No |
 | `--run-id` | Run identifier for this invocation. Overrides the default timestamp-based ID. | `string` | - | `BOE_RUN_ID` | No |
+| `--listen-address` | IP address for Envoy listener to accept incoming traffic. Use 0.0.0.0 to accept traffic on all interfaces. | `string` | `127.0.0.1` | - | No |
 | `--listen-port` | Port for Envoy listener to accept incoming traffic. | `uint32` | `10000` | - | No |
 | `--admin-port` | Port for Envoy admin interface. | `uint32` | `9901` | `BOE_ADMIN_PORT` | No |
 | `--extension` | Extensions to enable (in the format: "name" or "name:version"). | `[]string` | - | - | No |
