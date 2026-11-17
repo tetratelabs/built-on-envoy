@@ -34,9 +34,11 @@ routes that follow it:
 
 Requests for any other model pass through unchanged.
 
-The algorithms run on a small Tokio runtime owned by the module. Envoy worker threads block on it
-for the duration of a decision, which never waits on I/O: only algorithms that decide from the
-request alone are supported.
+The algorithms run on a Tokio runtime owned by the module, never on the Envoy worker threads. The
+filter holds the request while the algorithm runs, and resumes it on its worker thread when the
+algorithm is done. Other requests on that worker go on meanwhile. A run that takes longer than
+`routing_timeout_ms` (30 seconds by default), or that panics, is stopped, and the failure mode of the
+virtual model applies.
 
 ## Configuration
 
@@ -72,7 +74,8 @@ request alone are supported.
   "model_header": null,
   "clear_route_cache": false,
   "decision_headers": true,
-  "rewrite_body": true
+  "rewrite_body": true,
+  "routing_timeout_ms": 30000
 }
 ```
 
@@ -287,6 +290,8 @@ routes the virtual model unless a filter between the two acts on the decision.
   key and the `io.builtonenvoy.switchyard.evidence` filter state key.
 - The `switchyard_judge_calls` counter, with the labels `judge` and `outcome` (`ok`, `error` or
   `timeout`), one per call.
+- The `switchyard_routing_failures` counter, with the labels `virtual_model` and `reason`
+  (`timeout` or `panic`), one per routing run stopped by `routing_timeout_ms` or by a panic.
 - For algorithms that call models, the dynamic metadata keys `routing_calls`,
   `routing_input_tokens`, `routing_output_tokens`, `routing_total_tokens`, `routing_models`, and
   `routing_latency_ms` (from the start of routing to its outcome). When `routing_headers` is true,

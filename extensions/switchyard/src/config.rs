@@ -71,6 +71,9 @@ pub struct RawFilterConfig {
     /// Whether to add the `x-switchyard-routing-*` response headers with the cost of routing.
     #[serde(default)]
     pub routing_headers: bool,
+    /// How long a routing run may take, model calls included, before the failure mode applies.
+    #[serde(default = "default_routing_timeout_ms")]
+    pub routing_timeout_ms: u64,
 }
 
 /// How model calls are made: as HTTP callouts to an Envoy cluster, usually one that loops back to
@@ -104,6 +107,10 @@ pub struct RawModelCalls {
 
 fn default_call_timeout_ms() -> u64 {
     10_000
+}
+
+fn default_routing_timeout_ms() -> u64 {
+    30_000
 }
 
 /// A virtual model: a model name that clients send and that the filter resolves to a target model.
@@ -217,6 +224,7 @@ pub struct Config {
     pub model_calls: Option<ModelCalls>,
     pub eligible_models_header: Option<String>,
     pub routing_headers: bool,
+    pub routing_timeout: std::time::Duration,
     /// Trace context of each judge configured with its own endpoint.
     judge_trace: BTreeMap<String, TraceContext>,
 }
@@ -334,6 +342,9 @@ impl Config {
         if raw.endpoints.is_empty() {
             return Err("endpoints must not be empty".to_string());
         }
+        if raw.routing_timeout_ms == 0 {
+            return Err("routing_timeout_ms must be greater than zero".to_string());
+        }
 
         let judge_trace: BTreeMap<String, TraceContext> = raw
             .decision_targets
@@ -406,6 +417,7 @@ impl Config {
             model_calls,
             eligible_models_header: raw.eligible_models_header.map(|h| h.to_ascii_lowercase()),
             routing_headers: raw.routing_headers,
+            routing_timeout: std::time::Duration::from_millis(raw.routing_timeout_ms),
             judge_trace,
         })
     }
@@ -684,6 +696,10 @@ mod tests {
                 "endpoints must not be empty",
             ),
             (
+                r#"{"virtual_models": [{"name": "v", "targets": {"a": "m"}, "algorithm": {"type": "passthrough", "target": "a"}}], "routing_timeout_ms": 0}"#,
+                "routing_timeout_ms must be greater than zero",
+            ),
+            (
                 r#"{"virtual_models": [{"name": "v", "targets": {"a": "m"}, "algorithm": {"type": "passthrough", "target": "a"}}], "endpoints": {"v1/chat": "openai_chat"}}"#,
                 "must start with '/'",
             ),
@@ -809,6 +825,7 @@ mod tests {
         merged["model_calls"] = serde_json::json!({"cluster":"loopback","authority":"gateway.example","path":"/v1/messages","format":"anthropic_messages","timeout_ms":1234,"forward_headers":["authorization"],"headers":{"x-extra":"v"},"trace_context":"b3"});
         merged["eligible_models_header"] = serde_json::json!("x-eligible");
         merged["routing_headers"] = serde_json::json!(true);
+        merged["routing_timeout_ms"] = serde_json::json!(5000);
         merged["decision_targets"]["jev"]["trace_context"] = serde_json::json!("none");
         merged["judge_targets"] = serde_json::json!({"llm":{"format":"openai_chat","model":"j","cluster":"j","authority":"j.example","trace_context":"w3c"}});
         assert!(compiled.is_valid(&merged));
@@ -845,6 +862,7 @@ mod tests {
         let defaults = Config::parse(VALID.as_bytes()).unwrap();
         assert!(defaults.model_calls.is_none());
         assert!(!defaults.routing_headers);
+        assert_eq!(defaults.routing_timeout, std::time::Duration::from_secs(30));
         assert!(defaults.eligible_models_header.is_none());
         value["model_calls"] = serde_json::json!({"cluster":"loopback"});
         let config = Config::parse(value.to_string().as_bytes()).unwrap();

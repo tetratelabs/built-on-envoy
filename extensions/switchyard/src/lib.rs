@@ -30,6 +30,8 @@ const FILTER_NAME: &str = "switchyard";
 const DECISIONS_COUNTER: &str = "switchyard_decisions";
 /// Name of the judge calls counter.
 const JUDGE_CALLS_COUNTER: &str = "switchyard_judge_calls";
+/// Name of the counter of routing runs that timed out or panicked.
+const ROUTING_FAILURES_COUNTER: &str = "switchyard_routing_failures";
 
 fn init() -> bool {
     true
@@ -64,6 +66,10 @@ fn new_filter_config(
                 &["virtual_model", "selected_model", "outcome"],
             ),
             judge_calls: define_counter(JUDGE_CALLS_COUNTER, &["judge", "outcome"]),
+            routing_failures: define_counter(
+                ROUTING_FAILURES_COUNTER,
+                &["virtual_model", "reason"],
+            ),
         }),
         Err(err) => {
             envoy_log_error!("switchyard: {err}");
@@ -91,11 +97,16 @@ mod tests {
                 assert_eq!(labels, &["judge", "outcome"]);
                 Some(EnvoyCounterVecId(8))
             }
+            ROUTING_FAILURES_COUNTER => {
+                assert_eq!(labels, &["virtual_model", "reason"]);
+                Some(EnvoyCounterVecId(9))
+            }
             _ => panic!("unexpected counter {name}"),
         })
         .unwrap();
         assert_eq!(built.decisions, Some(EnvoyCounterVecId(7)));
         assert_eq!(built.judge_calls, Some(EnvoyCounterVecId(8)));
+        assert_eq!(built.routing_failures, Some(EnvoyCounterVecId(9)));
         assert!(new_filter_config("other", config, |_, _| None).is_none());
         assert!(new_filter_config(FILTER_NAME, b"{}", |_, _| None).is_none());
     }

@@ -5,16 +5,17 @@
 
 //! The HTTP filter: buffers the request body, resolves virtual models and rewrites the request.
 //!
-//! Algorithms that decide from the request alone are run in the body callback. Algorithms that
-//! call models, such as judges, continue on the module's Tokio runtime: the filter holds the
-//! request, makes the calls as HTTP callouts on the worker thread, and resumes the request, or
-//! answers it, once the algorithm is done.
+//! Routing runs on the module's Tokio runtime, never on the worker thread: the filter holds the
+//! request, makes the calls of algorithms that call models as HTTP callouts on the worker thread,
+//! and resumes the request, or answers it, once the algorithm is done. A run that takes longer
+//! than `routing_timeout_ms`, or that panics, applies the failure mode of the virtual model.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use envoy_proxy_dynamic_modules_rust_sdk::*;
+use futures::FutureExt;
 use serde_json::Value;
 use switchyard_protocol::WireFormat;
 use tokio::sync::oneshot;
@@ -22,7 +23,7 @@ use tokio::sync::oneshot;
 use crate::config::{Callouts, Config, FailureMode, TraceContext, VirtualModel};
 use crate::host::{CallRole, Callout, CalloutResult, Destination, Host, RoutingUsage, Transport};
 use crate::judge::HttpReply;
-use crate::router::{runtime, Answer, Decision, Outcome, Pending, Start};
+use crate::router::{runtime, Answer, Decision, Outcome, Start};
 
 /// Dynamic metadata namespace of the routing decision.
 pub const METADATA_NAMESPACE: &str = "io.builtonenvoy.switchyard";
@@ -61,6 +62,10 @@ const OUTCOME_REJECTED: &str = "rejected";
 const EVENT_CALLOUTS: u64 = 1;
 const EVENT_DONE: u64 = 2;
 
+/// Reason label values of the routing failures counter.
+const FAILURE_TIMEOUT: &str = "timeout";
+const FAILURE_PANIC: &str = "panic";
+
 /// The filter configuration shared by all the filter instances.
 pub struct FilterConfig {
     pub config: Arc<Config>,
@@ -68,6 +73,8 @@ pub struct FilterConfig {
     pub decisions: Option<EnvoyCounterVecId>,
     /// Counter of judge and model calls, by judge or model and outcome.
     pub judge_calls: Option<EnvoyCounterVecId>,
+    /// Counter of routing runs that timed out or panicked, by virtual model and reason.
+    pub routing_failures: Option<EnvoyCounterVecId>,
 }
 
 impl<EHF: EnvoyHttpFilter> HttpFilterConfig<EHF> for FilterConfig {
@@ -76,6 +83,7 @@ impl<EHF: EnvoyHttpFilter> HttpFilterConfig<EHF> for FilterConfig {
             Arc::clone(&self.config),
             self.decisions,
             self.judge_calls,
+            self.routing_failures,
         ))
     }
 }
@@ -85,10 +93,11 @@ pub struct Filter {
     config: Arc<Config>,
     decisions: Option<EnvoyCounterVecId>,
     judge_calls: Option<EnvoyCounterVecId>,
+    routing_failures: Option<EnvoyCounterVecId>,
     /// The API format of the request body, set when the filter handles the request and cleared
     /// once the request has been processed.
     format: Option<WireFormat>,
-    /// The routing run in progress, when the algorithm calls models.
+    /// The routing run in progress.
     run: Option<Run>,
     /// Callouts in flight, by callout ID, with the judge or model called.
     callouts: HashMap<u64, (String, oneshot::Sender<CalloutResult>)>,
@@ -100,7 +109,7 @@ pub struct Filter {
 struct Run {
     /// Index of the virtual model in the configuration.
     virtual_model: usize,
-    body: Value,
+    body: Arc<Value>,
     shared: Arc<Mutex<Shared>>,
     task: tokio::task::AbortHandle,
     usage: Arc<Mutex<RoutingUsage>>,
@@ -125,6 +134,10 @@ struct Shared {
     /// Calls waiting to be sent from the worker thread.
     queue: Vec<Callout>,
     outcome: Option<Result<Outcome, String>>,
+    /// Why the run failed, when it timed out or panicked.
+    failure: Option<&'static str>,
+    /// Set when the filter is destroyed. The routing task never schedules an event after that.
+    closed: bool,
 }
 
 /// Sends calls through the worker thread of the request.
@@ -135,7 +148,12 @@ struct EnvoyTransport {
 
 impl Transport for EnvoyTransport {
     fn send(&self, callout: Callout) {
-        lock(&self.shared).queue.push(callout);
+        let mut shared = lock(&self.shared);
+        if shared.closed {
+            let _ = callout.reply.send(Err("the request is gone".into()));
+            return;
+        }
+        shared.queue.push(callout);
         self.scheduler.commit(EVENT_CALLOUTS);
     }
 }
@@ -171,6 +189,15 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|e| e.into_inner())
 }
 
+/// The message of a panic payload.
+fn panic_message(payload: &(dyn std::any::Any + Send)) -> &str {
+    payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("unknown panic")
+}
+
 /// What the filter does after processing the request body.
 #[derive(Debug, PartialEq)]
 enum Action {
@@ -191,8 +218,16 @@ impl Drop for Filter {
     fn drop(&mut self) {
         // Stop the routing run of a request that is gone.
         if let Some(run) = &self.run {
-            run.task.abort();
+            run.close();
         }
+    }
+}
+
+impl Run {
+    /// Cancels the routing task. After this returns, the task never schedules an event.
+    fn close(&self) {
+        lock(&self.shared).closed = true;
+        self.task.abort();
     }
 }
 
@@ -201,11 +236,13 @@ impl Filter {
         config: Arc<Config>,
         decisions: Option<EnvoyCounterVecId>,
         judge_calls: Option<EnvoyCounterVecId>,
+        routing_failures: Option<EnvoyCounterVecId>,
     ) -> Self {
         Self {
             config,
             decisions,
             judge_calls,
+            routing_failures,
             format: None,
             run: None,
             callouts: HashMap::new(),
@@ -249,13 +286,13 @@ impl Filter {
     }
 
     /// Processes the complete request body.
-    fn process<EHF: EnvoyHttpFilter>(&mut self, envoy: &mut EHF, in_body_callback: bool) -> Action {
+    fn process<EHF: EnvoyHttpFilter>(&mut self, envoy: &mut EHF) -> Action {
         let Some(format) = self.format.take() else {
             return Action::Continue;
         };
         let raw = utility::read_whole_request_body(envoy);
         // Requests that are not valid JSON, or that have no model, are left to the next filters.
-        let Ok(mut body) = serde_json::from_slice::<Value>(&raw) else {
+        let Ok(body) = serde_json::from_slice::<Value>(&raw) else {
             return Action::Continue;
         };
         let Some(model) = body
@@ -272,16 +309,8 @@ impl Filter {
 
         let metadata = config.session.metadata(|h| header_value(envoy, h));
         let eligible = config.eligible_models(|h| header_value(envoy, h));
-        let outcome = match vm.router.start(format, &body, metadata, eligible) {
-            Start::Finished(outcome) => outcome,
-            Start::Pending(pending) => {
-                match self.start_run(envoy, vm, format, body.clone(), pending) {
-                    Ok(()) => return Action::Wait,
-                    Err(err) => Err(err),
-                }
-            }
-        };
-        self.finish(envoy, vm, &mut body, outcome, in_body_callback)
+        self.start_run(envoy, vm, format, body, metadata, eligible);
+        Action::Wait
     }
 
     /// Applies the outcome of a routing run.
@@ -318,15 +347,17 @@ impl Filter {
         }
     }
 
-    /// Continues a routing run that calls models on the Tokio runtime.
+    /// Starts the routing run on the Tokio runtime. The run schedules `EVENT_DONE` on the worker
+    /// thread when it is done, has timed out or has panicked.
     fn start_run<EHF: EnvoyHttpFilter>(
         &mut self,
         envoy: &mut EHF,
         vm: &VirtualModel,
         format: WireFormat,
         body: Value,
-        pending: Box<Pending>,
-    ) -> Result<(), String> {
+        metadata: switchyard_protocol::Metadata,
+        eligible: Option<std::collections::BTreeSet<String>>,
+    ) {
         let config = Arc::clone(&self.config);
         let client_path = header_value(envoy, ":path").unwrap_or_default();
         // Without model_calls, gateway calls fail when they are sent.
@@ -350,21 +381,56 @@ impl Filter {
         let shared = Arc::new(Mutex::new(Shared::default()));
         let scheduler: Arc<dyn EnvoyHttpFilterScheduler> = Arc::new(envoy.new_scheduler());
         let usage = Arc::new(Mutex::new(RoutingUsage::default()));
-        let host = Host {
-            transport: Arc::new(EnvoyTransport {
-                shared: Arc::clone(&shared),
-                scheduler: Arc::clone(&scheduler),
-            }),
-            judges: pending.judges(),
-            gateway_format,
-            gateway_judges: pending.gateway_judges(),
-            usage: Arc::clone(&usage),
-        };
+        let transport = Arc::new(EnvoyTransport {
+            shared: Arc::clone(&shared),
+            scheduler: Arc::clone(&scheduler),
+        });
+        let task_usage = Arc::clone(&usage);
         let task_shared = Arc::clone(&shared);
+        let router = Arc::clone(&vm.router);
+        let body = Arc::new(body);
+        let task_body = Arc::clone(&body);
+        let timeout = config.routing_timeout;
         let task = runtime().spawn(async move {
-            let outcome = pending.run(&host).await;
-            lock(&task_shared).outcome = Some(outcome);
-            scheduler.commit(EVENT_DONE);
+            let run = async move {
+                match router.start(format, &task_body, metadata, eligible).await {
+                    Start::Finished(outcome) => outcome,
+                    Start::Pending(pending) => {
+                        let host = Host {
+                            transport,
+                            judges: pending.judges(),
+                            gateway_format,
+                            gateway_judges: pending.gateway_judges(),
+                            usage: task_usage,
+                        };
+                        pending.run(&host).await
+                    }
+                }
+            };
+            // The run, and its hold on the body, ends before the event is scheduled.
+            let result =
+                tokio::time::timeout(timeout, std::panic::AssertUnwindSafe(run).catch_unwind())
+                    .await;
+            let (outcome, failure) = match result {
+                Ok(Ok(outcome)) => (outcome, None),
+                Ok(Err(panic)) => (
+                    Err(format!("routing panicked: {}", panic_message(&panic))),
+                    Some(FAILURE_PANIC),
+                ),
+                Err(_) => (
+                    Err(format!(
+                        "routing timed out after {} ms",
+                        timeout.as_millis()
+                    )),
+                    Some(FAILURE_TIMEOUT),
+                ),
+            };
+            let mut shared = lock(&task_shared);
+            if !shared.closed {
+                shared.outcome = Some(outcome);
+                shared.failure = failure;
+                scheduler.commit(EVENT_DONE);
+            }
         });
         let virtual_model = config
             .virtual_models
@@ -382,7 +448,6 @@ impl Filter {
             parent_id,
             trace,
         });
-        Ok(())
     }
 
     /// Builds the headers of the gateway calls made for a request: the request line, the forwarded
@@ -512,7 +577,11 @@ impl Filter {
         let Some(run) = self.run.take() else {
             return;
         };
-        let Some(outcome) = lock(&run.shared).outcome.take() else {
+        let (outcome, failure) = {
+            let mut shared = lock(&run.shared);
+            (shared.outcome.take(), shared.failure.take())
+        };
+        let Some(outcome) = outcome else {
             self.run = Some(run);
             return;
         };
@@ -524,7 +593,10 @@ impl Filter {
 
         let config = Arc::clone(&self.config);
         let vm = &config.virtual_models[run.virtual_model];
-        let mut body = run.body;
+        if let (Some(id), Some(reason)) = (self.routing_failures, failure) {
+            let _ = envoy.increment_counter_vec(id, &[vm.name.as_str(), reason], 1);
+        }
+        let mut body = Arc::try_unwrap(run.body).unwrap_or_else(|body| (*body).clone());
         if self.finish(envoy, vm, &mut body, outcome, false) == Action::Continue {
             envoy.continue_decoding();
         }
@@ -789,7 +861,7 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for Filter {
         if !end_of_stream {
             return abi::envoy_dynamic_module_type_on_http_filter_request_body_status::StopIterationAndBuffer;
         }
-        match self.process(envoy, true) {
+        match self.process(envoy) {
             Action::Continue => {
                 abi::envoy_dynamic_module_type_on_http_filter_request_body_status::Continue
             }
@@ -812,7 +884,7 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for Filter {
         }
         // With trailers, the body callback never sees the end of the stream, so the buffered body
         // is processed here.
-        match self.process(envoy, false) {
+        match self.process(envoy) {
             Action::Continue => {
                 abi::envoy_dynamic_module_type_on_http_filter_request_trailers_status::Continue
             }
@@ -891,7 +963,7 @@ impl<EHF: EnvoyHttpFilter> HttpFilter<EHF> for Filter {
 
     fn on_stream_complete(&mut self, _envoy: &mut EHF) {
         if let Some(run) = self.run.take() {
-            run.task.abort();
+            run.close();
         }
         self.callouts.clear();
     }
@@ -967,6 +1039,7 @@ mod tests {
     fn filter(config: &str) -> Filter {
         Filter::new(
             Arc::new(Config::parse(config.as_bytes()).unwrap()),
+            None,
             None,
             None,
         )
@@ -1106,6 +1179,24 @@ mod tests {
                     String::from_utf8_lossy(body.unwrap_or_default()).into_owned(),
                 ));
             });
+        envoy
+            .expect_set_dynamic_metadata_number()
+            .returning(|_, _, _| ());
+        envoy.expect_get_active_span().returning(|| None);
+        let (tx, rx) = std::sync::mpsc::channel::<u64>();
+        envoy.expect_new_scheduler().returning(move || {
+            let tx = Mutex::new(tx.clone());
+            let mut scheduler = MockEnvoyHttpFilterScheduler::new();
+            scheduler.expect_commit().returning(move |id| {
+                let _ = tx.lock().unwrap().send(id);
+            });
+            Box::new(scheduler)
+        });
+        let continued = Arc::new(Mutex::new(false));
+        let c = Arc::clone(&continued);
+        envoy
+            .expect_continue_decoding()
+            .returning(move || *c.lock().unwrap() = true);
 
         let headers_status = filter.on_request_headers(&mut envoy, false);
         let mut body_status = None;
@@ -1119,6 +1210,34 @@ mod tests {
                 trailers_status = Some(filter.on_request_trailers(&mut envoy));
             } else {
                 body_status = Some(filter.on_request_body(&mut envoy, true));
+            }
+        }
+        // A routing run holds the request, and resumes it from a scheduled event on the worker
+        // thread. Report the status the request resolved to.
+        if filter.run.is_some() {
+            loop {
+                let event = rx
+                    .recv_timeout(std::time::Duration::from_secs(10))
+                    .expect("no event");
+                filter.on_scheduled(&mut envoy, event);
+                if event == EVENT_DONE {
+                    break;
+                }
+            }
+            let continued = *continued.lock().unwrap();
+            if let Some(status) = &mut body_status {
+                assert_eq!(*status, BodyStatus::StopIterationAndBuffer);
+                *status = if continued {
+                    BodyStatus::Continue
+                } else {
+                    BodyStatus::StopIterationNoBuffer
+                };
+            }
+            if let Some(status) = &mut trailers_status {
+                assert_eq!(*status, TrailersStatus::StopIteration);
+                if continued {
+                    *status = TrailersStatus::Continue;
+                }
             }
         }
         drop(envoy);
@@ -1423,6 +1542,22 @@ mod tests {
         "model_calls": {"cluster": "loopback", "trace_context": "b3"}
     }"#;
 
+    /// Delivers the scheduled events to the test, and panics on calls when asked to.
+    struct TestScheduler {
+        tx: Mutex<std::sync::mpsc::Sender<u64>>,
+        panic_on_call: bool,
+    }
+
+    impl EnvoyHttpFilterScheduler for TestScheduler {
+        fn commit(&self, event_id: u64) {
+            assert!(
+                !(self.panic_on_call && event_id == EVENT_CALLOUTS),
+                "test panic"
+            );
+            let _ = self.tx.lock().unwrap().send(event_id);
+        }
+    }
+
     type CalloutResponder = dyn Fn(
         &SentCallout,
     ) -> (
@@ -1442,6 +1577,7 @@ mod tests {
         let mut filter = filter(config);
         filter.decisions = Some(EnvoyCounterVecId(0));
         filter.judge_calls = Some(EnvoyCounterVecId(1));
+        filter.routing_failures = Some(EnvoyCounterVecId(2));
         let recorded = Arc::new(Mutex::new(AsyncRecorded::default()));
         let events = Arc::new(Mutex::new(std::collections::VecDeque::<u64>::new()));
         let (tx, rx) = std::sync::mpsc::channel::<u64>();
@@ -1453,6 +1589,8 @@ mod tests {
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect();
         let values = headers.clone();
+        // Makes the routing task panic when it sends its first call.
+        let panic_on_call = headers.contains_key("x-test-panic");
         envoy
             .expect_get_request_header_value()
             .returning(move |name| {
@@ -1546,12 +1684,10 @@ mod tests {
             .expect_get_active_span()
             .returning(|| Some(Box::new(FakeSpan)));
         envoy.expect_new_scheduler().returning(move || {
-            let tx = Mutex::new(tx.clone());
-            let mut scheduler = MockEnvoyHttpFilterScheduler::new();
-            scheduler.expect_commit().returning(move |id| {
-                let _ = tx.lock().unwrap().send(id);
-            });
-            Box::new(scheduler)
+            Box::new(TestScheduler {
+                tx: Mutex::new(tx.clone()),
+                panic_on_call,
+            })
         });
         let r = Arc::clone(&recorded);
         let pending = Arc::clone(&events);
@@ -1808,6 +1944,89 @@ mod tests {
     }
 
     #[test]
+    fn slow_runs_time_out_and_apply_the_failure_mode() {
+        let config = JUDGE_CONFIG.replace(
+            r#""routing_headers": true"#,
+            r#""routing_headers": true, "routing_timeout_ms": 50"#,
+        );
+        // The judge answers after the routing timeout.
+        let says = judge_says(0.9);
+        let slow = move |call: &SentCallout| {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            says(call)
+        };
+        let (status, rec) = run_async(&config, judge_request(), &slow, SUCCESS);
+        assert_eq!(status, BodyStatus::StopIterationAndBuffer);
+        assert!(rec.continued);
+        assert_eq!(
+            serde_json::from_slice::<Value>(rec.body.as_ref().unwrap()).unwrap()["model"],
+            "large-model"
+        );
+        assert_eq!(
+            rec.counters,
+            vec![
+                vec!["coding-auto", "timeout"],
+                vec!["coding-auto", "large-model", "default"]
+            ]
+        );
+    }
+
+    #[test]
+    fn panicking_runs_apply_the_failure_mode() {
+        let (status, rec) = run_async(
+            JUDGE_CONFIG,
+            judge_request().with_header("x-test-panic", "1"),
+            &|_| unreachable!(),
+            SUCCESS,
+        );
+        assert_eq!(status, BodyStatus::StopIterationAndBuffer);
+        assert!(rec.continued);
+        assert!(rec.callouts.is_empty());
+        assert_eq!(
+            rec.counters,
+            vec![
+                vec!["coding-auto", "panic"],
+                vec!["coding-auto", "large-model", "default"]
+            ]
+        );
+    }
+
+    #[test]
+    fn closed_runs_never_schedule_events() {
+        let shared = Arc::new(Mutex::new(Shared::default()));
+        let task = runtime().spawn(std::future::pending::<()>());
+        let run = Run {
+            virtual_model: 0,
+            body: Arc::new(Value::Null),
+            shared: Arc::clone(&shared),
+            task: task.abort_handle(),
+            usage: Arc::default(),
+            started: Instant::now(),
+            model_headers: vec![],
+            parent_id: None,
+            trace: None,
+        };
+        run.close();
+        assert!(runtime().block_on(task).unwrap_err().is_cancelled());
+        let mut scheduler = MockEnvoyHttpFilterScheduler::new();
+        scheduler.expect_commit().never();
+        let transport = EnvoyTransport {
+            shared: Arc::clone(&shared),
+            scheduler: Arc::new(scheduler),
+        };
+        let (reply, mut result) = oneshot::channel();
+        transport.send(Callout {
+            role: CallRole::Decision,
+            target: "judge".into(),
+            destination: Destination::Gateway,
+            body: Vec::new(),
+            reply,
+        });
+        assert!(result.try_recv().unwrap().is_err());
+        assert!(lock(&shared).queue.is_empty());
+    }
+
+    #[test]
     fn advisor_answers_with_a_local_response() {
         let respond = |call: &SentCallout| {
             let model = call.body["model"].as_str().unwrap().to_string();
@@ -1861,7 +2080,7 @@ mod tests {
         let task = runtime().spawn(std::future::pending::<()>());
         f.run = Some(Run {
             virtual_model: 0,
-            body: Value::Null,
+            body: Arc::new(Value::Null),
             shared,
             task: task.abort_handle(),
             usage: Arc::default(),
@@ -1885,6 +2104,7 @@ mod tests {
             config: Arc::new(Config::parse(CONFIG.as_bytes()).unwrap()),
             decisions: None,
             judge_calls: None,
+            routing_failures: None,
         };
         let mut envoy = MockEnvoyHttpFilter::new();
         let _filter = HttpFilterConfig::<MockEnvoyHttpFilter>::new_http_filter(&config, &mut envoy);

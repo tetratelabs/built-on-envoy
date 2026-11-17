@@ -29,19 +29,19 @@ const CALLING_ALGORITHMS: &[&str] = &["advisor", "vgr"];
 /// The Tokio runtime that runs the Switchyard algorithms.
 ///
 /// Switchyard is async and needs a Tokio runtime with timers, which stateful algorithms use to
-/// expire sessions. Envoy worker threads are not Tokio threads. They block on this runtime until
-/// the algorithm takes its first step, which is short as algorithms do no I/O of their own. When
-/// that step is a model call, the rest of the run continues on this runtime, and the worker thread
-/// is free until the outcome is ready.
+/// expire sessions. Envoy worker threads are not Tokio threads, and never wait on this runtime: the
+/// filter spawns each routing run here and resumes the request on its worker thread when the run
+/// is done.
 ///
-/// One thread serves the runs of every worker. Runs spend their time waiting on calls, which Envoy
-/// makes on the worker threads, so this thread only decodes the call responses, steps the
-/// algorithms and encodes the answers. That is short compared to the model calls it waits on.
+/// The runs of every worker share these threads, and Switchyard spawns a task per run. More than
+/// one thread keeps a run that holds a thread, such as one decoding a large request, from stalling
+/// the runs of the other requests.
 pub fn runtime() -> &'static Runtime {
     static RUNTIME: OnceLock<Runtime> = OnceLock::new();
     RUNTIME.get_or_init(|| {
+        let threads = std::thread::available_parallelism().map_or(2, |n| n.get().max(2));
         tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(1)
+            .worker_threads(threads)
             .thread_name("switchyard")
             .enable_all()
             .build()
@@ -257,10 +257,10 @@ impl Router {
         Ok(router)
     }
 
-    /// Starts routing a request body in the given API format.
+    /// Starts routing a request body in the given API format. Runs on the Tokio runtime.
     ///
     /// When `eligible` is set, the request may only be routed to these models.
-    pub fn start(
+    pub async fn start(
         &self,
         format: WireFormat,
         body: &Value,
@@ -295,17 +295,10 @@ impl Router {
             routes: !self.routing_models.is_empty(),
         };
 
-        let algorithm = Arc::clone(&self.algorithm);
-        let runtime = runtime();
-        let (stream, first) = runtime.block_on(async move {
-            let mut stream = algorithm.run_stream(request, models, State::default());
-            let first = stream.next().await;
-            (stream, first)
-        });
+        let mut stream = Arc::clone(&self.algorithm).run_stream(request, models, State::default());
+        let first = stream.next().await;
         match first {
-            Some(Ok(Step::Done(outcome))) => {
-                Start::Finished(runtime.block_on(finisher.finish(*outcome)))
-            }
+            Some(Ok(Step::Done(outcome))) => Start::Finished(finisher.finish(*outcome).await),
             Some(Ok(first)) => Start::Pending(Box::new(Pending {
                 stream,
                 first,
@@ -602,7 +595,7 @@ mod tests {
         eligible: Option<BTreeSet<String>>,
         transport: Arc<FnTransport>,
     ) -> Result<Outcome, String> {
-        match router.start(format, body, metadata, eligible) {
+        match runtime().block_on(router.start(format, body, metadata, eligible)) {
             Start::Finished(outcome) => outcome,
             Start::Pending(pending) => {
                 let host = Host {
@@ -1350,12 +1343,12 @@ mod tests {
             &Judges::new(),
         )
         .unwrap();
-        let Start::Pending(pending) = router.start(
+        let Start::Pending(pending) = runtime().block_on(router.start(
             WireFormat::OpenAiChat,
             &chat("hi"),
             Metadata::default(),
             None,
-        ) else {
+        )) else {
             panic!("expected pending")
         };
         let (tx, rx) = std::sync::mpsc::channel();
