@@ -289,6 +289,7 @@ func TestDockerRunArgs_RunID(t *testing.T) {
 				"-p", "9901:9901",
 				"-v", "boe-cache:" + containerVolumeDir,
 				"-e", "BOE_ADMIN_ADDRESS=0.0.0.0:9901",
+				"-e", "BOE_LISTEN_ADDRESS=0.0.0.0",
 				"-e", "BOE_CONFIG_HOME=" + containerConfigHome,
 				"-e", "BOE_DATA_HOME=" + containerDataHome,
 				"-e", "BOE_STATE_HOME=" + containerStateHome,
@@ -309,6 +310,7 @@ func TestDockerRunArgs_RunID(t *testing.T) {
 				"-p", "9901:9901",
 				"-v", "boe-cache:" + containerVolumeDir,
 				"-e", "BOE_ADMIN_ADDRESS=0.0.0.0:9901",
+				"-e", "BOE_LISTEN_ADDRESS=0.0.0.0",
 				"-e", "BOE_CONFIG_HOME=" + containerConfigHome,
 				"-e", "BOE_DATA_HOME=" + containerDataHome,
 				"-e", "BOE_STATE_HOME=" + containerStateHome,
@@ -331,6 +333,63 @@ func TestDockerRunArgs_RunID(t *testing.T) {
 				RunID:      tt.runID,
 			}
 			require.Equal(t, tt.expected, r.dockerRunArgs("ghcr.io/test/boe:latest", nil))
+		})
+	}
+}
+
+func TestDockerRunArgs_ListenAddress(t *testing.T) {
+	originalArgs := os.Args
+	os.Args = []string{"boe", "run", "--docker"}
+	t.Cleanup(func() { os.Args = originalArgs })
+
+	tests := []struct {
+		name          string
+		listenAddress string
+		wantTCP       string
+		wantUDP       string
+	}{
+		{name: "empty", listenAddress: "", wantTCP: "10000:10000/tcp", wantUDP: "10000:10000/udp"},
+		{name: "loopback", listenAddress: "127.0.0.1", wantTCP: "127.0.0.1:10000:10000/tcp", wantUDP: "127.0.0.1:10000:10000/udp"},
+		{name: "IPv6 loopback", listenAddress: "::1", wantTCP: "[::1]:10000:10000/tcp", wantUDP: "[::1]:10000:10000/udp"},
+		{name: "all IPv4 interfaces", listenAddress: "0.0.0.0", wantTCP: "10000:10000/tcp", wantUDP: "10000:10000/udp"},
+		{name: "all IPv6 interfaces", listenAddress: "::", wantTCP: "10000:10000/tcp", wantUDP: "10000:10000/udp"},
+		{name: "specific address", listenAddress: "192.168.1.10", wantTCP: "192.168.1.10:10000:10000/tcp", wantUDP: "192.168.1.10:10000:10000/udp"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &RunnerDocker{
+				Logger:        internaltesting.NewTLogger(t),
+				ListenAddress: tt.listenAddress,
+				ListenPort:    10000,
+				AdminPort:     9901,
+				Arch:          "arm64",
+				Pull:          "missing",
+			}
+			args := r.dockerRunArgs("ghcr.io/test/boe:latest", nil)
+			require.Equal(t, []string{"-p", tt.wantTCP, "-p", tt.wantUDP, "-p", "9901:9901"}, args[6:12])
+			// The listener binds all interfaces inside the container, whatever the host address is.
+			require.Contains(t, args, "BOE_LISTEN_ADDRESS=0.0.0.0")
+		})
+	}
+}
+
+func TestProxyHostPort(t *testing.T) {
+	tests := []struct {
+		listenAddress string
+		want          string
+	}{
+		{"", "localhost:10000"},
+		{"127.0.0.1", "localhost:10000"},
+		{"::1", "localhost:10000"},
+		{"0.0.0.0", "localhost:10000"},
+		{"::", "localhost:10000"},
+		{"192.168.1.10", "192.168.1.10:10000"},
+		{"fd00::1", "[fd00::1]:10000"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.listenAddress, func(t *testing.T) {
+			require.Equal(t, tt.want, proxyHostPort(tt.listenAddress, 10000))
 		})
 	}
 }
@@ -359,16 +418,17 @@ func TestPassthroughEnvVars(t *testing.T) {
 		{
 			name: "mix of passthrough and excluded vars",
 			envVars: map[string]string{
-				"BOE_REGISTRY":      "ghcr.io/test",
-				"BOE_ADMIN_ADDRESS": "127.0.0.1:9901",
-				"BOE_CONFIG_HOME":   "/custom/config",
-				"BOE_DATA_HOME":     "/custom/data",
-				"BOE_STATE_HOME":    "/custom/state",
-				"BOE_RUNTIME_DIR":   "/custom/runtime",
-				"BOE_RUN_ID":        "host-run-id",
-				"BOE_RUN_DOCKER":    "true",
-				"BOE_TOKEN":         "secret",
-				"HOME":              "/home/user",
+				"BOE_REGISTRY":       "ghcr.io/test",
+				"BOE_ADMIN_ADDRESS":  "127.0.0.1:9901",
+				"BOE_LISTEN_ADDRESS": "127.0.0.1",
+				"BOE_CONFIG_HOME":    "/custom/config",
+				"BOE_DATA_HOME":      "/custom/data",
+				"BOE_STATE_HOME":     "/custom/state",
+				"BOE_RUNTIME_DIR":    "/custom/runtime",
+				"BOE_RUN_ID":         "host-run-id",
+				"BOE_RUN_DOCKER":     "true",
+				"BOE_TOKEN":          "secret",
+				"HOME":               "/home/user",
 			},
 			expected: []string{"-e", "BOE_REGISTRY=ghcr.io/test", "-e", "BOE_TOKEN=secret"},
 		},

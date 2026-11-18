@@ -6,6 +6,7 @@
 package envoy
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -42,6 +43,9 @@ type ConfigGenerationParams struct {
 	Logger *slog.Logger
 	// AdminAddress is the host:port for Envoy admin interface (e.g. "127.0.0.1:9901").
 	AdminAddress string
+	// ListenerAddress is the IP address where Envoy listens for incoming traffic.
+	// If empty, Envoy listens on all interfaces (0.0.0.0).
+	ListenerAddress string
 	// ListenerPort is the port where Envoy listens for incoming traffic.
 	ListenerPort uint32
 	// Dirs provides access to XDG directories for locating extension resources.
@@ -162,7 +166,7 @@ func FullConfigRenderer(params *ConfigGenerationParams, gen *GeneratedConfigReso
 		}
 	}
 
-	cfg, err := buildFullConfig(params.AdminAddress, params.ListenerPort, clusterName, hostRewrite, newCluster, gen.HTTPFilters, gen.NetworkFilters, gen.ListenerFilters, gen.UDPListenerFilters, gen.Clusters, listenerTLS)
+	cfg, err := buildFullConfig(params.AdminAddress, cmp.Or(params.ListenerAddress, "0.0.0.0"), params.ListenerPort, clusterName, hostRewrite, newCluster, gen.HTTPFilters, gen.NetworkFilters, gen.ListenerFilters, gen.UDPListenerFilters, gen.Clusters, listenerTLS)
 	if err != nil {
 		return "", fmt.Errorf("failed to build config: %w", err)
 	}
@@ -481,7 +485,7 @@ func parseCluster(shortSpec string, tls bool) (*clusterv3.Cluster, error) {
 // and allows us to use the proto marshalling functions. Otherwise, we would have to create a wrapper
 // proto on our own, or marshal the config manually.
 // TODO(nacx): Is there a wrapper for `admin` and `static_resources` we could use other than Bootstrap?
-func buildFullConfig(adminAddress string, listenerPort uint32, testUpstreamClusterName, testUpstreamHostRewrite string, newCluster *clusterv3.Cluster, httpFilters []*hcmv3.HttpFilter, networkFilters []*listenerv3.Filter, listenerFilters []*listenerv3.ListenerFilter, udpListenerFilters []*listenerv3.ListenerFilter, clusters []*clusterv3.Cluster, listenerTLS *corev3.TransportSocket) (*bootstrapv3.Bootstrap, error) {
+func buildFullConfig(adminAddress, listenerAddress string, listenerPort uint32, testUpstreamClusterName, testUpstreamHostRewrite string, newCluster *clusterv3.Cluster, httpFilters []*hcmv3.HttpFilter, networkFilters []*listenerv3.Filter, listenerFilters []*listenerv3.ListenerFilter, udpListenerFilters []*listenerv3.ListenerFilter, clusters []*clusterv3.Cluster, listenerTLS *corev3.TransportSocket) (*bootstrapv3.Bootstrap, error) {
 	adminHost, adminPortStr, err := net.SplitHostPort(adminAddress)
 	if err != nil {
 		return nil, fmt.Errorf("invalid admin address %q: %w", adminAddress, err)
@@ -513,7 +517,7 @@ func buildFullConfig(adminAddress string, listenerPort uint32, testUpstreamClust
 		Address: &corev3.Address{
 			Address: &corev3.Address_SocketAddress{
 				SocketAddress: &corev3.SocketAddress{
-					Address: "0.0.0.0",
+					Address: listenerAddress,
 					PortSpecifier: &corev3.SocketAddress_PortValue{
 						PortValue: listenerPort,
 					},
@@ -541,7 +545,7 @@ func buildFullConfig(adminAddress string, listenerPort uint32, testUpstreamClust
 				Address: &corev3.Address_SocketAddress{
 					SocketAddress: &corev3.SocketAddress{
 						Protocol: corev3.SocketAddress_UDP,
-						Address:  "0.0.0.0",
+						Address:  listenerAddress,
 						PortSpecifier: &corev3.SocketAddress_PortValue{
 							PortValue: listenerPort,
 						},

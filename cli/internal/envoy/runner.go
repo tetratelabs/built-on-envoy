@@ -54,6 +54,8 @@ type RunnerFuncE struct {
 	Dirs *xdg.Directories
 	// RunID specifies the run identifier for this invocation.
 	RunID string
+	// ListenAddress is the IP address for Envoy listener to accept incoming traffic.
+	ListenAddress string
 	// ListenPort is the port for Envoy listener to accept incoming traffic.
 	ListenPort uint32
 	// AdminAddress is the host:port for Envoy admin interface (e.g. "127.0.0.1:9901").
@@ -100,6 +102,7 @@ func (r *RunnerFuncE) Run(ctx context.Context) error {
 	params := &ConfigGenerationParams{
 		Logger:                  r.Logger,
 		AdminAddress:            r.AdminAddress,
+		ListenerAddress:         r.ListenAddress,
 		ListenerPort:            r.ListenPort,
 		Dirs:                    r.Dirs,
 		Extensions:              r.Extensions,
@@ -186,14 +189,14 @@ func (r *RunnerFuncE) Run(ctx context.Context) error {
 		startDuration := time.Since(start).Round(100 * time.Millisecond)
 		_, _ = fmt.Fprintf(os.Stderr, `
 %[1]s✓ Envoy is ready after %[5]v%[2]s
-  → %[1]sProxy:%[2]s %[6]s://localhost:%[3]d
+  → %[1]sProxy:%[2]s %[6]s://%[3]s
   → %[1]sAdmin:%[2]s http://localhost:%[4]d
 
 %[1]sTest with:%[2]s
-  curl %[6]s://localhost:%[3]d/
+  curl %[6]s://%[3]s/
 
 Press Ctrl+C to stop
-`, internal.ANSIBold, internal.ANSIReset, r.ListenPort, adminClient.Port(), startDuration, proxyProtocol)
+`, internal.ANSIBold, internal.ANSIReset, proxyHostPort(r.ListenAddress, r.ListenPort), adminClient.Port(), startDuration, proxyProtocol)
 		if r.Debug != nil {
 			r.Debug.printNotes()
 		}
@@ -421,10 +424,21 @@ const (
 	containerListenerTLSKey = containerRuntimeDir + "/tls/listener.key"
 )
 
+// proxyHostPort returns the host:port to reach the listener. It returns localhost unless the
+// listener binds a specific non-loopback address.
+func proxyHostPort(listenAddress string, port uint32) string {
+	host := "localhost"
+	if ip := net.ParseIP(listenAddress); ip != nil && !ip.IsLoopback() && !ip.IsUnspecified() {
+		host = listenAddress
+	}
+	return net.JoinHostPort(host, strconv.FormatUint(uint64(port), 10))
+}
+
 // RunnerDocker handles running Envoy as a Docker container.
 type RunnerDocker struct {
 	Logger          *slog.Logger
 	Registry        string
+	ListenAddress   string
 	ListenPort      uint32
 	AdminPort       uint32
 	Dirs            *xdg.Directories
@@ -488,15 +502,23 @@ func (r *RunnerDocker) Run(ctx context.Context) error {
 func (r *RunnerDocker) dockerRunArgs(image string, localExtArgs []string) []string {
 	adminPort := strconv.FormatUint(uint64(r.AdminPort), 10)
 	containerAdminAddress := net.JoinHostPort("0.0.0.0", adminPort)
+	listenPort := strconv.FormatUint(uint64(r.ListenPort), 10)
+	// The listener binds all interfaces in the container so that the published port reaches it.
+	// The listen address applies to the published port on the host.
+	hostListen := listenPort
+	if ip := net.ParseIP(r.ListenAddress); ip != nil && !ip.IsUnspecified() {
+		hostListen = net.JoinHostPort(r.ListenAddress, listenPort)
+	}
 	args := []string{
 		"run", "--rm",
 		"--pull", r.Pull,
 		"--platform", "linux/" + r.Arch,
-		"-p", fmt.Sprintf("%d:%d/tcp", r.ListenPort, r.ListenPort),
-		"-p", fmt.Sprintf("%d:%d/udp", r.ListenPort, r.ListenPort),
+		"-p", hostListen + ":" + listenPort + "/tcp",
+		"-p", hostListen + ":" + listenPort + "/udp",
 		"-p", adminPort + ":" + adminPort,
 		"-v", ContainerCacheVolumeName + ":" + containerVolumeDir,
 		"-e", "BOE_ADMIN_ADDRESS=" + containerAdminAddress,
+		"-e", "BOE_LISTEN_ADDRESS=0.0.0.0",
 		"-e", "BOE_CONFIG_HOME=" + containerConfigHome,
 		"-e", "BOE_DATA_HOME=" + containerDataHome,
 		"-e", "BOE_STATE_HOME=" + containerStateHome,
@@ -561,6 +583,7 @@ func passthroughEnvVars() []string {
 	// instead of trying to start another Docker container.
 	passthroughEnv := slices.DeleteFunc(os.Environ(), func(arg string) bool {
 		return strings.HasPrefix(arg, "BOE_ADMIN_ADDRESS=") ||
+			strings.HasPrefix(arg, "BOE_LISTEN_ADDRESS=") ||
 			strings.HasPrefix(arg, "BOE_CONFIG_HOME=") ||
 			strings.HasPrefix(arg, "BOE_DATA_HOME=") ||
 			strings.HasPrefix(arg, "BOE_STATE_HOME=") ||

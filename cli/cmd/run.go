@@ -35,6 +35,7 @@ type Run struct {
 	LogLevel   string     `help:"Envoy component log level." default:"all:error" env:"ENVOY_LOG_LEVEL"`
 	LogFormat  string     `help:"Envoy log format." env:"ENVOY_LOG_FORMAT"`
 	RunID      string     `name:"run-id" env:"BOE_RUN_ID" help:"Run identifier for this invocation. Overrides the default timestamp-based ID."`
+	ListenAddr string     `name:"listen-address" help:"IP address for Envoy listener to accept incoming traffic. Use 0.0.0.0 to accept traffic on all interfaces." default:"127.0.0.1"`
 	ListenPort uint32     `help:"Port for Envoy listener to accept incoming traffic." default:"10000"`
 	AdminPort  uint32     `name:"admin-port" help:"Port for Envoy admin interface." default:"9901" env:"BOE_ADMIN_PORT"`
 	Extensions []string   `name:"extension" help:"Extensions to enable (in the format: \"name\" or \"name:version\")."`
@@ -88,6 +89,9 @@ func (r *Run) Validate() error {
 	if r.Docker.ImageVersion != "" && !r.Docker.Enabled && !r.dockerImplicit {
 		return fmt.Errorf("--docker-image-version can only be used with --docker")
 	}
+	if net.ParseIP(r.ListenAddr) == nil {
+		return fmt.Errorf("--listen-address must be an IP address: %q", r.ListenAddr)
+	}
 	return nil
 }
 
@@ -104,6 +108,7 @@ func (r *Run) run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 		runner := &envoy.RunnerDocker{
 			Logger:          logger,
 			Registry:        r.OCI.Registry,
+			ListenAddress:   r.ListenAddr,
 			ListenPort:      r.ListenPort,
 			AdminPort:       r.AdminPort,
 			Dirs:            dirs,
@@ -201,6 +206,7 @@ func (r *Run) run(ctx context.Context, dirs *xdg.Directories, logger *slog.Logge
 		LogFormat:               r.LogFormat,
 		Dirs:                    dirs,
 		RunID:                   r.RunID,
+		ListenAddress:           listenAddressForLocal(r.ListenAddr),
 		ListenPort:              r.ListenPort,
 		AdminAddress:            adminAddressForLocal(r.AdminPort),
 		Extensions:              extensionsToRun,
@@ -230,6 +236,13 @@ func adminAddressForLocal(port uint32) string {
 		return addr
 	}
 	return net.JoinHostPort("127.0.0.1", strconv.FormatUint(uint64(port), 10))
+}
+
+// listenAddressForLocal returns the listener address for a locally-running Envoy.
+// Inside a Docker container, the BOE_LISTEN_ADDRESS env var is set by RunnerDocker
+// to bind on all interfaces; otherwise it is the --listen-address value.
+func listenAddressForLocal(flag string) string {
+	return cmp.Or(os.Getenv("BOE_LISTEN_ADDRESS"), flag)
 }
 
 // downloadExtensions downloads the specified extensions using the provided downloader.

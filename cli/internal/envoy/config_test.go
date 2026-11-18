@@ -1435,6 +1435,50 @@ func TestRenderConfigUDPListener(t *testing.T) {
 	require.Empty(t, tcp.GetListenerFilters(), "TCP listener must not host UDP listener filters")
 }
 
+func TestRenderConfigListenerAddress(t *testing.T) {
+	manifest := &extensions.Manifest{
+		Name:        "dns-gateway",
+		Type:        extensions.TypeRust,
+		FilterTypes: []extensions.FilterType{extensions.FilterTypeUDPListener},
+	}
+
+	tests := []struct {
+		name            string
+		listenerAddress string
+		want            string
+	}{
+		{name: "empty means all interfaces", listenerAddress: "", want: "0.0.0.0"},
+		{name: "all interfaces", listenerAddress: "0.0.0.0", want: "0.0.0.0"},
+		{name: "loopback", listenerAddress: "127.0.0.1", want: "127.0.0.1"},
+		{name: "IPv6 loopback", listenerAddress: "::1", want: "::1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, err := RenderConfig(&ConfigGenerationParams{
+				Logger:          internaltesting.NewTLogger(t),
+				AdminAddress:    "127.0.0.1:9901",
+				ListenerAddress: tt.listenerAddress,
+				ListenerPort:    10000,
+				Extensions:      []*extensions.Manifest{manifest},
+			}, FullConfigRenderer)
+			require.NoError(t, err)
+
+			jsonBytes, err := yaml.YAMLToJSON([]byte(out))
+			require.NoError(t, err)
+			var bootstrap bootstrapv3.Bootstrap
+			require.NoError(t, protojson.Unmarshal(jsonBytes, &bootstrap))
+
+			// Both the TCP and the UDP listener bind the listener address.
+			listeners := bootstrap.GetStaticResources().GetListeners()
+			require.Len(t, listeners, 2)
+			for _, l := range listeners {
+				require.Equal(t, tt.want, l.GetAddress().GetSocketAddress().GetAddress(), l.GetName())
+			}
+		})
+	}
+}
+
 // requireEqualError compares error strings while normalizing protobuf NBSP output.
 func requireEqualError(t *testing.T, err error, expected string) {
 	t.Helper()

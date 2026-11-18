@@ -111,6 +111,7 @@ func TestDockerRunArgsDebug(t *testing.T) {
 		"-p", "9901:9901",
 		"-v", "boe-cache:" + containerVolumeDir,
 		"-e", "BOE_ADMIN_ADDRESS=0.0.0.0:9901",
+		"-e", "BOE_LISTEN_ADDRESS=0.0.0.0",
 		"-e", "BOE_CONFIG_HOME=" + containerConfigHome,
 		"-e", "BOE_DATA_HOME=" + containerDataHome,
 		"-e", "BOE_STATE_HOME=" + containerStateHome,

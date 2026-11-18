@@ -39,6 +39,16 @@ and all the files needed to execute the extension locally.
     boe run --local ~/src/built-on-envoy/extensions/composer/example
     ```
 
+The listener accepts traffic only on the loopback interface (`127.0.0.1`) by default. To accept
+traffic from other hosts, set `--listen-address`. Use `0.0.0.0` for all interfaces:
+
+    ```shell
+    boe run --local ~/src/built-on-envoy/extensions/composer/example --listen-address 0.0.0.0
+    ```
+
+With `--docker`, Envoy listens on all interfaces inside the container, and `--listen-address`
+sets the host address where Docker publishes the listener port.
+
 Run with a custom Envoy binary. BOE uses this binary directly; it must match the local OS/arch.
 
     ```shell
