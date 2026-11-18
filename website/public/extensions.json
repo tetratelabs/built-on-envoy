@@ -1,7 +1,7 @@
 [
   {
     "name": "anthropic-messages-decoder",
-    "version": "0.14.0-dev",
+    "version": "0.15.0-dev",
     "parent": "composer",
     "categories": [
       "AI",
@@ -50,13 +50,13 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.14.0-dev",
+    "composerVersion": "0.15.0-dev",
     "sourcePath": "composer/anthropic-decoder",
     "configReferencePath": "/docs/reference/extensions#anthropic-messages-decoder"
   },
   {
     "name": "azure-content-safety",
-    "version": "0.14.0-dev",
+    "version": "0.15.0-dev",
     "parent": "composer",
     "categories": [
       "Security",
@@ -118,13 +118,13 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.14.0-dev",
+    "composerVersion": "0.15.0-dev",
     "sourcePath": "composer/azure-content-safety",
     "configReferencePath": "/docs/reference/extensions#azure-content-safety"
   },
   {
     "name": "bedrock-guardrails",
-    "version": "0.14.0-dev",
+    "version": "0.15.0-dev",
     "parent": "composer",
     "categories": [
       "AI",
@@ -169,13 +169,13 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.14.0-dev",
+    "composerVersion": "0.15.0-dev",
     "sourcePath": "composer/bedrock-guardrails",
     "configReferencePath": "/docs/reference/extensions#bedrock-guardrails"
   },
   {
     "name": "cedar-auth",
-    "version": "0.14.0-dev",
+    "version": "0.15.0-dev",
     "parent": "composer",
     "categories": [
       "Security"
@@ -249,13 +249,13 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.14.0-dev",
+    "composerVersion": "0.15.0-dev",
     "sourcePath": "composer/cedar",
     "configReferencePath": "/docs/reference/extensions#cedar-auth"
   },
   {
     "name": "chat-completions-decoder",
-    "version": "0.14.0-dev",
+    "version": "0.15.0-dev",
     "parent": "composer",
     "categories": [
       "AI",
@@ -304,13 +304,13 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.14.0-dev",
+    "composerVersion": "0.15.0-dev",
     "sourcePath": "composer/chat-completions-decoder",
     "configReferencePath": "/docs/reference/extensions#chat-completions-decoder"
   },
   {
     "name": "cluster-router",
-    "version": "0.14.0-dev",
+    "version": "0.15.0-dev",
     "parent": "composer",
     "categories": [
       "Traffic Control",
@@ -346,13 +346,13 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.14.0-dev",
+    "composerVersion": "0.15.0-dev",
     "sourcePath": "composer/cluster-router",
     "configReferencePath": "/docs/reference/extensions#cluster-router"
   },
   {
     "name": "coraza-waf",
-    "version": "0.14.0-dev",
+    "version": "0.15.0-dev",
     "parent": "composer",
     "categories": [
       "Security"
@@ -390,13 +390,13 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.14.0-dev",
+    "composerVersion": "0.15.0-dev",
     "sourcePath": "composer/waf",
     "configReferencePath": "/docs/reference/extensions#coraza-waf"
   },
   {
     "name": "dynamic-fault-injection",
-    "version": "0.14.0-dev",
+    "version": "0.15.0-dev",
     "parent": "composer",
     "categories": [
       "Traffic Control",
@@ -427,7 +427,7 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.14.0-dev",
+    "composerVersion": "0.15.0-dev",
     "sourcePath": "composer/dynamic-fault-injection",
     "configReferencePath": "/docs/reference/extensions#dynamic-fault-injection"
   },
@@ -471,7 +471,7 @@
   },
   {
     "name": "example-go",
-    "version": "0.14.0-dev",
+    "version": "0.15.0-dev",
     "parent": "composer",
     "categories": [
       "Examples"
@@ -498,7 +498,7 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.14.0-dev",
+    "composerVersion": "0.15.0-dev",
     "sourcePath": "composer/example"
   },
   {
@@ -579,7 +579,7 @@
   },
   {
     "name": "file-server",
-    "version": "0.14.0-dev",
+    "version": "0.15.0-dev",
     "parent": "composer",
     "categories": [
       "Traffic Control"
@@ -613,13 +613,13 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.14.0-dev",
+    "composerVersion": "0.15.0-dev",
     "sourcePath": "composer/file-server",
     "configReferencePath": "/docs/reference/extensions#file-server"
   },
   {
     "name": "goplugin-loader",
-    "version": "0.14.0-dev",
+    "version": "0.15.0-dev",
     "parent": "composer",
     "categories": [
       "Misc"
@@ -649,7 +649,7 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.14.0-dev",
+    "composerVersion": "0.15.0-dev",
     "sourcePath": "composer/goplugin-loader",
     "configReferencePath": "/docs/reference/extensions#goplugin-loader"
   },
@@ -705,7 +705,7 @@
   },
   {
     "name": "jwe-decrypt",
-    "version": "0.14.0-dev",
+    "version": "0.15.0-dev",
     "parent": "composer",
     "categories": [
       "Authentication"
@@ -761,13 +761,13 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.14.0-dev",
+    "composerVersion": "0.15.0-dev",
     "sourcePath": "composer/jwe-decrypt",
     "configReferencePath": "/docs/reference/extensions#jwe-decrypt"
   },
   {
     "name": "llm-proxy",
-    "version": "0.14.0-dev",
+    "version": "0.15.0-dev",
     "parent": "composer",
     "categories": [
       "AI"
@@ -815,7 +815,7 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.14.0-dev",
+    "composerVersion": "0.15.0-dev",
     "sourcePath": "composer/llm-proxy",
     "configReferencePath": "/docs/reference/extensions#llm-proxy"
   },
@@ -867,7 +867,7 @@
   },
   {
     "name": "opa",
-    "version": "0.14.0-dev",
+    "version": "0.15.0-dev",
     "parent": "composer",
     "categories": [
       "Security"
@@ -941,13 +941,13 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.14.0-dev",
+    "composerVersion": "0.15.0-dev",
     "sourcePath": "composer/opa",
     "configReferencePath": "/docs/reference/extensions#opa"
   },
   {
     "name": "openapi-validator",
-    "version": "0.14.0-dev",
+    "version": "0.15.0-dev",
     "parent": "composer",
     "categories": [
       "Traffic Control"
@@ -994,13 +994,13 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.14.0-dev",
+    "composerVersion": "0.15.0-dev",
     "sourcePath": "composer/openapi-validator",
     "configReferencePath": "/docs/reference/extensions#openapi-validator"
   },
   {
     "name": "openfga",
-    "version": "0.14.0-dev",
+    "version": "0.15.0-dev",
     "parent": "composer",
     "categories": [
       "AI",
@@ -1008,7 +1008,7 @@
     ],
     "author": "Okta \u0026 Tetrate",
     "description": "Inline OpenFGA authorization for Envoy, Envoy Gateway, and AI Gateway — no sidecar required",
-    "longDescription": "This extension implements [OpenFGA](https://openfga.dev/) authorization checks as an\ninline Envoy HTTP filter. It calls the OpenFGA Check API via Envoy's async HTTP callout\nmechanism to determine whether a request should be allowed or denied, without requiring\na separate authorization sidecar.\n\nWorks with [Envoy](https://www.envoyproxy.io/), [Envoy Gateway](https://gateway.envoyproxy.io/),\nand [Envoy AI Gateway](https://aigateway.envoyproxy.io/) (AIGatewayRoute, HTTPRoute, MCPRoute).\nThe extension extracts user, relation, and object from request headers, URL path segments,\nquery parameters, or static values, then delegates the authorization decision to OpenFGA.\n\n## Key Features\n\n- **Async HTTP callout**: Uses Envoy's built-in `HttpCallout` to call the OpenFGA Check API\n  through a configured cluster, integrating with Envoy's connection pooling and circuit breaking.\n- **Flexible input mapping**: Extract `user`, `relation`, and `object` from request headers,\n  URL path segments, query parameters, or static values — no ExtProc needed for REST APIs.\n- **AI Gateway ready**: Works in the same Envoy filter chain as the AI Gateway External\n  Processor. Use it to control access to AI models, MCP tools, or any HTTP resource.\n- **Dry-run mode**: Log authorization decisions without enforcing them.\n- **Fail-open mode**: Allow requests through when OpenFGA or the filter cannot enforce a deny (see Metrics).\n\n## OpenFGA best practices\n\nFollow [OpenFGA’s production guidance](https://openfga.dev/docs/best-practices/running-in-production):\nenable TLS and API authentication on the OpenFGA server, disable the playground in production,\nand tune metrics and tracing on the server. Configure the Envoy **cluster** to OpenFGA with TLS\nand any required upstream headers (for example API tokens) so callouts are protected in transit\nand authenticated like any other client.\n\nIn production, set **`authorization_model_id`** to a fixed model ID instead of omitting it\n(omitted uses the store’s latest model, which can change unexpectedly when models are updated).\n\nOpenFGA’s [query consistency modes](https://openfga.dev/docs/interacting/consistency) apply when\nCheck query caching is enabled on the server. The default omits `consistency` from the Check\nrequest (equivalent to minimizing latency when caching matters). Use the optional **`consistency`**\nconfig field to send `HIGHER_CONSISTENCY` when you need to skip the cache after tuple writes;\navoid setting it on every request because it increases latency and load.\n\n**`user`**, **`relation`**, and **`object`** must be valid for your authorization model (typically\nOpenFGA strings such as `type:id`). This extension builds them from static values or request data\nvia `prefix` and extracted values—misconfiguration can produce strings OpenFGA will reject or\nevaluate incorrectly.\n\n**`fail_open`** and **`dry_run`** trade security for availability or observability: only enable\nthem deliberately.\n\nThis filter supports **contextual tuples** and **context** (ABAC conditions) in the Check request.\nUse **`contextual_tuples`** to pass request-scoped relationships (e.g., organization membership from\na JWT claim) without storing them in OpenFGA; see [Contextual tuples](https://openfga.dev/docs/interacting/contextual-tuples).\nUse **`context`** to pass runtime values for [condition evaluation](https://openfga.dev/docs/modeling/conditions)\n(e.g., current time, IP address) in ABAC-style policies.\n\n## Configuration\n\nThe extension requires an Envoy cluster pointing to the OpenFGA server. The `user`, `relation`,\nand `object` fields for the Check API are built from static values, request headers, URL path\nsegments, or query parameters (see valueSource below).\n\n```json\n{\n  \"cluster\": \"openfga\",\n  \"openfga_host\": \"openfga.default.svc:8080\",\n  \"store_id\": \"01ABCDEF\",\n  \"user\": {\"header\": \"x-user-id\", \"prefix\": \"user:\"},\n  \"relation\": {\"value\": \"can_use\"},\n  \"object\": {\"header\": \"x-ai-model\", \"prefix\": \"model:\"}\n}\n```\n\n## Multi-Rule Configuration\n\nFor routes that handle multiple resource types (e.g., AI models, MCP tools, and generic HTTP\nresources), use the `rules` array instead of the legacy single-rule config. Each rule can match\non request headers and define its own `relation` and `object`.\n\n- **`rules`**: Array of rules evaluated in order. The first matching rule is used. A rule with no\n  `match` or empty `match.headers` is a catch-all and must be last.\n- **`match.headers`**: Object mapping header names to match values. Use `\"*\"` to require the\n  header to be present with any non-empty value; use an exact string for a value match.\n- **Top-level `user`**: Serves as the default user source for all rules. Individual rules can\n  override with their own `user` field.\n\nExample: AI model rule (header `x-ai-eg-model`), MCP tool rule (header `x-mcp-tool`), and a\ncatch-all for generic resources.\n\n```json\n{\n  \"cluster\": \"openfga\",\n  \"openfga_host\": \"openfga.default.svc:8080\",\n  \"store_id\": \"01ABCDEF\",\n  \"user\": {\"header\": \"x-user-id\", \"prefix\": \"user:\"},\n  \"rules\": [\n    {\"match\": {\"headers\": {\"x-ai-eg-model\": \"*\"}}, \"relation\": {\"value\": \"can_use\"}, \"object\": {\"header\": \"x-ai-eg-model\", \"prefix\": \"model:\"}},\n    {\"match\": {\"headers\": {\"x-mcp-tool\": \"*\"}}, \"relation\": {\"value\": \"can_invoke\"}, \"object\": {\"header\": \"x-mcp-tool\", \"prefix\": \"tool:\"}},\n    {\"relation\": {\"value\": \"can_access\"}, \"object\": {\"header\": \"x-resource-id\", \"prefix\": \"resource:\"}}\n  ]\n}\n```\n\n## Filter Chain Ordering\n\nWhen deploying with Envoy AI Gateway, filter chain order determines which headers are\navailable when the openfga filter runs.\n\n**Recommended order:**\n\n1. **jwe-decrypt** (optional) — decrypts a JWE-wrapped token so JWT authn can read it\n2. **JWT Authentication** (Envoy built-in) — validates the token and optionally injects\n   claims as request headers via `SecurityPolicy.jwt.claimsToHeaders`\n3. **openfga** — reads user identity from a header, checks authorization against OpenFGA\n4. **AI Gateway ExtProc** — parses the request body to route to the correct AI model\n\n**Why openfga before the AI Gateway ExtProc?**\n\nOpenFGA is a header-only filter: it runs on `OnRequestHeaders` before the request body is\nread. The AI Gateway ExtProc processes the request body and may set headers like\n`x-ai-eg-model` based on the JSON payload. When openfga runs first, it reads\n`x-ai-eg-model` as set by the **client** — which is the intended control point for\naccess control (the client declares what it wants, and the check runs before any\nprocessing). If the model name must come from the body-parsed value injected by ExtProc,\nplace openfga **after** the AI Gateway ExtProc in the filter chain instead.\n\n## Identity Integration\n\n**Envoy Gateway JWT claims injection (recommended)**\n\nThe simplest way to pass user identity to openfga is via Envoy Gateway's `SecurityPolicy`\nwith `claimsToHeaders`. Envoy validates the JWT and injects any claim (e.g. `sub`) into a\nrequest header before the filter chain runs — no extra plugins needed. The header name is\nfully configurable; examples here use `x-user-id` for consistency with the rest of the\nComposer extension ecosystem.\n\n```yaml\napiVersion: gateway.envoyproxy.io/v1alpha1\nkind: SecurityPolicy\nmetadata:\n  name: jwt-policy\nspec:\n  targetRef:\n    group: gateway.networking.k8s.io\n    kind: HTTPRoute\n    name: my-route\n  jwt:\n    providers:\n      - name: my-provider\n        issuer: https://auth.example.com\n        remoteJWKS:\n          uri: https://auth.example.com/.well-known/jwks.json\n        claimsToHeaders:\n          - claim: sub\n            header: x-user-id\n```\n\nThen configure openfga to read that header:\n```json\n{\"header\": \"x-user-id\", \"prefix\": \"user:\"}\n```\n\n**jwe-decrypt + JWT authn (for encrypted tokens)**\n\nFor deployments where clients send JWE-encrypted JWTs, chain the `jwe-decrypt` plugin\nbefore openfga in the same Composer filter. The `jwe-decrypt` plugin decrypts the\n`Authorization` header in-place; Envoy's JWT authn filter then validates the inner JWT\nand `claimsToHeaders` makes the `sub` claim available as `x-user-id` for openfga to read.\n\n## Metrics\n\nThe extension exposes:\n\n- **`openfga_requests_total`** (counter, tag: `decision`): Authorization outcomes\n- **`openfga_check_duration_ms`** (histogram): Latency of OpenFGA Check API calls in milliseconds\n\n| Decision | Description |\n|----------|-------------|\n| `allowed` | The Check API allowed the request. |\n| `denied` | The request was denied: OpenFGA returned not allowed, **or** no rule matched the request, **or** `user` / `relation` / `object` resolved empty (when `fail_open` is false). |\n| `failopen` | The request was allowed because `fail_open` is true after a callout/API/parse failure, empty check inputs, or no matching rule. |\n| `dryrun_allow` | OpenFGA would have denied the request but it was allowed because `dry_run` is enabled. |\n| `error` | The request was denied after a callout failure, non-OK Check response, or unparseable response body (HTTP 502 to the client); not used when `fail_open` is true (those count as `failopen`). |\n",
+    "longDescription": "This extension implements [OpenFGA](https://openfga.dev/) authorization checks as an\ninline Envoy HTTP filter. It calls the OpenFGA Check API via Envoy's async HTTP callout\nmechanism to determine whether a request should be allowed or denied, without requiring\na separate authorization sidecar.\n\nWorks with [Envoy](https://www.envoyproxy.io/), [Envoy Gateway](https://gateway.envoyproxy.io/),\nand [Agent Router](https://theagentrouter.ai/) (AIGatewayRoute, HTTPRoute, MCPRoute).\nThe extension extracts user, relation, and object from request headers, URL path segments,\nquery parameters, or static values, then delegates the authorization decision to OpenFGA.\n\n## Key Features\n\n- **Async HTTP callout**: Uses Envoy's built-in `HttpCallout` to call the OpenFGA Check API\n  through a configured cluster, integrating with Envoy's connection pooling and circuit breaking.\n- **Flexible input mapping**: Extract `user`, `relation`, and `object` from request headers,\n  URL path segments, query parameters, or static values — no ExtProc needed for REST APIs.\n- **AI Gateway ready**: Works in the same Envoy filter chain as the AI Gateway External\n  Processor. Use it to control access to AI models, MCP tools, or any HTTP resource.\n- **Dry-run mode**: Log authorization decisions without enforcing them.\n- **Fail-open mode**: Allow requests through when OpenFGA or the filter cannot enforce a deny (see Metrics).\n\n## OpenFGA best practices\n\nFollow [OpenFGA’s production guidance](https://openfga.dev/docs/best-practices/running-in-production):\nenable TLS and API authentication on the OpenFGA server, disable the playground in production,\nand tune metrics and tracing on the server. Configure the Envoy **cluster** to OpenFGA with TLS\nand any required upstream headers (for example API tokens) so callouts are protected in transit\nand authenticated like any other client.\n\nIn production, set **`authorization_model_id`** to a fixed model ID instead of omitting it\n(omitted uses the store’s latest model, which can change unexpectedly when models are updated).\n\nOpenFGA’s [query consistency modes](https://openfga.dev/docs/interacting/consistency) apply when\nCheck query caching is enabled on the server. The default omits `consistency` from the Check\nrequest (equivalent to minimizing latency when caching matters). Use the optional **`consistency`**\nconfig field to send `HIGHER_CONSISTENCY` when you need to skip the cache after tuple writes;\navoid setting it on every request because it increases latency and load.\n\n**`user`**, **`relation`**, and **`object`** must be valid for your authorization model (typically\nOpenFGA strings such as `type:id`). This extension builds them from static values or request data\nvia `prefix` and extracted values—misconfiguration can produce strings OpenFGA will reject or\nevaluate incorrectly.\n\n**`fail_open`** and **`dry_run`** trade security for availability or observability: only enable\nthem deliberately.\n\nThis filter supports **contextual tuples** and **context** (ABAC conditions) in the Check request.\nUse **`contextual_tuples`** to pass request-scoped relationships (e.g., organization membership from\na JWT claim) without storing them in OpenFGA; see [Contextual tuples](https://openfga.dev/docs/interacting/contextual-tuples).\nUse **`context`** to pass runtime values for [condition evaluation](https://openfga.dev/docs/modeling/conditions)\n(e.g., current time, IP address) in ABAC-style policies.\n\n## Configuration\n\nThe extension requires an Envoy cluster pointing to the OpenFGA server. The `user`, `relation`,\nand `object` fields for the Check API are built from static values, request headers, URL path\nsegments, or query parameters (see valueSource below).\n\n```json\n{\n  \"cluster\": \"openfga\",\n  \"openfga_host\": \"openfga.default.svc:8080\",\n  \"store_id\": \"01ABCDEF\",\n  \"user\": {\"header\": \"x-user-id\", \"prefix\": \"user:\"},\n  \"relation\": {\"value\": \"can_use\"},\n  \"object\": {\"header\": \"x-ai-model\", \"prefix\": \"model:\"}\n}\n```\n\n## Multi-Rule Configuration\n\nFor routes that handle multiple resource types (e.g., AI models, MCP tools, and generic HTTP\nresources), use the `rules` array instead of the legacy single-rule config. Each rule can match\non request headers and define its own `relation` and `object`.\n\n- **`rules`**: Array of rules evaluated in order. The first matching rule is used. A rule with no\n  `match` or empty `match.headers` is a catch-all and must be last.\n- **`match.headers`**: Object mapping header names to match values. Use `\"*\"` to require the\n  header to be present with any non-empty value; use an exact string for a value match.\n- **Top-level `user`**: Serves as the default user source for all rules. Individual rules can\n  override with their own `user` field.\n\nExample: AI model rule (header `x-ai-eg-model`), MCP tool rule (header `x-mcp-tool`), and a\ncatch-all for generic resources.\n\n```json\n{\n  \"cluster\": \"openfga\",\n  \"openfga_host\": \"openfga.default.svc:8080\",\n  \"store_id\": \"01ABCDEF\",\n  \"user\": {\"header\": \"x-user-id\", \"prefix\": \"user:\"},\n  \"rules\": [\n    {\"match\": {\"headers\": {\"x-ai-eg-model\": \"*\"}}, \"relation\": {\"value\": \"can_use\"}, \"object\": {\"header\": \"x-ai-eg-model\", \"prefix\": \"model:\"}},\n    {\"match\": {\"headers\": {\"x-mcp-tool\": \"*\"}}, \"relation\": {\"value\": \"can_invoke\"}, \"object\": {\"header\": \"x-mcp-tool\", \"prefix\": \"tool:\"}},\n    {\"relation\": {\"value\": \"can_access\"}, \"object\": {\"header\": \"x-resource-id\", \"prefix\": \"resource:\"}}\n  ]\n}\n```\n\n## Filter Chain Ordering\n\nWhen deploying with Agent Router Gateway, filter chain order determines which headers are\navailable when the openfga filter runs.\n\n**Recommended order:**\n\n1. **jwe-decrypt** (optional) — decrypts a JWE-wrapped token so JWT authn can read it\n2. **JWT Authentication** (Envoy built-in) — validates the token and optionally injects\n   claims as request headers via `SecurityPolicy.jwt.claimsToHeaders`\n3. **openfga** — reads user identity from a header, checks authorization against OpenFGA\n4. **AI Gateway ExtProc** — parses the request body to route to the correct AI model\n\n**Why openfga before the AI Gateway ExtProc?**\n\nOpenFGA is a header-only filter: it runs on `OnRequestHeaders` before the request body is\nread. The AI Gateway ExtProc processes the request body and may set headers like\n`x-ai-eg-model` based on the JSON payload. When openfga runs first, it reads\n`x-ai-eg-model` as set by the **client** — which is the intended control point for\naccess control (the client declares what it wants, and the check runs before any\nprocessing). If the model name must come from the body-parsed value injected by ExtProc,\nplace openfga **after** the AI Gateway ExtProc in the filter chain instead.\n\n## Identity Integration\n\n**Envoy Gateway JWT claims injection (recommended)**\n\nThe simplest way to pass user identity to openfga is via Envoy Gateway's `SecurityPolicy`\nwith `claimsToHeaders`. Envoy validates the JWT and injects any claim (e.g. `sub`) into a\nrequest header before the filter chain runs — no extra plugins needed. The header name is\nfully configurable; examples here use `x-user-id` for consistency with the rest of the\nComposer extension ecosystem.\n\n```yaml\napiVersion: gateway.envoyproxy.io/v1alpha1\nkind: SecurityPolicy\nmetadata:\n  name: jwt-policy\nspec:\n  targetRef:\n    group: gateway.networking.k8s.io\n    kind: HTTPRoute\n    name: my-route\n  jwt:\n    providers:\n      - name: my-provider\n        issuer: https://auth.example.com\n        remoteJWKS:\n          uri: https://auth.example.com/.well-known/jwks.json\n        claimsToHeaders:\n          - claim: sub\n            header: x-user-id\n```\n\nThen configure openfga to read that header:\n```json\n{\"header\": \"x-user-id\", \"prefix\": \"user:\"}\n```\n\n**jwe-decrypt + JWT authn (for encrypted tokens)**\n\nFor deployments where clients send JWE-encrypted JWTs, chain the `jwe-decrypt` plugin\nbefore openfga in the same Composer filter. The `jwe-decrypt` plugin decrypts the\n`Authorization` header in-place; Envoy's JWT authn filter then validates the inner JWT\nand `claimsToHeaders` makes the `sub` claim available as `x-user-id` for openfga to read.\n\n## Metrics\n\nThe extension exposes:\n\n- **`openfga_requests_total`** (counter, tag: `decision`): Authorization outcomes\n- **`openfga_check_duration_ms`** (histogram): Latency of OpenFGA Check API calls in milliseconds\n\n| Decision | Description |\n|----------|-------------|\n| `allowed` | The Check API allowed the request. |\n| `denied` | The request was denied: OpenFGA returned not allowed, **or** no rule matched the request, **or** `user` / `relation` / `object` resolved empty (when `fail_open` is false). |\n| `failopen` | The request was allowed because `fail_open` is true after a callout/API/parse failure, empty check inputs, or no matching rule. |\n| `dryrun_allow` | OpenFGA would have denied the request but it was allowed because `dry_run` is enabled. |\n| `error` | The request was denied after a callout failure, non-OK Check response, or unparseable response body (HTTP 502 to the client); not used when `fail_open` is true (those count as `failopen`). |\n",
     "type": "go",
     "filterType": [
       "http"
@@ -1026,7 +1026,7 @@
     "examples": [
       {
         "title": "AI Model Access Control",
-        "description": "Control which users can access specific AI models (for example on an AIGatewayRoute).\nThe user identity comes from a header set by upstream authentication; the model name\ncomes from a header you choose (here `x-ai-model`, often set by the client or an\nupstream filter). For Envoy AI Gateway’s body-derived model header (`x-ai-eg-model`),\nuse the multi-rule example below or place openfga after the AI Gateway ExtProc.\n",
+        "description": "Control which users can access specific AI models (for example on an AIGatewayRoute).\nThe user identity comes from a header set by upstream authentication; the model name\ncomes from a header you choose (here `x-ai-model`, often set by the client or an\nupstream filter). For Agent Router's body-derived model header (`x-ai-eg-model`),\nuse the multi-rule example below or place openfga after the AI Gateway ExtProc.\n",
         "code": "boe run --extension openfga \\\n  --config '{\n    \"cluster\": \"openfga\",\n    \"openfga_host\": \"localhost:8080\",\n    \"store_id\": \"YOUR_STORE_ID\",\n    \"user\": {\"header\": \"x-user-id\", \"prefix\": \"user:\"},\n    \"relation\": {\"value\": \"can_use\"},\n    \"object\": {\"header\": \"x-ai-model\", \"prefix\": \"model:\"}\n  }' \\\n  --cluster-insecure localhost:8080\n\n# Allowed (if user:alice has can_use relation with model:gpt-4 in OpenFGA)\ncurl -H \"x-user-id: alice\" -H \"x-ai-model: gpt-4\" http://localhost:10000/v1/chat/completions\n\n# Denied\ncurl -H \"x-user-id: bob\" -H \"x-ai-model: gpt-4\" http://localhost:10000/v1/chat/completions\n"
       },
       {
@@ -1067,7 +1067,7 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.14.0-dev",
+    "composerVersion": "0.15.0-dev",
     "sourcePath": "composer/openfga",
     "configReferencePath": "/docs/reference/extensions#openfga"
   },
@@ -1119,7 +1119,7 @@
   },
   {
     "name": "saml",
-    "version": "0.14.0-dev",
+    "version": "0.15.0-dev",
     "parent": "composer",
     "categories": [
       "Authentication",
@@ -1172,13 +1172,79 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.14.0-dev",
+    "composerVersion": "0.15.0-dev",
     "sourcePath": "composer/saml",
     "configReferencePath": "/docs/reference/extensions#saml"
   },
   {
+    "name": "switchyard",
+    "version": "0.1.1",
+    "categories": [
+      "AI",
+      "Traffic Control"
+    ],
+    "author": "NVIDIA Corporation \u0026 Tetrate",
+    "featured": true,
+    "description": "Route LLM requests to the right model per request with NVIDIA NeMo Switchyard",
+    "longDescription": "This extension resolves **virtual models** with [NVIDIA NeMo Switchyard](https://github.com/NVIDIA-NeMo/Switchyard)\nrouting algorithms. Clients send a virtual model name, such as `coding-auto`, and the filter\ndecides, for every request, which target model serves it. For example, it can send agent steps\nthat only read tool output to an efficient model and the rest to a capable model.\n\n## How It Works\n\n1. The filter buffers the body of LLM API requests (OpenAI chat completions, OpenAI responses\n   and Anthropic messages).\n2. If the request's `model` is a configured virtual model, the filter runs its Switchyard\n   algorithm on the request, in process.\n3. The filter rewrites the `model` field of the body to the selected model and adds\n   `x-switchyard-*` decision headers.\n\nFilters that route by the model in the body, such as [Agent Router](https://github.com/theagentrouter/agent-router)'s,\nthen route the request to the selected model. On plain Envoy, set `model_header` and\n`clear_route_cache` so that routes can match the selected model on a header.\n\nTo let a later filter make the final choice, set `rewrite_body` to `false`. The body keeps the\nvirtual model, and the decision is carried only in dynamic metadata, filter state and, when\nenabled, the decision headers and `model_header`. A later filter then sees both, and can apply its own policy, such as\nquotas or fallbacks, before it picks the backend.\n\n## Supported Algorithms\n\nAll Switchyard algorithms except `prefill_router`, in Switchyard's own route format. Judges, such\nas Jev, are called with non-blocking HTTP callouts, either on their own endpoint with their own key\n(`decision_targets`, `judge_targets`) or through the gateway itself (`model_calls`). `vgr`,\n`advisor` and `noop` may answer the request themselves, streamed when the client asks.\n\n## Sessions\n\nStateful algorithms keep per-session state in the Envoy process. The session ID comes from the\n`x-switchyard-session-id` header, falling back to `agent-session-id`, and can be scoped by tenant\nheaders. Requests of a session must reach the same Envoy instance to share state.\n\n## Observability\n\n* Request headers `x-switchyard-virtual-model`, `x-switchyard-selected-model` and `x-switchyard-reason`.\n* Dynamic metadata in the `io.builtonenvoy.switchyard` namespace, for access logs.\n* Filter state under the `io.builtonenvoy.switchyard.virtual_model`,\n  `io.builtonenvoy.switchyard.selected_model` and `io.builtonenvoy.switchyard.reason` keys,\n  which is never sent upstream.\n* The `switchyard_decisions` counter, by virtual model, selected model and outcome.\n* For judge algorithms, the judge's evidence, the `switchyard_judge_calls` counter, and the calls\n  and tokens spent on routing.\n\n## Using with Agent Router\n\n[Agent Router](https://github.com/theagentrouter/agent-router) works with this extension\nunchanged. Agent Router reads the model from the request body, so when this filter runs first\nand rewrites the body, Agent Router routes the request to the selected model, with that model's\ncredentials, translation, rate limits and costs.\n\nThe extension is added to the Gateway with Envoy Gateway's dynamic module support (Envoy Gateway\nv1.9 or later). Two settings matter:\n\n* **Filter order.** The module must run before Agent Router's `ext_proc` filter, which Agent\n  Router inserts before the first `lua`, `ext_proc` or `wasm` filter of the listener. The\n  `EnvoyProxy` `filterOrder` moves the module before them.\n* **Gateway-wide policy.** Envoy picks the filters for a request from the first route it matches,\n  before the model is known. For Agent Router that is usually the catch-all `route-not-found`\n  rule, so the `EnvoyExtensionPolicy` must target the whole Gateway.\n\nThe module is loaded from the extension image, mounted as a Kubernetes\n[image volume](https://kubernetes.io/docs/concepts/storage/volumes/#image) (enabled by default\nsince Kubernetes 1.35). The image also ships `libgcc_s.so.1`, which distroless Envoy images lack.\n\nYour `AIGatewayRoute` needs a rule for each target model, as in any Agent Router setup. A rule for\nthe virtual model is optional: it lists it in `/v1/models`.\n\nSee the examples below to try it in a local kind cluster or to add it to an existing Gateway, and\nthe [README](https://github.com/tetratelabs/built-on-envoy/tree/main/extensions/switchyard#using-with-agent-router)\nfor the full setup and telemetry options.\n",
+    "type": "rust",
+    "filterType": [
+      "http"
+    ],
+    "tags": [
+      "ai",
+      "llm",
+      "model-routing",
+      "switchyard",
+      "rust",
+      "dynamic-module"
+    ],
+    "license": "Apache-2.0",
+    "examples": [
+      {
+        "title": "Try It with Agent Router in kind",
+        "description": "Creates a kind cluster, installs Envoy Gateway and Agent Router, deploys two fake model\nbackends and a Gateway with the extension, and checks that coding-auto requests reach the\nmodel Switchyard selects. Requires docker, kind, kubectl and helm.\n",
+        "code": "git clone https://github.com/tetratelabs/built-on-envoy.git\ncd built-on-envoy\n./extensions/switchyard/examples/agent-router/kind.sh\n\n# Then send requests through the gateway (the script leaves the cluster running).\nkubectl port-forward -n envoy-gateway-system \\\n  \"$(kubectl get svc -n envoy-gateway-system -l gateway.envoyproxy.io/owning-gateway-name=switchyard -o name)\" 8080:80 \u0026\ncurl -i localhost:8080/v1/chat/completions -H 'content-type: application/json' \\\n  -d '{\"model\": \"coding-auto\", \"messages\": [{\"role\": \"user\", \"content\": \"write a hello world in Go\"}]}'\n"
+      },
+      {
+        "title": "Add It to an Agent Router Gateway",
+        "description": "Adds the extension to a Gateway managed by Envoy Gateway and Agent Router. The Gateway must\nreference this EnvoyProxy in spec.infrastructure.parametersRef, and the AIGatewayRoute must\nhave rules for the gpt-4.1-mini and gpt-5 target models.\n",
+        "code": "kubectl apply -f - \u003c\u003cEOF\napiVersion: gateway.envoyproxy.io/v1alpha1\nkind: EnvoyProxy\nmetadata:\n  name: switchyard\n  namespace: default\nspec:\n  dynamicModules:\n    - name: switchyard\n      source:\n        type: Local\n        local:\n          path: /var/boe/extensions/switchyard/libswitchyard.so\n      doNotClose: true\n  # Run the module before Agent Router's ext_proc filter.\n  filterOrder:\n    - {name: envoy.filters.http.dynamic_modules, before: envoy.filters.http.lua}\n    - {name: envoy.filters.http.dynamic_modules, before: envoy.filters.http.ext_proc}\n    - {name: envoy.filters.http.dynamic_modules, before: envoy.filters.http.wasm}\n  provider:\n    type: Kubernetes\n    kubernetes:\n      envoyDeployment:\n        pod:\n          volumes:\n            - name: switchyard\n              image:\n                reference: ghcr.io/tetratelabs/built-on-envoy/extension-switchyard:0.1.1\n        container:\n          volumeMounts:\n            - name: switchyard\n              mountPath: /var/boe/extensions/switchyard\n              readOnly: true\n---\napiVersion: gateway.envoyproxy.io/v1alpha1\nkind: EnvoyExtensionPolicy\nmetadata:\n  name: switchyard\n  namespace: default\nspec:\n  # Must target the whole Gateway.\n  targetRefs:\n    - group: gateway.networking.k8s.io\n      kind: Gateway\n      name: my-gateway\n  dynamicModule:\n    - name: switchyard\n      filterName: switchyard\n      config:\n        virtual_models:\n          - name: coding-auto\n            targets:\n              efficient: gpt-4.1-mini\n              capable: gpt-5\n            algorithm:\n              type: auto\n              capable_target: capable\n              efficient_target: efficient\n            default_model: gpt-4.1-mini\nEOF\n"
+      },
+      {
+        "title": "Automatic Tier Selection",
+        "description": "Route coding-auto requests to an efficient or a capable model",
+        "code": "boe run --extension switchyard --config '\n  {\n    \"virtual_models\": [\n      {\n        \"name\": \"coding-auto\",\n        \"targets\": {\"efficient\": \"gpt-4.1-mini\", \"capable\": \"gpt-5\"},\n        \"algorithm\": {\"type\": \"auto\", \"capable_target\": \"capable\", \"efficient_target\": \"efficient\"},\n        \"default_model\": \"gpt-4.1-mini\"\n      }\n    ]\n  }'\n"
+      },
+      {
+        "title": "Judge Routing with Jev",
+        "description": "Ask Jev whether each new session needs the capable model",
+        "code": "boe run --extension switchyard --cluster api.typesafe.ai:443 --config '\n  {\n    \"decision_targets\": {\n      \"jev\": {\"format\": \"system_one\", \"model\": \"jev-latest\", \"cluster\": \"api.typesafe.ai:443\",\n              \"authority\": \"api.typesafe.ai\", \"api_key\": {\"file\": \"/tmp/jev-api-key\"}}\n    },\n    \"virtual_models\": [\n      {\n        \"name\": \"coding-auto\",\n        \"targets\": {\"efficient\": \"gpt-4.1-mini\", \"capable\": \"gpt-5\"},\n        \"algorithm\": {\"type\": \"llm_classifier\", \"mode\": \"capability\", \"classifier_target\": \"jev\",\n                      \"strong_target\": \"capable\", \"weak_target\": \"efficient\", \"classify_trigger\": \"new_session\",\n                      \"decision\": {\"cutoff\": 0.05, \"candidates\": {\"candidate_a\": \"capable\", \"candidate_b\": \"efficient\"}, \"evidence\": {}}},\n        \"default_model\": \"gpt-4.1-mini\"\n      }\n    ]\n  }'\n"
+      },
+      {
+        "title": "Weighted Split Routed by Header",
+        "description": "Split traffic between two models and expose the selected one in a header for routing",
+        "code": "boe run --extension switchyard --config '\n  {\n    \"virtual_models\": [\n      {\n        \"name\": \"chat-split\",\n        \"targets\": {\"a\": \"model-a\", \"b\": \"model-b\"},\n        \"algorithm\": {\"type\": \"random\", \"targets\": [\"a\", \"b\"], \"weights\": [0.9, 0.1]}\n      }\n    ],\n    \"model_header\": \"x-model\",\n    \"clear_route_cache\": true\n  }'\n"
+      },
+      {
+        "title": "Decision Only, for a Later Filter",
+        "description": "Keep the virtual model in the body and pass the decision to later filters as filter state",
+        "code": "boe run --extension switchyard --config '\n  {\n    \"virtual_models\": [\n      {\n        \"name\": \"coding-auto\",\n        \"targets\": {\"efficient\": \"gpt-4.1-mini\", \"capable\": \"gpt-5\"},\n        \"algorithm\": {\"type\": \"auto\", \"capable_target\": \"capable\", \"efficient_target\": \"efficient\"}\n      }\n    ],\n    \"rewrite_body\": false,\n    \"decision_headers\": false\n  }'\n"
+      },
+      {
+        "title": "Tenant-Scoped Sessions",
+        "description": "Use per-tenant session state and a cheaper policy for the free tier",
+        "code": "boe run --extension switchyard --config '\n  {\n    \"virtual_models\": [\n      {\n        \"name\": \"coding-auto\",\n        \"match_headers\": [{\"name\": \"x-tier\", \"value\": \"free\"}],\n        \"targets\": {\"only\": \"gpt-4.1-mini\"},\n        \"algorithm\": {\"type\": \"passthrough\", \"target\": \"only\"}\n      },\n      {\n        \"name\": \"coding-auto\",\n        \"targets\": {\"efficient\": \"gpt-4.1-mini\", \"capable\": \"gpt-5\"},\n        \"algorithm\": {\"type\": \"auto\", \"capable_target\": \"capable\", \"efficient_target\": \"efficient\"},\n        \"default_model\": \"gpt-4.1-mini\"\n      }\n    ],\n    \"session\": {\"scope_headers\": [\"x-tenant-id\"]}\n  }'\n"
+      }
+    ],
+    "minEnvoyVersion": "1.39.0",
+    "maxEnvoyVersion": "1.40.0",
+    "sourcePath": "switchyard",
+    "configReferencePath": "/docs/reference/extensions#switchyard"
+  },
+  {
     "name": "token-exchange",
-    "version": "0.14.0-dev",
+    "version": "0.15.0-dev",
     "parent": "composer",
     "categories": [
       "Authentication",
@@ -1210,7 +1276,7 @@
     ],
     "minEnvoyVersion": "1.38.0",
     "maxEnvoyVersion": "1.39.0",
-    "composerVersion": "0.14.0-dev",
+    "composerVersion": "0.15.0-dev",
     "sourcePath": "composer/token-exchange",
     "configReferencePath": "/docs/reference/extensions#token-exchange"
   }

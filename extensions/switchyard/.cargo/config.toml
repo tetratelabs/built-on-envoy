@@ -1,0 +1,17 @@
+[net]
+git-fetch-with-cli = true
+
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
+
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
+
+# Envoy Gateway's default Envoy image is distroless and has no libgcc_s, which Rust links against
+# on Linux. The extension image ships libgcc_s.so.1 next to the module, and this RUNPATH makes the
+# dynamic loader find it there.
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-Wl,-rpath,$ORIGIN"]
+
+[target.aarch64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-Wl,-rpath,$ORIGIN"]

@@ -1,0 +1,89 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# Fake OpenAI-compatible model servers, one per target model, for local tests. Agent Router's
+# test upstream returns the TESTUPSTREAM_ID in the testupstream-id response header, so tests can
+# tell which backend served a request.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: efficient
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: efficient
+  template:
+    metadata:
+      labels:
+        app: efficient
+    spec:
+      containers:
+        - name: testupstream
+          image: docker.io/envoyproxy/ai-gateway-testupstream:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: TESTUPSTREAM_ID
+              value: efficient
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: efficient
+  namespace: default
+spec:
+  selector:
+    app: efficient
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: capable
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: capable
+  template:
+    metadata:
+      labels:
+        app: capable
+    spec:
+      containers:
+        - name: testupstream
+          image: docker.io/envoyproxy/ai-gateway-testupstream:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: TESTUPSTREAM_ID
+              value: capable
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: capable
+  namespace: default
+spec:
+  selector:
+    app: capable
+  ports:
+    - port: 80
+      targetPort: 8080

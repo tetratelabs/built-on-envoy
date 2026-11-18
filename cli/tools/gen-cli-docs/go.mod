@@ -3,7 +3,7 @@ module github.com/tetratelabs/built-on-envoy/cli/tools/gen-cli-docs
 go 1.27.3
 
 require (
-	github.com/alecthomas/kong v1.16.1
+	github.com/alecthomas/kong v1.17.0
 	github.com/tetratelabs/built-on-envoy v0.0.0
 )
 
@@ -15,7 +15,6 @@ require (
 	github.com/envoyproxy/protoc-gen-validate v1.3.3 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
-	github.com/kr/text v0.2.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20260330125221-c963978e514e // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
@@ -30,11 +29,11 @@ require (
 	github.com/ulikunitz/lz v0.6.11 // indirect
 	github.com/ulikunitz/xz/v2 v2.0.0-dev.4 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	go.yaml.in/yaml/v2 v2.4.2 // indirect
-	golang.org/x/mod v0.42.0 // indirect
+	go.yaml.in/yaml/v2 v2.4.5 // indirect
+	golang.org/x/mod v0.43.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
-	golang.org/x/text v0.42.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260720211330-0afa2a65878a // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260720211330-0afa2a65878a // indirect
 	google.golang.org/protobuf v1.36.12 // indirect

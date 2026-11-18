@@ -2,6 +2,9 @@ import fs from 'fs';
 import path from 'path';
 
 import { GITHUB_REPO, EXTENSIONS_PATH } from '../constants';
+import { HIGHLIGHTS } from '../data/highlights';
+
+const DEFAULT_HIGHLIGHT_LABEL = 'Highlight';
 
 export interface Example {
 	title: string;
@@ -30,6 +33,7 @@ export interface Extension {
 	configReferencePath?: string;
 	filterType: string[];
 	extensionSet?: boolean;
+	highlight?: { label: string };
 }
 
 /**
@@ -62,4 +66,34 @@ export function loadExtensions(): Extension[] {
  */
 export function loadExtensionSets(): Extension[] {
 	return loadIndex('extension-sets.json');
+}
+
+/**
+ * Mark the extensions configured in HIGHLIGHTS and move them to the front of
+ * the list, in the order they are configured. The remaining extensions keep
+ * their original order. Highlights whose `until` date has passed are ignored.
+ * Throws if a highlight references an unknown extension, so typos and removed
+ * extensions fail the build.
+ */
+export function applyHighlights(extensions: Extension[], now: Date = new Date()): Extension[] {
+	const byName = new Map(extensions.map(ext => [ext.name, ext]));
+	const today = now.toISOString().slice(0, 10);
+
+	const highlighted: Extension[] = [];
+	for (const h of HIGHLIGHTS) {
+		const ext = byName.get(h.name);
+		if (!ext) {
+			throw new Error(`Highlighted extension "${h.name}" not found in extensions.json (see src/data/highlights.ts)`);
+		}
+		if (h.until && h.until < today) {
+			continue;
+		}
+		if (highlighted.some(e => e.name === h.name)) {
+			continue;
+		}
+		highlighted.push({ ...ext, highlight: { label: h.label ?? DEFAULT_HIGHLIGHT_LABEL } });
+	}
+
+	const names = new Set(highlighted.map(ext => ext.name));
+	return [...highlighted, ...extensions.filter(ext => !names.has(ext.name))];
 }

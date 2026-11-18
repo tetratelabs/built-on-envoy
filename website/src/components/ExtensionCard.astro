@@ -8,14 +8,23 @@ interface Props {
 	parent?: string;
 	tags?: string[];
 	filterTypes?: string[];
+	highlight?: { label: string };
 }
 
-const { name, type, categories, description, href, parent, tags = [], filterTypes = [] } = Astro.props;
+const { name, type, categories, description, href, parent, tags = [], filterTypes = [], highlight } = Astro.props;
 const sortedCategories = [...categories].sort((a, b) => a.localeCompare(b));
 const sortedTags = [...tags].sort((a, b) => a.localeCompare(b));
 ---
 
-<div class="extension-card" data-type={type} data-tags={tags.join(',')} data-filter-types={filterTypes.join(',')}>
+<div class:list={["extension-card", { "extension-card--highlight": highlight }]} data-type={type} data-tags={tags.join(',')} data-filter-types={filterTypes.join(',')}>
+	{highlight && (
+		<span class="extension-highlight-label">
+			<svg class="extension-highlight-star" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
+				<path fill="currentColor" d="M12 2l2.9 6.9 7.1.6-5.4 4.7 1.6 7L12 17.5 5.8 21.2l1.6-7L2 9.5l7.1-.6z" />
+			</svg>
+			{highlight.label}
+		</span>
+	)}
 	<div class="extension-header">
 		<div class="extension-title">
 			<h3><a href={href} class="extension-card-primary-link">{name}</a></h3>

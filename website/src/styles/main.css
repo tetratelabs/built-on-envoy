@@ -615,6 +615,13 @@ header nav a.release-badge:focus {
 	margin-bottom: 48px;
 }
 
+/* Let cards keep their natural height instead of stretching to the tallest in
+ * the row (the catalog wraps each card in a filter wrapper, which already
+ * behaves like this). */
+.extensions .extensions-grid {
+	align-items: start;
+}
+
 .extension-card {
 	position: relative;
 	background: var(--bg);
@@ -630,6 +637,37 @@ header nav a.release-badge:focus {
 	transform: translateY(-4px);
 	box-shadow: 0 8px 24px rgba(124, 58, 237, 0.15), 0 4px 12px rgba(6, 182, 212, 0.1);
 	border-color: var(--primary-light);
+}
+
+/* Highlighted extensions (see src/data/highlights.ts) */
+.extension-card--highlight {
+	background: linear-gradient(135deg, rgba(124, 58, 237, 0.05) 0%, rgba(192, 108, 201, 0.04) 100%), var(--bg);
+	border: 1px solid var(--primary-light);
+	box-shadow: 0 4px 16px rgba(124, 58, 237, 0.12);
+}
+
+/* Tab sitting on the card's top border, kept apart from the category badges */
+.extension-highlight-label {
+	position: absolute;
+	top: 0;
+	left: 20px;
+	transform: translateY(-50%);
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	color: white;
+	font-size: 12px;
+	font-weight: 600;
+	line-height: 1;
+	padding: 4px 10px;
+	border-radius: 999px;
+	white-space: nowrap;
+	background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary-pink) 100%);
+	box-shadow: 0 2px 6px rgba(124, 58, 237, 0.25);
+}
+
+.extension-highlight-star {
+	flex-shrink: 0;
 }
 
 .extension-header {

@@ -43,15 +43,8 @@ func initLogger() {
 		}
 	}
 
-	var config zap.Config
-	if isDebugMode {
-		config = zap.NewDevelopmentConfig()
-	} else {
-		config = zap.NewProductionConfig()
-	}
-
 	var err error
-	mainLogger, err = config.Build()
+	mainLogger, err = newConfig(isDebugMode).Build()
 	if err != nil {
 		panic(fmt.Sprintf("failed to create mainLogger: %v", err))
 	}
@@ -61,4 +54,15 @@ func initLogger() {
 func GetLogger() *Logger {
 	once.Do(initLogger)
 	return mainLogger
+}
+
+// newConfig returns the zap config for the mode. Stack traces are disabled in both modes: the entries
+// logged at Error are rule matches from Coraza, and their trace is the rule-evaluation path, not a fault.
+func newConfig(isDebugMode bool) zap.Config {
+	config := zap.NewProductionConfig()
+	if isDebugMode {
+		config = zap.NewDevelopmentConfig()
+	}
+	config.DisableStacktrace = true
+	return config
 }

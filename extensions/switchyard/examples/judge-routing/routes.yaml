@@ -1,0 +1,121 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# Template, rendered by run.sh into out/manifests/. ${...} placeholders come from the environment,
+# and the lines between the https-only markers are kept only when INFERENCE_BASE_URL uses https.
+#
+# Agent Router routes for the real target models, all served by one OpenAI-compatible endpoint.
+# The Switchyard filter rewrites the model in the request body, and Agent Router routes the request
+# as if the client had asked for that model.
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: AIGatewayRoute
+metadata:
+  name: switchyard
+  namespace: default
+spec:
+  parentRefs:
+    - name: switchyard
+      kind: Gateway
+      group: gateway.networking.k8s.io
+  rules:
+    - matches:
+        - headers:
+            - type: Exact
+              name: x-ai-eg-model
+              value: "${EFFICIENT_MODEL}"
+      backendRefs:
+        - name: inference
+      timeouts:
+        request: 90s
+    - matches:
+        - headers:
+            - type: Exact
+              name: x-ai-eg-model
+              value: "${CAPABLE_MODEL}"
+      backendRefs:
+        - name: inference
+      timeouts:
+        request: 90s
+    # Optional. Lists the virtual models in /v1/models, and serves requests the filter leaves
+    # unchanged, with the efficient model.
+    - matches:
+        - headers:
+            - type: Exact
+              name: x-ai-eg-model
+              value: coding-jev
+      backendRefs:
+        - name: inference
+          modelNameOverride: "${EFFICIENT_MODEL}"
+      timeouts:
+        request: 90s
+    - matches:
+        - headers:
+            - type: Exact
+              name: x-ai-eg-model
+              value: coding-classifier
+      backendRefs:
+        - name: inference
+          modelNameOverride: "${EFFICIENT_MODEL}"
+      timeouts:
+        request: 90s
+---
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: AIServiceBackend
+metadata:
+  name: inference
+  namespace: default
+spec:
+  schema:
+    name: OpenAI
+    # Chat completions go to <prefix>/chat/completions, for example /v1/chat/completions.
+    prefix: "${INFERENCE_PREFIX}"
+  backendRef:
+    name: inference
+    kind: Backend
+    group: gateway.envoyproxy.io
+---
+# Sends the key in the inference-api-key Secret, created by run.sh from INFERENCE_API_KEY_FILE, as
+# "Authorization: Bearer <key>".
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: BackendSecurityPolicy
+metadata:
+  name: inference
+  namespace: default
+spec:
+  targetRefs:
+    - group: aigateway.envoyproxy.io
+      kind: AIServiceBackend
+      name: inference
+  type: APIKey
+  apiKey:
+    secretRef:
+      name: inference-api-key
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: inference
+  namespace: default
+spec:
+  endpoints:
+    - fqdn:
+        hostname: "${INFERENCE_HOST}"
+        port: ${INFERENCE_PORT}
+# https-only-begin
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: BackendTLSPolicy
+metadata:
+  name: inference
+  namespace: default
+spec:
+  targetRefs:
+    - group: gateway.envoyproxy.io
+      kind: Backend
+      name: inference
+  validation:
+    wellKnownCACertificates: System
+    hostname: "${INFERENCE_HOST}"
+# https-only-end

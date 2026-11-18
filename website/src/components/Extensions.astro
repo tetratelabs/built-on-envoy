@@ -1,8 +1,9 @@
 ---
 import ExtensionCard from './ExtensionCard.astro';
-import { loadExtensions } from '../utils/extensions';
+import { applyHighlights, loadExtensions } from '../utils/extensions';
 
-const featuredExtensions = loadExtensions().filter(ext => ext.featured === true);
+// Highlighted extensions are always shown (first), followed by the featured ones.
+const featuredExtensions = applyHighlights(loadExtensions()).filter(ext => ext.highlight || ext.featured === true);
 ---
 
 <section class="extensions" id="extensions">
@@ -21,6 +22,7 @@ const featuredExtensions = loadExtensions().filter(ext => ext.featured === true)
 					parent={ext.parent}
 					tags={ext.tags}
 					filterTypes={ext.filterType}
+					highlight={ext.highlight}
 				/>
 			))}
 		</div>

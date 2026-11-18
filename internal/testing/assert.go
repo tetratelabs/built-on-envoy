@@ -9,12 +9,16 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.yaml.in/yaml/v2"
+	"golang.org/x/mod/semver"
 )
 
 // MaybeSkipLongRunningTest skips the test if the -short flag is set.
@@ -39,6 +43,35 @@ func SkipIfTestRegistryNotConfigured(t *testing.T) {
 	}
 	if TestBoeRegistryPassword.Configured() {
 		t.Setenv("BOE_REGISTRY_PASSWORD", TestBoeRegistryPassword.Get())
+	}
+}
+
+// SkipIfEnvoyNotSupportedByExtension skips the test if the given extension does not support the configured Envoy version.
+func SkipIfEnvoyNotSupportedByExtension(t *testing.T, extensionPath string) {
+	envoyVersion := os.Getenv("ENVOY_VERSION")
+	if envoyVersion == "" || envoyVersion == "dev" || envoyVersion == "dev-latest" {
+		return
+	}
+	envoySemver := "v" + envoyVersion
+
+	manifest, err := ExtensionsFS(t).Open(filepath.Join(extensionPath, "manifest.yaml"))
+	require.NoError(t, err)
+	defer manifest.Close()
+
+	var envoyConstraints struct {
+		MinEnvoyVersion string `yaml:"minEnvoyVersion,omitempty" json:"minEnvoyVersion,omitempty"`
+		MaxEnvoyVersion string `yaml:"maxEnvoyVersion,omitempty" json:"maxEnvoyVersion,omitempty"`
+	}
+	err = yaml.NewDecoder(manifest).Decode(&envoyConstraints)
+	require.NoError(t, err)
+
+	if envoyConstraints.MinEnvoyVersion != "" && semver.Compare(envoySemver, "v"+envoyConstraints.MinEnvoyVersion) < 0 {
+		t.Skipf("Envoy version %s is older than the required minimum version %s, skipping test",
+			envoyVersion, envoyConstraints.MinEnvoyVersion)
+	}
+	if envoyConstraints.MaxEnvoyVersion != "" && semver.Compare(envoySemver, "v"+envoyConstraints.MaxEnvoyVersion) > 0 {
+		t.Skipf("Envoy version %s is newer than the allowed maximum version %s, skipping test",
+			envoyVersion, envoyConstraints.MaxEnvoyVersion)
 	}
 }
 
