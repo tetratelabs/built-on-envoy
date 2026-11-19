@@ -1,6 +1,6 @@
 module github.com/tetratelabs/built-on-envoy/extensions/example-ext-proc
 
-go 1.27.3
+go 1.27.4
 
 require (
 	github.com/envoyproxy/go-control-plane/envoy v1.37.0
