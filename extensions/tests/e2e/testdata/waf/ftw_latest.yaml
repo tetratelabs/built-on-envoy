@@ -3,6 +3,9 @@
 # The full text of the Apache license is available in the LICENSE file at
 # the root of the repo.
 
+# CRS version: 4.30.0
+# The ignored test IDs are those of this CRS version: review them when moving to another one.
+
 ---
 maxmarkerretries: 500
 testoverride:
@@ -34,7 +37,9 @@ testoverride:
     "932207-1": "Referer header is sanitized by Envoy and removed from the request"
     "932207-2": "Referer header is sanitized by Envoy and removed from the request"
     "932207-7": "Referer header is sanitized by Envoy and removed from the request"
+    "932237-8": "Referer header is sanitized by Envoy and removed from the request"
     "932237-10": "Referer header is sanitized by Envoy and removed from the request"
+    "932237-18": "Referer header is sanitized by Envoy and removed from the request"
     "932239-6": "Referer header is sanitized by Envoy and removed from the request"
     "932239-7": "Referer header is sanitized by Envoy and removed from the request"
     "932239-19": "Referer header is sanitized by Envoy and removed from the request"
@@ -73,6 +78,7 @@ testoverride:
     "920180-1": ""
     "920180-3": ""
     "932237-4": ""
+    "932237-12": ""
     "941120-4": ""
     "921140-1": ""
     "921250-1": ""

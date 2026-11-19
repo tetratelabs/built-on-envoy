@@ -20,12 +20,24 @@ import (
 type Config struct {
 	// Directives are the Coraza directives, joined with newlines.
 	Directives string
+	// CRSVersion selects the OWASP CRS version the directives are resolved against: an alias such
+	// as "lts". Empty selects the default one.
+	CRSVersion string
 }
 
 // GetOrCreateSharedWAFFromConfig returns the WAF built from cfg. The WAF is shared: a live one
-// built from the same directives is reused if the files it was built from are unchanged.
+// built from the same directives and CRS version is reused if the files it was built from are
+// unchanged.
 func GetOrCreateSharedWAFFromConfig(cfg Config, l *zap.Logger) (*SharedWAF, error) {
-	return sharedWAFs.getOrCreate(cfg.Directives, l, combinedDirectivesFS)
+	crs, err := lookupCRSBundle(cfg.CRSVersion)
+	if err != nil {
+		return nil, err
+	}
+	if cfg.CRSVersion != crs.version {
+		// An alias or the default: show which CRS version it selects, since upgrades can move it.
+		l.Info("using OWASP CRS "+crs.version, zap.String("crs_version", cfg.CRSVersion))
+	}
+	return crs.wafs.getOrCreate(cfg.Directives, l, crs.fs)
 }
 
 // newWAF creates a new WAF, reading included and data files from root.

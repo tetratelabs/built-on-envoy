@@ -16,9 +16,26 @@ func TestConfigSchema(t *testing.T) {
 		internaltesting.AssertSchemaValid(t, "config.schema.json", `{
 			"directives": ["SecRuleEngine On", "Include @recommended.conf"],
 			"mode": "FULL",
-			"request_uri_path_only": true
+			"request_uri_path_only": true,
+			"crs_version": "lts"
 		}`)
 	})
+	for _, v := range []string{"latest", "lts"} {
+		t.Run("crs_version alias "+v, func(t *testing.T) {
+			internaltesting.AssertSchemaValid(t, "config.schema.json", `{
+				"directives": ["SecRuleEngine On"],
+				"crs_version": "`+v+`"
+			}`)
+		})
+	}
+	for _, v := range []string{"4.25.2", "4.30.0", "4.25", "v4.25.2", "LTS", "stable"} {
+		t.Run("crs_version invalid "+v, func(t *testing.T) {
+			internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{
+				"directives": ["SecRuleEngine On"],
+				"crs_version": "`+v+`"
+			}`)
+		})
+	}
 	t.Run("empty config", func(t *testing.T) {
 		internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{}`)
 	})
