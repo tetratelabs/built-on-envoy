@@ -221,6 +221,11 @@
       "type": "boolean",
       "description": "Whether to add the x-switchyard-routing-calls, -input-tokens, -output-tokens and -total-tokens response headers to routed responses and answers. Defaults to false."
     },
+    "routing_timeout_ms": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "How long a routing run may take, in milliseconds, model calls included. When it takes longer, the run is cancelled and the failure mode of the virtual model applies. Defaults to 30000."
+    },
     "session": {
       "type": "object",
       "additionalProperties": false,
