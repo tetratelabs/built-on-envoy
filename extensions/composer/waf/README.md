@@ -38,10 +38,17 @@ go mod tidy
 1. Add the tailored setup file of the new version, `crs/setup/v<new-version>/@crs-setup.conf`, and remove the one of the
    former version. Start from the upstream `crs-setup.conf.example` (`crs-setup-lts.conf.example` for `lts/v4`) of the
    new version, and apply the customizations of the former file: so far, rule 900120 (`tx.early_blocking=1`) is
-   uncommented. The setup files are maintained by hand and can differ per version; the `crs` package tests only check
+   uncommented, and for `lts/v4` also rule 900510 (`tx.crs_xml_attr_inspect=1`, GHSA-6jp8-c2w2-x7wr). The setup files are maintained by hand and can differ per version; the `crs` package tests only check
    that each one belongs to its version.
 
+1. Review the ignored test IDs of the version's FTW list, `tests/e2e/testdata/waf/ftw_latest.yaml` or `ftw_lts.yaml`
+   (CRS renumbers and adds regression tests), and set its `# CRS version:` line to the new version: `TestFTW` fails
+   until it matches.
+
 1. Update the CRS versions in the `manifest.yaml` documentation.
+
+`latest` and `lts` must stay on different CRS versions: each version is registered once, so the `crs` package panics at
+start-up if both aliases name the same one.
 
 Moving the default or removing a CRS version changes the rules of configurations that rely on it: announce it in
 advance, so that users can test the new version. A bump moves the `latest` or `lts` alias: list the CRS versions it

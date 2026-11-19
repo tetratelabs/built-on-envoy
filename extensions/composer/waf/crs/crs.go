@@ -46,8 +46,8 @@ var (
 type Version = crsregistry.Version
 
 // Register makes a CRS version available to the WAF. crs_version selects it only through its
-// aliases (see SetAlias). It panics if the version is already registered, if its files are not
-// those of the version, or if a WAF configuration has already been loaded.
+// aliases (see SetAlias). It panics if the version is malformed or already registered, if its
+// files are not those of the version, or if a WAF configuration has already been loaded.
 func Register(v Version) {
 	if err := crsregistry.Global.Register(v); err != nil {
 		panic(err)
@@ -63,8 +63,9 @@ func SetAlias(alias, version string) {
 	}
 }
 
-// SetDefault sets the CRS version used when the WAF configuration does not set crs_version. It
-// panics if the version is not registered or if a WAF configuration has already been loaded.
+// SetDefault sets the CRS version used when the WAF configuration does not set crs_version. The
+// default is a version, not an alias: moving an alias with SetAlias does not move it. It panics if
+// the version is not registered or if a WAF configuration has already been loaded.
 func SetDefault(version string) {
 	if err := crsregistry.Global.SetDefault(version); err != nil {
 		panic(err)

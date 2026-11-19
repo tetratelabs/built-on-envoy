@@ -39,7 +39,7 @@
     },
     "crs_version": {
       "type": "string",
-      "description": "OWASP CRS version served under @owasp_crs/, @crs-setup.conf and @crs-setup.conf.example: \"lts\" (the CRS LTS release, the default) or \"latest\" (the newest CRS release). Each extension release embeds the newest release of both, so an extension upgrade can move them to a newer CRS version.",
+      "description": "OWASP CRS version served under @owasp_crs/, @crs-setup.conf, @crs-setup.conf.example and @crs-setup.conf.example-nodefaultact: \"lts\" (the CRS LTS release, the default) or \"latest\" (the newest CRS release). Each extension release embeds the newest release of both, so an extension upgrade can move them to a newer CRS version.",
       "enum": ["lts", "latest"]
     }
   }

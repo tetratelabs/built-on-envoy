@@ -48,7 +48,9 @@ func TestGetOrCreateSharedWAFFromConfig(t *testing.T) {
 		require.Same(t, defaultWAF, lts)
 		// Same directives against another CRS version must not share the WAF.
 		require.NotSame(t, lts, latest)
+		// Each CRS version keeps its own WAF: building one doesn't evict the other's.
 		require.Same(t, latest, get(t, "latest"))
+		require.Same(t, lts, get(t, "lts"))
 	})
 
 	t.Run("invalid crs_version", func(t *testing.T) {

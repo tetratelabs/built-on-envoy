@@ -61,13 +61,9 @@ type crsBundle struct {
 }
 
 func newCRSBundle(e crsregistry.Entry) *crsBundle {
-	rules := e.Rules
-	if e.LTSNames {
-		rules = ltsAliasFS{rules}
-	}
 	return &crsBundle{
 		version: e.Version.Version,
-		fs:      mergefs.Merge(embeddedConfigs, directivesFS{e.Setup}, rules, corazaconf.FS, io.OSFS),
+		fs:      mergefs.Merge(embeddedConfigs, directivesFS{e.Setup}, crsRulesFS{crsRulesView{e.Rules, e.LTSNames}}, corazaconf.FS, io.OSFS),
 		wafs:    newSharedWAFCache(),
 	}
 }
@@ -213,55 +209,90 @@ const (
 	ltsSetupExample = "@crs-setup-lts.conf.example"
 )
 
-// ltsAliasFS serves the lts/v4 module under the names of the crs/v4 module: @owasp_crs/
-// for the rules and @crs-setup.conf.example[-nodefaultact] for the setup example. The
-// module's own names (@owasp_crs_lts/, @crs-setup-lts.conf.example) are hidden, so that
-// every CRS version exposes the same names.
-type ltsAliasFS struct {
-	fs fs.FS
+// crsRulesFS serves the rules of a CRS version under the names of the crs/v4 module:
+// @owasp_crs/ for the rules and @crs-setup.conf.example[-nodefaultact] for the setup example.
+// The lts/v4 module's own names (@owasp_crs_lts/, @crs-setup-lts.conf.example) are hidden, so
+// that every CRS version exposes the same names, also to globs and directory listings.
+type crsRulesFS struct {
+	view crsRulesView
 }
 
-func (a ltsAliasFS) Open(name string) (fs.File, error) {
-	n, ok := toLTSName(name)
+func (c crsRulesFS) Open(name string) (fs.File, error) { return c.view.Open(name) }
+
+func (c crsRulesFS) ReadDir(name string) ([]fs.DirEntry, error) { return c.view.ReadDir(name) }
+
+func (c crsRulesFS) ReadFile(name string) ([]byte, error) { return c.view.ReadFile(name) }
+
+// Glob matches against the renamed listings of the view, so that a pattern matches the same
+// names whatever module the rules come from, and the matches are names the view serves.
+func (c crsRulesFS) Glob(pattern string) ([]string, error) {
+	return fs.Glob(c.view, trimToAlias(pattern))
+}
+
+// crsRulesView maps the crs/v4 names to the names of the rules' module. It has no Glob method,
+// so that fs.Glob walks its renamed listings.
+type crsRulesView struct {
+	fs fs.FS
+	// lts is true if fs uses the names of the lts/v4 module.
+	lts bool
+}
+
+func (v crsRulesView) name(name string) (string, bool) {
+	if !v.lts {
+		return trimToAlias(name), true
+	}
+	return toLTSName(name)
+}
+
+func (v crsRulesView) Open(name string) (fs.File, error) {
+	n, ok := v.name(name)
 	if !ok {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 	}
-	return a.fs.Open(n)
+	return v.fs.Open(n)
 }
 
-func (a ltsAliasFS) ReadDir(name string) ([]fs.DirEntry, error) {
-	n, ok := toLTSName(name)
-	if !ok {
-		return nil, &fs.PathError{Op: "readdir", Path: name, Err: fs.ErrNotExist}
-	}
-	return fs.ReadDir(a.fs, n)
-}
-
-func (a ltsAliasFS) ReadFile(name string) ([]byte, error) {
-	n, ok := toLTSName(name)
+func (v crsRulesView) ReadFile(name string) ([]byte, error) {
+	n, ok := v.name(name)
 	if !ok {
 		return nil, &fs.PathError{Op: "readfile", Path: name, Err: fs.ErrNotExist}
 	}
-	return fs.ReadFile(a.fs, n)
+	return fs.ReadFile(v.fs, n)
 }
 
-func (a ltsAliasFS) Glob(pattern string) ([]string, error) {
-	p, ok := toLTSName(pattern)
+func (v crsRulesView) ReadDir(name string) ([]fs.DirEntry, error) {
+	n, ok := v.name(name)
 	if !ok {
-		return nil, nil
+		return nil, &fs.PathError{Op: "readdir", Path: name, Err: fs.ErrNotExist}
 	}
-	matches, err := fs.Glob(a.fs, p)
-	if err != nil {
-		return nil, err
+	entries, err := fs.ReadDir(v.fs, n)
+	if err != nil || !v.lts || n != "." {
+		return entries, err
 	}
-	// Report matches under the crs/v4 names, so that the files Coraza reads next (and the
-	// file names in its logs and errors) are the same as with any other CRS version.
-	for i, m := range matches {
-		if rest, ok := strings.CutPrefix(m, ltsRulesDir+"/"); ok {
-			matches[i] = crsRulesDir + "/" + rest
-		}
+	for i, e := range entries {
+		entries[i] = renamedEntry{e, fromLTSName(e.Name())}
 	}
-	return matches, nil
+	return entries, nil
+}
+
+// renamedEntry is a directory entry listed under another name.
+type renamedEntry struct {
+	fs.DirEntry
+	name string
+}
+
+func (e renamedEntry) Name() string { return e.name }
+
+// fromLTSName maps a top-level lts/v4 name to its crs/v4 name.
+func fromLTSName(name string) string {
+	switch {
+	case name == ltsRulesDir:
+		return crsRulesDir
+	case strings.HasPrefix(name, ltsSetupExample):
+		return crsSetupExample + strings.TrimPrefix(name, ltsSetupExample)
+	default:
+		return name
+	}
 }
 
 // toLTSName maps a crs/v4 name to its lts/v4 name, after stripping the directory prefix

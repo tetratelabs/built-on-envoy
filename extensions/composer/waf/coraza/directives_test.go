@@ -367,6 +367,35 @@ func TestLTSAliasFS(t *testing.T) {
 	}
 }
 
+// Globs and listings show the same names for every CRS version, never the lts/v4 module's own.
+func TestCRSRulesFSNames(t *testing.T) {
+	forEachCRSVersion(t, func(t *testing.T, root fs.FS) {
+		rules, err := fs.Glob(root, "@owasp_crs/*.conf")
+		require.NoError(t, err)
+		require.NotEmpty(t, rules)
+		for pattern, want := range map[string][]string{
+			"@owasp_cr?/*.conf":        rules,
+			"@crs-setup.conf.example*": {"@crs-setup.conf.example", "@crs-setup.conf.example-nodefaultact"},
+			"@owasp_crs":               {"@owasp_crs"},
+			"@owasp_crs_lts/*.conf":    nil,
+			"@crs-setup-lts.conf.*":    nil,
+		} {
+			got, globErr := fs.Glob(root, pattern)
+			require.NoError(t, globErr, pattern)
+			require.Equal(t, want, got, pattern)
+			for _, name := range got {
+				_, statErr := fs.Stat(root, name)
+				require.NoError(t, statErr, name)
+			}
+		}
+		top, err := fs.Glob(root, "@*")
+		require.NoError(t, err)
+		for _, name := range top {
+			require.NotContains(t, name, "lts", "hidden lts/v4 name listed")
+		}
+	})
+}
+
 // The config schema accepts exactly the aliases: this extension does not select its versions by
 // their exact version.
 func TestConfigSchemaCRSVersions(t *testing.T) {
@@ -441,6 +470,12 @@ func TestRegisteredCRSVersion(t *testing.T) {
 			require.Equal(t, []int{900990, 901001}, ruleIDs)
 
 			_, err = fs.ReadFile(b.fs, "@crs-setup.conf.example")
+			require.NoError(t, err)
+
+			// Coraza resolves an Include in a local file against that file's directory.
+			local := filepath.Join(t.TempDir(), "main.conf")
+			require.NoError(t, os.WriteFile(local, []byte("Include @owasp_crs/REQUEST-901-INITIALIZATION.conf\n"), 0o600))
+			_, err = coraza.NewWAF(coraza.NewWAFConfig().WithRootFS(b.fs).WithDirectives("Include " + local))
 			require.NoError(t, err)
 		})
 	}

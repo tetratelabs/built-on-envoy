@@ -665,6 +665,18 @@ Local cluster names this Envoy fronts as terminal destinations and advertises to
 
 Configuration for the Coraza WAF extension. Provides Web Application Firewall protection using SecLang directives.
 
+### crs_version
+
+OWASP CRS version served under @owasp_crs/, @crs-setup.conf, @crs-setup.conf.example and @crs-setup.conf.example-nodefaultact: "lts" (the CRS LTS release, the default) or "latest" (the newest CRS release). Each extension release embeds the newest release of both, so an extension upgrade can move them to a newer CRS version.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+| **Allowed values** | `lts`, `latest` |
+
+[↑ Top](#) | [↑ Coraza WAF Configuration](#coraza-waf) {/* if .SubProperties */}
+
 ### directives
 
 List of Coraza SecLang directives. Each entry is a single directive string. Special includes are supported: "Include @recommended.conf", "Include @crs-setup.conf", "Include @owasp_crs/*.conf".

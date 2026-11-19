@@ -87,6 +87,23 @@ longDescription: |
   }
   ```
 
+  On `lts`, the tailored `@crs-setup.conf` switches on the inspection of XML attribute values (rule 900510,
+  [GHSA-6jp8-c2w2-x7wr](https://github.com/coreruleset/coreruleset/security/advisories/GHSA-6jp8-c2w2-x7wr)), which
+  `latest` always does. `@crs-setup.conf.example` and `@crs-setup.conf.example-nodefaultact` are upstream's files and
+  don't switch it on, as in the CRS LTS release: most rules then skip XML attribute values. To switch it on with them on
+  `lts`, add rule 900510 between the setup include and the rules (not with `@crs-setup.conf`, which already has it):
+
+  ```json
+  {
+    "directives": [
+      "Include @coraza.conf",
+      "Include @crs-setup.conf.example",
+      "SecAction \"id:900510,phase:1,pass,nolog,setvar:tx.crs_xml_attr_inspect=1\"",
+      "Include @owasp_crs/*.conf"
+    ]
+  }
+  ```
+
   ## Mode
 
   The optional `mode` setting controls which parts of the HTTP exchange are evaluated by the WAF.
@@ -204,6 +221,8 @@ longDescription: |
   The extension supports per-route configuration, allowing you to specify different WAF rules and policies for different routes in your application. This is useful for tailoring security measures to specific endpoints or services.
 
   The per-route configuration share the same format as the extension configuration and see Envoy's [Dynamic Per Route Configuration](https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/filters/http/dynamic_modules/v3/dynamic_modules.proto) for more details on how to set it up.
+  A per-route configuration is complete on its own: it doesn't inherit `crs_version` or `mode` from the filter
+  configuration, so set them on the route too.
 type: go
 tags:
   - go

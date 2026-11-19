@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"strconv"
@@ -105,9 +106,9 @@ func TestWAFSmoke(t *testing.T) {
 }
 
 const (
-	envoyLogs  = "testdata/waf/envoy.log"
-	albedoLogs = "testdata/waf/albedo.log"
-	ftwPort    = 1064
+	envoyLogFmt = "testdata/waf/envoy-%s.log" // one per crs_version alias, so a failed run keeps its log
+	albedoLogs  = "testdata/waf/albedo.log"
+	ftwPort     = 1064
 )
 
 // ftwAliases are the crs_version values of the WAF, each with the go-ftw configuration reviewed
@@ -136,7 +137,6 @@ func TestFTW(t *testing.T) {
 
 	// This env var is used in the tests RunEnvoy to automatically configure "albedo" the test upstream cluster.
 	internaltesting.TestUpstreamClusterInsecure.Set(t, "localhost:"+strconv.Itoa(albedoPort))
-	internaltesting.TestCLIOutputFile.Set(t, envoyLogs) // Write CLI output to this file in addition to the in-mem buffers.
 
 	for _, alias := range aliases {
 		t.Run("CRS "+alias, func(t *testing.T) {
@@ -148,6 +148,8 @@ func TestFTW(t *testing.T) {
 
 func runFTW(t *testing.T, alias, crsVersion, ftwConf string) {
 	crsDir := requireCoreRuleSet(t, crsVersion)
+	envoyLog := fmt.Sprintf(envoyLogFmt, alias)
+	internaltesting.TestCLIOutputFile.Set(t, envoyLog) // Write CLI output to this file in addition to the in-mem buffers.
 	ports := internaltesting.FreePorts(t, 1)
 
 	config := fmt.Sprintf(`{
@@ -167,13 +169,14 @@ func runFTW(t *testing.T, alias, crsVersion, ftwConf string) {
 		"--log-format", "[%Y-%m-%d %T.%e][%t][%l][%n] [%N][%g:%#] %v",
 		"--local", "../../composer/waf",
 		"--config", config)
+	requireLoadedCRSVersion(t, envoyLog, alias, crsVersion)
 
 	cmdArgs := []string{
 		"tool", "-modfile=../../../tools/go.mod",
 		"go-ftw",
 		"run",
 		"-d", crsDir,
-		"-l", envoyLogs,
+		"-l", envoyLog,
 		"--config", ftwConf,
 		"--show-failures-only",
 		"--read-timeout=30s",
@@ -197,6 +200,33 @@ func runFTW(t *testing.T, alias, crsVersion, ftwConf string) {
 	cmd.Stderr = os.Stderr
 	require.NoError(t, cmd.Run())
 }
+
+// requireLoadedCRSVersion checks that the WAF loaded crsVersion for alias, from the
+// "using OWASP CRS <version>" line it logs when it builds a WAF for an alias. It fails when
+// an alias selects another version than the one its go-ftw configuration was reviewed for.
+func requireLoadedCRSVersion(t *testing.T, envoyLog, alias, crsVersion string) {
+	t.Helper()
+	aliasField := fmt.Sprintf("%q:%q", "crs_version", alias)
+	var loaded string
+	require.Eventually(t, func() bool {
+		// #nosec G304 G703 -- envoyLog is this test's own log file, named after an alias of ftwAliases
+		data, err := os.ReadFile(filepath.Clean(envoyLog))
+		if err != nil {
+			return false
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			if m := loadedCRSRe.FindStringSubmatch(line); m != nil && strings.Contains(line, aliasField) {
+				loaded = m[1]
+				return true
+			}
+		}
+		return false
+	}, 30*time.Second, 100*time.Millisecond, "the WAF did not log the CRS version it uses for crs_version %q", alias)
+	require.Equal(t, crsVersion, loaded, "crs_version %q loads CRS %s, but %s was reviewed for CRS %s",
+		alias, loaded, ftwAliases[alias], crsVersion)
+}
+
+var loadedCRSRe = regexp.MustCompile(`"using OWASP CRS ([^"]+)"`)
 
 // ftwConfig returns the go-ftw configuration of an alias and the CRS version it was reviewed for,
 // from its "# CRS version: <version>" line. A CRS bump fails here until the configuration is

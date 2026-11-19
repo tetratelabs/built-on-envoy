@@ -51,6 +51,17 @@ func TestEmbeddedSetups(t *testing.T) {
 	}, versions)
 }
 
+// activeDirectives returns the lines of a configuration file that are not comments.
+func activeDirectives(conf string) string {
+	var lines []string
+	for _, l := range strings.Split(conf, "\n") {
+		if !strings.HasPrefix(strings.TrimSpace(l), "#") {
+			lines = append(lines, l)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 // Each tailored setup is a hand-maintained file that may differ from its upstream example, but
 // it must belong to the CRS version of its directory.
 func TestTailoredSetups(t *testing.T) {
@@ -62,10 +73,15 @@ func TestTailoredSetups(t *testing.T) {
 			tailored, err := fs.ReadFile(setup(version), "@crs-setup.conf")
 			require.NoError(t, err)
 			require.Contains(t, string(tailored), "# OWASP CRS ver."+version+"\n")
-			for _, m := range regexp.MustCompile(`ver:'OWASP_CRS/([^']+)'`).FindAllStringSubmatch(string(tailored), -1) {
-				require.Equal(t, version, m[1])
+			active := activeDirectives(string(tailored))
+			vers := regexp.MustCompile(`ver:'OWASP_CRS/([^']+)'`).FindAllStringSubmatch(active, -1)
+			require.NotEmpty(t, vers)
+			for _, m := range vers {
+				require.Equal(t, version, m[1], "@crs-setup.conf has an action for another CRS release")
 			}
-			require.Contains(t, string(tailored), "setvar:tx.crs_setup_version="+strings.ReplaceAll(version, ".", "")+`"`)
+			setupVersions := regexp.MustCompile(`setvar:tx\.crs_setup_version=(\d+)`).FindAllStringSubmatch(active, -1)
+			require.Len(t, setupVersions, 1, "@crs-setup.conf must set tx.crs_setup_version once")
+			require.Equal(t, strings.ReplaceAll(version, ".", ""), setupVersions[0][1])
 		})
 	}
 }
