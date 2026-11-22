@@ -932,7 +932,7 @@
             "apply_default_config_without_warming": true,
             "config_source": {
               "path_config_source": {
-                "path": "mcp-openapi-tools-list.json"
+                "path": "./mcp-openapi-tools-list.json"
               }
             },
             "default_config": {
@@ -952,7 +952,7 @@
             "apply_default_config_without_warming": true,
             "config_source": {
               "path_config_source": {
-                "path": "mcp-openapi-bridge.json"
+                "path": "./mcp-openapi-bridge.json"
               }
             },
             "default_config": {

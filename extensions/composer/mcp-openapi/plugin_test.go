@@ -105,3 +105,59 @@ func TestConfigFactory_CreateSwagger2FromURL(t *testing.T) {
 	require.Equal(t, []bridgeTool{{Name: "ping", HTTPRule: bridgeHTTPRule{Get: "/v2/ping"}}},
 		bridge.Resources[0].TypedConfig.ToolConfig.Tools)
 }
+
+func TestWellKnownHttpFilterConfigFactories(t *testing.T) {
+	factories := WellKnownHttpFilterConfigFactories()
+	require.Len(t, factories, 1)
+	require.IsType(t, &configFactory{}, factories[filterName])
+}
+
+func TestFilterFactory_Create(t *testing.T) {
+	h := mocks.NewMockHttpFilterHandle(gomock.NewController(t))
+	require.Equal(t, new(filter), new(filterFactory).Create(h))
+}
+
+// TestConfigFactory_CreateWorkingDirectory checks that the ECDS files are written to the
+// working directory when no root is configured.
+func TestConfigFactory_CreateWorkingDirectory(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	inlineSpec, err := json.Marshal(string(testAPISpec))
+	require.NoError(t, err)
+
+	h := mocks.NewMockHttpFilterConfigHandle(gomock.NewController(t))
+	h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	_, err = new(configFactory).Create(h, []byte(`{"spec":{"inline":`+string(inlineSpec)+`}}`))
+	require.NoError(t, err)
+
+	for _, name := range []string{ecdsFilePath, luaECDSFilePath} {
+		require.FileExists(t, filepath.Join(dir, name))
+	}
+}
+
+func TestConfigFactory_CreateWriteErrors(t *testing.T) {
+	inlineSpec, err := json.Marshal(string(testAPISpec))
+	require.NoError(t, err)
+	raw := []byte(`{"spec":{"inline":` + string(inlineSpec) + `}}`)
+
+	tests := []struct {
+		name        string
+		dir         string
+		expectedErr string
+	}{
+		{"bridge config", ecdsFilePath, "writing bridge ECDS config: "},
+		{"lua config", luaECDSFilePath, "writing Lua ECDS config: "},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// A directory with the same name as the ECDS file makes the write fail.
+			root := testRoot(t)
+			require.NoError(t, root.Mkdir(tt.dir, 0o700))
+
+			h := mocks.NewMockHttpFilterConfigHandle(gomock.NewController(t))
+			h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			_, err := (&configFactory{root: root}).Create(h, raw)
+			require.ErrorContains(t, err, tt.expectedErr)
+		})
+	}
+}

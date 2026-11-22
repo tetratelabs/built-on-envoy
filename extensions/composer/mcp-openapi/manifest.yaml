@@ -81,7 +81,8 @@ nativeHttpFilters:
       config_discovery:
         config_source:
           path_config_source:
-            path: mcp-openapi-tools-list.json
+            # Envoy requires a directory in the path, so use ./ for the working directory.
+            path: ./mcp-openapi-tools-list.json
         type_urls:
           - "type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua"
         apply_default_config_without_warming: true
@@ -93,7 +94,7 @@ nativeHttpFilters:
       config_discovery:
         config_source:
           path_config_source:
-            path: mcp-openapi-bridge.json
+            path: ./mcp-openapi-bridge.json
         type_urls:
           - "type.googleapis.com/envoy.extensions.filters.http.mcp_json_rest_bridge.v3.McpJsonRestBridge"
         apply_default_config_without_warming: true

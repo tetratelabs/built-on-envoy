@@ -189,3 +189,87 @@ func loadTestSpec(t *testing.T, path string) *openapi3.T {
 	require.NoError(t, err)
 	return doc
 }
+
+func TestCleanForMCPInputSchema(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string]any
+		expected map[string]any
+	}{
+		{"nil", nil, nil},
+		{
+			"openapi-only keywords removed",
+			map[string]any{
+				"type": "string", "discriminator": map[string]any{}, "xml": map[string]any{},
+				"externalDocs": map[string]any{}, "example": "x", "deprecated": true, "writeOnly": true,
+			},
+			map[string]any{"type": "string"},
+		},
+		{"nullable without type", map[string]any{"nullable": true}, map[string]any{"type": []any{"null"}}},
+		{"nullable null type", map[string]any{"type": "null", "nullable": true}, map[string]any{"type": "null"}},
+		{
+			"nullable type list",
+			map[string]any{"type": []any{"string", "integer"}, "nullable": true},
+			map[string]any{"type": []any{"string", "integer", "null"}},
+		},
+		{
+			"nullable type list with null",
+			map[string]any{"type": []any{"string", "null"}, "nullable": true},
+			map[string]any{"type": []any{"string", "null"}},
+		},
+		{"not nullable", map[string]any{"type": "string", "nullable": false}, map[string]any{"type": "string"}},
+		{
+			"readOnly properties and their required entries removed",
+			map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":   map[string]any{"type": "integer", "readOnly": true},
+					"name": map[string]any{"type": "string", "example": "x"},
+					"raw":  true,
+				},
+				"required": []any{"id", "name"},
+			},
+			map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"name": map[string]any{"type": "string"},
+					"raw":  true,
+				},
+				"required": []any{"name"},
+			},
+		},
+		{
+			"only readOnly properties",
+			map[string]any{
+				"type":       "object",
+				"properties": map[string]any{"id": map[string]any{"type": "integer", "readOnly": true}},
+				"required":   []any{"id"},
+			},
+			map[string]any{"type": "object"},
+		},
+		{
+			"nested schemas cleaned",
+			map[string]any{
+				"items":                map[string]any{"type": "string", "example": "x"},
+				"additionalProperties": map[string]any{"type": "string", "nullable": true},
+				"not":                  map[string]any{"type": "integer", "deprecated": true},
+				"allOf":                []any{map[string]any{"type": "string", "example": "x"}, "raw"},
+				"oneOf":                []any{map[string]any{"type": "string", "xml": map[string]any{}}},
+				"anyOf":                []any{map[string]any{"type": "string", "writeOnly": true}},
+			},
+			map[string]any{
+				"items":                map[string]any{"type": "string"},
+				"additionalProperties": map[string]any{"type": []any{"string", "null"}},
+				"not":                  map[string]any{"type": "integer"},
+				"allOf":                []any{map[string]any{"type": "string"}, "raw"},
+				"oneOf":                []any{map[string]any{"type": "string"}},
+				"anyOf":                []any{map[string]any{"type": "string"}},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.expected, cleanForMCPInputSchema(tt.input))
+		})
+	}
+}

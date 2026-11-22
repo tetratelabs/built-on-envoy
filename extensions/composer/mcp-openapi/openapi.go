@@ -226,9 +226,9 @@ func cleanForMCPInputSchema(m map[string]any) map[string]any {
 		delete(m, k)
 	}
 
-	if nullable, ok := m["nullable"].(bool); ok && nullable {
-		delete(m, "nullable")
-
+	nullable, _ := m["nullable"].(bool) //nolint:errcheck // type assert to zero value
+	delete(m, "nullable")
+	if nullable {
 		switch t := m["type"].(type) {
 		case string:
 			if t != typeNull {
