@@ -16,6 +16,7 @@ export interface Highlight {
 
 export const HIGHLIGHTS: Highlight[] = [
 	{ name: 'switchyard', label: 'New' },
+	{ name: 'mcp-openapi', label: 'New' },
 	{ name: 'dynamic-fault-injection', label: 'New'},
 	{ name: 'coraza-waf', label: 'Popular'},
 ];

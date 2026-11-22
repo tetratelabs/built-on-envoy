@@ -1,0 +1,41 @@
+{
+  "version_info": "1",
+  "resources": [
+    {
+      "@type": "type.googleapis.com/envoy.config.core.v3.TypedExtensionConfig",
+      "name": "envoy.filters.http.mcp_json_rest_bridge",
+      "typed_config": {
+        "@type": "type.googleapis.com/envoy.extensions.filters.http.mcp_json_rest_bridge.v3.McpJsonRestBridge",
+        "tool_config": {
+          "tools": [
+            {
+              "name": "createItem",
+              "http_rule": {
+                "post": "/items",
+                "body": "*"
+              }
+            },
+            {
+              "name": "deleteItem",
+              "http_rule": {
+                "delete": "/items/{id}"
+              }
+            },
+            {
+              "name": "getItem",
+              "http_rule": {
+                "get": "/items/{id}"
+              }
+            },
+            {
+              "name": "get_search",
+              "http_rule": {
+                "get": "/search"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

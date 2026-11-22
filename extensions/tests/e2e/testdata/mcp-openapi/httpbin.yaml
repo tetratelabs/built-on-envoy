@@ -1,0 +1,77 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+openapi: 3.0.3
+info:
+  title: HTTPBin Anything
+  version: 1.0.0
+paths:
+  /anything:
+    post:
+      operationId: postAnything
+      summary: Echo request details
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Echo response
+  /anything/{id}:
+    get:
+      operationId: getAnything
+      summary: Echo request details for a resource
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: verbose
+          in: query
+          required: false
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Echo response
+  /anything/items/{itemId}:
+    delete:
+      summary: Echo request details for a deleted item
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Echo response
+  /status/{code}:
+    get:
+      operationId: getStatus
+      summary: Return the given status code with an empty body
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        default:
+          description: Response with the given status code

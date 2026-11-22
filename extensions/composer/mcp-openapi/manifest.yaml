@@ -1,0 +1,165 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: mcp-openapi
+parent: composer
+minEnvoyVersion: 1.38.0
+categories:
+  - AI
+author: Tetrate
+description: Expose REST APIs as MCP tools using an OpenAPI specification
+longDescription: |
+  This extension exposes REST APIs as [MCP](https://modelcontextprotocol.io/)
+  tools. Point it at an [OpenAPI](https://www.openapis.org/) spec and get an
+  MCP endpoint.
+
+  The extension is local control plane logic that runs inside Envoy: it loads
+  the OpenAPI spec at config time, generates the MCP tool definitions and the
+  routing configuration for Envoy's native `mcp_json_rest_bridge` filter, and
+  writes both as [ECDS](https://www.envoyproxy.io/docs/envoy/latest/configuration/overview/extension)
+  filesystem files. There is no per-request Go code: Envoy's native filters
+  serve all MCP traffic.
+
+  ![How it works](/extensions/mcp-openapi.svg)
+
+  - `envoy.filters.http.mcp` parses MCP JSON-RPC requests.
+  - `envoy.filters.http.lua` answers `tools/list` locally with the generated
+    tool definitions, including the tool annotations.
+  - `envoy.filters.http.mcp_json_rest_bridge` handles `initialize`,
+    `notifications/initialized` and `tools/call`, transcoding tool calls into
+    REST requests to the upstream.
+
+  The ECDS files (`mcp-openapi-bridge.json` and `mcp-openapi-tools-list.json`)
+  are written to the working directory of the Envoy process.
+
+  The same conversion logic can also run in an xDS control plane, which pushes
+  the generated configuration to a fleet of Envoy proxies over ADS instead of
+  writing files:
+
+  ![Remote control plane](/extensions/mcp-openapi-control-plane.svg)
+
+  ## Key Features
+
+  - **OpenAPI 3.x and Swagger 2.0**: Swagger 2.0 specs are automatically up-converted.
+  - **Flexible spec loading**: Load the spec inline, from a local file or from an HTTP(S) URL.
+  - **Flat tool schemas**: Tool arguments match the bridge's argument model
+    (e.g. `{"petId": 1}`, not `{"path": {"petId": 1}}`).
+  - **Tool annotations**: `readOnlyHint`, `destructiveHint` and `idempotentHint`
+    are derived from the HTTP method.
+  - **LLM-optimized descriptions**: The `x-mcp-description` vendor extension
+    overrides the operation description and summary.
+  - **Tool filtering**: Use the `include_ops` and `exclude_ops` properties to
+    choose which operations are exposed as tools. Operations are identified by
+    their `operationId`, or by a name derived from the HTTP method and path when
+    it is absent (e.g. `GET /v1/forecast` becomes `get_v1_forecast`).
+type: go
+tags:
+  - go
+  - http
+  - filter
+  - mcp
+  - openapi
+  - rest
+  - ai
+license: Apache-2.0
+nativeHttpFilters:
+  before:
+    - name: envoy.filters.http.mcp
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.filters.http.mcp.v3.Mcp
+        traffic_mode: REJECT_NO_MCP
+        clear_route_cache: false
+        request_storage_mode: DYNAMIC_METADATA_AND_FILTER_STATE
+        propagate_trace_context: {}
+        propagate_baggage: {}
+        parser_config:
+          group_metadata_key: mcp_method_group
+  after:
+    - name: envoy.filters.http.lua
+      config_discovery:
+        config_source:
+          path_config_source:
+            path: mcp-openapi-tools-list.json
+        type_urls:
+          - "type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua"
+        apply_default_config_without_warming: true
+        default_config:
+          "@type": "type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua"
+          default_source_code:
+            inline_string: "function envoy_on_request(request_handle) end"
+    - name: envoy.filters.http.mcp_json_rest_bridge
+      config_discovery:
+        config_source:
+          path_config_source:
+            path: mcp-openapi-bridge.json
+        type_urls:
+          - "type.googleapis.com/envoy.extensions.filters.http.mcp_json_rest_bridge.v3.McpJsonRestBridge"
+        apply_default_config_without_warming: true
+        default_config:
+          "@type": "type.googleapis.com/envoy.extensions.filters.http.mcp_json_rest_bridge.v3.McpJsonRestBridge"
+examples:
+  - title: Petstore MCP server
+    description: |
+      Expose the Swagger Petstore API as MCP tools, loading the Swagger 2.0 spec
+      from a remote URL.
+    code: |
+      boe run --extension mcp-openapi \
+        --config '{"spec": {"url": "https://petstore.swagger.io/v2/swagger.json"}}' \
+        --test-upstream-host petstore.swagger.io
+
+      # List the generated tools
+      curl -s http://localhost:10000/mcp \
+        -H 'Content-Type: application/json' \
+        -H 'Accept: application/json, text/event-stream' \
+        -d '{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}'
+
+      # Call a tool
+      curl -s http://localhost:10000/mcp \
+        -H 'Content-Type: application/json' \
+        -H 'Accept: application/json, text/event-stream' \
+        -d '{"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+             "params": {"name": "findPetsByStatus", "arguments": {"status": "available"}}}'
+  - title: Operation filtering
+    description: |
+      Only expose a subset of the API operations as MCP tools.
+    code: |
+      boe run --extension mcp-openapi \
+        --config '{
+          "spec": {"url": "https://petstore.swagger.io/v2/swagger.json"},
+          "include_ops": ["findPetsByStatus", "getPetById"]
+        }' \
+        --test-upstream-host petstore.swagger.io
+  - title: Local spec file
+    description: |
+      Load the spec from a local file. Requests are proxied to the default
+      test upstream (httpbin.org).
+    code: |
+      cat > /tmp/httpbin.yaml << 'SPEC'
+      openapi: 3.0.3
+      info:
+        title: HTTPBin
+        version: "1.0"
+      paths:
+        /anything/{id}:
+          get:
+            operationId: getAnything
+            parameters:
+              - name: id
+                in: path
+                required: true
+                schema:
+                  type: string
+            responses:
+              "200":
+                description: Echo response
+      SPEC
+
+      boe run --extension mcp-openapi --config '{"spec": {"file": "/tmp/httpbin.yaml"}}'
+
+      curl -s http://localhost:10000/mcp \
+        -H 'Content-Type: application/json' \
+        -H 'Accept: application/json, text/event-stream' \
+        -d '{"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+             "params": {"name": "getAnything", "arguments": {"id": "42"}}}'
