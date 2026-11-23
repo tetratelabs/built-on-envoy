@@ -26,6 +26,8 @@ func Test_ParseConfig(t *testing.T) {
 		cfg, err := parseConfig(marshal(t, map[string]any{"directives": []string{"Include @coraza.conf", "SecRuleEngine On"}}), logger.GetLogger())
 		require.NoError(t, err)
 		require.Equal(t, "Include @coraza.conf\nSecRuleEngine On", cfg.engine.Directives)
+		// No crs_version: the WAF uses the default CRS version.
+		require.Empty(t, cfg.engine.CRSVersion)
 		// REQUEST_ONLY is the default when no mode is set.
 		require.Equal(t, modeRequestOnly, cfg.mode)
 		require.Equal(t, defaultRequestURIPathOnly, cfg.requestURIPathOnly)
@@ -78,11 +80,13 @@ func Test_ParseConfig(t *testing.T) {
 			"directives":            []string{"Include @coraza.conf"},
 			"mode":                  "FULL",
 			"request_uri_path_only": true,
+			"crs_version":           "latest",
 			"metrics":               map[string]any{"authority_label": "none"},
 		}), logger.GetLogger())
 		require.NoError(t, err)
 		require.Equal(t, modeFull, cfg.mode)
 		require.True(t, cfg.requestURIPathOnly)
+		require.Equal(t, "latest", cfg.engine.CRSVersion)
 		require.True(t, cfg.metrics.authority.disabled)
 	})
 

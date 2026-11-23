@@ -28,8 +28,6 @@ type SharedWAF struct {
 	inputs *wafInputs
 }
 
-var sharedWAFs = newSharedWAFCache()
-
 type sharedWAFCache struct {
 	mu      sync.Mutex
 	entries map[[sha256.Size]byte]weak.Pointer[SharedWAF]

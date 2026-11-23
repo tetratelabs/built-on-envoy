@@ -11,7 +11,8 @@ require (
 	github.com/beevik/etree v1.8.1
 	github.com/cedar-policy/cedar-go v1.9.3
 	github.com/corazawaf/coraza-coreruleset/coraza/v3 v3.8.1
-	github.com/corazawaf/coraza-coreruleset/crs/v4 v4.30.0
+	github.com/corazawaf/coraza-coreruleset/crs/v4 v4.31.0
+	github.com/corazawaf/coraza-coreruleset/lts/v4 v4.25.2
 	github.com/corazawaf/coraza/v3 v3.8.1
 	github.com/crewjam/saml v0.6.3
 	github.com/docker/cli v29.10.0+incompatible

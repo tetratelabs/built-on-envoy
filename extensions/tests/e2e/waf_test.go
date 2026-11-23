@@ -8,11 +8,14 @@ package integration
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -103,29 +106,62 @@ func TestWAFSmoke(t *testing.T) {
 }
 
 const (
-	envoyLogs  = "testdata/waf/envoy.log"
-	albedoLogs = "testdata/waf/albedo.log"
-	ftwPort    = 1064
+	envoyLogFmt = "testdata/waf/envoy-%s.log" // one per crs_version alias, so a failed run keeps its log
+	albedoLogs  = "testdata/waf/albedo.log"
+	ftwPort     = 1064
 )
 
+// ftwAliases are the crs_version values of the WAF, each with the go-ftw configuration reviewed
+// for its CRS version.
+var ftwAliases = map[string]string{
+	"latest": "testdata/waf/ftw_latest.yaml",
+	"lts":    "testdata/waf/ftw_lts.yaml",
+}
+
+// TestFTW runs the CRS regression tests against every CRS version embedded in the WAF, selected
+// by its alias. Set FTW_CRS_VERSION to an alias to run a single one (and CRS_DIR to use a local
+// CRS checkout of its version).
 func TestFTW(t *testing.T) {
-	crsDir := requireCoreRuleSet(t)
+	aliases := slices.Sorted(maps.Keys(ftwAliases))
+	if only := os.Getenv("FTW_CRS_VERSION"); only != "" {
+		require.Contains(t, aliases, only, "FTW_CRS_VERSION must be one of the crs_version aliases")
+		aliases = []string{only}
+	}
+	if os.Getenv("CRS_DIR") != "" {
+		require.Len(t, aliases, 1, "CRS_DIR requires FTW_CRS_VERSION")
+	}
+	embedded := embeddedCRSVersions(t)
+	require.Len(t, embedded, len(ftwAliases), "every embedded CRS version needs an alias in ftwAliases")
+
 	albedoPort := startAlbedo(t)
-	ports := internaltesting.FreePorts(t, 1)
 
 	// This env var is used in the tests RunEnvoy to automatically configure "albedo" the test upstream cluster.
 	internaltesting.TestUpstreamClusterInsecure.Set(t, "localhost:"+strconv.Itoa(albedoPort))
-	internaltesting.TestCLIOutputFile.Set(t, envoyLogs) // Write CLI output to this file in addition to the in-mem buffers.
 
-	const config = `{
+	for _, alias := range aliases {
+		t.Run("CRS "+alias, func(t *testing.T) {
+			ftwConf, crsVersion := ftwConfig(t, alias, embedded)
+			runFTW(t, alias, crsVersion, ftwConf)
+		})
+	}
+}
+
+func runFTW(t *testing.T, alias, crsVersion, ftwConf string) {
+	crsDir := requireCoreRuleSet(t, crsVersion)
+	envoyLog := fmt.Sprintf(envoyLogFmt, alias)
+	internaltesting.TestCLIOutputFile.Set(t, envoyLog) // Write CLI output to this file in addition to the in-mem buffers.
+	ports := internaltesting.FreePorts(t, 1)
+
+	config := fmt.Sprintf(`{
 	"mode": "FULL",
+	"crs_version": %q,
 	"directives": [
 		"Include @coraza.conf",
 		"Include @ftw.conf",
 		"Include @crs-setup.conf",
 		"Include @owasp_crs/*.conf"
 	]
-}`
+}`, alias)
 
 	internaltesting.RunEnvoy(t, cliBin, ftwPort, ports[0],
 		"--log-level", "dynamic_modules:debug",
@@ -133,14 +169,15 @@ func TestFTW(t *testing.T) {
 		"--log-format", "[%Y-%m-%d %T.%e][%t][%l][%n] [%N][%g:%#] %v",
 		"--local", "../../composer/waf",
 		"--config", config)
+	requireLoadedCRSVersion(t, envoyLog, alias, crsVersion)
 
 	cmdArgs := []string{
 		"tool", "-modfile=../../../tools/go.mod",
 		"go-ftw",
 		"run",
 		"-d", crsDir,
-		"-l", envoyLogs,
-		"--config", "testdata/waf/ftw.yaml",
+		"-l", envoyLog,
+		"--config", ftwConf,
 		"--show-failures-only",
 		"--read-timeout=30s",
 		"--wait-for-timeout=0",
@@ -162,6 +199,80 @@ func TestFTW(t *testing.T) {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	require.NoError(t, cmd.Run())
+}
+
+// requireLoadedCRSVersion checks that the WAF loaded crsVersion for alias, from the
+// "using OWASP CRS <version>" line it logs when it builds a WAF for an alias. It fails when
+// an alias selects another version than the one its go-ftw configuration was reviewed for.
+func requireLoadedCRSVersion(t *testing.T, envoyLog, alias, crsVersion string) {
+	t.Helper()
+	aliasField := fmt.Sprintf("%q:%q", "crs_version", alias)
+	var loaded string
+	require.Eventually(t, func() bool {
+		// #nosec G304 G703 -- envoyLog is this test's own log file, named after an alias of ftwAliases
+		data, err := os.ReadFile(filepath.Clean(envoyLog))
+		if err != nil {
+			return false
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			if m := loadedCRSRe.FindStringSubmatch(line); m != nil && strings.Contains(line, aliasField) {
+				loaded = m[1]
+				return true
+			}
+		}
+		return false
+	}, 30*time.Second, 100*time.Millisecond, "the WAF did not log the CRS version it uses for crs_version %q", alias)
+	require.Equal(t, crsVersion, loaded, "crs_version %q loads CRS %s, but %s was reviewed for CRS %s",
+		alias, loaded, ftwAliases[alias], crsVersion)
+}
+
+var loadedCRSRe = regexp.MustCompile(`"using OWASP CRS ([^"]+)"`)
+
+// ftwConfig returns the go-ftw configuration of an alias and the CRS version it was reviewed for,
+// from its "# CRS version: <version>" line. A CRS bump fails here until the configuration is
+// reviewed: the ignored test IDs change between CRS versions.
+func ftwConfig(t *testing.T, alias string, embedded []string) (string, string) {
+	t.Helper()
+	path := ftwAliases[alias]
+	data, err := os.ReadFile(filepath.Clean(path))
+	require.NoError(t, err)
+	for _, line := range strings.Split(string(data), "\n") {
+		if v, ok := strings.CutPrefix(line, "# CRS version: "); ok {
+			v = strings.TrimSpace(v)
+			require.Contains(t, embedded, v, "%s was reviewed for CRS %s, which is no longer embedded: "+
+				"review its ignored test IDs and update its \"# CRS version:\" line", path, v)
+			return path, v
+		}
+	}
+	require.FailNow(t, "no \"# CRS version:\" line in "+path)
+	return "", ""
+}
+
+// embeddedCRSVersions returns the CRS versions embedded in the WAF, read from the header of
+// the tailored setup file of each CRS version (waf/crs/setup/v<version>/@crs-setup.conf).
+func embeddedCRSVersions(t *testing.T) []string {
+	t.Helper()
+
+	confPaths, err := filepath.Glob(filepath.Join("..", "..", "composer", "waf", "crs", "setup", "v*", "@crs-setup.conf"))
+	require.NoError(t, err)
+	require.NotEmpty(t, confPaths, "no tailored CRS setup files found")
+
+	var versions []string
+	for _, confPath := range confPaths {
+		confData, err := os.ReadFile(filepath.Clean(confPath))
+		require.NoError(t, err, "failed to read CRS config file")
+
+		var crsVersion string
+		for _, line := range strings.Split(string(confData), "\n") {
+			if v, ok := strings.CutPrefix(line, "# OWASP CRS ver."); ok {
+				crsVersion = strings.TrimSpace(v)
+				break
+			}
+		}
+		require.NotEmpty(t, crsVersion, "could not determine WAF CRS version from %s", confPath)
+		versions = append(versions, crsVersion)
+	}
+	return versions
 }
 
 // TODO: Do not use go tool but just start the server using the right packages.
@@ -201,26 +312,13 @@ func startAlbedo(t *testing.T) int {
 }
 
 // TODO: Do not use go tool but just run FTW using hte right packages.
-func requireCoreRuleSet(t *testing.T) string {
+func requireCoreRuleSet(t *testing.T, crsVersion string) string {
 	t.Helper()
 
 	if crsDir := os.Getenv("CRS_DIR"); crsDir != "" {
 		require.DirExists(t, crsDir)
 		return crsDir
 	}
-
-	confPath := filepath.Join("..", "..", "composer", "waf", "coraza", "directives", "@crs-setup.conf")
-	confData, err := os.ReadFile(filepath.Clean(confPath))
-	require.NoError(t, err, "failed to read CRS config file")
-
-	var crsVersion string
-	for _, line := range strings.Split(string(confData), "\n") {
-		if v, ok := strings.CutPrefix(line, "# OWASP CRS ver."); ok {
-			crsVersion = strings.TrimSpace(v)
-			break
-		}
-	}
-	require.NotEmpty(t, crsVersion, "could not determine WAF CRS version from %s", confPath)
 
 	buffers := internaltesting.DumpLogsOnFail(t, t.TempDir(), "CRS stdout", "CRS stderr")
 
@@ -231,21 +329,21 @@ func requireCoreRuleSet(t *testing.T) string {
 
 	if _, err := os.Stat(filepath.Join(crsCloneDir, ".git")); errors.Is(err, os.ErrNotExist) {
 		t.Logf("Cloning Core Rule Set %s into coreruleset", crsRef)
-		// #nosec G204
+		// #nosec G204 G702 -- crsRef is the reviewed CRS version of one of the ftw configurations
 		cmd := exec.Command("git", "clone", "--depth", "1", "--branch", crsRef, "--single-branch", crsRepo, crsCloneDir)
 		cmd.Stdout = buffers[0]
 		cmd.Stderr = buffers[1]
 		require.NoError(t, cmd.Run(), "failed to clone Core Rule Set")
 	} else {
 		t.Logf("Syncing coreruleset to %s", crsRef)
-		// #nosec G204
+		// #nosec G204 G702 -- crsRef is the reviewed CRS version of one of the ftw configurations
 		fetch := exec.Command("git", "-C", crsCloneDir, "fetch", "--depth", "1", "origin",
 			fmt.Sprintf("refs/tags/%s:refs/tags/%s", crsRef, crsRef))
 		fetch.Stdout = buffers[0]
 		fetch.Stderr = buffers[1]
 		require.NoError(t, fetch.Run(), "failed to fetch Core Rule Set tag %s", crsRef)
 
-		// #nosec G204
+		// #nosec G204 G702 -- crsRef is the reviewed CRS version of one of the ftw configurations
 		checkout := exec.Command("git", "-C", crsCloneDir, "checkout", "--detach", "tags/"+crsRef)
 		checkout.Stdout = buffers[0]
 		checkout.Stderr = buffers[1]

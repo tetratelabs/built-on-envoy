@@ -1,0 +1,55 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# CRS version: 4.25.2
+# The ignored test IDs are those of this CRS version: review them when moving to another one.
+
+---
+maxmarkerretries: 500
+testoverride:
+  input:
+    dest_addr: localhost
+    port: 1064
+  ignore:
+    # Rejected or rewritten by Envoy before the WAF sees the request
+    "^911100-[57]$": "Invalid HTTP method. Rejected by Envoy with Error 400"
+    "^920100-1[04]$": "Invalid HTTP method. Rejected by Envoy with Error 400"
+    "^949110-4$": "Same request as 920100-10. Rejected by Envoy with Error 400"
+    "^920100-16$": "Envoy accepts an absolute URI without a path and passes :path /, so 920100 sees a valid request line"
+    "^920181-1$": "Content-Length with Transfer-Encoding chunked. Rejected by Envoy with Error 400"
+    "^920280-1$": "HTTP/1.0 without Host. Rejected by Envoy with Error 400"
+    "^934120-(2[3-6]|39)$": "Raw UTF-8 in the request line. Rejected by Envoy with Error 400"
+    "^920430-[3589]$": "Envoy reads HTTP/0.8, HTTP/0.9 and HTTP/4.0 request lines as HTTP/1.0, and answers 400 to one without a version, so 920430 cannot see the version"
+    "^920280-3$": "Envoy reads the HTTP/0.9 request line as HTTP/1.0 and answers 200; the test expects Apache's 400"
+    "^920180-4$": "Envoy reads the HTTP/2.0 request line as HTTP/1.0, so the HTTP/2 exemption of 920180 does not apply"
+
+    # Headers Envoy does not pass to the WAF
+    "^920171-[23]$": "Envoy does not pass Transfer-Encoding to the WAF, so 920171 cannot see a GET or HEAD with a chunked body"
+    "^920210-[23467]$": "Connection header is stripped out by Envoy"
+    "^932161-(7|9|1[0-2])$": "Referer header is sanitized by Envoy and removed from the request"
+    "^932207-[127]$": "Referer header is sanitized by Envoy and removed from the request"
+    "^932237-(4|12)$": "Referer header is sanitized by Envoy and removed from the request"
+    "^932239-(6|7|19|27|29)$": "Referer header is sanitized by Envoy and removed from the request"
+    "^932390-9$": "Referer header is sanitized by Envoy and removed from the request"
+    "^941101-1$": "Referer header is sanitized by Envoy and removed from the request"
+    "^941110-4$": "Referer header is sanitized by Envoy and removed from the request"
+    "^941120-(49|50)$": "Referer header is sanitized by Envoy and removed from the request"
+    "^942280-3$": "Referer header is sanitized by Envoy and removed from the request"
+
+    # BOE WAF issues
+    "^(920100-[46]|920300-3)$": "CONNECT hangs: the WAF waits for a request body that never comes, so no answer reaches the client"
+    "^920274-[235]$": "The WAF passes Envoy's :path pseudo-header as a request header, and 920274 (PL4) flags the '?' and '=' of its query string"
+    "^941120-8$": "The WAF passes Envoy's :path pseudo-header as a request header, and 941120 matches the query in it: the test's word has 49 characters, not 51 (coreruleset#4622, fixed in CRS 4.27.0)"
+
+    # Rules working, tests expecting Apache's status code
+    "^(920270-4|920274-1)$": "The rule matches; the test expects Apache's 400"
+    "^920290-1$": "920290 matches the empty Host; the test expects Apache's 400"
+    "^922130-4$": "922130 matches, but BOE logs JSON, so the quotes the test's match_regex looks for are escaped"
+
+    # Coraza behavior
+    "^922130-[127]$": "Coraza's multipart parser rejects the body first (200003, MULTIPART_STRICT_ERROR), so 922130 is not reached; Coraza's FTW overrides expect 200003"
+
+    # CRS test bugs
+    "^921140-1$": "Raw CR in a header, which go-ftw 2.6.1 and later refuse (go-ftw#670); sent as encoded_request after CRS 4.30.0 and 4.25.2 (coreruleset#4916)"

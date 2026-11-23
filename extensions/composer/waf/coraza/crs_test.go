@@ -7,13 +7,12 @@ package coraza
 
 import (
 	"io/fs"
-	"regexp"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
 
-	crs "github.com/corazawaf/coraza-coreruleset/crs/v4"
 	"github.com/corazawaf/coraza/v3"
 	ctypes "github.com/corazawaf/coraza/v3/types"
 	"github.com/stretchr/testify/require"
@@ -21,46 +20,6 @@ import (
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 )
-
-// activeDirectives returns the lines of a directives file that are not comments.
-func activeDirectives(content []byte) string {
-	var lines []string
-	for _, line := range strings.Split(string(content), "\n") {
-		if !strings.HasPrefix(strings.TrimSpace(line), "#") {
-			lines = append(lines, line)
-		}
-	}
-	return strings.Join(lines, "\n")
-}
-
-// CRS does not reject a setup file written for an older release, so a CRS upgrade that forgets
-// to rebase @crs-setup.conf would go unnoticed. The embedded setup must declare the version of
-// the embedded rules.
-func TestCRSSetupVersionMatchesRules(t *testing.T) {
-	rules, err := fs.ReadFile(crs.FS, "@owasp_crs/REQUEST-901-INITIALIZATION.conf")
-	require.NoError(t, err)
-	m := regexp.MustCompile(`ver:'OWASP_CRS/(\d+)\.(\d+)\.(\d+)'`).FindSubmatch(rules)
-	require.NotNil(t, m, "no CRS version found in REQUEST-901-INITIALIZATION.conf")
-	rulesVersion := string(m[1]) + "." + string(m[2]) + "." + string(m[3])
-	require.Equal(t, strings.TrimPrefix(crs.Version, "v"), rulesVersion)
-	// CRS writes 4.30.0 as 4300 and 4.25.2 as 4252.
-	wantSetupVersion := string(m[1]) + string(m[2]) + string(m[3])
-
-	content, err := fs.ReadFile(embeddedConfigs, "@crs-setup.conf")
-	require.NoError(t, err)
-	setup := activeDirectives(content)
-
-	setupVersions := regexp.MustCompile(`setvar:tx\.crs_setup_version=(\d+)`).FindAllStringSubmatch(setup, -1)
-	require.Len(t, setupVersions, 1, "@crs-setup.conf must set tx.crs_setup_version once")
-	require.Equal(t, wantSetupVersion, setupVersions[0][1],
-		"@crs-setup.conf is for another CRS release than the embedded rules (%s)", rulesVersion)
-
-	vers := regexp.MustCompile(`ver:'OWASP_CRS/([^']+)'`).FindAllStringSubmatch(setup, -1)
-	require.NotEmpty(t, vers)
-	for _, v := range vers {
-		require.Equal(t, rulesVersion, v[1], "@crs-setup.conf has an action for another CRS release")
-	}
-}
 
 type crsProbe struct {
 	name    string
@@ -74,18 +33,23 @@ type crsProbe struct {
 	rule int
 }
 
-// newCRSWAF builds a WAF from the embedded directives as documented, with the rule engine on and
-// CRS at its defaults: paranoia level 1 and an inbound anomaly score threshold of 5.
-func newCRSWAF(t *testing.T) coraza.WAF {
-	t.Helper()
-	waf, err := newWAF(strings.Join([]string{
-		"Include @coraza.conf",
-		"SecRuleEngine On",
-		"Include @crs-setup.conf",
-		"Include @owasp_crs/*.conf",
-	}, "\n"), zap.NewNop(), combinedDirectivesFS)
-	require.NoError(t, err)
-	return waf
+// crsDirectives are the embedded directives as documented, with the rule engine on and CRS at its
+// defaults: paranoia level 1 and an inbound anomaly score threshold of 5.
+var crsDirectives = strings.Join([]string{
+	"Include @coraza.conf",
+	"SecRuleEngine On",
+	"Include @crs-setup.conf",
+	"Include @owasp_crs/*.conf",
+}, "\n")
+
+// forEachCRSVersion runs f for every crs_version alias, with the files of the CRS version it
+// selects.
+func forEachCRSVersion(t *testing.T, f func(t *testing.T, root fs.FS)) {
+	set := mustCRSBundles(t)
+	for _, alias := range slices.Sorted(maps.Keys(set.aliases)) {
+		b := set.aliases[alias]
+		t.Run(alias+" "+b.version, func(t *testing.T) { f(t, b.fs) })
+	}
 }
 
 // runCRSProbe sends one request through the request phases and returns whether it was
@@ -141,8 +105,6 @@ func multipart(lines ...string) string {
 // GHSA-6jp8-c2w2-x7wr) and the 933110 trailing-slash fix, plus controls that must behave the same
 // before and after the fixes.
 func TestCRSAdvisoryProbes(t *testing.T) {
-	waf := newCRSWAF(t)
-
 	// Not text/plain: CRS does not allow it as a request content type (920420), so it would be
 	// blocked whatever the charset.
 	formCT := func(charset string) [][2]string {
@@ -205,7 +167,9 @@ func TestCRSAdvisoryProbes(t *testing.T) {
 		// GHSA-575j-qr6p-9763: command injection in the last path segment, paranoia level 1 rules.
 		pathProbe(932130, "%24%28echo%20%24%28cat%24%28id%29%29%29"),
 		pathProbe(932235, "%3Badduser%20pawnd"),
-		pathProbe(932260, "%3Baddgroup%20pawnd"),
+		// The advisory fixed this one in 932260; CRS 4.31.0 takes REQUEST_FILENAME out of 932260
+		// (coreruleset#4842), and 932235 detects it in every version.
+		pathProbe(932235, "%3Baddgroup%20pawnd"),
 		pathProbe(932340, "%3Bdmesg"),
 		pathProbe(932380, "view%3Dimage.jpg%26bcdboot%20c%3A%5Cwindows"),
 
@@ -280,67 +244,69 @@ func TestCRSAdvisoryProbes(t *testing.T) {
 		{name: "control 933110 X-Filename a.php/safe.txt", method: "GET", uri: "/", headers: [][2]string{{"X-Filename", "a.php/safe.txt"}}, blocked: false, rule: 933110},
 	}
 
-	for _, p := range probes {
-		t.Run(p.name, func(t *testing.T) {
-			blocked, ids, scored := runCRSProbe(t, waf, &p)
-			t.Logf("blocked=%t matched rules with a severity=%v", blocked, scored)
-			require.Equal(t, p.blocked, blocked, "blocked")
-			require.Equal(t, p.blocked, slices.Contains(ids, p.rule), "rule %d matched", p.rule)
-		})
-	}
+	// Every CRS version must have the fixes, the LTS release included.
+	forEachCRSVersion(t, func(t *testing.T, root fs.FS) {
+		waf, err := newWAF(crsDirectives, zap.NewNop(), root)
+		require.NoError(t, err)
+		for _, p := range probes {
+			t.Run(p.name, func(t *testing.T) {
+				blocked, ids, scored := runCRSProbe(t, waf, &p)
+				t.Logf("blocked=%t matched rules with a severity=%v", blocked, scored)
+				require.Equal(t, p.blocked, blocked, "blocked")
+				require.Equal(t, p.blocked, slices.Contains(ids, p.rule), "rule %d matched", p.rule)
+			})
+		}
+	})
 }
 
 // The setup gives phases 3 to 5 a default action with log and auditlog (CRS #4675). Without it,
 // response rules still match and still block, but nothing reaches the error callback or the
 // audit log.
 func TestCRSResponseMatchesAreLogged(t *testing.T) {
-	core, logs := observer.New(zapcore.InfoLevel)
-	waf, err := newWAF(strings.Join([]string{
-		"Include @coraza.conf",
-		"SecRuleEngine On",
-		"Include @crs-setup.conf",
-		"Include @owasp_crs/*.conf",
-	}, "\n"), zap.New(core), combinedDirectivesFS)
-	require.NoError(t, err)
-
-	tx := waf.NewTransaction()
-	tx.ProcessConnection("127.0.0.1", 40000, "127.0.0.1", 80)
-	tx.ProcessURI("/index.html", "GET", "HTTP/1.1")
-	tx.AddRequestHeader("Host", "localhost")
-	tx.AddRequestHeader("User-Agent", "OWASP CRS test agent")
-	tx.AddRequestHeader("Accept", "*/*")
-	require.Nil(t, tx.ProcessRequestHeaders())
-	it, err := tx.ProcessRequestBody()
-	require.NoError(t, err)
-	require.Nil(t, it)
-
-	body := "<html><body>You have an error in your SQL syntax; check the manual that corresponds to " +
-		"your MySQL server version for the right syntax to use near ''' at line 1</body></html>"
-	tx.AddResponseHeader("Content-Type", "text/html")
-	tx.AddResponseHeader("Content-Length", strconv.Itoa(len(body)))
-	require.Nil(t, tx.ProcessResponseHeaders(200, "HTTP/1.1"))
-	it, _, err = tx.WriteResponseBody([]byte(body))
-	require.NoError(t, err)
-	if it == nil {
-		it, err = tx.ProcessResponseBody()
+	forEachCRSVersion(t, func(t *testing.T, root fs.FS) {
+		core, logs := observer.New(zapcore.InfoLevel)
+		waf, err := newWAF(crsDirectives, zap.New(core), root)
 		require.NoError(t, err)
-	}
-	tx.ProcessLogging()
 
-	audited := false
-	for _, mr := range tx.MatchedRules() {
-		if mr.Rule().ID() == 951230 {
-			a, ok := mr.(interface{ Audit() bool })
-			require.True(t, ok)
-			audited = a.Audit()
+		tx := waf.NewTransaction()
+		tx.ProcessConnection("127.0.0.1", 40000, "127.0.0.1", 80)
+		tx.ProcessURI("/index.html", "GET", "HTTP/1.1")
+		tx.AddRequestHeader("Host", "localhost")
+		tx.AddRequestHeader("User-Agent", "OWASP CRS test agent")
+		tx.AddRequestHeader("Accept", "*/*")
+		require.Nil(t, tx.ProcessRequestHeaders())
+		it, err := tx.ProcessRequestBody()
+		require.NoError(t, err)
+		require.Nil(t, it)
+
+		body := "<html><body>You have an error in your SQL syntax; check the manual that corresponds to " +
+			"your MySQL server version for the right syntax to use near ''' at line 1</body></html>"
+		tx.AddResponseHeader("Content-Type", "text/html")
+		tx.AddResponseHeader("Content-Length", strconv.Itoa(len(body)))
+		require.Nil(t, tx.ProcessResponseHeaders(200, "HTTP/1.1"))
+		it, _, err = tx.WriteResponseBody([]byte(body))
+		require.NoError(t, err)
+		if it == nil {
+			it, err = tx.ProcessResponseBody()
+			require.NoError(t, err)
 		}
-	}
-	require.NoError(t, tx.Close())
+		tx.ProcessLogging()
 
-	require.NotNil(t, it)
-	require.Equal(t, 959100, it.RuleID)
-	entries := logs.FilterMessageSnippet(`[id "951230"]`).All()
-	require.Len(t, entries, 1, "951230 (SQL error leak) reaches the error callback")
-	require.Equal(t, zapcore.ErrorLevel, entries[0].Level)
-	require.True(t, audited, "951230 is marked for the audit log")
+		audited := false
+		for _, mr := range tx.MatchedRules() {
+			if mr.Rule().ID() == 951230 {
+				a, ok := mr.(interface{ Audit() bool })
+				require.True(t, ok)
+				audited = a.Audit()
+			}
+		}
+		require.NoError(t, tx.Close())
+
+		require.NotNil(t, it)
+		require.Equal(t, 959100, it.RuleID)
+		entries := logs.FilterMessageSnippet(`[id "951230"]`).All()
+		require.Len(t, entries, 1, "951230 (SQL error leak) reaches the error callback")
+		require.Equal(t, zapcore.ErrorLevel, entries[0].Level)
+		require.True(t, audited, "951230 is marked for the audit log")
+	})
 }

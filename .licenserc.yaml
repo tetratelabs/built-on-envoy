@@ -27,6 +27,7 @@ header:
     - .editorconfig
     - LICENSE
     - "**/coraza/directives/**"
+    - "**/crs/setup/**"
     - "**/coraza/testdata/**"
     - "**/.claude/**"
     - "**/*.json"

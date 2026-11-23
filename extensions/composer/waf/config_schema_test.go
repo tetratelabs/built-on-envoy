@@ -16,7 +16,8 @@ func TestConfigSchema(t *testing.T) {
 		internaltesting.AssertSchemaValid(t, "config.schema.json", `{
 			"directives": ["SecRuleEngine On", "Include @recommended.conf"],
 			"mode": "FULL",
-			"request_uri_path_only": true
+			"request_uri_path_only": true,
+			"crs_version": "lts"
 		}`)
 	})
 	t.Run("empty config", func(t *testing.T) {

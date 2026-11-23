@@ -186,13 +186,15 @@ func TestRecordingFS(t *testing.T) {
 		require.False(t, r.inputs.unchanged(root))
 	})
 
-	t.Run("embedded directives", func(t *testing.T) {
-		r := newRecordingFS(combinedDirectivesFS)
-		_, err := newWAF("Include @coraza.conf\nInclude @crs-setup.conf\nInclude @owasp_crs/*.conf", zap.NewNop(), r)
-		require.NoError(t, err)
-		require.False(t, r.inputs.untracked)
-		require.NotEmpty(t, r.inputs.files)
-		require.NotEmpty(t, r.inputs.globs)
-		require.True(t, r.inputs.unchanged(combinedDirectivesFS))
-	})
+	for _, b := range mustCRSBundles(t).bundles {
+		t.Run("embedded directives with CRS "+b.version, func(t *testing.T) {
+			r := newRecordingFS(b.fs)
+			_, err := newWAF("Include @coraza.conf\nInclude @crs-setup.conf\nInclude @owasp_crs/*.conf", zap.NewNop(), r)
+			require.NoError(t, err)
+			require.False(t, r.inputs.untracked)
+			require.NotEmpty(t, r.inputs.files)
+			require.NotEmpty(t, r.inputs.globs)
+			require.True(t, r.inputs.unchanged(b.fs))
+		})
+	}
 }
