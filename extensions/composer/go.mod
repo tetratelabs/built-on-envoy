@@ -19,6 +19,7 @@ require (
 	// between Envoy 1.38 and this SDK version.
 	github.com/envoyproxy/envoy/source/extensions/dynamic_modules v0.0.0-20260425100846-90594f45b3ed
 	github.com/getkin/kin-openapi v0.153.0
+	github.com/goccy/go-yaml v1.19.2
 	github.com/google/go-containerregistry v0.22.1
 	github.com/jcchavezs/mergefs v0.1.1
 	github.com/lestrrat-go/jwx/v3 v3.4.0
@@ -42,7 +43,6 @@ require (
 	github.com/go-openapi/jsonpointer v1.0.1 // indirect
 	github.com/gobwas/glob v1.1.0 // indirect
 	github.com/goccy/go-json v0.11.2 // indirect
-	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/gotnospirit/makeplural v0.0.0-20180622080156-a5f48d94d976 // indirect

@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/composer/mcp-openapi/config.schema.json",
+  "title": "MCP OpenAPI Configuration",
+  "description": "Configuration for the MCP OpenAPI extension. Exposes the operations of an OpenAPI spec as MCP tools.",
+  "type": "object",
+  "required": [
+    "spec"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "spec": {
+      "$ref": "#/$defs/SpecSource",
+      "description": "OpenAPI 3.x or Swagger 2.0 specification in YAML or JSON format."
+    },
+    "include_ops": {
+      "type": "array",
+      "description": "Operations to expose as tools. When set, only these operations are exposed. Operations are identified by their operationId, or by the generated tool name when the operationId is absent.",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "exclude_ops": {
+      "type": "array",
+      "description": "Operations not to expose as tools. Operations are identified by their operationId, or by the generated tool name when the operationId is absent.",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "bridge_config_path": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path of the generated mcp_json_rest_bridge ECDS file. Relative paths are resolved against the Envoy working directory, and Envoy requires the path to contain a directory (e.g. ./). Defaults to ./mcp-openapi-bridge.json. When changed, the path_config_source of the envoy.filters.http.mcp_json_rest_bridge filter must be changed to match, for example with --native-http-filter-after."
+    }
+  },
+  "$defs": {
+    "SpecSource": {
+      "type": "object",
+      "description": "The source of the OpenAPI specification. Exactly one of inline, file or url must be set.",
+      "additionalProperties": false,
+      "properties": {
+        "inline": {
+          "type": "string",
+          "description": "Spec provided directly as a string."
+        },
+        "file": {
+          "type": "string",
+          "description": "Path to a file containing the spec."
+        },
+        "url": {
+          "type": "string",
+          "description": "HTTP(S) URL of the spec, fetched when the configuration is loaded.",
+          "pattern": "^https?://"
+        },
+        "timeout": {
+          "type": "string",
+          "description": "Maximum time to fetch the spec from the url, as a duration string (e.g. 10s). Defaults to 30s.",
+          "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "inline"
+          ]
+        },
+        {
+          "required": [
+            "file"
+          ]
+        },
+        {
+          "required": [
+            "url"
+          ]
+        }
+      ]
+    }
+  }
+}

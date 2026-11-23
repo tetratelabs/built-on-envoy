@@ -46,32 +46,62 @@ func SkipIfTestRegistryNotConfigured(t *testing.T) {
 	}
 }
 
+// EnvoyConstraints represents the minimum and maximum supported Envoy versions for an extension.
+type EnvoyConstraints struct {
+	MinEnvoyVersion string `yaml:"minEnvoyVersion,omitempty" json:"minEnvoyVersion,omitempty"`
+	MaxEnvoyVersion string `yaml:"maxEnvoyVersion,omitempty" json:"maxEnvoyVersion,omitempty"`
+}
+
+// SkipIfEnvoyVersionUnsupported skips the test if the Envoy version used to run the given extension
+// does not satisfy the given constraints.
+//
+// When ENVOY_VERSION is not set, `boe run` picks the Envoy version from the extension's manifest
+// constraints (the minimum version if set, otherwise the maximum one), so that version is the one
+// checked against the constraints.
+func SkipIfEnvoyVersionUnsupported(t *testing.T, extensionPath string, constraints EnvoyConstraints) {
+	envoyVersion := os.Getenv("ENVOY_VERSION")
+	if envoyVersion == "" {
+		manifestConstraints := extensionEnvoyConstraints(t, extensionPath)
+		envoyVersion = manifestConstraints.MinEnvoyVersion
+		if envoyVersion == "" {
+			envoyVersion = manifestConstraints.MaxEnvoyVersion
+		}
+	}
+	skipIfEnvoyVersionOutside(t, envoyVersion, constraints)
+}
+
 // SkipIfEnvoyNotSupportedByExtension skips the test if the given extension does not support the configured Envoy version.
 func SkipIfEnvoyNotSupportedByExtension(t *testing.T, extensionPath string) {
-	envoyVersion := os.Getenv("ENVOY_VERSION")
+	skipIfEnvoyVersionOutside(t, os.Getenv("ENVOY_VERSION"), extensionEnvoyConstraints(t, extensionPath))
+}
+
+// extensionEnvoyConstraints returns the Envoy version constraints declared in the manifest of the given extension.
+func extensionEnvoyConstraints(t *testing.T, extensionPath string) EnvoyConstraints {
+	manifest, err := ExtensionsFS(t).Open(filepath.Join(extensionPath, "manifest.yaml"))
+	require.NoError(t, err)
+	defer manifest.Close()
+
+	var envoyConstraints EnvoyConstraints
+	err = yaml.NewDecoder(manifest).Decode(&envoyConstraints)
+	require.NoError(t, err)
+	return envoyConstraints
+}
+
+// skipIfEnvoyVersionOutside skips the test if the given Envoy version does not satisfy the given constraints.
+// Empty and development versions are always considered supported.
+func skipIfEnvoyVersionOutside(t *testing.T, envoyVersion string, constraints EnvoyConstraints) {
 	if envoyVersion == "" || envoyVersion == "dev" || envoyVersion == "dev-latest" {
 		return
 	}
 	envoySemver := "v" + envoyVersion
 
-	manifest, err := ExtensionsFS(t).Open(filepath.Join(extensionPath, "manifest.yaml"))
-	require.NoError(t, err)
-	defer manifest.Close()
-
-	var envoyConstraints struct {
-		MinEnvoyVersion string `yaml:"minEnvoyVersion,omitempty" json:"minEnvoyVersion,omitempty"`
-		MaxEnvoyVersion string `yaml:"maxEnvoyVersion,omitempty" json:"maxEnvoyVersion,omitempty"`
-	}
-	err = yaml.NewDecoder(manifest).Decode(&envoyConstraints)
-	require.NoError(t, err)
-
-	if envoyConstraints.MinEnvoyVersion != "" && semver.Compare(envoySemver, "v"+envoyConstraints.MinEnvoyVersion) < 0 {
+	if constraints.MinEnvoyVersion != "" && semver.Compare(envoySemver, "v"+constraints.MinEnvoyVersion) < 0 {
 		t.Skipf("Envoy version %s is older than the required minimum version %s, skipping test",
-			envoyVersion, envoyConstraints.MinEnvoyVersion)
+			envoyVersion, constraints.MinEnvoyVersion)
 	}
-	if envoyConstraints.MaxEnvoyVersion != "" && semver.Compare(envoySemver, "v"+envoyConstraints.MaxEnvoyVersion) > 0 {
+	if constraints.MaxEnvoyVersion != "" && semver.Compare(envoySemver, "v"+constraints.MaxEnvoyVersion) > 0 {
 		t.Skipf("Envoy version %s is newer than the allowed maximum version %s, skipping test",
-			envoyVersion, envoyConstraints.MaxEnvoyVersion)
+			envoyVersion, constraints.MaxEnvoyVersion)
 	}
 }
 

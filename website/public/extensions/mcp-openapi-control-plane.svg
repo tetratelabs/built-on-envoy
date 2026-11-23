@@ -1,0 +1,84 @@
+<!--
+  ~ Copyright Built On Envoy
+  ~ SPDX-License-Identifier: Apache-2.0
+  ~ The full text of the Apache license is available in the LICENSE file at
+  ~ the root of the repo.
+-->
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 400" font-family="system-ui, -apple-system, sans-serif" font-size="13">
+  <defs>
+    <marker id="a" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#555"/></marker>
+    <marker id="b" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#2563eb"/></marker>
+    <marker id="e" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#7c3aed"/></marker>
+  </defs>
+  <rect width="100%" height="100%" fill="#fff"/>
+
+  <rect width="780" height="400" fill="#fafafa" rx="6"/>
+
+  <text x="390" y="24" text-anchor="middle" font-weight="700" font-size="15" fill="#111">mcp-openapi-remote</text>
+  <text x="390" y="42" text-anchor="middle" font-size="11" fill="#6b7280">xDS control plane pushes ECDS config to Envoy over ADS</text>
+
+  <!-- Config time: left column -->
+  <text x="88" y="72" text-anchor="middle" font-weight="700" font-size="11" fill="#7c3aed">Config time</text>
+
+  <!-- OpenAPI spec -->
+  <rect x="23" y="84" width="130" height="30" rx="6" fill="#fef3c7" stroke="#d97706" stroke-width="1"/>
+  <text x="88" y="97" text-anchor="middle" font-weight="700" font-size="11" fill="#92400e">OpenAPI spec</text>
+  <text x="88" y="110" text-anchor="middle" font-size="9" fill="#92400e">(URL or file)</text>
+
+  <line x1="88" y1="114" x2="88" y2="134" stroke="#7c3aed" stroke-width="1" stroke-dasharray="3,2" marker-end="url(#e)"/>
+  <text x="117" y="128" font-size="8" fill="#7c3aed">HTTP GET</text>
+
+  <!-- xDS Control Plane -->
+  <rect x="23" y="138" width="130" height="30" rx="6" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+  <text x="88" y="158" text-anchor="middle" font-weight="700" font-size="11" fill="#5b21b6">xDS control plane</text>
+
+  <line x1="88" y1="168" x2="88" y2="192" stroke="#7c3aed" stroke-width="1" stroke-dasharray="3,2" marker-end="url(#e)"/>
+
+  <!-- ADS gRPC box -->
+  <rect x="23" y="196" width="130" height="30" rx="6" fill="#f3f4f6" stroke="#9ca3af" stroke-width="1"/>
+  <text x="88" y="216" text-anchor="middle" font-weight="600" font-size="10" fill="#374151">ADS gRPC</text>
+
+  <!-- Arrow from ADS to bridge -->
+  <line x1="153" y1="211" x2="230" y2="211" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#e)"/>
+  <text x="191" y="204" font-size="9" fill="#7c3aed">ECDS</text>
+
+  <!-- MCP Client -->
+  <rect x="310" y="66" width="170" height="38" rx="6" fill="#e0e7ff" stroke="#6366f1" stroke-width="1.5"/>
+  <text x="395" y="86" text-anchor="middle" font-weight="700" font-size="12" fill="#4338ca">MCP Client (agent)</text>
+
+  <line x1="395" y1="104" x2="395" y2="128" stroke="#555" stroke-width="1.5" marker-end="url(#a)"/>
+  <text x="430" y="120" font-size="10" fill="#555">POST /mcp</text>
+
+  <!-- Envoy box -->
+  <rect x="234" y="132" width="370" height="166" rx="6" fill="#fff" stroke="#d1d5db" stroke-width="1.5"/>
+  <text x="419" y="152" text-anchor="middle" font-weight="700" font-size="14" fill="#111">Envoy</text>
+
+  <!-- mcp_json_rest_bridge -->
+  <rect x="254" y="162" width="330" height="38" rx="6" fill="#fde68a" stroke="#d97706" stroke-width="1.5"/>
+  <text x="419" y="179" text-anchor="middle" font-weight="700" font-size="11" fill="#92400e">mcp_json_rest_bridge</text>
+  <text x="419" y="193" text-anchor="middle" font-size="10" fill="#374151">initialize, tools/list, tools/call</text>
+
+  <line x1="419" y1="200" x2="419" y2="218" stroke="#555" stroke-width="1" marker-end="url(#a)"/>
+
+  <!-- Router -->
+  <rect x="354" y="222" width="130" height="24" rx="6" fill="#f3f4f6" stroke="#9ca3af" stroke-width="1"/>
+  <text x="419" y="238" text-anchor="middle" font-weight="700" font-size="11" fill="#374151">Router</text>
+
+  <!-- Arrow to upstream -->
+  <line x1="419" y1="246" x2="419" y2="304" stroke="#2563eb" stroke-width="1.5" marker-end="url(#b)"/>
+  <text x="462" y="280" font-size="10" fill="#2563eb">GET /items/1</text>
+
+  <!-- Upstream -->
+  <rect x="319" y="310" width="200" height="38" rx="6" fill="#fce7f3" stroke="#db2777" stroke-width="1.5"/>
+  <text x="419" y="334" text-anchor="middle" font-weight="700" font-size="11" fill="#9d174d">REST API (upstream)</text>
+
+  <!-- Response path -->
+  <line x1="519" y1="329" x2="660" y2="329" stroke="#555" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="590" y="324" font-size="10" fill="#555">JSON response</text>
+  <line x1="660" y1="329" x2="660" y2="85" stroke="#555" stroke-width="1" stroke-dasharray="4,3"/>
+  <rect x="610" y="179" width="100" height="20" rx="6" fill="#fde68a" stroke="#d97706" stroke-width="1"/>
+  <text x="660" y="193" text-anchor="middle" font-size="8" fill="#92400e">wrap JSON-RPC</text>
+  <line x1="660" y1="85" x2="482" y2="85" stroke="#555" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#a)"/>
+  <text x="580" y="80" font-size="10" fill="#555">JSON-RPC response</text>
+</svg>

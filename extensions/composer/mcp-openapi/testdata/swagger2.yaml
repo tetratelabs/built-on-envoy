@@ -1,0 +1,20 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+# Same as swagger2.json, in YAML. The unquoted 200 response key is valid YAML but
+# not a valid JSON object key, which the YAML to JSON conversion must handle.
+swagger: "2.0"
+info:
+  title: Test
+  version: "1.0"
+host: example.com
+basePath: /v2
+paths:
+  /ping:
+    get:
+      operationId: ping
+      responses:
+        200:
+          description: OK
