@@ -110,6 +110,24 @@ func Test_ParseConfigMetrics(t *testing.T) {
 			cfg, err := parseConfig([]byte(tc.config), logger.GetLogger())
 			require.NoError(t, err)
 			require.Equal(t, tc.want, cfg.metrics.authority)
+			require.Equal(t, defaultRuleMatches, cfg.metrics.ruleMatches)
+		})
+	}
+
+	for _, tc := range []struct {
+		name   string
+		config string
+		want   bool
+	}{
+		{"rule_matches unset is off", `{"metrics": {"authority_label": "none"}}`, false},
+		{"rule_matches false", `{"metrics": {"rule_matches": false}}`, false},
+		{"rule_matches true", `{"metrics": {"rule_matches": true}}`, true},
+		{"rule_matches true with authority_label", `{"metrics": {"authority_label": "route_name", "rule_matches": true}}`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, err := parseConfig([]byte(tc.config), logger.GetLogger())
+			require.NoError(t, err)
+			require.Equal(t, tc.want, cfg.metrics.ruleMatches)
 		})
 	}
 
@@ -129,6 +147,19 @@ func Test_ParseConfigMetrics(t *testing.T) {
 			[]string{"metrics.authority_label", `"host"`, "authority, none, route_name, virtual_host_name"},
 		},
 		{"label_source is not a setting", `{"metrics": {"label_source": "route_name"}}`, []string{"invalid metrics", "label_source"}},
+		{"rule_matches is not a boolean", `{"metrics": {"rule_matches": "yes"}}`, []string{"invalid metrics"}},
+		{"rule_matches is a number", `{"metrics": {"rule_matches": 1}}`, []string{"invalid metrics"}},
+		{"misspelled rule_matches", `{"metrics": {"rule_match": true}}`, []string{"invalid metrics", "rule_match"}},
+		{
+			"invalid rule_matches after a valid authority_label",
+			`{"metrics": {"authority_label": "none", "rule_matches": "yes"}}`,
+			[]string{"invalid metrics"},
+		},
+		{
+			"unknown authority_label beside a valid rule_matches",
+			`{"metrics": {"rule_matches": true, "authority_label": "host"}}`,
+			[]string{"metrics.authority_label", `"host"`},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := parseConfig([]byte(tc.config), logger.GetLogger())
@@ -146,6 +177,9 @@ func Test_InvalidMetricsConfigRejectsFilterConfig(t *testing.T) {
 		{"authority_literal": "shop"},
 		{"authority_label": "host"},
 		{"authority_label": false},
+		{"rule_matches": "yes"},
+		{"rule_match": true},
+		{"authority_label": "none", "rule_matches": "yes"},
 	} {
 		ctrl := gomock.NewController(t)
 		// No expectations: the filter config must be rejected before any metric is defined.
@@ -166,9 +200,11 @@ func Test_PerRouteMetricsConfig(t *testing.T) {
 	}
 	// Valid settings are accepted, although per-route configurations do not override them.
 	require.NoError(t, create(map[string]any{"authority_label": "none"}))
+	require.NoError(t, create(map[string]any{"rule_matches": true}))
 	// Invalid ones are rejected rather than silently ignored.
 	require.ErrorContains(t, create(map[string]any{"authority_lable": false}), "invalid metrics")
 	require.ErrorContains(t, create(map[string]any{"authority_literal": "shop"}), "invalid metrics")
+	require.ErrorContains(t, create(map[string]any{"rule_matches": "yes"}), "invalid metrics")
 }
 
 // Test_MetricsAuthorityLabel checks the tags waf_tx_blocked is defined and recorded with, for every

@@ -19,6 +19,8 @@ import (
 type metrics struct {
 	// authority decides the authority tag of the metrics tagged with it.
 	authority authorityLabel
+	// ruleMatched counts the rules matched by each transaction. It is nil unless enabled.
+	ruleMatched *pkg.Metric
 
 	txTotal    *pkg.Metric
 	txBlocked  *pkg.Metric
@@ -30,7 +32,8 @@ type metrics struct {
 func newMetrics(h shared.HttpFilterConfigHandle, cfg metricsConfig) *metrics {
 	a := cfg.authority
 	return &metrics{
-		authority: a,
+		authority:   a,
+		ruleMatched: newRuleMatchedMetric(h, cfg),
 
 		txTotal:    pkg.NewMetric(h, h.DefineCounter, "waf_tx_total"),
 		txBlocked:  pkg.NewMetric(h, h.DefineCounter, "waf_tx_blocked", a.tagNames("phase", "rule_id")...),
@@ -84,4 +87,40 @@ func (m *metrics) RecordBlockInternal(h shared.HttpFilterHandle, authority strin
 			"",
 		)...,
 	)
+}
+
+// newRuleMatchedMetric defines the waf_rule_matched counter if metrics.rule_matches is enabled,
+// and returns nil otherwise. Its authority tag is ruleMatchedAuthority, not waf_tx_blocked's.
+func newRuleMatchedMetric(h shared.HttpFilterConfigHandle, cfg metricsConfig) *pkg.Metric {
+	if !cfg.ruleMatches {
+		return nil
+	}
+	auth := cfg.authority.ruleMatchedAuthority()
+	return pkg.NewMetric(h, h.DefineCounter, "waf_rule_matched", auth.tagNames("phase", "rule_id")...)
+}
+
+// RecordMatchedRules increments the matched rule counter once for every rule a transaction
+// matched, whether or not it interrupted the transaction: with OWASP CRS, these are the signature
+// rules that raised the anomaly score, besides the anomaly blocking rule that waf_tx_blocked counts.
+// Rules without the log action (set on the rule or by SecDefaultAction), such as the CRS
+// initialization rules that match every transaction, are skipped, as Coraza does for its error log
+// callback.
+// It does nothing unless metrics.rule_matches is enabled. It should be called once for every
+// transaction, when it ends.
+func (m *metrics) RecordMatchedRules(h shared.HttpFilterHandle, authority string, matched []ctypes.MatchedRule) {
+	if m.ruleMatched == nil {
+		return
+	}
+	labels := m.authority.ruleMatchedAuthority()
+	for i, mr := range matched {
+		if !isLogged(mr) || matchedBefore(matched[:i], mr.Rule().ID()) {
+			continue
+		}
+		m.ruleMatched.Record(h, h.IncrementCounterValue, 1,
+			labels.tags(h, authority,
+				strconv.Itoa(int(mr.Rule().Phase())),
+				strconv.Itoa(mr.Rule().ID()),
+			)...,
+		)
+	}
 }

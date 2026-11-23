@@ -509,17 +509,19 @@ func (p *wafPlugin) OnStreamComplete() {
 	p.releaseTransaction()
 }
 
-// releaseTransaction runs ProcessLogging (phase 5 + audit logging), sets the matched_rules
-// metadata when enabled (OnStreamComplete runs before the access log is written), closes the transaction,
-// returning it to Coraza's pool, and marks it as released. It is a no-op if there is no
-// transaction.
+// releaseTransaction runs ProcessLogging (phase 5 + audit logging), counts the matched rules and sets
+// the matched_rules metadata when they are enabled (OnStreamComplete runs before the access log is
+// written), closes the transaction, returning it to Coraza's pool, and marks it as released. It is a
+// no-op if there is no transaction.
 func (p *wafPlugin) releaseTransaction() {
 	if p.txContext == nil {
 		return
 	}
 	p.txContext.ProcessLogging()
+	matched := p.txContext.MatchedRules()
+	p.metrics.RecordMatchedRules(p.handle, p.authority, matched)
 	if p.metadata.matchedRules {
-		if ids := matchedRuleIDs(p.txContext.MatchedRules()); ids != "" {
+		if ids := matchedRuleIDs(matched); ids != "" {
 			p.handle.SetMetadata(p.metadataNamespace, metadataKeyMatchedRules, ids)
 		}
 	}

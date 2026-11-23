@@ -114,12 +114,13 @@ func parseConfig(configBytes []byte, l *zap.Logger) (config, error) {
 
 // parseMetrics parses the metrics object of the filter configuration, if there is one.
 func parseMetrics(raw json.RawMessage) (metricsConfig, error) {
-	var cfg metricsConfig
+	cfg := metricsConfig{ruleMatches: defaultRuleMatches}
 	if len(raw) == 0 {
 		return cfg, nil
 	}
 	var m struct {
 		AuthorityLabel *string `json:"authority_label"`
+		RuleMatches    *bool   `json:"rule_matches"`
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
@@ -134,6 +135,9 @@ func parseMetrics(raw json.RawMessage) (metricsConfig, error) {
 			return metricsConfig{}, fmt.Errorf("invalid metrics: metrics.authority_label %q is not one of %s", *m.AuthorityLabel, strings.Join(names, ", "))
 		}
 		cfg.authority = label
+	}
+	if m.RuleMatches != nil {
+		cfg.ruleMatches = *m.RuleMatches
 	}
 	return cfg, nil
 }
