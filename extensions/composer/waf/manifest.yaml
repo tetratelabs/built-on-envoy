@@ -107,6 +107,32 @@ longDescription: |
   | `io.builtonenvoy.waf` | `block_phase` | Phase in which the requests has been blocked. See the [execution flow](https://coraza.io/docs/seclang/execution-flow/) for details on the possible values. |
   | `io.builtonenvoy.waf` | `block_rule` | ID of the rule that triggered the block. |
 
+  Setting `metadata.matched_rules` to `true` (default `false`) adds a key set when a transaction ends, whether or not
+  it was blocked, before the access log is written:
+
+  | Namespace | Key | Description |
+  |-----------|-----|-------------|
+  | `io.builtonenvoy.waf` | `matched_rules` | IDs of the rules the transaction matched, comma-separated in the order they matched, each once, e.g. `920350,941100,949110`. Rules without the `log` action (set on the rule or by `SecDefaultAction`), such as those with `nolog`, are left out, as they are from the WAF's per-match log. Not set when no rule is left. |
+
+  With OWASP CRS in anomaly scoring mode, `block_rule` is the anomaly blocking rule (e.g. `949110`) for every attack;
+  `matched_rules` names the signatures behind it, and the ones that matched without reaching the threshold. Printed by
+  the access log (`%DYNAMIC_METADATA(io.builtonenvoy.waf:matched_rules)%`), it gives one record per request.
+  `980170`, the CRS phase-5 anomaly-score report, is included only when `SecDefaultAction` carries `log` (it does in
+  `@crs-setup.conf` and `@crs-setup.conf.example`, and not in `@crs-setup.conf.example-nodefaultact`) and
+  `tx.reporting_level` allows it. A blocking rule without the `log` action is still named by `block_rule` and counted
+  in `waf_tx_blocked`, but it is not listed here.
+
+  ```json
+  {
+    "directives": ["Include @coraza.conf", "Include @crs-setup.conf", "Include @owasp_crs/*.conf"],
+    "metadata": {"matched_rules": true}
+  }
+  ```
+
+  Unknown keys in `metadata` reject the configuration. Like `metrics`, the `metadata` settings are read from the
+  filter configuration only: per-route configurations do not override them, although an invalid `metadata` object
+  is rejected there too.
+
   ## Metrics
 
   The extension exposes the following metrics:

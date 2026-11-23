@@ -28,6 +28,12 @@ var metricsTestDirectives = []string{
 	`SecRule REQUEST_HEADERS:X-Block-Test "@streq block-me" "id:100001,phase:1,deny,status:403,log,msg:'blocked'"`,
 }
 
+// newMetricsTestConfigHandle returns a filter config handle mock expecting the metrics that every
+// filter config defines, waf_tx_blocked with its default tags.
+func newMetricsTestConfigHandle(ctrl *gomock.Controller) *mocks.MockHttpFilterConfigHandle {
+	return newMetricsTestConfigHandleTags(ctrl, "authority", "phase", "rule_id")
+}
+
 // newMetricsTestConfigHandleTags returns a filter config handle mock expecting the metrics that
 // every filter config defines, with waf_tx_blocked defined with exactly the given tags. Gauges are
 // not under test here and are accepted.
