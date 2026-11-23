@@ -6,6 +6,7 @@
 package mcpopenapi
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared/mocks"
 	"github.com/stretchr/testify/require"
@@ -48,9 +50,12 @@ func TestConfigFactory_Create(t *testing.T) {
 		{"file spec", `{"spec":{"file":"` + specFile + `"}}`, ""},
 		{"inline spec", `{"spec":{"inline":` + string(inlineSpec) + `}}`, ""},
 		{"url spec", `{"spec":{"url":"` + ts.URL + `/api.yml"}}`, ""},
+		{"url spec with timeout", `{"spec":{"url":"` + ts.URL + `/api.yml","timeout":"5s"}}`, ""},
 		{"invalid JSON", `not json`, "parsing config: invalid character 'o' in literal null (expecting 'u')"},
 		{"empty spec", `{}`, "invalid spec config: one of 'inline', 'file' or 'url' must be set"},
 		{"multiple spec sources", `{"spec":{"file":"api.yml","url":"` + ts.URL + `"}}`, "invalid spec config: only one of 'inline', 'file' or 'url' can be set"},
+		{"invalid timeout", `{"spec":{"url":"` + ts.URL + `","timeout":"soon"}}`, `invalid spec config: invalid timeout "soon": must be a positive duration`},
+		{"negative timeout", `{"spec":{"url":"` + ts.URL + `","timeout":"-1s"}}`, `invalid spec config: invalid timeout "-1s": must be a positive duration`},
 		{"missing spec file", `{"spec":{"file":"x.json"}}`, "reading spec x.json: open x.json: no such file or directory"},
 		{"spec url not found", `{"spec":{"url":"` + ts.URL + `/x.json"}}`, "reading spec " + ts.URL + "/x.json: status 404"},
 		{"invalid inline spec", `{"spec":{"inline":"openapi: 3.0.3"}}`, "loading spec: validating spec: invalid info: must be an object"},
@@ -58,24 +63,47 @@ func TestConfigFactory_Create(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			root := testRoot(t)
-			h := mocks.NewMockHttpFilterConfigHandle(gomock.NewController(t))
-			h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-			ff, err := (&configFactory{root: root}).Create(h, []byte(tt.raw))
+			path := filepath.Join(t.TempDir(), "bridge.json")
+			raw := withBridgeConfigPath(t, tt.raw, path)
+			ff, err := new(configFactory).Create(newConfigHandle(t), raw)
 			if tt.expectedErr != "" {
 				require.EqualError(t, err, tt.expectedErr)
 				return
 			}
 			require.NoError(t, err)
 			require.Equal(t, new(filterFactory), ff)
-
-			// Both ECDS files are written to the root.
-			for _, name := range []string{ecdsFilePath, luaECDSFilePath} {
-				_, err := root.Stat(name)
-				require.NoError(t, err)
-			}
+			require.FileExists(t, path)
 		})
 	}
+}
+
+// TestConfigFactory_CreateSpecTimeout checks that a slow spec URL fails after the configured timeout
+// instead of blocking the Envoy main thread.
+func TestConfigFactory_CreateSpecTimeout(t *testing.T) {
+	release := make(chan struct{})
+	ts := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	t.Cleanup(func() {
+		close(release)
+		ts.Close()
+	})
+
+	start := time.Now()
+	raw := withBridgeConfigPath(t, `{"spec":{"url":"`+ts.URL+`","timeout":"200ms"}}`, filepath.Join(t.TempDir(), "bridge.json"))
+	_, err := new(configFactory).Create(newConfigHandle(t), raw)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Less(t, time.Since(start), 5*time.Second)
+}
+
+func TestSpecSourceTimeout(t *testing.T) {
+	require.Equal(t, defaultSpecFetchTimeout, (&specSource{}).timeout())
+	s := specSource{URL: "https://example.com/api.yml", Timeout: "2s"}
+	require.NoError(t, s.validate())
+	require.Equal(t, 2*time.Second, s.timeout())
 }
 
 func TestSpecSourceString(t *testing.T) {
@@ -87,23 +115,28 @@ func TestSpecSourceString(t *testing.T) {
 // TestConfigFactory_CreateSwagger2FromURL loads a Swagger 2.0 spec from a URL and checks
 // that the generated bridge routes include the spec's basePath.
 func TestConfigFactory_CreateSwagger2FromURL(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write(readTestdata(t, "testdata/swagger2.json"))
-	}))
-	t.Cleanup(ts.Close)
+	for _, spec := range []string{"testdata/swagger2.json", "testdata/swagger2.yaml"} {
+		t.Run(spec, func(t *testing.T) {
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write(readTestdata(t, spec))
+			}))
+			t.Cleanup(ts.Close)
 
-	root := testRoot(t)
-	h := mocks.NewMockHttpFilterConfigHandle(gomock.NewController(t))
-	h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	_, err := (&configFactory{root: root}).Create(h, []byte(`{"spec":{"url":"`+ts.URL+`/swagger.json"}}`))
-	require.NoError(t, err)
+			path := filepath.Join(t.TempDir(), "bridge.json")
+			raw := withBridgeConfigPath(t, `{"spec":{"url":"`+ts.URL+`/swagger"}}`, path)
+			_, err := new(configFactory).Create(newConfigHandle(t), raw)
+			require.NoError(t, err)
 
-	data, err := root.ReadFile(ecdsFilePath)
-	require.NoError(t, err)
-	var bridge bridgeECDSConfig
-	require.NoError(t, json.Unmarshal(data, &bridge))
-	require.Equal(t, []bridgeTool{{Name: "ping", HTTPRule: bridgeHTTPRule{Get: "/v2/ping"}}},
-		bridge.Resources[0].TypedConfig.ToolConfig.Tools)
+			data, err := os.ReadFile(filepath.Clean(path))
+			require.NoError(t, err)
+			var bridge bridgeECDSConfig
+			require.NoError(t, json.Unmarshal(data, &bridge))
+			tools := bridge.Resources[0].TypedConfig.ToolConfig.Tools
+			require.Len(t, tools, 1)
+			require.Equal(t, "ping", tools[0].Name)
+			require.Equal(t, bridgeHTTPRule{Get: "/v2/ping"}, tools[0].HTTPRule)
+		})
+	}
 }
 
 func TestWellKnownHttpFilterConfigFactories(t *testing.T) {
@@ -117,47 +150,46 @@ func TestFilterFactory_Create(t *testing.T) {
 	require.Equal(t, new(filter), new(filterFactory).Create(h))
 }
 
-// TestConfigFactory_CreateWorkingDirectory checks that the ECDS files are written to the
-// working directory when no root is configured.
-func TestConfigFactory_CreateWorkingDirectory(t *testing.T) {
+// TestConfigFactory_CreateDefaultPath checks that the bridge config is written to the
+// default path in the working directory when no path is configured.
+func TestConfigFactory_CreateDefaultPath(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 	inlineSpec, err := json.Marshal(string(testAPISpec))
 	require.NoError(t, err)
 
-	h := mocks.NewMockHttpFilterConfigHandle(gomock.NewController(t))
-	h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-	_, err = new(configFactory).Create(h, []byte(`{"spec":{"inline":`+string(inlineSpec)+`}}`))
+	_, err = new(configFactory).Create(newConfigHandle(t), []byte(`{"spec":{"inline":`+string(inlineSpec)+`}}`))
 	require.NoError(t, err)
-
-	for _, name := range []string{ecdsFilePath, luaECDSFilePath} {
-		require.FileExists(t, filepath.Join(dir, name))
-	}
+	require.FileExists(t, filepath.Join(dir, defaultBridgeConfigPath))
 }
 
-func TestConfigFactory_CreateWriteErrors(t *testing.T) {
+func TestConfigFactory_CreateWriteError(t *testing.T) {
 	inlineSpec, err := json.Marshal(string(testAPISpec))
 	require.NoError(t, err)
-	raw := []byte(`{"spec":{"inline":` + string(inlineSpec) + `}}`)
+	path := filepath.Join(t.TempDir(), "missing", "bridge.json")
+	raw := withBridgeConfigPath(t, `{"spec":{"inline":`+string(inlineSpec)+`}}`, path)
 
-	tests := []struct {
-		name        string
-		dir         string
-		expectedErr string
-	}{
-		{"bridge config", ecdsFilePath, "writing bridge ECDS config: "},
-		{"lua config", luaECDSFilePath, "writing Lua ECDS config: "},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// A directory with the same name as the ECDS file makes the write fail.
-			root := testRoot(t)
-			require.NoError(t, root.Mkdir(tt.dir, 0o700))
+	_, err = new(configFactory).Create(newConfigHandle(t), raw)
+	require.ErrorContains(t, err, "writing bridge ECDS config: ")
+}
 
-			h := mocks.NewMockHttpFilterConfigHandle(gomock.NewController(t))
-			h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-			_, err := (&configFactory{root: root}).Create(h, raw)
-			require.ErrorContains(t, err, tt.expectedErr)
-		})
+func newConfigHandle(t *testing.T) *mocks.MockHttpFilterConfigHandle {
+	t.Helper()
+	h := mocks.NewMockHttpFilterConfigHandle(gomock.NewController(t))
+	h.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	return h
+}
+
+// withBridgeConfigPath sets the bridge_config_path in the given JSON config, if it is a valid
+// JSON object. Invalid configs are returned unchanged.
+func withBridgeConfigPath(t *testing.T, raw, path string) []byte {
+	t.Helper()
+	var cfg map[string]any
+	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+		return []byte(raw)
 	}
+	cfg["bridge_config_path"] = path
+	out, err := json.Marshal(cfg)
+	require.NoError(t, err)
+	return out
 }

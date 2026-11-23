@@ -26,18 +26,34 @@ a fleet.
 ![Architecture](../../../website/public/extensions/mcp-openapi.svg)
 
 The native filters are declared in the [manifest](manifest.yaml) as
-`nativeHttpFilters`, and the ECDS ones start with a no-op default config so
-Envoy does not block waiting for the extension to write the generated files:
+`nativeHttpFilters`. The bridge filter uses ECDS and starts with a no-op default
+config, so Envoy does not block waiting for the extension to write the generated
+file:
 
-| Filter                                    | Position | Purpose                                                          |
-|-------------------------------------------|----------|------------------------------------------------------------------|
-| `envoy.filters.http.mcp`                  | before   | Parses MCP requests and rejects non-MCP traffic                  |
-| `envoy.filters.http.lua`                  | after    | Answers `tools/list` locally (ECDS: `mcp-openapi-tools-list.json`), see [below](#lua-filter-for-toolslist) |
-| `envoy.filters.http.mcp_json_rest_bridge` | after    | Transcodes `tools/call` into REST (ECDS: `mcp-openapi-bridge.json`) |
+| Filter                                    | Position | Purpose                                                                                      |
+|-------------------------------------------|----------|----------------------------------------------------------------------------------------------|
+| `envoy.filters.http.mcp`                  | before   | Parses MCP requests and rejects non-MCP traffic                                              |
+| `envoy.filters.http.mcp_json_rest_bridge` | after    | Answers `tools/list` locally and transcodes `tools/call` into REST (ECDS: `./mcp-openapi-bridge.json`) |
 
-The ECDS paths are relative, so the files are written to the working directory
-of the Envoy process. The spec itself can be provided inline, from a file or from
-an HTTP(S) URL.
+The bridge answers `tools/list` itself through [`tool_list_local`][bridge-tool-list-local],
+which requires Envoy 1.39 or later.
+
+The ECDS file is written to `./mcp-openapi-bridge.json`, relative to the working
+directory of the Envoy process. The `bridge_config_path` property changes it, for
+example to run several instances of the extension with different specs; the
+`path_config_source` of the bridge filter must then be changed to match (e.g. with
+`--native-http-filter-after`). Envoy requires the path to contain a directory, hence
+the `./`.
+
+The file is written to a temporary file and then renamed over the target. Envoy
+only picks up changes to file-based config sources that are moved into place, so
+writing the file in place would leave Envoy serving the old tools when the
+extension configuration changes while Envoy is running. The rename also prevents
+Envoy from reading a partially written file.
+
+The spec itself can be provided inline, from a file or from an HTTP(S) URL. URL
+specs are fetched while Envoy loads its configuration, which blocks the main
+thread, so the fetch is bounded by `spec.timeout` (30 seconds by default).
 
 ### Remote control plane
 
@@ -45,34 +61,12 @@ The conversion code can also run in an xDS control plane (like Istio's istiod).
 Instead of writing ECDS files to disk, the control plane pushes
 `TypedExtensionConfig` resources to Envoy over ADS gRPC. Envoy's listener
 references the bridge filter via `config_discovery` with an ADS config source,
-so the bridge config can be updated without rebuilding the listener. The Lua
-filter is not needed there either: the bridge can forward `tools/list` to a
-managed tools endpoint via [`tool_list_http_rule`][envoy-bridge-proto], or
-answer it locally via [`tool_list_local`][bridge-tool-list-local] (Envoy 1.39+).
+so the bridge config can be updated without rebuilding the listener. The bridge
+can answer `tools/list` locally via [`tool_list_local`][bridge-tool-list-local],
+as this extension does, or forward it to a managed tools endpoint via
+[`tool_list_http_rule`][envoy-bridge-proto].
 
 ![Remote control plane](../../../website/public/extensions/mcp-openapi-control-plane.svg)
-
-### Lua filter for tools/list
-
-The bridge handles `initialize` and `tools/call`, but `tools/list` is answered by
-a Lua ECDS filter ([tools_list.lua](tools_list.lua)). It reads the MCP method
-from the [`envoy.filters.http.mcp`][envoy-mcp-filter] metadata and sends a local
-reply with the pre-computed tool definitions. The filter is needed for two
-reasons:
-
-- **Envoy 1.38**: the bridge can only forward `tools/list` upstream as a GET via
-  `tool_list_http_rule`, not answer it locally ([envoy TODO][bridge-todo]).
-- **Tool annotations**: Envoy 1.39 added a local `tools/list` response
-  ([`tool_list_local`][bridge-tool-list-local]), but each tool only supports a
-  title, a description and an input schema ([`ToolsListSpecificConfig`][bridge-tool-list-config]).
-  It does not support the `readOnlyHint`, `destructiveHint` and `idempotentHint`
-  annotations this extension derives from the HTTP methods.
-
-On Envoy 1.39 and later the Lua filter can be removed in favor of
-`tool_list_local`, at the cost of losing the tool annotations. Since the
-annotations are only hints, clients still see and can call every tool. This
-would also drop the `mcp-openapi-tools-list.json` ECDS file: the tool titles,
-descriptions and input schemas would be written to the bridge config instead.
 
 ### Responses without a body
 
@@ -98,12 +92,11 @@ and [FastMCP][fastmcp] v4.2.4.
 |-----------------------------------|:-----------------------:|:-------------------------:|:----------------------:|:-----------------------------------------------:|
 | Auto-generates tools from OpenAPI |    [✓][boe-gen-src]     |      [✓][ag-gen-src]      |    [✓][al-gen-src]     |                 [✓][fm-gen-src]                 |
 | Works without `operationId`       |    [✓][boe-name-src]    |                           |    [✓][fm-name-src]    |                [✓][fm-name-src]                 |
-| Tool annotations from HTTP method |    [✓][boe-ann-src]     |                           |                        |                                                 |
 | Ergonomic schema mapping          |    [✓][boe-flat-src]    |                           |    [✓][fm-flat-src]    |                [✓][fm-flat-src]                 |
 | Output schema                     |                         |                           |    [✓][fm-out-src]     |                 [✓][fm-out-src]                 |
 | Operation filtering               | [operationId][boe-filter-src] | [tool name (CEL)][ag-filter-src] | [tags][al-filter-src] | [methods, paths, tags, custom][fm-filter-src] |
 | Remote URL spec loading           |    [✓][boe-url-src]     |      [✓][ag-url-src]      |    [✓][al-url-src]     |                                                 |
-| Swagger 2.0                       |    [✓][boe-sw2-src]     |                           |                        |                                                 |
+| Swagger 2.0 (JSON and YAML)       |    [✓][boe-sw2-src]     |                           |                        |                                                 |
 
 AWS Labs builds on FastMCP's OpenAPI support ([`FastMCP.from_openapi`][al-gen-src]),
 so it inherits FastMCP's tool naming, schema mapping and output schemas.
@@ -111,9 +104,6 @@ so it inherits FastMCP's tool naming, schema mapping and output schemas.
 - **Works without `operationId`**: agentgateway [rejects the spec][ag-opid-src]
   if any operation lacks an `operationId`. The others derive a name from the
   method and path (FastMCP tries the summary first).
-- **Tool annotations from HTTP method**: e.g. `DELETE` sets `destructiveHint`, so
-  clients can, for example, skip confirmation on read-only calls. FastMCP tools
-  accept annotations, but only when set manually in a `mcp_component_fn` hook.
 - **Ergonomic schema mapping**: e.g. `{"petId": 1}` not `{"path": {"petId": 1}}`.
   agentgateway [nests the arguments][ag-nest-src] under `body`, `path`, `query`
   and `header`.
@@ -145,23 +135,19 @@ make -C extensions/tests/e2e test GO_TEST_ARGS="-run TestMCPOpenAPI -v"
 [kin-openapi]: https://github.com/getkin/kin-openapi
 [ecds]: https://www.envoyproxy.io/docs/envoy/latest/configuration/overview/extension
 [istio-ecds]: https://github.com/envoyproxy/envoy/pull/16795
-[envoy-mcp-filter]: https://github.com/envoyproxy/envoy/tree/v1.40.0/source/extensions/filters/http/mcp
 [envoy-bridge]: https://github.com/envoyproxy/envoy/tree/v1.40.0/source/extensions/filters/http/mcp_json_rest_bridge
 [envoy-bridge-proto]: https://github.com/envoyproxy/envoy/blob/v1.40.0/api/envoy/extensions/filters/http/mcp_json_rest_bridge/v3/mcp_json_rest_bridge.proto
-[bridge-todo]: https://github.com/envoyproxy/envoy/blob/v1.38.7/source/extensions/filters/http/mcp_json_rest_bridge/mcp_json_rest_bridge_filter.cc#L300
 [bridge-tool-list-local]: https://github.com/envoyproxy/envoy/blob/v1.39.0/api/envoy/extensions/filters/http/mcp_json_rest_bridge/v3/mcp_json_rest_bridge.proto#L212
-[bridge-tool-list-config]: https://github.com/envoyproxy/envoy/blob/v1.40.0/api/envoy/extensions/filters/http/mcp_json_rest_bridge/v3/mcp_json_rest_bridge.proto#L253
 [bridge-headers-only-138]: https://github.com/envoyproxy/envoy/blob/v1.38.7/source/extensions/filters/http/mcp_json_rest_bridge/mcp_json_rest_bridge_filter.cc#L248
 [bridge-headers-only-139]: https://github.com/envoyproxy/envoy/blob/v1.39.4/source/extensions/filters/http/mcp_json_rest_bridge/mcp_json_rest_bridge_filter.cc#L552
 [bridge-headers-only-140]: https://github.com/envoyproxy/envoy/blob/v1.40.0/source/extensions/filters/http/mcp_json_rest_bridge/mcp_json_rest_bridge_filter.cc#L830
 [bridge-text-content]: https://github.com/envoyproxy/envoy/blob/v1.40.0/source/extensions/filters/http/mcp_json_rest_bridge/mcp_json_rest_bridge_filter.cc#L125
-[boe-gen-src]: openapi.go#L95
-[boe-name-src]: mcp.go#L16
-[boe-ann-src]: openapi.go#L310
-[boe-flat-src]: openapi.go#L127
-[boe-filter-src]: openapi.go#L106
-[boe-url-src]: plugin.go#L136
-[boe-sw2-src]: openapi.go#L57
+[boe-gen-src]: openapi.go#L97
+[boe-name-src]: mcp.go#L12
+[boe-flat-src]: openapi.go#L129
+[boe-filter-src]: openapi.go#L108
+[boe-url-src]: plugin.go#L149
+[boe-sw2-src]: openapi.go#L51
 [ag-gen-src]: https://github.com/agentgateway/agentgateway/blob/v1.7.0/crates/agentgateway/src/mcp/upstream/openapi/mod.rs#L256
 [ag-opid-src]: https://github.com/agentgateway/agentgateway/blob/v1.7.0/crates/agentgateway/src/mcp/upstream/openapi/mod.rs#L275
 [ag-nest-src]: https://github.com/agentgateway/agentgateway/blob/v1.7.0/crates/agentgateway/src/mcp/upstream/openapi/mod.rs#L432

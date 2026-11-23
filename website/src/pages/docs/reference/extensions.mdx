@@ -1534,6 +1534,18 @@ Match strings ending with this value.
 
 Configuration for the MCP OpenAPI extension. Exposes the operations of an OpenAPI spec as MCP tools.
 
+### bridge_config_path
+
+Path of the generated mcp_json_rest_bridge ECDS file. Relative paths are resolved against the Envoy working directory, and Envoy requires the path to contain a directory (e.g. ./). Defaults to ./mcp-openapi-bridge.json. When changed, the path_config_source of the envoy.filters.http.mcp_json_rest_bridge filter must be changed to match, for example with --native-http-filter-after.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+| **Min length** | 1 |
+
+[↑ Top](#) | [↑ MCP OpenAPI Configuration](#mcp-openapi) {/* if .SubProperties */}
+
 ### exclude_ops
 
 Operations not to expose as tools. Operations are identified by their operationId, or by the generated tool name when the operationId is absent.
@@ -1596,6 +1608,18 @@ Spec provided directly as a string.
 |---|---|
 | **Type** | `string` |
 | **Required** | No |
+
+[↑ Top](#) | [↑ MCP OpenAPI Configuration](#mcp-openapi)
+
+#### timeout
+
+Maximum time to fetch the spec from the url, as a duration string (e.g. 10s). Defaults to 30s.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+| **Pattern** | `^([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$` |
 
 [↑ Top](#) | [↑ MCP OpenAPI Configuration](#mcp-openapi)
 

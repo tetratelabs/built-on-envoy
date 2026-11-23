@@ -14,9 +14,10 @@ import (
 func TestConfigSchema(t *testing.T) {
 	t.Run("valid full config", func(t *testing.T) {
 		internaltesting.AssertSchemaValid(t, "config.schema.json", `{
-			"spec": {"url": "https://petstore.swagger.io/v2/swagger.json"},
+			"spec": {"url": "https://petstore.swagger.io/v2/swagger.json", "timeout": "1m30s"},
 			"include_ops": ["getPetById"],
-			"exclude_ops": ["deletePet"]
+			"exclude_ops": ["deletePet"],
+			"bridge_config_path": "/var/run/envoy/bridge.json"
 		}`)
 	})
 	t.Run("valid file spec", func(t *testing.T) {
@@ -39,6 +40,12 @@ func TestConfigSchema(t *testing.T) {
 	})
 	t.Run("non http url", func(t *testing.T) {
 		internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{"spec": {"url": "ftp://example.com/api.yaml"}}`)
+	})
+	t.Run("invalid timeout", func(t *testing.T) {
+		internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{"spec": {"url": "https://example.com/api.yaml", "timeout": "30"}}`)
+	})
+	t.Run("empty bridge config path", func(t *testing.T) {
+		internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{"spec": {"file": "api.yaml"}, "bridge_config_path": ""}`)
 	})
 	t.Run("unknown field", func(t *testing.T) {
 		internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{"spec": {"file": "api.yaml"}, "foo": "bar"}`)

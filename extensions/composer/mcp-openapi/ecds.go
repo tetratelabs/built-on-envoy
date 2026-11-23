@@ -6,25 +6,17 @@
 package mcpopenapi
 
 import (
-	_ "embed"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
-	"strings"
+	"path/filepath"
 )
 
-//go:embed tools_list.lua
-var luaScriptTemplate string
-
 const (
-	luaPlaceholder = "__TOOLS_LIST_JSON__"
-
 	typedExtensionConfigType = "type.googleapis.com/envoy.config.core.v3.TypedExtensionConfig"
 	bridgeFilterName         = "envoy.filters.http.mcp_json_rest_bridge"
 	bridgeConfigType         = "type.googleapis.com/envoy.extensions.filters.http.mcp_json_rest_bridge.v3.McpJsonRestBridge"
-	luaFilterName            = "envoy.filters.http.lua"
-	luaConfigType            = "type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua"
 )
 
 type bridgeECDSConfig struct {
@@ -45,11 +37,14 @@ type bridgeTypedConfig struct {
 
 type bridgeToolGroup struct {
 	Tools []bridgeTool `json:"tools"`
+	// ToolListLocal makes the bridge answer tools/list locally, using each tool's ToolListConfig.
+	ToolListLocal struct{} `json:"tool_list_local"`
 }
 
 type bridgeTool struct {
-	Name     string         `json:"name"`
-	HTTPRule bridgeHTTPRule `json:"http_rule"`
+	Name           string               `json:"name"`
+	HTTPRule       bridgeHTTPRule       `json:"http_rule"`
+	ToolListConfig bridgeToolListConfig `json:"tool_list_config"`
 }
 
 type bridgeHTTPRule struct {
@@ -61,31 +56,21 @@ type bridgeHTTPRule struct {
 	Body   string `json:"body,omitempty"`
 }
 
-type luaECDSConfig struct {
-	VersionInfo string              `json:"version_info"`
-	Resources   []luaTypedExtension `json:"resources"`
+type bridgeToolListConfig struct {
+	Description string `json:"description"`
+	// InputSchema is the tool's input JSON Schema, serialized as a string.
+	InputSchema string `json:"input_schema"`
 }
 
-type luaTypedExtension struct {
-	Type        string         `json:"@type"`
-	Name        string         `json:"name"`
-	TypedConfig luaTypedConfig `json:"typed_config"`
-}
-
-type luaTypedConfig struct {
-	Type              string        `json:"@type"`
-	DefaultSourceCode luaSourceCode `json:"default_source_code"`
-}
-
-type luaSourceCode struct {
-	InlineString string `json:"inline_string"`
-}
-
-// writeECDSConfig writes the MCP-to-REST bridge ECDS configuration for Envoy.
-func writeECDSConfig(root *os.Root, name string, tools []tool) error {
+// writeECDSConfig writes the MCP-to-REST bridge ECDS configuration for Envoy to the given path.
+func writeECDSConfig(path string, tools []tool) error {
 	bt := make([]bridgeTool, len(tools))
 	for i := range tools {
-		bt[i] = buildBridgeTool(&tools[i])
+		t, err := buildBridgeTool(&tools[i])
+		if err != nil {
+			return err
+		}
+		bt[i] = t
 	}
 
 	cfg := bridgeECDSConfig{
@@ -104,39 +89,34 @@ func writeECDSConfig(root *os.Root, name string, tools []tool) error {
 	if err != nil {
 		return fmt.Errorf("marshaling ECDS config: %w", err)
 	}
-	return root.WriteFile(name, data, 0o600)
+	return writeFileAtomic(path, data)
 }
 
-// writeLuaECDSConfig writes the Lua ECDS configuration that answers tools/list
-// locally. See tools_list.lua for why the bridge is not used for this.
-func writeLuaECDSConfig(root *os.Root, name string, tools []tool) error {
-	toolsListJSON, err := json.Marshal(toolsListResult{Tools: tools})
+// writeFileAtomic writes data to a temporary file in the same directory as path, and then
+// renames it to path. Envoy only picks up changes to file-based config sources that are moved
+// into place, and this also prevents Envoy from reading a partially written file.
+func writeFileAtomic(path string, data []byte) (err error) {
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
 	if err != nil {
-		return fmt.Errorf("marshaling tools list: %w", err)
+		return err
 	}
-	script := strings.Replace(luaScriptTemplate, luaPlaceholder, string(toolsListJSON), 1)
-
-	cfg := luaECDSConfig{
-		VersionInfo: "1",
-		Resources: []luaTypedExtension{{
-			Type: typedExtensionConfigType,
-			Name: luaFilterName,
-			TypedConfig: luaTypedConfig{
-				Type:              luaConfigType,
-				DefaultSourceCode: luaSourceCode{InlineString: script},
-			},
-		}},
+	defer func() {
+		if err != nil {
+			_ = os.Remove(tmp.Name())
+		}
+	}()
+	if _, err = tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
 	}
-
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshaling Lua ECDS config: %w", err)
+	if err = tmp.Close(); err != nil {
+		return err
 	}
-	return root.WriteFile(name, data, 0o600)
+	return os.Rename(tmp.Name(), path)
 }
 
-// buildBridgeTool converts an internal tool to the bridge's HTTP rule format.
-func buildBridgeTool(t *tool) bridgeTool {
+// buildBridgeTool converts an internal tool to the bridge's tool configuration.
+func buildBridgeTool(t *tool) (bridgeTool, error) {
 	rule := bridgeHTTPRule{}
 	switch t.httpMethod {
 	case http.MethodGet:
@@ -153,5 +133,17 @@ func buildBridgeTool(t *tool) bridgeTool {
 	if t.hasBody {
 		rule.Body = "*"
 	}
-	return bridgeTool{Name: t.Name, HTTPRule: rule}
+
+	schema, err := json.Marshal(t.InputSchema)
+	if err != nil {
+		return bridgeTool{}, fmt.Errorf("marshaling input schema for tool %s: %w", t.Name, err)
+	}
+	return bridgeTool{
+		Name:     t.Name,
+		HTTPRule: rule,
+		ToolListConfig: bridgeToolListConfig{
+			Description: t.Description,
+			InputSchema: string(schema),
+		},
+	}, nil
 }

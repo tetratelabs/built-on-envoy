@@ -5,7 +5,7 @@
 
 name: mcp-openapi
 parent: composer
-minEnvoyVersion: 1.38.0
+minEnvoyVersion: 1.39.0
 categories:
   - AI
 author: Tetrate
@@ -18,21 +18,24 @@ longDescription: |
   The extension is local control plane logic that runs inside Envoy: it loads
   the OpenAPI spec at config time, generates the MCP tool definitions and the
   routing configuration for Envoy's native `mcp_json_rest_bridge` filter, and
-  writes both as [ECDS](https://www.envoyproxy.io/docs/envoy/latest/configuration/overview/extension)
-  filesystem files. There is no per-request Go code: Envoy's native filters
+  writes them as an [ECDS](https://www.envoyproxy.io/docs/envoy/latest/configuration/overview/extension)
+  filesystem file. There is no per-request Go code: Envoy's native filters
   serve all MCP traffic.
 
   ![How it works](/extensions/mcp-openapi.svg)
 
   - `envoy.filters.http.mcp` parses MCP JSON-RPC requests.
-  - `envoy.filters.http.lua` answers `tools/list` locally with the generated
-    tool definitions, including the tool annotations.
   - `envoy.filters.http.mcp_json_rest_bridge` handles `initialize`,
-    `notifications/initialized` and `tools/call`, transcoding tool calls into
-    REST requests to the upstream.
+    `notifications/initialized` and `tools/list` locally, and transcodes
+    `tools/call` into REST requests to the upstream.
 
-  The ECDS files (`mcp-openapi-bridge.json` and `mcp-openapi-tools-list.json`)
-  are written to the working directory of the Envoy process.
+  The ECDS file is written to `./mcp-openapi-bridge.json` in the working
+  directory of the Envoy process. Use the `bridge_config_path` property to
+  change it (for example, to run several instances of the extension with
+  different specs), and update the `path_config_source` of the
+  `envoy.filters.http.mcp_json_rest_bridge` filter to match, for example with
+  `--native-http-filter-after`. The file is replaced atomically, so Envoy picks
+  up configuration changes without a restart.
 
   The same conversion logic can also run in an xDS control plane, which pushes
   the generated configuration to a fleet of Envoy proxies over ADS instead of
@@ -42,12 +45,11 @@ longDescription: |
 
   ## Key Features
 
-  - **OpenAPI 3.x and Swagger 2.0**: Swagger 2.0 specs are automatically up-converted.
+  - **OpenAPI 3.x and Swagger 2.0**: In JSON or YAML. Swagger 2.0 specs are
+    automatically up-converted.
   - **Flexible spec loading**: Load the spec inline, from a local file or from an HTTP(S) URL.
   - **Flat tool schemas**: Tool arguments match the bridge's argument model
     (e.g. `{"petId": 1}`, not `{"path": {"petId": 1}}`).
-  - **Tool annotations**: `readOnlyHint`, `destructiveHint` and `idempotentHint`
-    are derived from the HTTP method.
   - **LLM-optimized descriptions**: The `x-mcp-description` vendor extension
     overrides the operation description and summary.
   - **Tool filtering**: Use the `include_ops` and `exclude_ops` properties to
@@ -77,23 +79,12 @@ nativeHttpFilters:
         parser_config:
           group_metadata_key: mcp_method_group
   after:
-    - name: envoy.filters.http.lua
-      config_discovery:
-        config_source:
-          path_config_source:
-            # Envoy requires a directory in the path, so use ./ for the working directory.
-            path: ./mcp-openapi-tools-list.json
-        type_urls:
-          - "type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua"
-        apply_default_config_without_warming: true
-        default_config:
-          "@type": "type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua"
-          default_source_code:
-            inline_string: "function envoy_on_request(request_handle) end"
     - name: envoy.filters.http.mcp_json_rest_bridge
       config_discovery:
         config_source:
           path_config_source:
+            # Must match the extension's bridge_config_path. Envoy requires a directory in the
+            # path, so use ./ for the working directory.
             path: ./mcp-openapi-bridge.json
         type_urls:
           - "type.googleapis.com/envoy.extensions.filters.http.mcp_json_rest_bridge.v3.McpJsonRestBridge"

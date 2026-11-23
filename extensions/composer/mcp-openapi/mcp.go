@@ -7,10 +7,6 @@ package mcpopenapi
 
 import "strings"
 
-type toolsListResult struct {
-	Tools []tool `json:"tools"`
-}
-
 // formatToolName derives a tool name when operationId is absent.
 // Example: GET /v1/forecast → get_v1_forecast
 func formatToolName(method, path string) string {

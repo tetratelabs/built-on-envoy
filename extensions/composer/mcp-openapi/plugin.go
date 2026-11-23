@@ -4,9 +4,8 @@
 // the root of the repo.
 
 // Package mcpopenapi is a config-time-only Envoy dynamic module. It reads an
-// OpenAPI spec at init and writes ECDS configs for Envoy's native MCP filter,
-// Lua filter, and MCP-to-REST bridge. All standard Envoy filters, not dynamic
-// modules themselves.
+// OpenAPI spec at init and writes the ECDS config for Envoy's native
+// MCP-to-REST bridge filter, which serves all MCP traffic.
 package mcpopenapi
 
 import (
@@ -16,7 +15,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
+	"time"
 
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 
@@ -26,9 +25,13 @@ import (
 const userAgent = "built-on-envoy-mcp-openapi"
 
 const (
-	filterName      = "mcp-openapi"
-	ecdsFilePath    = "mcp-openapi-bridge.json"
-	luaECDSFilePath = "mcp-openapi-tools-list.json"
+	filterName = "mcp-openapi"
+	// defaultBridgeConfigPath must match the path_config_source of the bridge filter in the
+	// manifest. Envoy requires a directory in the path, so use ./ for the working directory.
+	defaultBridgeConfigPath = "./mcp-openapi-bridge.json"
+	// defaultSpecFetchTimeout bounds the spec download, as it blocks Envoy's main thread
+	// while the configuration is loaded.
+	defaultSpecFetchTimeout = 30 * time.Second
 )
 
 var (
@@ -47,11 +50,9 @@ func WellKnownHttpFilterConfigFactories() map[string]shared.HttpFilterConfigFact
 
 type configFactory struct {
 	shared.EmptyHttpFilterConfigFactory
-	root *os.Root // set only in tests
 }
 
-// Create loads an OpenAPI spec and writes ECDS configs that wire Envoy's
-// MCP-to-REST bridge and a Lua filter for tools/list responses.
+// Create loads an OpenAPI spec and writes the ECDS config for Envoy's MCP-to-REST bridge.
 func (cf *configFactory) Create(handle shared.HttpFilterConfigHandle, raw []byte) (shared.HttpFilterFactory, error) {
 	var cfg config
 	if err := json.Unmarshal(raw, &cfg); err != nil {
@@ -61,17 +62,14 @@ func (cf *configFactory) Create(handle shared.HttpFilterConfigHandle, raw []byte
 		return nil, fmt.Errorf("invalid spec config: %w", err)
 	}
 
-	root := cf.root
-	if root == nil {
-		r, err := os.OpenRoot(".")
-		if err != nil {
-			return nil, fmt.Errorf("opening root: %w", err)
-		}
-		defer r.Close() //nolint:errcheck // not actionable in defer
-		root = r
+	bridgeConfigPath := cfg.BridgeConfigPath
+	if bridgeConfigPath == "" {
+		bridgeConfigPath = defaultBridgeConfigPath
 	}
 
-	specData, err := cfg.Spec.content(context.Background(), http.DefaultClient)
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.Spec.timeout())
+	defer cancel()
+	specData, err := cfg.Spec.content(ctx, http.DefaultClient)
 	if err != nil {
 		return nil, fmt.Errorf("reading spec %s: %w", cfg.Spec, err)
 	}
@@ -86,15 +84,10 @@ func (cf *configFactory) Create(handle shared.HttpFilterConfigHandle, raw []byte
 		return nil, fmt.Errorf("generating tools: %w", err)
 	}
 
-	// Bridge ECDS maps each tool to an HTTP rule so Envoy routes MCP calls to REST.
-	if err := writeECDSConfig(root, ecdsFilePath, tools); err != nil {
+	// The bridge ECDS maps each tool to an HTTP rule so Envoy routes MCP calls to REST, and
+	// has the tool definitions so it answers tools/list locally.
+	if err := writeECDSConfig(bridgeConfigPath, tools); err != nil {
 		return nil, fmt.Errorf("writing bridge ECDS config: %w", err)
-	}
-
-	// Lua ECDS answers tools/list locally, including the tool annotations that the
-	// bridge does not support (see tools_list.lua).
-	if err := writeLuaECDSConfig(root, luaECDSFilePath, tools); err != nil {
-		return nil, fmt.Errorf("writing Lua ECDS config: %w", err)
 	}
 
 	handle.Log(shared.LogLevelInfo, "mcp-openapi: loaded %d tools from %s", len(tools), cfg.Spec)
@@ -112,10 +105,30 @@ type specSource struct {
 	pkg.DataSource
 	// URL is the HTTP(S) URL of the spec.
 	URL string `json:"url,omitempty"`
+	// Timeout is the maximum time to fetch the spec from the URL, as a Go duration string.
+	Timeout string `json:"timeout,omitempty"`
+
+	parsedTimeout time.Duration
 }
 
-// validate checks that exactly one of the spec sources is set.
+// timeout returns the maximum time to load the spec.
+func (s *specSource) timeout() time.Duration {
+	if s.parsedTimeout > 0 {
+		return s.parsedTimeout
+	}
+	return defaultSpecFetchTimeout
+}
+
+// validate checks that exactly one of the spec sources is set, and that the timeout is valid.
 func (s *specSource) validate() error {
+	if s.Timeout != "" {
+		d, err := time.ParseDuration(s.Timeout)
+		if err != nil || d <= 0 {
+			return fmt.Errorf("invalid timeout %q: must be a positive duration", s.Timeout)
+		}
+		s.parsedTimeout = d
+	}
+
 	set := 0
 	for _, v := range []string{s.Inline, s.File, s.URL} {
 		if v != "" {

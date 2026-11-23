@@ -23,6 +23,7 @@ func TestLoadOpenAPISpec(t *testing.T) {
 		expectedErr string
 	}{
 		{"swagger 2.0", readTestdata(t, "testdata/swagger2.json"), ""},
+		{"swagger 2.0 yaml", readTestdata(t, "testdata/swagger2.yaml"), ""},
 		{"openapi 3.x", readTestdata(t, "testdata/test_api.yml"), ""},
 		{"invalid", []byte(`not valid`), "parsing spec: failed to unmarshal data: json error: jsontext: invalid character 'o' in literal null (expecting 'u') after offset 1, yaml error: yaml: construct errors: line 1: cannot construct !!str `not valid` into openapi3.T"},
 	}
@@ -46,6 +47,7 @@ func TestServerBasePath(t *testing.T) {
 		expected string
 	}{
 		{"swagger 2.0 basePath", string(readTestdata(t, "testdata/swagger2.json")), "/v2"},
+		{"swagger 2.0 yaml basePath", string(readTestdata(t, "testdata/swagger2.yaml")), "/v2"},
 		{"server url path", `{"openapi":"3.0.3","info":{"title":"t","version":"1"},"servers":[{"url":"https://example.com/api/v1/"}],"paths":{}}`, "/api/v1"},
 		{"server url variables", `{"openapi":"3.0.3","info":{"title":"t","version":"1"},"servers":[{"url":"https://example.com/{base}","variables":{"base":{"default":"v3"}}}],"paths":{}}`, "/v3"},
 		{"server url without path", `{"openapi":"3.0.3","info":{"title":"t","version":"1"},"servers":[{"url":"https://example.com"}],"paths":{}}`, ""},
@@ -69,7 +71,6 @@ func TestGenerateToolsBasePath(t *testing.T) {
 }
 
 func TestGenerateTools(t *testing.T) {
-	yes, no := true, false
 	doc := loadTestSpec(t, "testdata/test_api.yml")
 
 	allTools := []tool{
@@ -80,22 +81,22 @@ func TestGenerateTools(t *testing.T) {
 				"tag":  map[string]any{"type": []any{"string", "null"}},
 			},
 			"required": []string{"name"},
-		}, Annotations: &annotations{}, httpMethod: "POST", pathTemplate: "/items", hasBody: true},
+		}, httpMethod: "POST", pathTemplate: "/items", hasBody: true},
 		{Name: "deleteItem", Description: "Delete an item", InputSchema: map[string]any{
 			"type":       "object",
 			"properties": map[string]any{"id": map[string]any{"type": "integer", "format": "int64", "description": "The item ID"}},
 			"required":   []string{"id"},
-		}, Annotations: &annotations{DestructiveHint: &yes, IdempotentHint: &yes}, httpMethod: "DELETE", pathTemplate: "/items/{id}", hasBody: false},
+		}, httpMethod: "DELETE", pathTemplate: "/items/{id}", hasBody: false},
 		{Name: "getItem", Description: "Get an item", InputSchema: map[string]any{
 			"type":       "object",
 			"properties": map[string]any{"id": map[string]any{"type": "integer", "format": "int64", "description": "The item ID"}},
 			"required":   []string{"id"},
-		}, Annotations: &annotations{ReadOnlyHint: &yes, DestructiveHint: &no, IdempotentHint: &yes}, httpMethod: "GET", pathTemplate: "/items/{id}", hasBody: false},
+		}, httpMethod: "GET", pathTemplate: "/items/{id}", hasBody: false},
 		{Name: "get_search", Description: "Search items", InputSchema: map[string]any{
 			"type":       "object",
 			"properties": map[string]any{"q": map[string]any{"type": "string", "description": "Search query"}},
 			"required":   []string{"q"},
-		}, Annotations: &annotations{ReadOnlyHint: &yes, DestructiveHint: &no, IdempotentHint: &yes}, httpMethod: "GET", pathTemplate: "/search", hasBody: false},
+		}, httpMethod: "GET", pathTemplate: "/search", hasBody: false},
 	}
 
 	tests := []struct {
@@ -150,28 +151,6 @@ func TestSchemaToMap(t *testing.T) {
 			m, err := schemaToMap(tt.ref)
 			require.NoError(t, err)
 			require.Equal(t, tt.expected, m)
-		})
-	}
-}
-
-func TestAnnotationsForMethod(t *testing.T) {
-	yes, no := true, false
-	tests := []struct {
-		name     string
-		method   string
-		expected *annotations
-	}{
-		{"read-only idempotent", "GET", &annotations{ReadOnlyHint: &yes, DestructiveHint: &no, IdempotentHint: &yes}},
-		{"HEAD same as GET", "HEAD", &annotations{ReadOnlyHint: &yes, DestructiveHint: &no, IdempotentHint: &yes}},
-		{"OPTIONS same as GET", "OPTIONS", &annotations{ReadOnlyHint: &yes, DestructiveHint: &no, IdempotentHint: &yes}},
-		{"idempotent non-destructive", "PUT", &annotations{DestructiveHint: &no, IdempotentHint: &yes}},
-		{"destructive idempotent", "DELETE", &annotations{DestructiveHint: &yes, IdempotentHint: &yes}},
-		{"no hints", "POST", &annotations{}},
-		{"PATCH same as POST", "PATCH", &annotations{}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			require.Equal(t, tt.expected, annotationsForMethod(tt.method))
 		})
 	}
 }

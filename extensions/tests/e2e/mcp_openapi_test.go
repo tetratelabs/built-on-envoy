@@ -51,8 +51,8 @@ func TestMCPOpenAPI(t *testing.T) {
 			var result struct {
 				Tools []struct {
 					Name        string         `json:"name"`
+					Description string         `json:"description"`
 					InputSchema map[string]any `json:"inputSchema"`
-					Annotations map[string]any `json:"annotations"`
 				} `json:"tools"`
 			}
 			require.NoError(c, json.Unmarshal(res.Result, &result))
@@ -61,7 +61,8 @@ func TestMCPOpenAPI(t *testing.T) {
 				names = append(names, tool.Name)
 			}
 			require.Equal(c, []string{"delete_anything_items_itemId", "getAnything", "getStatus", "postAnything"}, names)
-			assert.Equal(c, map[string]any{"destructiveHint": true, "idempotentHint": true}, result.Tools[0].Annotations)
+			assert.Equal(c, "Echo request details for a resource", result.Tools[1].Description)
+			assert.Equal(c, "object", result.Tools[1].InputSchema["type"])
 			assert.Equal(c, []any{"id"}, result.Tools[1].InputSchema["required"])
 		})
 	})
@@ -157,15 +158,16 @@ func TestMCPOpenAPI(t *testing.T) {
 
 		tools, err := session.ListTools(t.Context(), nil)
 		require.NoError(t, err)
-		annotations := map[string]*mcp.ToolAnnotations{}
+		descriptions := map[string]string{}
 		for _, tool := range tools.Tools {
-			annotations[tool.Name] = tool.Annotations
+			descriptions[tool.Name] = tool.Description
 		}
-		require.Len(t, annotations, 4)
-		require.NotNil(t, annotations["getAnything"])
-		require.True(t, annotations["getAnything"].ReadOnlyHint)
-		require.NotNil(t, annotations["delete_anything_items_itemId"])
-		require.Equal(t, ptr(true), annotations["delete_anything_items_itemId"].DestructiveHint)
+		require.Equal(t, map[string]string{
+			"delete_anything_items_itemId": "Echo request details for a deleted item",
+			"getAnything":                  "Echo request details for a resource",
+			"getStatus":                    "Return the given status code with an empty body",
+			"postAnything":                 "Echo request details",
+		}, descriptions)
 
 		res, err := session.CallTool(t.Context(), &mcp.CallToolParams{
 			Name:      "getAnything",
@@ -289,5 +291,3 @@ func toolCallEcho(c *assert.CollectT, res mcpResponse) httpbinEcho {
 	require.NoError(c, json.Unmarshal([]byte(result.Content[0].Text), &echo), "text: %s", result.Content[0].Text)
 	return echo
 }
-
-func ptr[T any](v T) *T { return &v }

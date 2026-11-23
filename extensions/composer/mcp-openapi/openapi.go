@@ -9,13 +9,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"slices"
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi2"
 	"github.com/getkin/kin-openapi/openapi2conv"
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/goccy/go-yaml"
 )
 
 const (
@@ -24,25 +24,16 @@ const (
 )
 
 type tool struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description,omitempty"`
-	InputSchema map[string]any `json:"inputSchema"`
-	// TODO: add outputSchema when the bridge supports structured content. As of Envoy 1.40
+	Name        string
+	Description string
+	InputSchema map[string]any
+	// TODO: add an output schema when the bridge supports structured content. As of Envoy 1.40
 	// it always returns the upstream response as a single text content item:
 	// https://github.com/envoyproxy/envoy/blob/v1.40.0/source/extensions/filters/http/mcp_json_rest_bridge/mcp_json_rest_bridge_filter.cc#L125
-	Annotations *annotations `json:"annotations,omitempty"`
 
-	// Internal fields for bridge config generation (not serialized).
 	httpMethod   string
 	pathTemplate string
 	hasBody      bool
-}
-
-type annotations struct {
-	ReadOnlyHint    *bool `json:"readOnlyHint,omitempty"`
-	DestructiveHint *bool `json:"destructiveHint,omitempty"`
-	IdempotentHint  *bool `json:"idempotentHint,omitempty"`
-	OpenWorldHint   *bool `json:"openWorldHint,omitempty"`
 }
 
 // config is the JSON config passed to the filter via --config.
@@ -50,14 +41,25 @@ type config struct {
 	Spec       specSource `json:"spec"`
 	IncludeOps []string   `json:"include_ops,omitempty"`
 	ExcludeOps []string   `json:"exclude_ops,omitempty"`
+	// BridgeConfigPath is the path of the generated mcp_json_rest_bridge ECDS file. Relative
+	// paths are resolved against the Envoy working directory.
+	BridgeConfigPath string `json:"bridge_config_path,omitempty"`
 }
 
-// loadOpenAPISpec loads an OpenAPI spec from bytes.
+// loadOpenAPISpec loads an OpenAPI spec in JSON or YAML format.
 // OpenAPI 3.x are loaded directly, where Swagger 2.0 are up-converted
 func loadOpenAPISpec(data []byte) (*openapi3.T, error) {
+	// The Swagger 2.0 types only support JSON, so convert YAML specs before detecting the version.
+	jsonData := data
+	if !json.Valid(data) {
+		if converted, err := yaml.YAMLToJSON(data); err == nil {
+			jsonData = converted
+		}
+	}
+
 	// Detect Swagger 2.0 by trying to unmarshal into openapi2.T.
 	var v2 openapi2.T
-	if err := json.Unmarshal(data, &v2); err == nil && v2.Swagger == "2.0" {
+	if err := json.Unmarshal(jsonData, &v2); err == nil && v2.Swagger == "2.0" {
 		doc, err := openapi2conv.ToV3(&v2)
 		if err != nil {
 			return nil, fmt.Errorf("converting swagger 2.0 to openapi 3: %w", err)
@@ -188,7 +190,6 @@ func buildTool(name, method, fullPath string, op *openapi3.Operation, pathParams
 		Name:         name,
 		Description:  descriptionOf(op.Extensions, op.Description, op.Summary, name),
 		InputSchema:  schema,
-		Annotations:  annotationsForMethod(method),
 		httpMethod:   method,
 		pathTemplate: fullPath,
 		hasBody:      hasBody,
@@ -305,18 +306,4 @@ func cleanForMCPInputSchema(m map[string]any) map[string]any {
 	}
 
 	return m
-}
-
-func annotationsForMethod(method string) *annotations {
-	yes, no := true, false
-	switch method {
-	case http.MethodGet, http.MethodHead, http.MethodOptions:
-		return &annotations{ReadOnlyHint: &yes, DestructiveHint: &no, IdempotentHint: &yes}
-	case http.MethodPut:
-		return &annotations{DestructiveHint: &no, IdempotentHint: &yes}
-	case http.MethodDelete:
-		return &annotations{DestructiveHint: &yes, IdempotentHint: &yes}
-	default: // POST, PATCH
-		return &annotations{}
-	}
 }
