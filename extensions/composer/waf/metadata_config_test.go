@@ -143,14 +143,15 @@ func Test_MatchedRulesMetadata(t *testing.T) {
 		config    map[string]any
 		headers   map[string][]string
 		block     bool
-		blockRule int    // the blocking rule when block is set; 0 means 100001
+		blockRule int    // the blocking rule when block is set
 		want      string // the expected matched_rules value; "" expects no matched_rules key
 	}{
 		{
-			name:    "off by default",
-			config:  map[string]any{"directives": metadataTestDirectives},
-			headers: map[string][]string{"x-seen": {"a"}, "x-block-test": {"block-me"}},
-			block:   true,
+			name:      "off by default",
+			config:    map[string]any{"directives": metadataTestDirectives},
+			headers:   map[string][]string{"x-seen": {"a"}, "x-block-test": {"block-me"}},
+			block:     true,
+			blockRule: 100001,
 		},
 		{
 			name:    "a logged match that does not block",
@@ -159,11 +160,12 @@ func Test_MatchedRulesMetadata(t *testing.T) {
 			want:    "100002",
 		},
 		{
-			name:    "the logged matches behind a block, in order, without the nolog rule",
-			config:  enabled,
-			headers: map[string][]string{"x-seen": {"a"}, "x-block-test": {"block-me"}},
-			block:   true,
-			want:    "100002,100001",
+			name:      "the logged matches behind a block, in order, without the nolog rule",
+			config:    enabled,
+			headers:   map[string][]string{"x-seen": {"a"}, "x-block-test": {"block-me"}},
+			block:     true,
+			blockRule: 100001,
+			want:      "100002,100001",
 		},
 		{
 			name:    "no match sets no key",
@@ -204,11 +206,7 @@ func Test_MatchedRulesMetadata(t *testing.T) {
 			factory := newMetricsTestFactory(t, newMetricsTestConfigHandle(ctrl), tc.config)
 			h := newMetadataTestPluginHandle(ctrl)
 			if tc.block {
-				ruleID := tc.blockRule
-				if ruleID == 0 {
-					ruleID = 100001
-				}
-				expectBlock(h, ruleID)
+				expectBlock(h, tc.blockRule)
 			}
 			if tc.want != "" {
 				h.EXPECT().SetMetadata(defaultMetadataNamespace, metadataKeyMatchedRules, tc.want)
