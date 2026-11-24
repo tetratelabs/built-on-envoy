@@ -327,6 +327,25 @@ mod tests {
         }
     }
 
+    #[test]
+    fn sdk_entry_points() {
+        assert!(init());
+        assert!(new_header_formatter_config("header-case", b"not json").is_none());
+
+        let config = new_header_formatter_config(
+            "header-case",
+            br#"{"overrides":{"content-type":"Content-type"}}"#,
+        )
+        .unwrap();
+        let mut f = config.create().unwrap();
+        // The module never uses the handle, so a null Envoy pointer is fine here.
+        let handle = unsafe { HeaderFormatterHandle::new(std::ptr::null_mut()) };
+        f.process_key("X-Seen", &handle);
+        assert_eq!(f.format("x-seen", &handle), Some("X-Seen"));
+        assert_eq!(f.format("content-type", &handle), Some("Content-type"));
+        assert_eq!(f.format("x-new", &handle), Some("X-New"));
+    }
+
     fn schema() -> jsonschema::Validator {
         let schema: serde_json::Value =
             serde_json::from_str(include_str!("../config.schema.json")).unwrap();
@@ -346,6 +365,16 @@ mod tests {
             assert!(v.is_valid(&json), "{input}");
             assert!(Config::parse(input.as_bytes()).is_ok(), "{input}");
         }
+    }
+
+    // JSON Schema can't check that an override only changes casing, so this passes the schema and
+    // is rejected when Envoy loads the config.
+    #[test]
+    fn schema_cannot_check_override_casing() {
+        let input = r#"{"overrides":{"content-type":"Content-Length"}}"#;
+        let json: serde_json::Value = serde_json::from_str(input).unwrap();
+        assert!(schema().is_valid(&json));
+        assert!(Config::parse(input.as_bytes()).is_err());
     }
 
     #[test]

@@ -14,6 +14,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	bootstrapv3 "github.com/envoyproxy/go-control-plane/envoy/config/bootstrap/v3"
 	clusterv3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
@@ -1493,10 +1494,35 @@ func TestRenderConfigHeaderFormatter(t *testing.T) {
 		Extensions:       []*extensions.Manifest{formatter},
 		Configs:          []string{`{"mode":"preserve"}`},
 		ClustersInsecure: []string{"127.0.0.1:8080"},
-		ClustersJSON: []string{`{"name":"h2","type":"STATIC","typed_extension_protocol_options":{` +
-			`"envoy.extensions.upstreams.http.v3.HttpProtocolOptions":{` +
-			`"@type":"type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions",` +
-			`"explicit_http_config":{"http2_protocol_options":{}}}}}`},
+		ClustersJSON: []string{
+			`{"name":"h2","type":"STATIC","typed_extension_protocol_options":{` +
+				`"envoy.extensions.upstreams.http.v3.HttpProtocolOptions":{` +
+				`"@type":"type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions",` +
+				`"explicit_http_config":{"http2_protocol_options":{}}}}}`,
+			// Older cluster-level fields. Envoy ignores them once typed options exist, so these
+			// clusters must be left alone or they'd silently switch protocol or lose settings.
+			`{"name":"legacy-h2","type":"STATIC","http2_protocol_options":{}}`,
+			`{"name":"legacy-downstream","type":"STATIC","protocol_selection":"USE_DOWNSTREAM_PROTOCOL"}`,
+			`{"name":"legacy-common","type":"STATIC","common_http_protocol_options":{"idle_timeout":"30s"}}`,
+			// Typed HTTP/1 settings get the formatter merged in, keeping what they already set.
+			`{"name":"h1-idle","type":"STATIC","typed_extension_protocol_options":{` +
+				`"envoy.extensions.upstreams.http.v3.HttpProtocolOptions":{` +
+				`"@type":"type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions",` +
+				`"common_http_protocol_options":{"idle_timeout":"30s"},"explicit_http_config":{"http_protocol_options":{"accept_http_10":true}}}}}`,
+			`{"name":"auto","type":"STATIC","typed_extension_protocol_options":{` +
+				`"envoy.extensions.upstreams.http.v3.HttpProtocolOptions":{` +
+				`"@type":"type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions",` +
+				`"auto_config":{}}}}`,
+			`{"name":"downstream","type":"STATIC","typed_extension_protocol_options":{` +
+				`"envoy.extensions.upstreams.http.v3.HttpProtocolOptions":{` +
+				`"@type":"type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions",` +
+				`"use_downstream_protocol_config":{}}}}`,
+			// A cluster that already picks a header format is left as is.
+			`{"name":"own-format","type":"STATIC","typed_extension_protocol_options":{` +
+				`"envoy.extensions.upstreams.http.v3.HttpProtocolOptions":{` +
+				`"@type":"type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions",` +
+				`"explicit_http_config":{"http_protocol_options":{"header_key_format":{"proper_case_words":{}}}}}}}`,
+		},
 	}
 
 	gen, err := generateConfig(params)
@@ -1522,20 +1548,32 @@ func TestRenderConfigHeaderFormatter(t *testing.T) {
 	checkProtos(t, []*corev3.TypedExtensionConfig{gen.HeaderFormatter},
 		[]*corev3.TypedExtensionConfig{hcm.GetHttpProtocolOptions().GetHeaderKeyFormat().GetStatefulFormatter()})
 
-	// Each HTTP/1 cluster formats responses written back to the client; the HTTP/2 one is untouched.
+	// Each HTTP/1 cluster formats responses written back to the client. HTTP/2-only clusters, clusters
+	// using the older fields, and clusters with their own header format are left alone.
 	clusters := bootstrap.GetStaticResources().GetClusters()
-	require.Len(t, clusters, 3)
+	require.Len(t, clusters, 10)
 	for _, c := range clusters {
-		var opts httpv3.HttpProtocolOptions
-		require.NoError(t, c.GetTypedExtensionProtocolOptions()[httpProtocolOptionsKey].UnmarshalTo(&opts), c.GetName())
-		explicit := opts.GetExplicitHttpConfig()
-		if c.GetName() == "h2" {
-			require.NotNil(t, explicit.GetHttp2ProtocolOptions())
-			require.Nil(t, explicit.GetHttpProtocolOptions())
+		name := c.GetName()
+		if strings.HasPrefix(name, "legacy-") {
+			require.Empty(t, c.GetTypedExtensionProtocolOptions(), name)
 			continue
 		}
-		checkProtos(t, []*corev3.TypedExtensionConfig{gen.HeaderFormatter},
-			[]*corev3.TypedExtensionConfig{explicit.GetHttpProtocolOptions().GetHeaderKeyFormat().GetStatefulFormatter()})
+		opts := &httpv3.HttpProtocolOptions{}
+		require.NoError(t, c.GetTypedExtensionProtocolOptions()[httpProtocolOptionsKey].UnmarshalTo(opts), name)
+		h1 := http1Options(opts)
+		switch name {
+		case "h2":
+			require.Nil(t, h1)
+		case "own-format":
+			require.NotNil(t, h1.GetHeaderKeyFormat().GetProperCaseWords(), name)
+		default:
+			checkProtos(t, []*corev3.TypedExtensionConfig{gen.HeaderFormatter},
+				[]*corev3.TypedExtensionConfig{h1.GetHeaderKeyFormat().GetStatefulFormatter()})
+		}
+		if name == "h1-idle" {
+			require.True(t, h1.GetAcceptHttp_10())
+			require.Equal(t, 30*time.Second, opts.GetCommonHttpProtocolOptions().GetIdleTimeout().AsDuration())
+		}
 	}
 
 	// genconfig prints the formatter too.

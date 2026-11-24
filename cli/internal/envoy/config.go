@@ -701,36 +701,83 @@ func headerKeyFormat(f *corev3.TypedExtensionConfig) *corev3.Http1ProtocolOption
 	}
 }
 
-// setUpstreamHeaderFormatter sets the header formatter on each cluster, so responses written back to
-// the client are formatted too. The HCM copy only covers requests sent upstream. Clusters that
-// already set HTTP protocol options are left alone, since they may not speak HTTP/1.
+// setUpstreamHeaderFormatter sets the header formatter on each HTTP/1 cluster, so responses written
+// back to the client are formatted too. The HCM copy only covers requests sent upstream.
 func setUpstreamHeaderFormatter(clusters []*clusterv3.Cluster, f *corev3.TypedExtensionConfig) error {
 	if f == nil {
 		return nil
 	}
-	opts := &httpv3.HttpProtocolOptions{
-		UpstreamProtocolOptions: &httpv3.HttpProtocolOptions_ExplicitHttpConfig_{
-			ExplicitHttpConfig: &httpv3.HttpProtocolOptions_ExplicitHttpConfig{
-				ProtocolConfig: &httpv3.HttpProtocolOptions_ExplicitHttpConfig_HttpProtocolOptions{
-					HttpProtocolOptions: &corev3.Http1ProtocolOptions{HeaderKeyFormat: headerKeyFormat(f)},
-				},
-			},
-		},
-	}
-	optsAny, err := anypb.New(opts)
-	if err != nil {
-		return fmt.Errorf("failed to marshal upstream HTTP protocol options to Any: %w", err)
-	}
 	for _, c := range clusters {
-		if _, ok := c.TypedExtensionProtocolOptions[httpProtocolOptionsKey]; ok {
+		optsAny, ok := c.GetTypedExtensionProtocolOptions()[httpProtocolOptionsKey]
+		if !ok {
+			if hasLegacyHTTPProtocolSettings(c) {
+				continue
+			}
+			optsAny = nil
+		}
+		opts := &httpv3.HttpProtocolOptions{}
+		if optsAny != nil {
+			if err := optsAny.UnmarshalTo(opts); err != nil {
+				return fmt.Errorf("cluster %q: failed to read HTTP protocol options: %w", c.GetName(), err)
+			}
+		} else {
+			opts.UpstreamProtocolOptions = &httpv3.HttpProtocolOptions_ExplicitHttpConfig_{
+				ExplicitHttpConfig: &httpv3.HttpProtocolOptions_ExplicitHttpConfig{
+					ProtocolConfig: &httpv3.HttpProtocolOptions_ExplicitHttpConfig_HttpProtocolOptions{
+						HttpProtocolOptions: &corev3.Http1ProtocolOptions{},
+					},
+				},
+			}
+		}
+		h1 := http1Options(opts)
+		// Skip HTTP/2 or HTTP/3 only clusters, and clusters that already pick a header format.
+		if h1 == nil || h1.GetHeaderKeyFormat() != nil {
 			continue
+		}
+		h1.HeaderKeyFormat = headerKeyFormat(f)
+		updated, err := anypb.New(opts)
+		if err != nil {
+			return fmt.Errorf("cluster %q: failed to marshal HTTP protocol options: %w", c.GetName(), err)
 		}
 		if c.TypedExtensionProtocolOptions == nil {
 			c.TypedExtensionProtocolOptions = map[string]*anypb.Any{}
 		}
-		c.TypedExtensionProtocolOptions[httpProtocolOptionsKey] = optsAny
+		c.TypedExtensionProtocolOptions[httpProtocolOptionsKey] = updated
 	}
 	return nil
+}
+
+// http1Options returns the HTTP/1 settings Envoy uses when it talks HTTP/1 to the upstream, creating
+// them if needed. It returns nil when the options pin HTTP/2 or HTTP/3.
+func http1Options(opts *httpv3.HttpProtocolOptions) *corev3.Http1ProtocolOptions {
+	switch p := opts.GetUpstreamProtocolOptions().(type) {
+	case *httpv3.HttpProtocolOptions_ExplicitHttpConfig_:
+		return p.ExplicitHttpConfig.GetHttpProtocolOptions()
+	case *httpv3.HttpProtocolOptions_UseDownstreamProtocolConfig:
+		if p.UseDownstreamProtocolConfig.HttpProtocolOptions == nil {
+			p.UseDownstreamProtocolConfig.HttpProtocolOptions = &corev3.Http1ProtocolOptions{}
+		}
+		return p.UseDownstreamProtocolConfig.HttpProtocolOptions
+	case *httpv3.HttpProtocolOptions_AutoConfig:
+		if p.AutoConfig.HttpProtocolOptions == nil {
+			p.AutoConfig.HttpProtocolOptions = &corev3.Http1ProtocolOptions{}
+		}
+		return p.AutoConfig.HttpProtocolOptions
+	default:
+		return nil
+	}
+}
+
+// hasLegacyHTTPProtocolSettings reports whether the cluster sets its HTTP settings with the older
+// cluster-level fields. Envoy ignores those once typed options exist, so adding ours would silently
+// drop them (an HTTP/2 cluster would fall back to HTTP/1). Such clusters are left alone.
+func hasLegacyHTTPProtocolSettings(c *clusterv3.Cluster) bool {
+	//nolint:staticcheck // Reading deprecated fields on purpose to avoid overriding them.
+	return c.GetHttp2ProtocolOptions() != nil ||
+		c.GetHttpProtocolOptions() != nil ||
+		c.GetCommonHttpProtocolOptions() != nil ||
+		c.GetUpstreamHttpProtocolOptions() != nil ||
+		c.GetProtocolSelection() != clusterv3.Cluster_USE_CONFIGURED_PROTOCOL
 }
 
 // prependCluster prepends c to clusters if c is non-nil, otherwise returns clusters unchanged.
