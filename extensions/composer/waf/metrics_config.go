@@ -9,6 +9,9 @@ import (
 	"github.com/envoyproxy/envoy/source/extensions/dynamic_modules/sdk/go/shared"
 )
 
+// defaultRuleMatches is the default for metrics.rule_matches.
+const defaultRuleMatches = false
+
 // labelSource is where the value of the authority tag comes from.
 type labelSource int
 
@@ -83,10 +86,33 @@ func (a authorityLabel) value(h shared.HttpFilterHandle, requestAuthority string
 	return unresolvedLabel
 }
 
+// ruleMatchedAuthority is the authority tag waf_rule_matched is defined and recorded with.
+// waf_tx_blocked follows metrics.authority_label, including the default, which is the client-chosen
+// :authority. This counter does not: it has one series per matched rule, so that tag is unbounded.
+// It carries an authority tag only for route_name and virtual_host_name, which come from the
+// configuration. authority (the default) and none define it with phase and rule_id only. With
+// route_name or virtual_host_name, the number of series is the matched rule ids times the
+// configured routes or virtual hosts.
+func (a authorityLabel) ruleMatchedAuthority() authorityLabel {
+	if a.disabled { // none: no authority tag
+		return authorityLabel{disabled: true}
+	}
+	if a.source == labelSourceRouteName {
+		return authorityLabel{source: labelSourceRouteName}
+	}
+	if a.source == labelSourceVirtualHostName {
+		return authorityLabel{source: labelSourceVirtualHostName}
+	}
+	// authority, the default: no authority tag
+	return authorityLabel{disabled: true, source: labelSourceAuthority}
+}
+
 // metricsConfig holds the metrics settings of a filter configuration. Its zero value is the default.
 //
 // Metrics are defined once per filter configuration, so these settings are read from the filter
 // configuration only: per-route configurations do not override them. It is parsed by parseConfig.
 type metricsConfig struct {
 	authority authorityLabel
+	// ruleMatches enables the waf_rule_matched counter.
+	ruleMatches bool
 }

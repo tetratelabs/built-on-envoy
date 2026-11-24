@@ -79,13 +79,14 @@ func Test_ParseConfig(t *testing.T) {
 			"directives":            []string{"Include @coraza.conf"},
 			"mode":                  "FULL",
 			"request_uri_path_only": true,
-			"metrics":               map[string]any{"authority_label": "none"},
+			"metrics":               map[string]any{"authority_label": "none", "rule_matches": true},
 			"metadata":              map[string]any{"matched_rules": true},
 		}), logger.GetLogger())
 		require.NoError(t, err)
 		require.Equal(t, modeFull, cfg.mode)
 		require.True(t, cfg.requestURIPathOnly)
 		require.True(t, cfg.metrics.authority.disabled)
+		require.True(t, cfg.metrics.ruleMatches)
 		require.True(t, cfg.metadata.matchedRules)
 	})
 

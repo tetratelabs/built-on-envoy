@@ -72,6 +72,9 @@ func TestConfigSchema(t *testing.T) {
 			`{"authority_label": "route_name"}`,
 			`{"authority_label": "virtual_host_name"}`,
 			`{"authority_label": "none"}`,
+			`{"authority_label": "none", "rule_matches": true}`,
+			`{"rule_matches": true}`,
+			`{"rule_matches": false}`,
 		} {
 			internaltesting.AssertSchemaValid(t, "config.schema.json", `{
 				"directives": ["SecRuleEngine On"],
@@ -87,6 +90,10 @@ func TestConfigSchema(t *testing.T) {
 			`{"authority_lable": false}`,
 			`{"authority_literal": "shop"}`,
 			`{"label_source": "route_name"}`,
+			`{"rule_matches": "yes"}`,
+			`{"rule_matches": 1}`,
+			`{"rule_match": true}`,
+			`{"authority_label": "none", "rule_matches": "yes"}`,
 		} {
 			internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{
 				"directives": ["SecRuleEngine On"],
