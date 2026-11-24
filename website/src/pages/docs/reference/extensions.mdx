@@ -1244,6 +1244,49 @@ Whether to append the composer version to the tag of "url" before fetching the p
 
 
 
+<a id="header-case"></a>
+## Header Case Configuration
+
+Controls the casing of HTTP/1 header names that Envoy writes on the wire. Overrides win over the mode.
+
+### fallback
+
+Casing for header names the peer never sent, such as headers added by Envoy. Only valid when mode is preserve.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+| **Allowed values** | `proper_case`, `lowercase` |
+
+[↑ Top](#) | [↑ Header Case Configuration](#header-case) {/* if .SubProperties */}
+
+### mode
+
+preserve keeps the casing the peer sent; proper_case uppercases the first letter of each word (X-Foo-Bar); lowercase is Envoy's default.
+
+| | |
+|---|---|
+| **Type** | `string` |
+| **Required** | No |
+| **Allowed values** | `preserve`, `proper_case`, `lowercase` |
+
+[↑ Top](#) | [↑ Header Case Configuration](#header-case) {/* if .SubProperties */}
+
+### overrides
+
+Exact spellings by header name, e.g. {"content-type": "Content-type"}. Names are matched case-insensitively and a spelling may only change the casing.
+
+| | |
+|---|---|
+| **Type** | `object` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Header Case Configuration](#header-case) {/* if .SubProperties */} {/* range .Properties */} {/* if .CustomTypes */}
+
+
+
+
 <a id="ip-restriction"></a>
 ## IP Restriction Configuration
 

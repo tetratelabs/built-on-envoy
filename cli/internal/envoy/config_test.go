@@ -23,6 +23,7 @@ import (
 	dymhttpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/dynamic_modules/v3"
 	routerv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/router/v3"
 	hcmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
+	httpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/upstreams/http/v3"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -1477,6 +1478,89 @@ func TestRenderConfigListenerAddress(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRenderConfigHeaderFormatter(t *testing.T) {
+	formatter := &extensions.Manifest{
+		Name:        "header-case",
+		Type:        extensions.TypeRust,
+		FilterTypes: []extensions.FilterType{extensions.FilterTypeHeaderFormatter},
+	}
+	params := &ConfigGenerationParams{
+		Logger:           internaltesting.NewTLogger(t),
+		AdminAddress:     "127.0.0.1:9901",
+		ListenerPort:     10000,
+		Extensions:       []*extensions.Manifest{formatter},
+		Configs:          []string{`{"mode":"preserve"}`},
+		ClustersInsecure: []string{"127.0.0.1:8080"},
+		ClustersJSON: []string{`{"name":"h2","type":"STATIC","typed_extension_protocol_options":{` +
+			`"envoy.extensions.upstreams.http.v3.HttpProtocolOptions":{` +
+			`"@type":"type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions",` +
+			`"explicit_http_config":{"http2_protocol_options":{}}}}}`},
+	}
+
+	gen, err := generateConfig(params)
+	require.NoError(t, err)
+	require.Empty(t, gen.HTTPFilters)
+	require.NotNil(t, gen.HeaderFormatter)
+	require.Equal(t, "header-case", gen.HeaderFormatter.GetName())
+
+	out, err := RenderConfig(params, FullConfigRenderer)
+	require.NoError(t, err)
+	jsonBytes, err := yaml.YAMLToJSON([]byte(out))
+	require.NoError(t, err)
+	var bootstrap bootstrapv3.Bootstrap
+	require.NoError(t, protojson.Unmarshal(jsonBytes, &bootstrap))
+
+	// The HCM formats requests sent upstream.
+	listeners := bootstrap.GetStaticResources().GetListeners()
+	require.Len(t, listeners, 1)
+	filters := listeners[0].GetFilterChains()[0].GetFilters()
+	var hcm hcmv3.HttpConnectionManager
+	require.NoError(t, filters[len(filters)-1].GetTypedConfig().UnmarshalTo(&hcm))
+	require.True(t, hcm.GetHttpProtocolOptions().GetAcceptHttp_10())
+	checkProtos(t, []*corev3.TypedExtensionConfig{gen.HeaderFormatter},
+		[]*corev3.TypedExtensionConfig{hcm.GetHttpProtocolOptions().GetHeaderKeyFormat().GetStatefulFormatter()})
+
+	// Each HTTP/1 cluster formats responses written back to the client; the HTTP/2 one is untouched.
+	clusters := bootstrap.GetStaticResources().GetClusters()
+	require.Len(t, clusters, 3)
+	for _, c := range clusters {
+		var opts httpv3.HttpProtocolOptions
+		require.NoError(t, c.GetTypedExtensionProtocolOptions()[httpProtocolOptionsKey].UnmarshalTo(&opts), c.GetName())
+		explicit := opts.GetExplicitHttpConfig()
+		if c.GetName() == "h2" {
+			require.NotNil(t, explicit.GetHttp2ProtocolOptions())
+			require.Nil(t, explicit.GetHttpProtocolOptions())
+			continue
+		}
+		checkProtos(t, []*corev3.TypedExtensionConfig{gen.HeaderFormatter},
+			[]*corev3.TypedExtensionConfig{explicit.GetHttpProtocolOptions().GetHeaderKeyFormat().GetStatefulFormatter()})
+	}
+
+	// genconfig prints the formatter too.
+	minimal, err := RenderConfig(params, MinimalConfigRenderer)
+	require.NoError(t, err)
+	require.Contains(t, minimal, "header_formatter:")
+	require.Contains(t, minimal, "DynamicModuleHeaderFormatter")
+}
+
+func TestRenderConfigRejectsSecondHeaderFormatter(t *testing.T) {
+	newFormatter := func(name string) *extensions.Manifest {
+		return &extensions.Manifest{
+			Name:        name,
+			Type:        extensions.TypeRust,
+			FilterTypes: []extensions.FilterType{extensions.FilterTypeHeaderFormatter},
+		}
+	}
+	params := &ConfigGenerationParams{
+		Logger:       internaltesting.NewTLogger(t),
+		AdminAddress: "127.0.0.1:9901",
+		ListenerPort: 10000,
+		Extensions:   []*extensions.Manifest{newFormatter("a"), newFormatter("b")},
+	}
+	_, err := generateConfig(params)
+	require.EqualError(t, err, `extension "b": only one header formatter can be enabled, "a" is already set`)
 }
 
 // requireEqualError compares error strings while normalizing protobuf NBSP output.

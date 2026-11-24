@@ -100,7 +100,8 @@
           "http",
           "network",
           "listener",
-          "udp_listener"
+          "udp_listener",
+          "header_formatter"
         ]
       }
     },

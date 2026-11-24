@@ -112,6 +112,7 @@ It defaults to `http` if not specified.
 | `network` | TCP/TLS (L4) | `declare_network_filter_init_functions!` |Process raw byte streams before HTTP decoding; useful for custom protocols or connection-level access policies |
 | `listener` | Listener (pre-routing) | `declare_listener_filter_init_functions!` | Run logic before a TCP connection is routed to a filter chain; useful for connection acceptance policies and pre-routing inspection |
 | `udp_listener` | UDP Listener | `declare_udp_listener_filter_init_functions!` | Process UDP datagrams at the listener level |
+| `header_formatter` | HTTP/1 codec | `declare_all_init_functions!` with a `header_formatter:` arm | Decide the casing of HTTP/1 header names written on the wire. Needs Envoy 1.40+ |
 
 <Callout type="tip">
 If you need both HTTP and network filters in a single module, use `declare_all_init_functions!` instead.

@@ -25,6 +25,7 @@ import (
 	dymnetv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/dynamic_modules/v3"
 	hcmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
 	dymudpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/udp/dynamic_modules/v3"
+	dymhfv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/http/header_formatters/dynamic_modules/v3"
 	httpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/upstreams/http/v3"
 	wasmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/wasm/v3"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -65,9 +66,15 @@ type (
 		// (i.e. one whose socket address protocol is UDP), kept separate from ListenerFilters
 		// (TCP listener filters) so the config renderer can build the right kind of listener.
 		UDPListenerFilters []*listenerv3.ListenerFilter
+		// HeaderFormatters are HTTP/1 stateful header formatters. They are not filters: the config
+		// renderer sets them on the HTTP connection manager and on the upstream clusters.
+		HeaderFormatters []*corev3.TypedExtensionConfig
 		// TODO(huabing): may need to add more resources
 	}
 )
+
+// httpProtocolOptionsKey is the cluster typed_extension_protocol_options key for upstream HTTP options.
+const httpProtocolOptionsKey = "envoy.extensions.upstreams.http.v3.HttpProtocolOptions"
 
 var (
 	// ErrUnsupportedExtensionType is returned when an extension type is not supported.
@@ -256,6 +263,7 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 	var networkFilters []*listenerv3.Filter
 	var listenerFilters []*listenerv3.ListenerFilter
 	var udpListenerFilters []*listenerv3.ListenerFilter
+	var headerFormatters []*corev3.TypedExtensionConfig
 
 	for _, filterType := range manifest.FilterTypes {
 		switch filterType {
@@ -301,6 +309,20 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 				Name:       manifest.Name,
 				ConfigType: &listenerv3.ListenerFilter_TypedConfig{TypedConfig: dynamicModuleAny},
 			})
+		case extensions.FilterTypeHeaderFormatter:
+			protoConfig := &dymhfv3.DynamicModuleHeaderFormatter{
+				DynamicModuleConfig:   moduleConfig,
+				HeaderFormatterName:   manifest.Name,
+				HeaderFormatterConfig: anyConfig,
+			}
+			dynamicModuleAny, err := anypb.New(protoConfig)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal dynamic module header formatter to Any: %w", err)
+			}
+			headerFormatters = append(headerFormatters, &corev3.TypedExtensionConfig{
+				Name:        manifest.Name,
+				TypedConfig: dynamicModuleAny,
+			})
 		default: // FilterTypeHTTP or empty
 			protoConfig := &dymhttpv3.DynamicModuleFilter{
 				DynamicModuleConfig: moduleConfig,
@@ -323,6 +345,7 @@ func (d DynamicModuleFilterGenerator) GenerateFilterConfig(manifest *extensions.
 		NetworkFilters:     networkFilters,
 		ListenerFilters:    listenerFilters,
 		UDPListenerFilters: udpListenerFilters,
+		HeaderFormatters:   headerFormatters,
 	}, nil
 }
 
@@ -463,7 +486,7 @@ func (e ExtProcFilterGenerator) GenerateFilterConfig(manifest *extensions.Manife
 			Type: clusterv3.Cluster_STATIC,
 		},
 		TypedExtensionProtocolOptions: map[string]*anypb.Any{
-			"envoy.extensions.upstreams.http.v3.HttpProtocolOptions": httpProtocolOptionsAny,
+			httpProtocolOptionsKey: httpProtocolOptionsAny,
 		},
 		LoadAssignment: &endpointv3.ClusterLoadAssignment{
 			ClusterName: clusterName,

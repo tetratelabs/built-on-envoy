@@ -28,6 +28,7 @@ import (
 	routerv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/router/v3"
 	hcmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
 	tlsv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
+	httpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/upstreams/http/v3"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -98,6 +99,8 @@ type GeneratedConfigResources struct {
 	// UDPListenerFilters are the generated UDP listener filters; they must be hosted on a listener
 	// whose socket address protocol is UDP, so they are tracked separately from ListenerFilters.
 	UDPListenerFilters []*listenerv3.ListenerFilter
+	// HeaderFormatter is the optional HTTP/1 stateful header formatter. Envoy takes at most one.
+	HeaderFormatter *corev3.TypedExtensionConfig
 	// Clusters are the generated clusters to be included in the Envoy configuration.
 	Clusters []*clusterv3.Cluster
 }
@@ -166,7 +169,7 @@ func FullConfigRenderer(params *ConfigGenerationParams, gen *GeneratedConfigReso
 		}
 	}
 
-	cfg, err := buildFullConfig(params.AdminAddress, cmp.Or(params.ListenerAddress, "0.0.0.0"), params.ListenerPort, clusterName, hostRewrite, newCluster, gen.HTTPFilters, gen.NetworkFilters, gen.ListenerFilters, gen.UDPListenerFilters, gen.Clusters, listenerTLS)
+	cfg, err := buildFullConfig(params.AdminAddress, cmp.Or(params.ListenerAddress, "0.0.0.0"), params.ListenerPort, clusterName, hostRewrite, newCluster, gen.HTTPFilters, gen.NetworkFilters, gen.ListenerFilters, gen.UDPListenerFilters, gen.HeaderFormatter, gen.Clusters, listenerTLS)
 	if err != nil {
 		return "", fmt.Errorf("failed to build config: %w", err)
 	}
@@ -197,6 +200,13 @@ func MinimalConfigRenderer(params *ConfigGenerationParams, gen *GeneratedConfigR
 	if err != nil {
 		return "", fmt.Errorf("failed to serialize UDP listener filter configs: %w", err)
 	}
+	var headerFormatterConfigs []any
+	if gen.HeaderFormatter != nil {
+		headerFormatterConfigs, err = protoListToAny([]*corev3.TypedExtensionConfig{gen.HeaderFormatter})
+		if err != nil {
+			return "", fmt.Errorf("failed to serialize header formatter config: %w", err)
+		}
+	}
 	clusterConfigs, err := protoListToAny(gen.Clusters)
 	if err != nil {
 		return "", fmt.Errorf("failed to serialize cluster configs: %w", err)
@@ -214,6 +224,9 @@ func MinimalConfigRenderer(params *ConfigGenerationParams, gen *GeneratedConfigR
 	}
 	if len(udpListenerFilterConfigs) > 0 {
 		payload["udp_listener_filters"] = udpListenerFilterConfigs
+	}
+	if len(headerFormatterConfigs) > 0 {
+		payload["header_formatter"] = headerFormatterConfigs[0]
 	}
 	if len(clusterConfigs) > 0 {
 		payload["clusters"] = clusterConfigs
@@ -233,6 +246,7 @@ func generateConfig(params *ConfigGenerationParams) (GeneratedConfigResources, e
 	listenerFilters := make([]*listenerv3.ListenerFilter, 0)
 	udpListenerFilters := make([]*listenerv3.ListenerFilter, 0)
 	clusters := make([]*clusterv3.Cluster, 0)
+	var headerFormatter *corev3.TypedExtensionConfig
 	for i, ext := range params.Extensions {
 		var config string
 		if i < len(params.Configs) {
@@ -301,6 +315,13 @@ func generateConfig(params *ConfigGenerationParams) (GeneratedConfigResources, e
 		listenerFilters = append(listenerFilters, resources.ListenerFilters...)
 		udpListenerFilters = append(udpListenerFilters, resources.UDPListenerFilters...)
 		clusters = append(clusters, resources.Clusters...)
+		for _, f := range resources.HeaderFormatters {
+			if headerFormatter != nil {
+				return GeneratedConfigResources{}, fmt.Errorf("extension %q: only one header formatter can be enabled, %q is already set",
+					ext.Name, headerFormatter.Name)
+			}
+			headerFormatter = f
+		}
 	}
 
 	for i, clusterSpec := range params.Clusters {
@@ -332,6 +353,7 @@ func generateConfig(params *ConfigGenerationParams) (GeneratedConfigResources, e
 		NetworkFilters:     networkFilters,
 		ListenerFilters:    listenerFilters,
 		UDPListenerFilters: udpListenerFilters,
+		HeaderFormatter:    headerFormatter,
 		Clusters:           clusters,
 	}, nil
 }
@@ -485,7 +507,7 @@ func parseCluster(shortSpec string, tls bool) (*clusterv3.Cluster, error) {
 // and allows us to use the proto marshalling functions. Otherwise, we would have to create a wrapper
 // proto on our own, or marshal the config manually.
 // TODO(nacx): Is there a wrapper for `admin` and `static_resources` we could use other than Bootstrap?
-func buildFullConfig(adminAddress, listenerAddress string, listenerPort uint32, testUpstreamClusterName, testUpstreamHostRewrite string, newCluster *clusterv3.Cluster, httpFilters []*hcmv3.HttpFilter, networkFilters []*listenerv3.Filter, listenerFilters []*listenerv3.ListenerFilter, udpListenerFilters []*listenerv3.ListenerFilter, clusters []*clusterv3.Cluster, listenerTLS *corev3.TransportSocket) (*bootstrapv3.Bootstrap, error) {
+func buildFullConfig(adminAddress, listenerAddress string, listenerPort uint32, testUpstreamClusterName, testUpstreamHostRewrite string, newCluster *clusterv3.Cluster, httpFilters []*hcmv3.HttpFilter, networkFilters []*listenerv3.Filter, listenerFilters []*listenerv3.ListenerFilter, udpListenerFilters []*listenerv3.ListenerFilter, headerFormatter *corev3.TypedExtensionConfig, clusters []*clusterv3.Cluster, listenerTLS *corev3.TransportSocket) (*bootstrapv3.Bootstrap, error) {
 	adminHost, adminPortStr, err := net.SplitHostPort(adminAddress)
 	if err != nil {
 		return nil, fmt.Errorf("invalid admin address %q: %w", adminAddress, err)
@@ -495,7 +517,7 @@ func buildFullConfig(adminAddress, listenerAddress string, listenerPort uint32, 
 		return nil, fmt.Errorf("invalid admin port in %q: %w", adminAddress, err)
 	}
 
-	hcm, err := buildHTTPConnectionManager(httpFilters, testUpstreamClusterName, testUpstreamHostRewrite)
+	hcm, err := buildHTTPConnectionManager(httpFilters, headerFormatter, testUpstreamClusterName, testUpstreamHostRewrite)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build HTTP connection manager: %w", err)
 	}
@@ -570,6 +592,11 @@ func buildFullConfig(adminAddress, listenerAddress string, listenerPort uint32, 
 		},
 	}
 
+	allClusters := prependCluster(newCluster, clusters)
+	if err := setUpstreamHeaderFormatter(allClusters, headerFormatter); err != nil {
+		return nil, err
+	}
+
 	return &bootstrapv3.Bootstrap{
 		Node: &corev3.Node{
 			Id:      "boe",
@@ -578,7 +605,7 @@ func buildFullConfig(adminAddress, listenerAddress string, listenerPort uint32, 
 		Admin: admin,
 		StaticResources: &bootstrapv3.Bootstrap_StaticResources{
 			Listeners: listeners,
-			Clusters:  prependCluster(newCluster, clusters),
+			Clusters:  allClusters,
 		},
 	}, nil
 }
@@ -586,7 +613,7 @@ func buildFullConfig(adminAddress, listenerAddress string, listenerPort uint32, 
 // buildHTTPConnectionManager creates the HTTP connection manager configuration.
 // testUpstreamClusterName is the cluster to route all traffic to.
 // testUpstreamHostRewrite, if non-empty, sets the host header rewrite for the route.
-func buildHTTPConnectionManager(filters []*hcmv3.HttpFilter, testUpstreamClusterName, testUpstreamHostRewrite string) (*hcmv3.HttpConnectionManager, error) {
+func buildHTTPConnectionManager(filters []*hcmv3.HttpFilter, headerFormatter *corev3.TypedExtensionConfig, testUpstreamClusterName, testUpstreamHostRewrite string) (*hcmv3.HttpConnectionManager, error) {
 	// Build the router filter
 	router := &routerv3.Router{}
 	routerAny, err := anypb.New(router)
@@ -620,7 +647,8 @@ func buildHTTPConnectionManager(filters []*hcmv3.HttpFilter, testUpstreamCluster
 			},
 		},
 		HttpProtocolOptions: &corev3.Http1ProtocolOptions{
-			AcceptHttp_10: true,
+			AcceptHttp_10:   true,
+			HeaderKeyFormat: headerKeyFormat(headerFormatter),
 		},
 		HttpFilters: httpFilters,
 		RouteSpecifier: &hcmv3.HttpConnectionManager_RouteConfig{
@@ -661,6 +689,48 @@ func buildRouteAction(clusterName, hostRewrite string) *routev3.Route_Route {
 		}
 	}
 	return &routev3.Route_Route{Route: routeAction}
+}
+
+// headerKeyFormat wraps the header formatter for Http1ProtocolOptions, or returns nil if there is none.
+func headerKeyFormat(f *corev3.TypedExtensionConfig) *corev3.Http1ProtocolOptions_HeaderKeyFormat {
+	if f == nil {
+		return nil
+	}
+	return &corev3.Http1ProtocolOptions_HeaderKeyFormat{
+		HeaderFormat: &corev3.Http1ProtocolOptions_HeaderKeyFormat_StatefulFormatter{StatefulFormatter: f},
+	}
+}
+
+// setUpstreamHeaderFormatter sets the header formatter on each cluster, so responses written back to
+// the client are formatted too. The HCM copy only covers requests sent upstream. Clusters that
+// already set HTTP protocol options are left alone, since they may not speak HTTP/1.
+func setUpstreamHeaderFormatter(clusters []*clusterv3.Cluster, f *corev3.TypedExtensionConfig) error {
+	if f == nil {
+		return nil
+	}
+	opts := &httpv3.HttpProtocolOptions{
+		UpstreamProtocolOptions: &httpv3.HttpProtocolOptions_ExplicitHttpConfig_{
+			ExplicitHttpConfig: &httpv3.HttpProtocolOptions_ExplicitHttpConfig{
+				ProtocolConfig: &httpv3.HttpProtocolOptions_ExplicitHttpConfig_HttpProtocolOptions{
+					HttpProtocolOptions: &corev3.Http1ProtocolOptions{HeaderKeyFormat: headerKeyFormat(f)},
+				},
+			},
+		},
+	}
+	optsAny, err := anypb.New(opts)
+	if err != nil {
+		return fmt.Errorf("failed to marshal upstream HTTP protocol options to Any: %w", err)
+	}
+	for _, c := range clusters {
+		if _, ok := c.TypedExtensionProtocolOptions[httpProtocolOptionsKey]; ok {
+			continue
+		}
+		if c.TypedExtensionProtocolOptions == nil {
+			c.TypedExtensionProtocolOptions = map[string]*anypb.Any{}
+		}
+		c.TypedExtensionProtocolOptions[httpProtocolOptionsKey] = optsAny
+	}
+	return nil
 }
 
 // prependCluster prepends c to clusters if c is non-nil, otherwise returns clusters unchanged.
