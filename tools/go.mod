@@ -107,8 +107,8 @@ require (
 	github.com/corazawaf/coraza/v3 v3.8.1 // indirect
 	github.com/corazawaf/libinjection-go v0.3.3 // indirect
 	github.com/coreruleset/albedo v0.3.0 // indirect
-	github.com/coreruleset/ftw-tests-schema/v2 v2.3.0 // indirect
-	github.com/coreruleset/go-ftw/v2 v2.6.1 // indirect
+	github.com/coreruleset/ftw-tests-schema/v3 v3.0.1 // indirect
+	github.com/coreruleset/go-ftw/v2 v2.7.0 // indirect
 	github.com/creativeprojects/go-selfupdate v1.5.2 // indirect
 	github.com/curioswitch/go-reassign v0.3.0 // indirect
 	github.com/cyphar/filepath-securejoin v0.6.1 // indirect
@@ -207,7 +207,7 @@ require (
 	github.com/kevinburke/ssh_config v1.2.0 // indirect
 	github.com/kisielk/errcheck v1.20.0 // indirect
 	github.com/kkHAIKE/contextcheck v1.1.6 // indirect
-	github.com/klauspost/compress v1.18.7 // indirect
+	github.com/klauspost/compress v1.20.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/knadh/koanf/maps v0.1.2 // indirect
 	github.com/knadh/koanf/parsers/yaml v1.1.0 // indirect

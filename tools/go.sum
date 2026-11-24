@@ -234,10 +234,10 @@ github.com/corazawaf/libinjection-go v0.3.3 h1:NhbXKRfRpqKzBMzv8zpCcnjyEw7BCVhBO
 github.com/corazawaf/libinjection-go v0.3.3/go.mod h1:Ik/+w3UmTWH9yn366RgS9D95K3y7Atb5m/H/gXzzPCk=
 github.com/coreruleset/albedo v0.3.0 h1:GC0CbI8/qzzBbiP95z7A+58pjlN8P5jheVrUwEfzRfQ=
 github.com/coreruleset/albedo v0.3.0/go.mod h1:dulcaAKNDKBnMw7CpK7V61zmGy5D4ASXSrtRpuDnYK8=
-github.com/coreruleset/ftw-tests-schema/v2 v2.3.0 h1:zs2US8z7sDba1O//qgaD1qj5R5B90m6FjHuRAuKK03g=
-github.com/coreruleset/ftw-tests-schema/v2 v2.3.0/go.mod h1:wvQApSsBz7qy0aGb88UwYWOnu6k6DlyPsJ3QoJ+tRhA=
-github.com/coreruleset/go-ftw/v2 v2.6.1 h1:iF2Uyysehhg5dlxcWxRZWiPFSZromjBfZ6YlqjBtE+M=
-github.com/coreruleset/go-ftw/v2 v2.6.1/go.mod h1:pzgtb9CrTNr5F9JAUjZ1ck9tOHbVh7YCGybj+re7UUo=
+github.com/coreruleset/ftw-tests-schema/v3 v3.0.1 h1:e4nfW8HIPk66o1ZG3lKpKGoX0NMQQuvWbof07RJ1bp8=
+github.com/coreruleset/ftw-tests-schema/v3 v3.0.1/go.mod h1:S1MlcTtcRrohmajCl2gS/if1rky0qIuN0VN95lqrLZg=
+github.com/coreruleset/go-ftw/v2 v2.7.0 h1:Zhq+RE83Nr8YH1DvjXMfyntrQryQNtzDxQ+AF4s7fCQ=
+github.com/coreruleset/go-ftw/v2 v2.7.0/go.mod h1:hIMZxImohh0f4IoH0fmrI1KeSaTCLyfgVCUhdibX3JI=
 github.com/cpuguy83/go-md2man/v2 v2.0.6/go.mod h1:oOW0eioCTA6cOiMLiUPZOpcVxMig6NIQQ7OS05n1F4g=
 github.com/creativeprojects/go-selfupdate v1.5.2 h1:3KR3JLrq70oplb9yZzbmJ89qRP78D1AN/9u+l3k0LJ4=
 github.com/creativeprojects/go-selfupdate v1.5.2/go.mod h1:BCOuwIl1dRRCmPNRPH0amULeZqayhKyY2mH/h4va7Dk=
@@ -566,8 +566,8 @@ github.com/kisielk/errcheck v1.20.0/go.mod h1:O+f80MKNwX8Oor2jwgpeQ9An7uJm+hRSgT
 github.com/kisielk/gotool v1.0.0/go.mod h1:XhKaO+MFFWcvkIS/tQcRk01m1F5IRFswLeQ+oQHNcck=
 github.com/kkHAIKE/contextcheck v1.1.6 h1:7HIyRcnyzxL9Lz06NGhiKvenXq7Zw6Q0UQu/ttjfJCE=
 github.com/kkHAIKE/contextcheck v1.1.6/go.mod h1:3dDbMRNBFaq8HFXWC1JyvDSPm43CmE6IuHam8Wr0rkg=
-github.com/klauspost/compress v1.18.7 h1:aUyZsS4kH3QTKurYhAOwAHxllVPnOthb3vPfnF1Ehjw=
-github.com/klauspost/compress v1.18.7/go.mod h1:cwPg85FWrGar70rWktvGQj8/hthj3wpl0PGDogxkrSQ=
+github.com/klauspost/compress v1.20.2 h1:v5tiZvm1KGLyg5d5oXdXe3lsSPrbEUiKoXGia//I7Qo=
+github.com/klauspost/compress v1.20.2/go.mod h1:LUdAzn7YLVvxLpc7y3V1m40wESHTgc1422pwwBSKYuI=
 github.com/klauspost/cpuid/v2 v2.3.0 h1:S4CRMLnYUhGeDFDqkGriYKdfoFlDnMtqTiI/sFzhA9Y=
 github.com/klauspost/cpuid/v2 v2.3.0/go.mod h1:hqwkgyIinND0mEev00jJYCxPNVRVXFQeu1XKlok6oO0=
 github.com/knadh/koanf/maps v0.1.2 h1:RBfmAW5CnZT+PJ1CVc1QSJKf4Xu9kxfQgYVQSu8hpbo=
