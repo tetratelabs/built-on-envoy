@@ -30,6 +30,7 @@ func Test_ParseConfig(t *testing.T) {
 		require.Equal(t, modeRequestOnly, cfg.mode)
 		require.Equal(t, defaultRequestURIPathOnly, cfg.requestURIPathOnly)
 		require.Equal(t, metricsConfig{}, cfg.metrics)
+		require.Equal(t, metadataConfig{}, cfg.metadata)
 	})
 
 	t.Run("explicit mode", func(t *testing.T) {
@@ -79,11 +80,13 @@ func Test_ParseConfig(t *testing.T) {
 			"mode":                  "FULL",
 			"request_uri_path_only": true,
 			"metrics":               map[string]any{"authority_label": "none"},
+			"metadata":              map[string]any{"matched_rules": true},
 		}), logger.GetLogger())
 		require.NoError(t, err)
 		require.Equal(t, modeFull, cfg.mode)
 		require.True(t, cfg.requestURIPathOnly)
 		require.True(t, cfg.metrics.authority.disabled)
+		require.True(t, cfg.metadata.matchedRules)
 	})
 
 	t.Run("invalid mode", func(t *testing.T) {

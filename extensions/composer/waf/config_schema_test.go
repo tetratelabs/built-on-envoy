@@ -38,6 +38,33 @@ func TestConfigSchema(t *testing.T) {
 			"mode": "INVALID"
 		}`)
 	})
+	t.Run("metadata settings", func(t *testing.T) {
+		for _, metadata := range []string{
+			`{}`,
+			`{"matched_rules": true}`,
+			`{"matched_rules": false}`,
+		} {
+			internaltesting.AssertSchemaValid(t, "config.schema.json", `{
+				"directives": ["SecRuleEngine On"],
+				"metadata": `+metadata+`
+			}`)
+		}
+	})
+	t.Run("invalid metadata", func(t *testing.T) {
+		for _, metadata := range []string{
+			`true`,
+			`[]`,
+			`{"matched_rules": "true"}`,
+			`{"matched_rules": 1}`,
+			`{"matched_rule": true}`,
+			`{"matched_rules": true, "matched_rule": true}`,
+		} {
+			internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{
+				"directives": ["SecRuleEngine On"],
+				"metadata": `+metadata+`
+			}`)
+		}
+	})
 	t.Run("metrics authority settings", func(t *testing.T) {
 		for _, metrics := range []string{
 			`{}`,

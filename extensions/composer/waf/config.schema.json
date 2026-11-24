@@ -25,6 +25,17 @@
       "type": "boolean",
       "description": "Set REQUEST_URI to the request path and query (e.g. \"/api?x=1\") instead of the absolute URL (e.g. \"https://example.com/api?x=1\"). Defaults to false. The default will change to true in a future release."
     },
+    "metadata": {
+      "type": "object",
+      "description": "Settings of the dynamic metadata the WAF sets. Read from the filter configuration only: per-route configurations do not override them.",
+      "additionalProperties": false,
+      "properties": {
+        "matched_rules": {
+          "type": "boolean",
+          "description": "Set the matched_rules key in the io.builtonenvoy.waf namespace when a transaction ends: the IDs of the rules it matched, comma-separated in the order they matched, each once, whether or not the transaction was blocked. Rules without the log action (set on the rule or by SecDefaultAction), such as those with nolog, are left out. A blocking rule without the log action is still named by block_rule and counted in waf_tx_blocked, but it is not listed here. Defaults to false."
+        }
+      }
+    },
     "metrics": {
       "type": "object",
       "description": "Settings of the WAF metrics. Read from the filter configuration only: per-route configurations do not override them.",
