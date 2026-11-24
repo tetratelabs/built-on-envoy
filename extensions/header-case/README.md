@@ -11,7 +11,7 @@ specific casing. This extension uses Envoy's dynamic module header formatter
 | Field | Values | Default | Description |
 | ----- | ------ | ------- | ----------- |
 | `mode` | `preserve`, `proper_case`, `lowercase` | `preserve` | `preserve` keeps the casing the peer sent. `proper_case` writes `X-Request-Id`. `lowercase` is Envoy's default. |
-| `fallback` | `proper_case`, `lowercase` | `proper_case` | Casing for names the peer never sent, such as headers Envoy adds. Only valid with `preserve`. |
+| `added_header_case` | `proper_case`, `lowercase` | `proper_case` | Casing for headers the peer never sent, such as ones Envoy adds. Only valid with `preserve`. |
 | `overrides` | map of name to spelling | none | Exact spellings such as `{"content-type": "Content-type"}`. Overrides win over the mode and may only change casing. |
 
 The config schema can't check that an override only changes casing. An override that renames a

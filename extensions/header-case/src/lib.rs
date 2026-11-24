@@ -18,7 +18,7 @@ use std::sync::Arc;
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum Mode {
-    /// Keep the casing the peer sent. Names the peer never sent use the fallback.
+    /// Keep the casing the peer sent. Names the peer never sent use `added_header_case`.
     #[default]
     Preserve,
     /// Uppercase the first letter and every letter after a non-alphanumeric character.
@@ -27,10 +27,10 @@ pub enum Mode {
     Lowercase,
 }
 
-/// Casing for names the peer never sent, in preserve mode.
+/// Casing for headers the peer never sent, such as ones Envoy adds. Only used in preserve mode.
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
-pub enum Fallback {
+pub enum AddedHeaderCase {
     #[default]
     ProperCase,
     Lowercase,
@@ -42,7 +42,7 @@ struct RawConfig {
     #[serde(default)]
     mode: Mode,
     #[serde(default)]
-    fallback: Option<Fallback>,
+    added_header_case: Option<AddedHeaderCase>,
     #[serde(default)]
     overrides: HashMap<String, String>,
 }
@@ -51,7 +51,7 @@ struct RawConfig {
 #[derive(Debug)]
 pub struct Config {
     mode: Mode,
-    fallback: Fallback,
+    added_header_case: AddedHeaderCase,
     /// Lowercase header name to the exact spelling written on the wire.
     overrides: HashMap<String, String>,
 }
@@ -65,8 +65,8 @@ impl Config {
             serde_json::from_slice(config).map_err(|e| format!("invalid config: {e}"))?
         };
 
-        if raw.fallback.is_some() && raw.mode != Mode::Preserve {
-            return Err("fallback only applies when mode is preserve".to_string());
+        if raw.added_header_case.is_some() && raw.mode != Mode::Preserve {
+            return Err("added_header_case only applies when mode is preserve".to_string());
         }
 
         let mut overrides = HashMap::with_capacity(raw.overrides.len());
@@ -90,7 +90,7 @@ impl Config {
 
         Ok(Self {
             mode: raw.mode,
-            fallback: raw.fallback.unwrap_or_default(),
+            added_header_case: raw.added_header_case.unwrap_or_default(),
             overrides,
         })
     }
@@ -152,13 +152,14 @@ impl CaseFormatter {
             Mode::Preserve if self.observed.contains_key(key) => {
                 return self.observed.get(key).map(String::as_str);
             }
-            Mode::Preserve => self.config.fallback,
-            Mode::ProperCase => Fallback::ProperCase,
-            Mode::Lowercase => Fallback::Lowercase,
+            Mode::Preserve => self.config.added_header_case,
+            // The other modes apply the same casing to every header, seen or not.
+            Mode::ProperCase => AddedHeaderCase::ProperCase,
+            Mode::Lowercase => AddedHeaderCase::Lowercase,
         };
         match casing {
-            Fallback::Lowercase => None,
-            Fallback::ProperCase => {
+            AddedHeaderCase::Lowercase => None,
+            AddedHeaderCase::ProperCase => {
                 proper_case(key, &mut self.formatted);
                 Some(&self.formatted)
             }
@@ -220,7 +221,7 @@ mod tests {
         for input in ["", "  ", "{}"] {
             let cfg = Config::parse(input.as_bytes()).unwrap();
             assert_eq!(cfg.mode, Mode::Preserve);
-            assert_eq!(cfg.fallback, Fallback::ProperCase);
+            assert_eq!(cfg.added_header_case, AddedHeaderCase::ProperCase);
             assert!(cfg.overrides.is_empty());
         }
     }
@@ -231,7 +232,7 @@ mod tests {
             "not json",
             r#"{"mode":"upper"}"#,
             r#"{"unknown":1}"#,
-            r#"{"mode":"proper_case","fallback":"lowercase"}"#,
+            r#"{"mode":"proper_case","added_header_case":"lowercase"}"#,
             r#"{"overrides":{"content-type":"Content-Length"}}"#,
             r#"{"overrides":{"x-a":""}}"#,
             r#"{"overrides":{"x a":"X A"}}"#,
@@ -271,7 +272,7 @@ mod tests {
             format(&mut f, "content-type").as_deref(),
             Some("content-TYPE")
         );
-        // Never seen on the wire, so the fallback applies.
+        // Never seen on the wire, so added_header_case applies.
         assert_eq!(
             format(&mut f, "x-envoy-upstream-service-time").as_deref(),
             Some("X-Envoy-Upstream-Service-Time")
@@ -287,8 +288,8 @@ mod tests {
     }
 
     #[test]
-    fn preserve_mode_lowercase_fallback() {
-        let mut f = formatter(r#"{"fallback":"lowercase"}"#);
+    fn preserve_mode_lowercase_added_headers() {
+        let mut f = formatter(r#"{"added_header_case":"lowercase"}"#);
         f.observe("X-Seen");
         assert_eq!(format(&mut f, "x-seen").as_deref(), Some("X-Seen"));
         assert_eq!(format(&mut f, "date"), None);
@@ -357,7 +358,7 @@ mod tests {
         let v = schema();
         for input in [
             "{}",
-            r#"{"mode":"preserve","fallback":"lowercase"}"#,
+            r#"{"mode":"preserve","added_header_case":"lowercase"}"#,
             r#"{"mode":"proper_case"}"#,
             r#"{"mode":"lowercase","overrides":{"content-type":"Content-type"}}"#,
         ] {
@@ -383,7 +384,7 @@ mod tests {
         for input in [
             r#"{"mode":"upper"}"#,
             r#"{"unknown":1}"#,
-            r#"{"mode":"proper_case","fallback":"lowercase"}"#,
+            r#"{"mode":"proper_case","added_header_case":"lowercase"}"#,
             r#"{"overrides":{"x-a":""}}"#,
             r#"{"overrides":{"x-a":"x a"}}"#,
         ] {

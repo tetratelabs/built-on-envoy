@@ -12,11 +12,11 @@
       "default": "preserve",
       "description": "preserve keeps the casing the peer sent; proper_case uppercases the first letter of each word (X-Foo-Bar); lowercase is Envoy's default."
     },
-    "fallback": {
+    "added_header_case": {
       "type": "string",
       "enum": ["proper_case", "lowercase"],
       "default": "proper_case",
-      "description": "Casing for header names the peer never sent, such as headers added by Envoy. Only valid when mode is preserve."
+      "description": "Casing for header names the peer never sent, such as headers Envoy adds. Only valid when mode is preserve."
     },
     "overrides": {
       "type": "object",
@@ -32,6 +32,6 @@
     "required": ["mode"]
   },
   "then": {
-    "not": { "required": ["fallback"] }
+    "not": { "required": ["added_header_case"] }
   }
 }
