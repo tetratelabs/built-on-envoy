@@ -48,6 +48,11 @@ func parseMetadata(raw json.RawMessage) (metadataConfig, error) {
 // matchedRuleIDs returns the IDs of the rules a transaction matched, comma-separated in the order they matched, each
 // once. Rules without the log action are skipped, as Coraza does for its error log callback. It returns "" when no
 // rule is left.
+//
+// The loop is O(n²), but n is the number of rules matched in a single transaction. That's usually zero to a few
+// dozen, even with CRS, and the function only runs once per transaction, when the transaction is released, and only
+// when matched_rules is on. At that size, a linear scan over a small slice is usually faster than a map[int]struct{}
+// or slice allocation, so switching to one would make the code longer without a measurable gain.
 func matchedRuleIDs(matched []ctypes.MatchedRule) string {
 	var b strings.Builder
 	for i, mr := range matched {
@@ -63,8 +68,10 @@ func matchedRuleIDs(matched []ctypes.MatchedRule) string {
 }
 
 // isLogged reports whether a matched rule has the log action, set on the rule or by SecDefaultAction.
-// ctypes.MatchedRule does not expose it, but Coraza's implementation does; a matched rule whose
-// implementation does not is kept.
+//
+// ctypes.MatchedRule does not expose the log action, but Coraza's own implementation of it has a Log() bool
+// method, so the type assertion finds it there. ok is false only for a matched rule from another implementation,
+// which cannot say whether it logged; such a rule is kept rather than dropped.
 func isLogged(mr ctypes.MatchedRule) bool {
 	l, ok := mr.(interface{ Log() bool })
 	return !ok || l.Log()
