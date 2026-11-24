@@ -20,7 +20,7 @@
     },
     "overrides": {
       "type": "object",
-      "description": "Exact spellings by header name, e.g. {\"content-type\": \"Content-type\"}. Names are matched case-insensitively and a spelling may only change the casing.",
+      "description": "Exact spellings by header name, e.g. `{\"content-type\": \"Content-type\"}`. Names are matched case-insensitively and a spelling may only change the casing.",
       "additionalProperties": {
         "type": "string",
         "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$"
