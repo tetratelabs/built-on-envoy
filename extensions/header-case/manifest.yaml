@@ -17,8 +17,9 @@ longDescription: |
 
   ## Modes
 
-  * **preserve** (default): keep the casing the peer sent. Headers the peer never sent, such as
-    ones Envoy adds, use `added_header_case` (`proper_case` by default, or `lowercase`).
+  * **preserve** (default): keep the casing the peer sent. Headers Envoy adds, such as
+    `x-request-id` or headers set by filters, use `added_header_case` (`proper_case` by default,
+    or `lowercase`).
   * **proper_case**: uppercase the first letter of each word, e.g. `X-Request-Id`.
   * **lowercase**: Envoy's default casing, useful together with `overrides`.
 

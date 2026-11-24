@@ -18,7 +18,7 @@ use std::sync::Arc;
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum Mode {
-    /// Keep the casing the peer sent. Names the peer never sent use `added_header_case`.
+    /// Keep the casing the peer sent. Headers Envoy adds use `added_header_case`.
     #[default]
     Preserve,
     /// Uppercase the first letter and every letter after a non-alphanumeric character.
@@ -27,7 +27,8 @@ pub enum Mode {
     Lowercase,
 }
 
-/// Casing for headers the peer never sent, such as ones Envoy adds. Only used in preserve mode.
+/// Casing for headers Envoy adds, such as `x-request-id` or headers set by filters. Only used in
+/// preserve mode.
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum AddedHeaderCase {

@@ -16,7 +16,7 @@
       "type": "string",
       "enum": ["proper_case", "lowercase"],
       "default": "proper_case",
-      "description": "Casing for header names the peer never sent, such as headers Envoy adds. Only valid when mode is preserve."
+      "description": "Casing for headers Envoy adds, such as x-request-id or headers set by filters. Only valid when mode is preserve."
     },
     "overrides": {
       "type": "object",
