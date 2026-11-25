@@ -191,7 +191,14 @@ func (p *wafPlugin) initializeTransaction(headers shared.HeaderMap) {
 	p.isUpgrade = p.checkUpgrade(headers)
 }
 
+// checkUpgrade reports whether the request opens a long-lived stream: an upgrade
+// (e.g. WebSocket) or a CONNECT tunnel. Envoy passes both to the filter with
+// end_stream=false and forwards the stream payload as body data, which ends only
+// with the stream, so the WAF must not wait for the end of the request body.
 func (p *wafPlugin) checkUpgrade(headers shared.HeaderMap) bool {
+	if headers.GetOne(":method").ToUnsafeString() == "CONNECT" {
+		return true
+	}
 	connectionHeader := headers.GetOne("connection").ToUnsafeString()
 	upgrade := headers.GetOne("upgrade").ToUnsafeString()
 	return strings.Contains(strings.ToLower(connectionHeader), "upgrade") &&
@@ -245,7 +252,14 @@ func (p *wafPlugin) OnRequestHeaders(headers shared.HeaderMap, endOfStream bool)
 	method := headers.GetOne(":method").ToString()
 	// Start from :path (path and query).
 	uri := headers.GetOne(":path").ToString()
-	if !p.requestURIPathOnly {
+	switch {
+	case uri == "":
+		// A classic CONNECT has no :path, and no absolute URL either. Use "//host:port" as net/http
+		// does, in both modes: a bare authority does not always parse as a URI (e.g.
+		// "10.0.0.1:443"), and "scheme://host:port" is not a valid CONNECT request line
+		// for CRS rule 920100.
+		uri = "//" + host
+	case !p.requestURIPathOnly:
 		// Legacy fallback: REQUEST_URI is the absolute URL.
 		// This is currently the default behavior, and it will be flipped to path-only in a future release.
 		scheme := headers.GetOne(":scheme").ToString()
@@ -253,10 +267,6 @@ func (p *wafPlugin) OnRequestHeaders(headers shared.HeaderMap, endOfStream bool)
 			scheme = "http"
 		}
 		uri = scheme + "://" + host + uri
-	} else if uri == "" {
-		// CONNECT has no :path. Use "//host:port" as net/http does, since a bare
-		// authority does not always parse as a URI.
-		uri = "//" + host
 	}
 
 	// CRS rules tend to expect Host even with HTTP/2

@@ -6,10 +6,12 @@
 package integration
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io"
 	"maps"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -50,7 +52,8 @@ func TestWAFSmoke(t *testing.T) {
 		"SecRule &REQUEST_HEADERS:Content-Length \"@eq 0\" \"chain\"",
 		"SecRule &REQUEST_HEADERS:Transfer-Encoding \"@eq 0\"",
 		"SecRule REQUEST_METHOD \"@rx ^(?:GET|HEAD)$\" \"id:106,phase:1,log,deny,status:406,msg:'Coraza E2E - 920171 logic',chain\"",
-		"SecRule &REQUEST_HEADERS:Transfer-Encoding \"!@eq 0\""
+		"SecRule &REQUEST_HEADERS:Transfer-Encoding \"!@eq 0\"",
+		"SecRule REQUEST_HEADERS:x-phase2 \"@streq block\" \"id:107,phase:2,log,deny,status:403\""
 	]
 }`
 
@@ -124,6 +127,13 @@ func TestWAFSmoke(t *testing.T) {
 		sendChunked(t, http.MethodGet, http.StatusNotAcceptable)
 	})
 
+	// Envoy passes a CONNECT request to the WAF with end_stream=false: the tunnel payload follows as
+	// body data, which ends only with the tunnel. A phase 2 rule must still run on its headers.
+	t.Run("block_connect_request", func(t *testing.T) {
+		status := connectStatus(t, proxyPort, "coraza-e2e: ok\r\nx-phase2: block\r\n")
+		require.Equal(t, http.StatusForbidden, status)
+	})
+
 	t.Run("block_response_headers", func(t *testing.T) {
 		url := fmt.Sprintf("http://localhost:%d/response-headers?pass=leak", proxyPort)
 		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
@@ -140,6 +150,23 @@ func TestWAFSmoke(t *testing.T) {
 		req.Header.Set("forbidden-body-content", "responsebodycode")
 		internaltesting.RequireEventuallyRequest(t, req, internaltesting.EqualStatus(403))
 	})
+}
+
+// connectStatus sends "CONNECT www.example.com:443" with the given raw header lines and returns the
+// status of the response. It fails if no response arrives within 10 seconds.
+func connectStatus(t *testing.T, proxyPort int, headers string) int {
+	t.Helper()
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("localhost:%d", proxyPort), 5*time.Second)
+	require.NoError(t, err)
+	defer func() { _ = conn.Close() }()
+	require.NoError(t, conn.SetDeadline(time.Now().Add(10*time.Second)))
+
+	_, err = fmt.Fprintf(conn, "CONNECT www.example.com:443 HTTP/1.1\r\nHost: www.example.com:443\r\n%s\r\n", headers)
+	require.NoError(t, err)
+	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	require.NoError(t, err, "no response to the CONNECT request")
+	_ = resp.Body.Close()
+	return resp.StatusCode
 }
 
 const (

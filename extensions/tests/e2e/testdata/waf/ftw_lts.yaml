@@ -24,6 +24,7 @@ testoverride:
     "^920430-[3589]$": "Envoy reads HTTP/0.8, HTTP/0.9 and HTTP/4.0 request lines as HTTP/1.0, and answers 400 to one without a version, so 920430 cannot see the version"
     "^920280-3$": "Envoy reads the HTTP/0.9 request line as HTTP/1.0 and answers 200; the test expects Apache's 400"
     "^920180-4$": "Envoy reads the HTTP/2.0 request line as HTTP/1.0, so the HTTP/2 exemption of 920180 does not apply"
+    "^920100-4$": "920100 does not match, as the test expects; the route has no CONNECT matcher, so Envoy answers 404 where the test expects 200"
 
     # Headers Envoy does not pass to the WAF
     "^920210-[23467]$": "Connection header is stripped out by Envoy"
@@ -38,7 +39,6 @@ testoverride:
     "^942280-3$": "Referer header is sanitized by Envoy and removed from the request"
 
     # BOE WAF issues
-    "^(920100-[46]|920300-3)$": "CONNECT hangs: the WAF waits for a request body that never comes, so no answer reaches the client"
     "^920274-[235]$": "The WAF passes Envoy's :path pseudo-header as a request header, and 920274 (PL4) flags the '?' and '=' of its query string"
     "^941120-8$": "The WAF passes Envoy's :path pseudo-header as a request header, and 941120 matches the query in it: the test's word has 49 characters, not 51 (coreruleset#4622, fixed in CRS 4.27.0)"
 

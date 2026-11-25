@@ -337,6 +337,44 @@ func Test_RequestOnlyWaf(t *testing.T) {
 		wafPlugin.OnStreamComplete()
 	})
 
+	t.Run("Handle CONNECT request", func(t *testing.T) {
+		// Envoy passes a CONNECT request with end_stream=false and no :path: the tunnel
+		// payload follows as body data, which ends only with the tunnel. The WAF must run
+		// phase 2 on the headers instead of waiting for the end of the body.
+		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
+		pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+		pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+
+		fakeHeaderMap := fake.NewFakeHeaderMap(map[string][]string{
+			":authority":   {"www.coreruleset.org:443"},
+			":method":      {"CONNECT"},
+			"x-request-id": {"req-12345"},
+			"user-agent":   {"ComposerTest/1.0"},
+		})
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(
+			pkg.UnsafeBufferFromString("HTTP/1.1"), true)
+		pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(
+			pkg.UnsafeBufferFromString("127.0.0.1:8080"), true)
+
+		plugin := wafPluginFactory.Create(pluginHandle)
+		wafPlugin, ok := plugin.(*wafPlugin)
+		require.True(t, ok, "failed to cast plugin to wafPlugin")
+
+		headerStatus := wafPlugin.OnRequestHeaders(fakeHeaderMap, false)
+		require.Equal(t, shared.HeadersStatusContinue, headerStatus,
+			"expected header status to continue for CONNECT request")
+		require.True(t, wafPlugin.isUpgrade, "expected isUpgrade to be true for CONNECT request")
+		require.True(t, wafPlugin.requestBodyProcessed, "expected phase 2 to run on the CONNECT request headers")
+
+		bodyBuffer := fake.NewFakeBodyBuffer([]byte("\x16\x03\x01 tunnel bytes"))
+		bodyStatus := wafPlugin.OnRequestBody(bodyBuffer, false)
+		require.Equal(t, shared.BodyStatusContinue, bodyStatus,
+			"expected tunnel data to stream through for CONNECT request")
+
+		// Ensure destroy is called.
+		wafPlugin.OnStreamComplete()
+	})
+
 	t.Run("Handle request with upgrade", func(t *testing.T) {
 		// Handle request with upgrade.
 		pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
@@ -1143,6 +1181,9 @@ func Test_Phase2RulesOnHeaderOnlyRequest(t *testing.T) {
 		directives []string
 		headers    map[string][]string
 		ruleID     int
+		// openStream is true when Envoy passes the headers with end_stream=false although
+		// the request has no body to wait for (upgrade, CONNECT).
+		openStream bool
 	}{
 		{
 			name: "phase 2 cookie rule executes on header-only request",
@@ -1186,7 +1227,22 @@ func Test_Phase2RulesOnHeaderOnlyRequest(t *testing.T) {
 				"upgrade":    {"websocket"},
 				"x-custom":   {"malicious-value"},
 			},
-			ruleID: 100203,
+			ruleID:     100203,
+			openStream: true,
+		},
+		{
+			name: "phase 2 rule executes on CONNECT request",
+			directives: []string{
+				"SecRuleEngine On",
+				`SecRule REQUEST_HEADERS:x-custom "@contains malicious-value" "id:100204,phase:2,deny,status:403,msg:'Blocked CONNECT request'"`,
+			},
+			headers: map[string][]string{
+				":authority": {"example.com:8080"},
+				":method":    {"CONNECT"},
+				"x-custom":   {"malicious-value"},
+			},
+			ruleID:     100204,
+			openStream: true,
 		},
 	}
 
@@ -1210,7 +1266,7 @@ func Test_Phase2RulesOnHeaderOnlyRequest(t *testing.T) {
 			wafPlugin, ok := wafPluginFactory.Create(pluginHandle).(*wafPlugin)
 			require.True(t, ok, "failed to cast plugin to wafPlugin")
 
-			headerStatus := wafPlugin.OnRequestHeaders(fake.NewFakeHeaderMap(tc.headers), true)
+			headerStatus := wafPlugin.OnRequestHeaders(fake.NewFakeHeaderMap(tc.headers), !tc.openStream)
 			require.Equal(t, shared.HeadersStatusStop, headerStatus, "expected phase 2 block on header-only request")
 
 			wafPlugin.OnStreamComplete()
@@ -2298,6 +2354,17 @@ func Test_TxReleasedEarlyOnLongLivedStreams(t *testing.T) {
 			},
 		},
 		{
+			name:  "CONNECT: released after the response headers",
+			setup: expectTxMetrics, released: true,
+			drive: func(t *testing.T, p *wafPlugin) {
+				req := fake.NewFakeHeaderMap(map[string][]string{":authority": {"example.com:443"}, ":method": {"CONNECT"}})
+				require.Equal(t, shared.HeadersStatusContinue, p.OnRequestHeaders(req, false))
+				require.NotNil(t, p.txContext, "the analysis is not done until the response headers in FULL mode")
+				resp := fake.NewFakeHeaderMap(map[string][]string{":status": {"200"}})
+				require.Equal(t, shared.HeadersStatusContinue, p.OnResponseHeaders(resp, false))
+			},
+		},
+		{
 			name:  "SSE: released after the response headers",
 			setup: expectTxMetrics, released: true,
 			drive: func(t *testing.T, p *wafPlugin) {
@@ -2451,6 +2518,31 @@ func Test_RequestURI(t *testing.T) {
 				":scheme":    {"https"},
 			},
 			want: "/api/v1/push?x=1",
+		},
+		{
+			name: "default: CONNECT without path",
+			headers: map[string][]string{
+				":authority": {"10.0.0.1:443"},
+				":method":    {"CONNECT"},
+			},
+			want: "//10.0.0.1:443",
+		},
+		{
+			name: "default: CONNECT to an IPv6 target",
+			headers: map[string][]string{
+				":authority": {"[2001:db8::1]:443"},
+				":method":    {"CONNECT"},
+			},
+			want: "//[2001:db8::1]:443",
+		},
+		{
+			// Envoy strips the port with strip_any_host_port (or strip_matching_host_port).
+			name: "default: CONNECT without a port",
+			headers: map[string][]string{
+				":authority": {"www.example.com"},
+				":method":    {"CONNECT"},
+			},
+			want: "//www.example.com",
 		},
 		{
 			name:     "path only: CONNECT without path",
