@@ -51,6 +51,11 @@
           "description": "Enable the waf_rule_matched counter: once for every rule matched by a transaction, whether or not it blocked the transaction (e.g. the CRS signature rules behind an anomaly score block), by phase and rule ID. The authority tag is set only when authority_label is route_name or virtual_host_name; with authority (the default) or none, the counter has no authority tag, unlike waf_tx_blocked, because a client-chosen tag times every matched rule id is unbounded. With route_name or virtual_host_name the number of series is the matched rule ids times the configured routes or virtual hosts. Rules without the log action (set on the rule or by SecDefaultAction), such as those with nolog, are not counted. A blocking rule without the log action is still named by block_rule and counted in waf_tx_blocked, but it is not counted here. Defaults to false."
         }
       }
+    },
+    "crs_version": {
+      "type": "string",
+      "description": "The OWASP CRS version that @owasp_crs/ and the @crs-setup.conf files come from. Supported values are \"lts\" and \"latest\". \"lts\" is the newest CRS LTS release, and the default if not set. \"latest\" is the newest CRS release. Each extension release embeds the newest version of both, so an extension upgrade can move them to a newer CRS version.",
+      "enum": ["lts", "latest"]
     }
   }
 }

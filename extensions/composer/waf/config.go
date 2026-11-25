@@ -65,6 +65,7 @@ func parseConfig(configBytes []byte, l *zap.Logger) (config, error) {
 		Directives         []string        `json:"directives"`
 		ModeString         string          `json:"mode"`
 		RequestURIPathOnly *bool           `json:"request_uri_path_only,omitempty"`
+		CRSVersion         string          `json:"crs_version,omitempty"`
 		Metrics            json.RawMessage `json:"metrics"`
 		Metadata           json.RawMessage `json:"metadata"`
 	}
@@ -104,7 +105,7 @@ func parseConfig(configBytes []byte, l *zap.Logger) (config, error) {
 	}
 
 	return config{
-		engine:             waf.Config{Directives: strings.Join(y.Directives, "\n")},
+		engine:             waf.Config{Directives: strings.Join(y.Directives, "\n"), CRSVersion: y.CRSVersion},
 		mode:               mode,
 		requestURIPathOnly: requestURIPathOnly,
 		metrics:            metrics,
