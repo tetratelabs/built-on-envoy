@@ -26,7 +26,6 @@ testoverride:
     "^920180-4$": "Envoy reads the HTTP/2.0 request line as HTTP/1.0, so the HTTP/2 exemption of 920180 does not apply"
 
     # Headers Envoy does not pass to the WAF
-    "^920171-[23]$": "Envoy does not pass Transfer-Encoding to the WAF, so 920171 cannot see a GET or HEAD with a chunked body"
     "^920210-[23467]$": "Connection header is stripped out by Envoy"
     "^932161-(7|9|1[0-2])$": "Referer header is sanitized by Envoy and removed from the request"
     "^932207-[127]$": "Referer header is sanitized by Envoy and removed from the request"

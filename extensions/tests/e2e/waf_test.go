@@ -8,6 +8,7 @@ package integration
 import (
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"net/http"
 	"os"
@@ -22,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	internaltesting "github.com/tetratelabs/built-on-envoy/internal/testing"
@@ -43,7 +45,12 @@ func TestWAFSmoke(t *testing.T) {
 		"SecRule RESPONSE_BODY \"@contains responsebodycode\" \"id:104,phase:4,t:lowercase,log,deny,status:403\"",
 		"SecRule ARGS_NAMES|ARGS \"@detectXSS\" \"id:9411,phase:2,t:none,t:utf8toUnicode,t:urlDecodeUni,t:htmlEntityDecode,t:jsDecode,t:cssDecode,t:removeNulls,log,deny,status:403\"",
 		"SecRule ARGS_NAMES|ARGS \"@detectSQLi\" \"id:9421,phase:2,t:none,t:utf8toUnicode,t:urlDecodeUni,t:removeNulls,multiMatch,log,deny,status:403\"",
-		"SecRule REQUEST_HEADERS:User-Agent \"@pm grabber masscan\" \"id:9131,phase:1,t:none,log,deny,status:403\""
+		"SecRule REQUEST_HEADERS:User-Agent \"@pm grabber masscan\" \"id:9131,phase:1,t:none,log,deny,status:403\"",
+		"SecRule REQUEST_METHOD \"@streq POST\" \"id:105,phase:1,log,deny,status:411,msg:'Coraza E2E - 920180 logic',chain\"",
+		"SecRule &REQUEST_HEADERS:Content-Length \"@eq 0\" \"chain\"",
+		"SecRule &REQUEST_HEADERS:Transfer-Encoding \"@eq 0\"",
+		"SecRule REQUEST_METHOD \"@rx ^(?:GET|HEAD)$\" \"id:106,phase:1,log,deny,status:406,msg:'Coraza E2E - 920171 logic',chain\"",
+		"SecRule &REQUEST_HEADERS:Transfer-Encoding \"!@eq 0\""
 	]
 }`
 
@@ -85,6 +92,36 @@ func TestWAFSmoke(t *testing.T) {
 		req.Header.Set("coraza-e2e", "ok")
 
 		internaltesting.RequireEventuallyRequest(t, req, internaltesting.EqualStatus(403))
+	})
+
+	// Envoy removes Transfer-Encoding before the WAF runs; the WAF derives it from the framing.
+	// Rules 105 and 106 follow the logic of CRS 920180 and 920171.
+	sendChunked := func(t *testing.T, method string, status int) {
+		url := fmt.Sprintf("http://localhost:%d/anything", proxyPort)
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			// A new request each attempt: the chunked body can be read only once.
+			req, err := http.NewRequestWithContext(t.Context(), method, url, io.NopCloser(strings.NewReader("payload=ok")))
+			if !assert.NoError(c, err) {
+				return
+			}
+			req.ContentLength = -1 // unknown length: Go sends Transfer-Encoding: chunked
+			req.Header.Set("content-type", "application/x-www-form-urlencoded")
+			req.Header.Set("coraza-e2e", "ok")
+			resp, err := http.DefaultClient.Do(req)
+			if !assert.NoError(c, err) {
+				return
+			}
+			defer resp.Body.Close() // nolint:errcheck
+			assert.Equal(c, status, resp.StatusCode)
+		}, time.Minute, 200*time.Millisecond)
+	}
+
+	t.Run("chunked_post_has_transfer_encoding", func(t *testing.T) {
+		sendChunked(t, http.MethodPost, http.StatusOK)
+	})
+
+	t.Run("chunked_get_has_transfer_encoding", func(t *testing.T) {
+		sendChunked(t, http.MethodGet, http.StatusNotAcceptable)
 	})
 
 	t.Run("block_response_headers", func(t *testing.T) {
