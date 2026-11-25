@@ -24,6 +24,7 @@ const (
 	defaultMetadataNamespace = "io.builtonenvoy.waf"
 	metadataKeyBlockRule     = "block_rule"
 	metadataKeyBlockPhase    = "block_phase"
+	metadataKeyMatchedRules  = "matched_rules"
 )
 
 type wafPluginFactory struct {
@@ -32,6 +33,7 @@ type wafPluginFactory struct {
 	mode               wafMode
 	requestURIPathOnly bool
 	metrics            *metrics
+	metadata           metadataConfig
 }
 
 type perRouteWafPluginConfig struct {
@@ -66,6 +68,7 @@ func (f *wafPluginFactory) Create(handle shared.HttpFilterHandle) shared.HttpFil
 		requestURIPathOnly: requestURIPathOnly,
 		metrics:            f.metrics,
 		metadataNamespace:  defaultMetadataNamespace,
+		metadata:           f.metadata,
 	}
 }
 
@@ -96,12 +99,13 @@ func (f *wafPluginConfigFactory) Create(handle shared.HttpFilterConfigHandle, un
 		mode:               cfg.mode,
 		requestURIPathOnly: cfg.requestURIPathOnly,
 		metrics:            newMetrics(handle, cfg.metrics),
+		metadata:           cfg.metadata,
 	}, nil
 }
 
 func (f *wafPluginConfigFactory) CreatePerRoute(unparsedConfig []byte) (any, error) {
-	// Per-route configurations do not override the metrics settings, but an invalid metrics object is
-	// rejected here too, as parseConfig does for the whole configuration.
+	// Per-route configurations do not override the metrics and metadata settings, but an invalid metrics
+	// or metadata object is rejected here too, as parseConfig does for the whole configuration.
 	cfg, err := parseConfig(unparsedConfig, logger.GetLogger())
 	if err != nil {
 		return nil, err
@@ -127,6 +131,7 @@ type wafPlugin struct {
 	requestURIPathOnly bool
 	metrics            *metrics
 	metadataNamespace  string
+	metadata           metadataConfig
 
 	txContext             ctypes.Transaction
 	wafElapsed            time.Duration // summed time spent in the waf callbacks (WAF-added latency)
@@ -504,14 +509,22 @@ func (p *wafPlugin) OnStreamComplete() {
 	p.releaseTransaction()
 }
 
-// releaseTransaction runs ProcessLogging (phase 5 + audit logging), closes the transaction,
-// returning it to Coraza's pool, and marks it as released. It is a no-op if there is no
-// transaction.
+// releaseTransaction runs ProcessLogging (phase 5 + audit logging), counts the matched rules and sets
+// the matched_rules metadata when they are enabled (OnStreamComplete runs before the access log is
+// written), closes the transaction, returning it to Coraza's pool, and marks it as released. It is a
+// no-op if there is no transaction.
 func (p *wafPlugin) releaseTransaction() {
 	if p.txContext == nil {
 		return
 	}
 	p.txContext.ProcessLogging()
+	matched := p.txContext.MatchedRules()
+	p.metrics.RecordMatchedRules(p.handle, p.authority, matched)
+	if p.metadata.matchedRules {
+		if ids := matchedRuleIDs(matched); ids != "" {
+			p.handle.SetMetadata(p.metadataNamespace, metadataKeyMatchedRules, ids)
+		}
+	}
 	if err := p.txContext.Close(); err != nil {
 		p.handle.Log(shared.LogLevelDebug, "Failed to close WAF transaction: %v", err.Error())
 	}

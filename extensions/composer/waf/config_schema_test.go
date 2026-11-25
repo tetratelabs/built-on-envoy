@@ -39,6 +39,33 @@ func TestConfigSchema(t *testing.T) {
 			"mode": "INVALID"
 		}`)
 	})
+	t.Run("metadata settings", func(t *testing.T) {
+		for _, metadata := range []string{
+			`{}`,
+			`{"matched_rules": true}`,
+			`{"matched_rules": false}`,
+		} {
+			internaltesting.AssertSchemaValid(t, "config.schema.json", `{
+				"directives": ["SecRuleEngine On"],
+				"metadata": `+metadata+`
+			}`)
+		}
+	})
+	t.Run("invalid metadata", func(t *testing.T) {
+		for _, metadata := range []string{
+			`true`,
+			`[]`,
+			`{"matched_rules": "true"}`,
+			`{"matched_rules": 1}`,
+			`{"matched_rule": true}`,
+			`{"matched_rules": true, "matched_rule": true}`,
+		} {
+			internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{
+				"directives": ["SecRuleEngine On"],
+				"metadata": `+metadata+`
+			}`)
+		}
+	})
 	t.Run("metrics authority settings", func(t *testing.T) {
 		for _, metrics := range []string{
 			`{}`,
@@ -46,6 +73,9 @@ func TestConfigSchema(t *testing.T) {
 			`{"authority_label": "route_name"}`,
 			`{"authority_label": "virtual_host_name"}`,
 			`{"authority_label": "none"}`,
+			`{"authority_label": "none", "rule_matches": true}`,
+			`{"rule_matches": true}`,
+			`{"rule_matches": false}`,
 		} {
 			internaltesting.AssertSchemaValid(t, "config.schema.json", `{
 				"directives": ["SecRuleEngine On"],
@@ -61,6 +91,10 @@ func TestConfigSchema(t *testing.T) {
 			`{"authority_lable": false}`,
 			`{"authority_literal": "shop"}`,
 			`{"label_source": "route_name"}`,
+			`{"rule_matches": "yes"}`,
+			`{"rule_matches": 1}`,
+			`{"rule_match": true}`,
+			`{"authority_label": "none", "rule_matches": "yes"}`,
 		} {
 			internaltesting.AssertSchemaInvalid(t, "config.schema.json", `{
 				"directives": ["SecRuleEngine On"],

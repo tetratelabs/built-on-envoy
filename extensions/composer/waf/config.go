@@ -50,11 +50,14 @@ type config struct {
 	// metrics are the metrics settings. Metrics are defined once per filter configuration, so only
 	// the filter configuration's are used: per-route configurations do not override them.
 	metrics metricsConfig
+	// metadata are the dynamic metadata settings. Like the metrics settings, only the filter
+	// configuration's are used: per-route configurations do not override them.
+	metadata metadataConfig
 }
 
 // parseConfig parses the raw configuration bytes passed at the Envoy filter configuration.
-// configBytes must be a valid json of the WAF configuration. Unknown keys in the metrics object are
-// rejected, so that a misspelled setting is not silently ignored.
+// configBytes must be a valid json of the WAF configuration. Unknown keys in the metrics and metadata
+// objects are rejected, so that a misspelled setting is not silently ignored.
 func parseConfig(configBytes []byte, l *zap.Logger) (config, error) {
 	var y struct {
 		// List of Coraza directive which will be joined with newlines. Use list here to
@@ -64,6 +67,7 @@ func parseConfig(configBytes []byte, l *zap.Logger) (config, error) {
 		RequestURIPathOnly *bool           `json:"request_uri_path_only,omitempty"`
 		CRSVersion         string          `json:"crs_version,omitempty"`
 		Metrics            json.RawMessage `json:"metrics"`
+		Metadata           json.RawMessage `json:"metadata"`
 	}
 	if err := json.Unmarshal(configBytes, &y); err != nil {
 		return config{}, fmt.Errorf("failed to unmarshal config: %w", err)
@@ -95,22 +99,29 @@ func parseConfig(configBytes []byte, l *zap.Logger) (config, error) {
 		return config{}, err
 	}
 
+	metadata, err := parseMetadata(y.Metadata)
+	if err != nil {
+		return config{}, err
+	}
+
 	return config{
 		engine:             waf.Config{Directives: strings.Join(y.Directives, "\n"), CRSVersion: y.CRSVersion},
 		mode:               mode,
 		requestURIPathOnly: requestURIPathOnly,
 		metrics:            metrics,
+		metadata:           metadata,
 	}, nil
 }
 
 // parseMetrics parses the metrics object of the filter configuration, if there is one.
 func parseMetrics(raw json.RawMessage) (metricsConfig, error) {
-	var cfg metricsConfig
+	cfg := metricsConfig{ruleMatches: defaultRuleMatches}
 	if len(raw) == 0 {
 		return cfg, nil
 	}
 	var m struct {
 		AuthorityLabel *string `json:"authority_label"`
+		RuleMatches    *bool   `json:"rule_matches"`
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
@@ -125,6 +136,9 @@ func parseMetrics(raw json.RawMessage) (metricsConfig, error) {
 			return metricsConfig{}, fmt.Errorf("invalid metrics: metrics.authority_label %q is not one of %s", *m.AuthorityLabel, strings.Join(names, ", "))
 		}
 		cfg.authority = label
+	}
+	if m.RuleMatches != nil {
+		cfg.ruleMatches = *m.RuleMatches
 	}
 	return cfg, nil
 }

@@ -153,6 +153,32 @@ longDescription: |
   | `io.builtonenvoy.waf` | `block_phase` | Phase in which the requests has been blocked. See the [execution flow](https://coraza.io/docs/seclang/execution-flow/) for details on the possible values. |
   | `io.builtonenvoy.waf` | `block_rule` | ID of the rule that triggered the block. |
 
+  Setting `metadata.matched_rules` to `true` (default `false`) adds a key set when a transaction ends, whether or not
+  it was blocked, before the access log is written:
+
+  | Namespace | Key | Description |
+  |-----------|-----|-------------|
+  | `io.builtonenvoy.waf` | `matched_rules` | IDs of the rules the transaction matched, comma-separated in the order they matched, each once, e.g. `920350,941100,949110`. Rules without the `log` action (set on the rule or by `SecDefaultAction`), such as those with `nolog`, are left out, as they are from the WAF's per-match log. Not set when no rule is left. |
+
+  With OWASP CRS in anomaly scoring mode, `block_rule` is the anomaly blocking rule (e.g. `949110`) for every attack;
+  `matched_rules` names the signatures behind it, and the ones that matched without reaching the threshold. Printed by
+  the access log (`%DYNAMIC_METADATA(io.builtonenvoy.waf:matched_rules)%`), it gives one record per request.
+  `980170`, the CRS phase-5 anomaly-score report, is included only when `SecDefaultAction` carries `log` (it does in
+  `@crs-setup.conf` and `@crs-setup.conf.example`, and not in `@crs-setup.conf.example-nodefaultact`) and
+  `tx.reporting_level` allows it. A blocking rule without the `log` action is still named by `block_rule` and counted
+  in `waf_tx_blocked`, but it is not listed here.
+
+  ```json
+  {
+    "directives": ["Include @coraza.conf", "Include @crs-setup.conf", "Include @owasp_crs/*.conf"],
+    "metadata": {"matched_rules": true}
+  }
+  ```
+
+  Unknown keys in `metadata` reject the configuration. Like `metrics`, the `metadata` settings are read from the
+  filter configuration only: per-route configurations do not override them, although an invalid `metadata` object
+  is rejected there too.
+
   ## Metrics
 
   The extension exposes the following metrics:
@@ -162,10 +188,12 @@ longDescription: |
   | `waf_tx_total` | - | Counter | Total amount of transactions processed by the WAF. |
   | `waf_tx_blocked` | `authority`, `phase`, `rule_id` | Counter | Total amount of transactions blocked by the WAF. The `rule_id` will not be set if the request is not blocked by a concrete rule but by a WAF internal error. |
   | `waf_tx_duration` | - | Histogram | Duration of WAF processing the transaction, in microseconds. |
+  | `waf_rule_matched` | `phase`, `rule_id` | Counter | Only with `metrics.rule_matches` enabled. `authority` only when `authority_label` is `route_name` or `virtual_host_name`. See below. |
 
   ### Authority tag
 
   By default the `authority` tag of `waf_tx_blocked` is the request `:authority` header without its port.
+  `waf_rule_matched` does not take that default; see Matched rules.
   Clients choose that value, blocked requests included, so the number of series grows with the number of
   distinct authorities the WAF sees. The optional `metrics` object bounds it:
 
@@ -173,8 +201,8 @@ longDescription: |
     route, and `virtual_host_name` the name of the matched virtual host (Envoy 1.40 and later; earlier
     versions do not expose it to the filter). These values come from the configuration, so the number of
     series stays bounded while each route or virtual host keeps its own. A request whose route or virtual
-    host has no name, or an Envoy that does not expose it, is tagged `unresolved`. `none` defines the
-    metric without the `authority` tag, so the number of series no longer depends on the requests.
+    host has no name, or an Envoy that does not expose it, is tagged `unresolved`. `none` defines
+    `waf_tx_blocked` without the `authority` tag, so the number of series no longer depends on the requests.
 
   ```json
   {
@@ -186,6 +214,32 @@ longDescription: |
   Unknown keys in `metrics` reject the configuration. Metrics are defined per filter configuration, so these
   settings are read from the filter configuration only: per-route configurations do not override them,
   although an invalid `metrics` object is rejected there too.
+
+  ### Matched rules
+
+  The `rule_id` of `waf_tx_blocked` is the rule that interrupted the transaction. With OWASP CRS in anomaly
+  scoring mode, that is the anomaly blocking rule (e.g. `949110`) for every attack. Setting
+  `metrics.rule_matches` to `true` (default `false`) adds the `waf_rule_matched` counter, which tells the attacks
+  apart: when a transaction ends, it is incremented once for every rule the transaction matched, whether or not
+  that rule blocked it, e.g. the `941xxx` XSS signatures and `949110` for a blocked XSS attempt, or a signature
+  that matched without reaching the anomaly threshold. Rules without the `log` action (set on the rule or by
+  `SecDefaultAction`), such as the CRS initialization rules with `nolog`, are not counted, as for `matched_rules`.
+  `980170`, the CRS phase-5 anomaly-score report, is counted only when `SecDefaultAction` carries `log` (it does in
+  `@crs-setup.conf` and `@crs-setup.conf.example`, and not in `@crs-setup.conf.example-nodefaultact`) and
+  `tx.reporting_level` allows it. A blocking rule without the `log` action is still named by `block_rule` and counted
+  in `waf_tx_blocked`, but it is not counted here.
+  Unlike `waf_tx_blocked`, its `authority` tag is set only when `metrics.authority_label` is `route_name` or
+  `virtual_host_name`. With `authority` (the default) or `none`, the counter has no `authority` tag: a client-chosen
+  value times every matched rule id is unbounded, which `waf_tx_blocked` does not multiply in the same way, so the
+  two metrics do not share that default. `waf_tx_blocked` is unchanged. With `route_name` or `virtual_host_name`,
+  the number of series is the matched rule ids times the configured routes or virtual hosts.
+
+  ```json
+  {
+    "directives": ["Include @coraza.conf", "Include @crs-setup.conf", "Include @owasp_crs/*.conf"],
+    "metrics": {"authority_label": "route_name", "rule_matches": true}
+  }
+  ```
 
   ### Histogram resolution
 

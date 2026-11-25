@@ -25,6 +25,17 @@
       "type": "boolean",
       "description": "Set REQUEST_URI to the request path and query (e.g. \"/api?x=1\") instead of the absolute URL (e.g. \"https://example.com/api?x=1\"). Defaults to false. The default will change to true in a future release."
     },
+    "metadata": {
+      "type": "object",
+      "description": "Settings of the dynamic metadata the WAF sets. Read from the filter configuration only: per-route configurations do not override them.",
+      "additionalProperties": false,
+      "properties": {
+        "matched_rules": {
+          "type": "boolean",
+          "description": "Set the matched_rules key in the io.builtonenvoy.waf namespace when a transaction ends: the IDs of the rules it matched, comma-separated in the order they matched, each once, whether or not the transaction was blocked. Rules without the log action (set on the rule or by SecDefaultAction), such as those with nolog, are left out. A blocking rule without the log action is still named by block_rule and counted in waf_tx_blocked, but it is not listed here. Defaults to false."
+        }
+      }
+    },
     "metrics": {
       "type": "object",
       "description": "Settings of the WAF metrics. Read from the filter configuration only: per-route configurations do not override them.",
@@ -33,7 +44,11 @@
         "authority_label": {
           "type": "string",
           "enum": ["authority", "route_name", "virtual_host_name", "none"],
-          "description": "The value of the authority tag of waf_tx_blocked. Defaults to authority, the :authority header without its port: clients choose that value, blocked requests included, so the number of series grows with the number of distinct authorities. route_name is the name of the matched route and virtual_host_name the name of the matched virtual host (Envoy 1.40 and later). These come from the configuration, so the number of series stays bounded; a request whose route or virtual host has no name, or an Envoy that does not expose the name, is tagged unresolved. none defines the metric without the authority tag."
+          "description": "The value of the authority tag of waf_tx_blocked. Defaults to authority, the :authority header without its port: clients choose that value, blocked requests included, so the number of series grows with the number of distinct authorities. route_name is the name of the matched route and virtual_host_name the name of the matched virtual host (Envoy 1.40 and later). These come from the configuration, so the number of series stays bounded; a request whose route or virtual host has no name, or an Envoy that does not expose the name, is tagged unresolved. none defines waf_tx_blocked without the authority tag. waf_rule_matched does not follow this default: it takes an authority tag only for route_name and virtual_host_name, and none with authority or none, because a client-chosen tag times every matched rule id is unbounded. waf_tx_blocked is unchanged."
+        },
+        "rule_matches": {
+          "type": "boolean",
+          "description": "Enable the waf_rule_matched counter: once for every rule matched by a transaction, whether or not it blocked the transaction (e.g. the CRS signature rules behind an anomaly score block), by phase and rule ID. The authority tag is set only when authority_label is route_name or virtual_host_name; with authority (the default) or none, the counter has no authority tag, unlike waf_tx_blocked, because a client-chosen tag times every matched rule id is unbounded. With route_name or virtual_host_name the number of series is the matched rule ids times the configured routes or virtual hosts. Rules without the log action (set on the rule or by SecDefaultAction), such as those with nolog, are not counted. A blocking rule without the log action is still named by block_rule and counted in waf_tx_blocked, but it is not counted here. Defaults to false."
         }
       }
     },
