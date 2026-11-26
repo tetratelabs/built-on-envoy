@@ -331,7 +331,7 @@ func Test_RequestOnlyWaf(t *testing.T) {
 		headerStatus := wafPlugin.OnRequestHeaders(fakeHeaderMap, true)
 		assert.Equal(t, shared.HeadersStatusContinue, headerStatus,
 			"expected header status to continue for header only request")
-		assert.False(t, wafPlugin.isUpgrade, "expected isUpgrade to be false for non-upgrade request")
+		assert.False(t, wafPlugin.isTunnel, "expected isTunnel to be false for non-upgrade request")
 
 		// Ensure destroy is called.
 		wafPlugin.OnStreamComplete()
@@ -363,7 +363,7 @@ func Test_RequestOnlyWaf(t *testing.T) {
 		headerStatus := wafPlugin.OnRequestHeaders(fakeHeaderMap, false)
 		require.Equal(t, shared.HeadersStatusContinue, headerStatus,
 			"expected header status to continue for CONNECT request")
-		require.True(t, wafPlugin.isUpgrade, "expected isUpgrade to be true for CONNECT request")
+		require.True(t, wafPlugin.isTunnel, "expected isTunnel to be true for CONNECT request")
 		require.True(t, wafPlugin.requestBodyProcessed, "expected phase 2 to run on the CONNECT request headers")
 
 		bodyBuffer := fake.NewFakeBodyBuffer([]byte("\x16\x03\x01 tunnel bytes"))
@@ -403,7 +403,7 @@ func Test_RequestOnlyWaf(t *testing.T) {
 		headerStatus := wafPlugin.OnRequestHeaders(fakeHeaderMap, false)
 		require.Equal(t, shared.HeadersStatusContinue, headerStatus,
 			"expected header status to continue for upgrade request")
-		require.True(t, wafPlugin.isUpgrade, "expected isUpgrade to be true for upgrade request")
+		require.True(t, wafPlugin.isTunnel, "expected isTunnel to be true for upgrade request")
 
 		bodyBuffer := fake.NewFakeBodyBuffer([]byte(`{"name":"test","value":123}`))
 		bodyStatus := wafPlugin.OnRequestBody(bodyBuffer, false)
@@ -443,7 +443,7 @@ func Test_RequestOnlyWaf(t *testing.T) {
 		headerStatus := wafPlugin.OnRequestHeaders(fakeHeaderMap, false)
 		require.Equal(t, shared.HeadersStatusStop, headerStatus,
 			"expected header status to stop for request with body")
-		require.False(t, wafPlugin.isUpgrade, "expected isUpgrade to be false for non-upgrade request")
+		require.False(t, wafPlugin.isTunnel, "expected isTunnel to be false for non-upgrade request")
 
 		bodyBuffer := fake.NewFakeBodyBuffer([]byte(`{"name":"test","value":123}`))
 		bodyStatus := wafPlugin.OnRequestBody(bodyBuffer, false)
@@ -484,7 +484,7 @@ func Test_RequestOnlyWaf(t *testing.T) {
 		headerStatus := wafPlugin.OnRequestHeaders(fakeHeaderMap, false)
 		require.Equal(t, shared.HeadersStatusStop, headerStatus,
 			"expected header status to stop for request with body")
-		require.False(t, wafPlugin.isUpgrade, "expected isUpgrade to be false for non-upgrade request")
+		require.False(t, wafPlugin.isTunnel, "expected isTunnel to be false for non-upgrade request")
 
 		bodyBuffer := fake.NewFakeBodyBuffer([]byte(`{"name":"test","value":123}`))
 		bodyStatus := wafPlugin.OnRequestBody(bodyBuffer, false)

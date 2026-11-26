@@ -138,7 +138,7 @@ type wafPlugin struct {
 	txDone                bool          // WAF analysis complete and metrics emitted: set by recordTxMetrics, exactly once
 	txReleased            bool          // transaction closed and returned to the pool: see releaseTransaction
 	protocol              string
-	isUpgrade             bool
+	isTunnel              bool
 	isSSE                 bool
 	requestBodyProcessed  bool
 	responseBodyProcessed bool
@@ -188,14 +188,14 @@ func (p *wafPlugin) initializeTransaction(headers shared.HeaderMap) {
 	id := headers.GetOne("x-request-id").ToString()
 	p.txContext = p.config.NewTransactionWithID(id)
 	p.metrics.RecordTxCreated(p.handle)
-	p.isUpgrade = p.checkUpgrade(headers)
+	p.isTunnel = p.checkTunnel(headers)
 }
 
-// checkUpgrade reports whether the request opens a long-lived stream: an upgrade
-// (e.g. WebSocket) or a CONNECT tunnel. Envoy passes both to the filter with
+// checkTunnel reports whether the request opens a tunnel, as Envoy calls both an
+// upgrade (e.g. WebSocket) and a CONNECT. Envoy passes both to the filter with
 // end_stream=false and forwards the stream payload as body data, which ends only
 // with the stream, so the WAF must not wait for the end of the request body.
-func (p *wafPlugin) checkUpgrade(headers shared.HeaderMap) bool {
+func (p *wafPlugin) checkTunnel(headers shared.HeaderMap) bool {
 	if headers.GetOne(":method").ToUnsafeString() == "CONNECT" {
 		return true
 	}
@@ -215,7 +215,7 @@ func (p *wafPlugin) checkUpgrade(headers shared.HeaderMap) bool {
 // it rejects transfer codings other than chunked (501). Upgrade and CONNECT
 // requests keep the stream open without a body, so they are left out.
 func (p *wafPlugin) hasChunkedBody(headers shared.HeaderMap, method string, endOfStream bool) bool {
-	if endOfStream || p.isUpgrade || method == "CONNECT" || !strings.HasPrefix(p.protocol, "HTTP/1") {
+	if endOfStream || p.isTunnel || method == "CONNECT" || !strings.HasPrefix(p.protocol, "HTTP/1") {
 		return false
 	}
 	return headers.GetOne("content-length").ToUnsafeString() == "" &&
@@ -288,9 +288,9 @@ func (p *wafPlugin) OnRequestHeaders(headers shared.HeaderMap, endOfStream bool)
 		return shared.HeadersStatusStop
 	}
 
-	// If endOfStream is true or if we won't buffer the body (upgrade), call handleRequestBody to run phase 2 rules.
+	// If endOfStream is true or if we won't buffer the body (tunnel), call handleRequestBody to run phase 2 rules.
 	// This allows rules in the request body phase to run, even if there is no actual body to process and before sending the headers.
-	if endOfStream || p.isUpgrade {
+	if endOfStream || p.isTunnel {
 		if !p.handleRequestBody() {
 			return shared.HeadersStatusStop
 		}
@@ -428,10 +428,10 @@ func (p *wafPlugin) OnResponseHeaders(headers shared.HeaderMap, endOfStream bool
 		return shared.HeadersStatusStop
 	}
 
-	// If endOfStream is true or if we are not going to buffer the response body anyway (upgrade or SSE),
+	// If endOfStream is true or if we are not going to buffer the response body anyway (tunnel or SSE),
 	// run handleResponseBody to enforce phase 4 rules. Doing so, response variables already populated
 	// are checked, before the headers are sent back.
-	if endOfStream || p.isUpgrade || p.isSSE {
+	if endOfStream || p.isTunnel || p.isSSE {
 		if !p.handleResponseBody() {
 			return shared.HeadersStatusStop
 		}
@@ -568,7 +568,7 @@ func (p *wafPlugin) releaseTransaction() {
 // by the WAF) and, as soon as the WAF analysis is done, marks the transaction
 // done, emitting its metrics. The transaction stays live: audit logging
 // (phase 5) and closing are deferred to OnStreamComplete, outside the data path,
-// except for long-lived streams (upgraded or SSE), whose transaction is released
+// except for long-lived streams (tunnels or SSE), whose transaction is released
 // right away.
 //
 // The WAF analysis is done when:
@@ -596,7 +596,7 @@ func (p *wafPlugin) trackAndMarkTxDone(start time.Time) {
 		(p.mode == modeRequestOnly && p.requestBodyProcessed) { // phase 2 has run in request-only mode
 		p.recordTxMetrics()
 		// The WAF does not inspect WebSocket frames or SSE events: once the analysis of a
-		// long-lived stream (upgraded or SSE) is done its transaction is idle, yet holding it
+		// long-lived stream (tunnel or SSE) is done its transaction is idle, yet holding it
 		// until the stream ends (often hours) keeps alive whatever memory it grew while
 		// serving previous requests, as Coraza pools and reuses transactions. Many long-lived
 		// streams can therefore pin a large amount of memory, so release it now.
@@ -606,7 +606,7 @@ func (p *wafPlugin) trackAndMarkTxDone(start time.Time) {
 		// worker instead does not avoid that, as the task runs before the headers are flushed.
 		//
 		// An interrupted stream ends right away and is released by OnStreamComplete.
-		if (p.isUpgrade || p.isSSE) && !p.txContext.IsInterrupted() {
+		if (p.isTunnel || p.isSSE) && !p.txContext.IsInterrupted() {
 			p.releaseTransaction()
 		}
 	}
