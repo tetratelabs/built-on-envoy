@@ -399,6 +399,19 @@
 }
 
 /* Code Blocks */
+.example-code-block + .example-code-block {
+	margin-top: 16px;
+}
+
+.example-code-label {
+	color: var(--text-muted);
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	margin-bottom: 6px;
+	text-transform: uppercase;
+}
+
 .code-block-wrapper {
 	position: relative;
 }
