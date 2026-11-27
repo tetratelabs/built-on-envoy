@@ -2866,6 +2866,17 @@ Whether to add the x-switchyard-routing-calls, -input-tokens, -output-tokens and
 
 [↑ Top](#) | [↑ Switchyard Configuration](#switchyard) {/* if .SubProperties */}
 
+### routing_timeout_ms
+
+How long a routing run may take, in milliseconds, model calls included. When it takes longer, the run is cancelled and the failure mode of the virtual model applies. Defaults to 30000.
+
+| | |
+|---|---|
+| **Type** | `integer` |
+| **Required** | No |
+
+[↑ Top](#) | [↑ Switchyard Configuration](#switchyard) {/* if .SubProperties */}
+
 ### session
 
 How the session identity used by stateful algorithms is read from the request headers.
