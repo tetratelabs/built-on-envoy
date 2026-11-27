@@ -198,6 +198,23 @@ func (p *wafPlugin) checkUpgrade(headers shared.HeaderMap) bool {
 		upgrade != ""
 }
 
+// hasChunkedBody reports whether an HTTP/1.x request, as this filter sees it,
+// carries a body without Content-Length, which means it was sent with
+// Transfer-Encoding: chunked. Envoy's connection manager removes that header
+// before HTTP filters run, so CRS rules such as 920171 (GET or HEAD with
+// Transfer-Encoding) and 920180 (POST without Content-Length or
+// Transfer-Encoding) can't see it. Envoy's HTTP/1 codec opens a stream with a
+// body only for chunked requests, a Content-Length above 0, and upgrades, and
+// it rejects transfer codings other than chunked (501). Upgrade and CONNECT
+// requests keep the stream open without a body, so they are left out.
+func (p *wafPlugin) hasChunkedBody(headers shared.HeaderMap, method string, endOfStream bool) bool {
+	if endOfStream || p.isUpgrade || method == "CONNECT" || !strings.HasPrefix(p.protocol, "HTTP/1") {
+		return false
+	}
+	return headers.GetOne("content-length").ToUnsafeString() == "" &&
+		headers.GetOne("transfer-encoding").ToUnsafeString() == ""
+}
+
 func (p *wafPlugin) checkSSE(headers shared.HeaderMap) bool {
 	return strings.Contains(strings.ToLower(headers.GetOne("content-type").ToUnsafeString()),
 		"text/event-stream")
@@ -248,6 +265,9 @@ func (p *wafPlugin) OnRequestHeaders(headers shared.HeaderMap, endOfStream bool)
 	headerMap := headers.GetAll()
 	for _, header := range headerMap {
 		p.txContext.AddRequestHeader(header[0].ToString(), header[1].ToString())
+	}
+	if p.hasChunkedBody(headers, method, endOfStream) {
+		p.txContext.AddRequestHeader("Transfer-Encoding", "chunked")
 	}
 
 	p.txContext.ProcessConnection(srcIP, srcPort, dstIP, dstPort)

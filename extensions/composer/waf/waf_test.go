@@ -1218,6 +1218,109 @@ func Test_Phase2RulesOnHeaderOnlyRequest(t *testing.T) {
 	}
 }
 
+// Envoy removes Transfer-Encoding before HTTP filters run, so the filter derives
+// it for HTTP/1.x requests that carry a body without Content-Length.
+func Test_TransferEncodingDerivedForChunkedRequests(t *testing.T) {
+	const (
+		ruleSawChunked = 100301
+		ruleSawNoTE    = 100302
+	)
+	directives := []string{
+		"SecRuleEngine On",
+		`SecRule REQUEST_HEADERS:Transfer-Encoding "@streq chunked" "id:100301,phase:1,deny,status:403"`,
+		`SecRule &REQUEST_HEADERS:Transfer-Encoding "@eq 0" "id:100302,phase:1,deny,status:403"`,
+	}
+
+	testCases := []struct {
+		name        string
+		protocol    string
+		headers     map[string][]string
+		endOfStream bool
+		ruleID      int
+	}{
+		{
+			name:     "chunked POST",
+			protocol: "HTTP/1.1",
+			headers:  map[string][]string{":method": {"POST"}, ":path": {"/"}},
+			ruleID:   ruleSawChunked,
+		},
+		{
+			name:     "chunked GET",
+			protocol: "HTTP/1.1",
+			headers:  map[string][]string{":method": {"GET"}, ":path": {"/"}},
+			ruleID:   ruleSawChunked,
+		},
+		{
+			name:     "chunked POST over HTTP/1.0",
+			protocol: "HTTP/1.0",
+			headers:  map[string][]string{":method": {"POST"}, ":path": {"/"}},
+			ruleID:   ruleSawChunked,
+		},
+		{
+			name:     "POST with Content-Length",
+			protocol: "HTTP/1.1",
+			headers:  map[string][]string{":method": {"POST"}, ":path": {"/"}, "content-length": {"7"}},
+			ruleID:   ruleSawNoTE,
+		},
+		{
+			name:        "GET without a body",
+			protocol:    "HTTP/1.1",
+			headers:     map[string][]string{":method": {"GET"}, ":path": {"/"}},
+			endOfStream: true,
+			ruleID:      ruleSawNoTE,
+		},
+		{
+			name:     "websocket upgrade",
+			protocol: "HTTP/1.1",
+			headers: map[string][]string{
+				":method": {"GET"}, ":path": {"/ws"}, "connection": {"Upgrade"}, "upgrade": {"websocket"},
+			},
+			ruleID: ruleSawNoTE,
+		},
+		{
+			name:     "CONNECT",
+			protocol: "HTTP/1.1",
+			headers:  map[string][]string{":method": {"CONNECT"}},
+			ruleID:   ruleSawNoTE,
+		},
+		{
+			name:     "HTTP/2 POST without Content-Length",
+			protocol: "HTTP/2",
+			headers:  map[string][]string{":method": {"POST"}, ":path": {"/"}},
+			ruleID:   ruleSawNoTE,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			wafPluginFactory := newWAFFactory(t, ctrl, directives, "FULL")
+
+			pluginHandle := newPluginHandleWithoutPerRouteConfig(ctrl)
+			pluginHandle.EXPECT().IncrementCounterValue(shared.MetricID(1), uint64(1)).Return(shared.MetricsSuccess)
+			pluginHandle.EXPECT().RecordHistogramValue(shared.MetricID(3), gomock.Any()).Return(shared.MetricsSuccess)
+			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDRequestProtocol).Return(pkg.UnsafeBufferFromString(tc.protocol), true)
+			pluginHandle.EXPECT().GetAttributeString(shared.AttributeIDSourceAddress).Return(pkg.UnsafeBufferFromString("10.0.0.1:12345"), true)
+			pluginHandle.EXPECT().IncrementCounterValue(
+				shared.MetricID(2), uint64(1), "example.com", strconv.Itoa(int(ctypes.PhaseRequestHeaders)), strconv.Itoa(tc.ruleID),
+			).Return(shared.MetricsSuccess)
+			pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockRule, tc.ruleID)
+			pluginHandle.EXPECT().SetMetadata("io.builtonenvoy.waf", metadataKeyBlockPhase, int(ctypes.PhaseRequestHeaders))
+			pluginHandle.EXPECT().SendLocalResponse(uint32(403), nil, nil, "waf_request_headers_blocked")
+
+			wafPlugin, ok := wafPluginFactory.Create(pluginHandle).(*wafPlugin)
+			require.True(t, ok, "failed to cast plugin to wafPlugin")
+
+			headers := maps.Clone(tc.headers)
+			headers[":authority"] = []string{"example.com:8080"}
+			headerStatus := wafPlugin.OnRequestHeaders(fake.NewFakeHeaderMap(headers), tc.endOfStream)
+			require.Equal(t, shared.HeadersStatusStop, headerStatus)
+
+			wafPlugin.OnStreamComplete()
+		})
+	}
+}
+
 func Test_Phase4RulesOnHeaderOnlyResponse(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
