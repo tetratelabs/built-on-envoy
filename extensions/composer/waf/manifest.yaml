@@ -141,6 +141,11 @@ longDescription: |
   - `true`: the path and query, e.g. `/api?x=1`, as in other Coraza and ModSecurity integrations. Path-based
     rules such as `SecRule REQUEST_URI "@beginsWith /api/"` require it.
 
+  A CONNECT request has no path: in both modes its `REQUEST_URI` is `//` followed by the target, e.g.
+  `//example.com:443`, as in Coraza's Go middleware. Like an upgraded (WebSocket) stream, a CONNECT tunnel is
+  inspected on its headers only: the WAF runs the request body phase on them and passes the tunnel's payload
+  through uninspected.
+
   Note: the default will change to `true` in a future release. We recommend enabling it now and updating
   any rules that match the scheme or host in `REQUEST_URI` (use `REQUEST_HEADERS:Host` for the host).
 
