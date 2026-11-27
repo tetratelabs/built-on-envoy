@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/tetratelabs/built-on-envoy/extensions/header-case/config.schema.json",
+  "title": "Header Case Configuration",
+  "description": "Controls the casing of HTTP/1 header names that Envoy writes on the wire. Overrides win over the mode.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "mode": {
+      "type": "string",
+      "enum": ["preserve", "proper_case", "lowercase"],
+      "default": "preserve",
+      "description": "preserve keeps the casing the peer sent; proper_case uppercases the first letter of each word (X-Foo-Bar); lowercase is Envoy's default."
+    },
+    "added_header_case": {
+      "type": "string",
+      "enum": ["proper_case", "lowercase"],
+      "default": "proper_case",
+      "description": "Casing for headers Envoy adds, such as x-request-id or headers set by filters. Only valid when mode is preserve."
+    },
+    "overrides": {
+      "type": "object",
+      "description": "Exact spellings by header name, e.g. `{\"content-type\": \"Content-type\"}`. Names are matched case-insensitively and a spelling may only change the casing.",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$"
+      }
+    }
+  },
+  "if": {
+    "properties": { "mode": { "enum": ["proper_case", "lowercase"] } },
+    "required": ["mode"]
+  },
+  "then": {
+    "not": { "required": ["added_header_case"] }
+  }
+}

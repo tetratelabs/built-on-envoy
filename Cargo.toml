@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "extensions/dns-gateway",
+    "extensions/header-case",
     "extensions/ip-restriction",
     "extensions/switchyard",
 ]

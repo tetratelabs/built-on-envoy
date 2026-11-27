@@ -14,6 +14,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	bootstrapv3 "github.com/envoyproxy/go-control-plane/envoy/config/bootstrap/v3"
 	clusterv3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
@@ -23,6 +24,7 @@ import (
 	dymhttpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/dynamic_modules/v3"
 	routerv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/router/v3"
 	hcmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
+	httpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/upstreams/http/v3"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -1477,6 +1479,126 @@ func TestRenderConfigListenerAddress(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRenderConfigHeaderFormatter(t *testing.T) {
+	formatter := &extensions.Manifest{
+		Name:        "header-case",
+		Type:        extensions.TypeRust,
+		FilterTypes: []extensions.FilterType{extensions.FilterTypeHeaderFormatter},
+	}
+	params := &ConfigGenerationParams{
+		Logger:           internaltesting.NewTLogger(t),
+		AdminAddress:     "127.0.0.1:9901",
+		ListenerPort:     10000,
+		Extensions:       []*extensions.Manifest{formatter},
+		Configs:          []string{`{"mode":"preserve"}`},
+		ClustersInsecure: []string{"127.0.0.1:8080"},
+		ClustersJSON: []string{
+			`{"name":"h2","type":"STATIC","typed_extension_protocol_options":{` +
+				`"envoy.extensions.upstreams.http.v3.HttpProtocolOptions":{` +
+				`"@type":"type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions",` +
+				`"explicit_http_config":{"http2_protocol_options":{}}}}}`,
+			// Older cluster-level fields. Envoy ignores them once typed options exist, so these
+			// clusters must be left alone or they'd silently switch protocol or lose settings.
+			`{"name":"legacy-h2","type":"STATIC","http2_protocol_options":{}}`,
+			`{"name":"legacy-downstream","type":"STATIC","protocol_selection":"USE_DOWNSTREAM_PROTOCOL"}`,
+			`{"name":"legacy-common","type":"STATIC","common_http_protocol_options":{"idle_timeout":"30s"}}`,
+			// Typed HTTP/1 settings get the formatter merged in, keeping what they already set.
+			`{"name":"h1-idle","type":"STATIC","typed_extension_protocol_options":{` +
+				`"envoy.extensions.upstreams.http.v3.HttpProtocolOptions":{` +
+				`"@type":"type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions",` +
+				`"common_http_protocol_options":{"idle_timeout":"30s"},"explicit_http_config":{"http_protocol_options":{"accept_http_10":true}}}}}`,
+			`{"name":"auto","type":"STATIC","typed_extension_protocol_options":{` +
+				`"envoy.extensions.upstreams.http.v3.HttpProtocolOptions":{` +
+				`"@type":"type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions",` +
+				`"auto_config":{}}}}`,
+			`{"name":"downstream","type":"STATIC","typed_extension_protocol_options":{` +
+				`"envoy.extensions.upstreams.http.v3.HttpProtocolOptions":{` +
+				`"@type":"type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions",` +
+				`"use_downstream_protocol_config":{}}}}`,
+			// A cluster that already picks a header format is left as is.
+			`{"name":"own-format","type":"STATIC","typed_extension_protocol_options":{` +
+				`"envoy.extensions.upstreams.http.v3.HttpProtocolOptions":{` +
+				`"@type":"type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions",` +
+				`"explicit_http_config":{"http_protocol_options":{"header_key_format":{"proper_case_words":{}}}}}}}`,
+		},
+	}
+
+	gen, err := generateConfig(params)
+	require.NoError(t, err)
+	require.Empty(t, gen.HTTPFilters)
+	require.NotNil(t, gen.HeaderFormatter)
+	require.Equal(t, "header-case", gen.HeaderFormatter.GetName())
+
+	out, err := RenderConfig(params, FullConfigRenderer)
+	require.NoError(t, err)
+	jsonBytes, err := yaml.YAMLToJSON([]byte(out))
+	require.NoError(t, err)
+	var bootstrap bootstrapv3.Bootstrap
+	require.NoError(t, protojson.Unmarshal(jsonBytes, &bootstrap))
+
+	// The HCM formats requests sent upstream.
+	listeners := bootstrap.GetStaticResources().GetListeners()
+	require.Len(t, listeners, 1)
+	filters := listeners[0].GetFilterChains()[0].GetFilters()
+	var hcm hcmv3.HttpConnectionManager
+	require.NoError(t, filters[len(filters)-1].GetTypedConfig().UnmarshalTo(&hcm))
+	require.True(t, hcm.GetHttpProtocolOptions().GetAcceptHttp_10())
+	checkProtos(t, []*corev3.TypedExtensionConfig{gen.HeaderFormatter},
+		[]*corev3.TypedExtensionConfig{hcm.GetHttpProtocolOptions().GetHeaderKeyFormat().GetStatefulFormatter()})
+
+	// Each HTTP/1 cluster formats responses written back to the client. HTTP/2-only clusters, clusters
+	// using the older fields, and clusters with their own header format are left alone.
+	clusters := bootstrap.GetStaticResources().GetClusters()
+	require.Len(t, clusters, 10)
+	for _, c := range clusters {
+		name := c.GetName()
+		if strings.HasPrefix(name, "legacy-") {
+			require.Empty(t, c.GetTypedExtensionProtocolOptions(), name)
+			continue
+		}
+		opts := &httpv3.HttpProtocolOptions{}
+		require.NoError(t, c.GetTypedExtensionProtocolOptions()[httpProtocolOptionsKey].UnmarshalTo(opts), name)
+		h1 := http1Options(opts)
+		switch name {
+		case "h2":
+			require.Nil(t, h1)
+		case "own-format":
+			require.NotNil(t, h1.GetHeaderKeyFormat().GetProperCaseWords(), name)
+		default:
+			checkProtos(t, []*corev3.TypedExtensionConfig{gen.HeaderFormatter},
+				[]*corev3.TypedExtensionConfig{h1.GetHeaderKeyFormat().GetStatefulFormatter()})
+		}
+		if name == "h1-idle" {
+			require.True(t, h1.GetAcceptHttp_10())
+			require.Equal(t, 30*time.Second, opts.GetCommonHttpProtocolOptions().GetIdleTimeout().AsDuration())
+		}
+	}
+
+	// genconfig prints the formatter too.
+	minimal, err := RenderConfig(params, MinimalConfigRenderer)
+	require.NoError(t, err)
+	require.Contains(t, minimal, "header_formatter:")
+	require.Contains(t, minimal, "DynamicModuleHeaderFormatter")
+}
+
+func TestRenderConfigRejectsSecondHeaderFormatter(t *testing.T) {
+	newFormatter := func(name string) *extensions.Manifest {
+		return &extensions.Manifest{
+			Name:        name,
+			Type:        extensions.TypeRust,
+			FilterTypes: []extensions.FilterType{extensions.FilterTypeHeaderFormatter},
+		}
+	}
+	params := &ConfigGenerationParams{
+		Logger:       internaltesting.NewTLogger(t),
+		AdminAddress: "127.0.0.1:9901",
+		ListenerPort: 10000,
+		Extensions:   []*extensions.Manifest{newFormatter("a"), newFormatter("b")},
+	}
+	_, err := generateConfig(params)
+	require.EqualError(t, err, `extension "b": only one header formatter can be enabled, "a" is already set`)
 }
 
 // requireEqualError compares error strings while normalizing protobuf NBSP output.

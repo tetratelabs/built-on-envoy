@@ -1,0 +1,21 @@
+[package]
+name = "header-case"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/tetratelabs/built-on-envoy"
+
+[dependencies]
+# The SDK version must match the Envoy version due to the strict compatibility requirements.
+# The header formatter ABI first shipped in Envoy v1.40.0.
+envoy-proxy-dynamic-modules-rust-sdk = { git = "https://github.com/envoyproxy/envoy", rev = "9e5580933739775e8bce696a57a2e1bc99368f23" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[dev-dependencies]
+jsonschema = "0.28"
+
+[lib]
+name = "header_case"
+path = "src/lib.rs"
+crate-type = ["cdylib"]

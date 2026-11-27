@@ -24,6 +24,7 @@ import (
 	dymnetv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/dynamic_modules/v3"
 	hcmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
 	dymudpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/udp/dynamic_modules/v3"
+	dymhfv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/http/header_formatters/dynamic_modules/v3"
 	httpv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/upstreams/http/v3"
 	wasmv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/wasm/v3"
 	"github.com/stretchr/testify/require"
@@ -478,6 +479,43 @@ func TestDynamicModuleFilterGeneratorUDPListener(t *testing.T) {
 
 	require.Empty(t, got.ListenerFilters, "UDP listener filter should not produce (TCP) listener filters")
 	checkProtos(t, wantWithConfig.UDPListenerFilters, got.UDPListenerFilters)
+}
+
+func TestDynamicModuleFilterGeneratorHeaderFormatter(t *testing.T) {
+	logger := internaltesting.NewTLogger(t)
+	dirs := &xdg.Directories{DataHome: t.TempDir()}
+	manifest := &extensions.Manifest{
+		Name:        "header-case",
+		Type:        extensions.TypeRust,
+		FilterTypes: []extensions.FilterType{extensions.FilterTypeHeaderFormatter},
+		Version:     "v1.0.0",
+		Remote:      true,
+	}
+
+	for _, configJSON := range []string{"", `{"mode":"proper_case"}`} {
+		got, err := GenerateFilterConfig(logger, manifest, dirs, configJSON)
+		require.NoError(t, err)
+		require.Empty(t, got.HTTPFilters, "header formatter should not produce HTTP filters")
+		require.Empty(t, got.NetworkFilters)
+		require.Empty(t, got.ListenerFilters)
+		require.Empty(t, got.UDPListenerFilters)
+
+		hf := &dymhfv3.DynamicModuleHeaderFormatter{
+			DynamicModuleConfig: &dymv3.DynamicModuleConfig{
+				Name:             extensions.ModuleName(manifest),
+				MetricsNamespace: "builtonenvoy",
+			},
+			HeaderFormatterName: manifest.Name,
+		}
+		if configJSON != "" {
+			cfg, cfgErr := anypb.New(wrapperspb.String(configJSON))
+			require.NoError(t, cfgErr)
+			hf.HeaderFormatterConfig = cfg
+		}
+		hfAny, err := anypb.New(hf)
+		require.NoError(t, err)
+		checkProtos(t, []*corev3.TypedExtensionConfig{{Name: manifest.Name, TypedConfig: hfAny}}, got.HeaderFormatters)
+	}
 }
 
 func TestComposerFilterGenerator(t *testing.T) {

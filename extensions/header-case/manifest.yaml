@@ -1,0 +1,65 @@
+# Copyright Built On Envoy
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+name: header-case
+version: 0.1.0
+minEnvoyVersion: 1.40.0
+categories:
+  - Traffic Control
+author: Tetrate
+description: Control the casing of HTTP/1 header names on the wire
+longDescription: |
+  Envoy writes HTTP/1 header names in lowercase. That is valid HTTP, but some legacy clients and
+  servers only accept a specific casing. This extension is an HTTP/1 header formatter that decides
+  how each header name is cased when Envoy writes it.
+
+  ## Modes
+
+  * **preserve** (default): keep the casing the peer sent. Headers Envoy adds, such as
+    `x-request-id` or headers set by filters, use `added_header_case` (`proper_case` by default,
+    or `lowercase`).
+  * **proper_case**: uppercase the first letter of each word, e.g. `X-Request-Id`.
+  * **lowercase**: Envoy's default casing, useful together with `overrides`.
+
+  `overrides` sets an exact spelling for specific headers, e.g. `content-type` as `Content-type`.
+  Overrides win over the mode and may only change casing, never the name.
+
+  ## Where it applies
+
+  The formatter is set on both sides of the proxy: request headers sent to the upstream follow the
+  casing the client used, and response headers sent back follow the casing the upstream used.
+
+  It only affects HTTP/1. HTTP/2 and HTTP/3 always use lowercase names. Trailers and the response
+  reason phrase are not changed.
+tags:
+  - http1
+  - headers
+  - legacy
+  - rust
+  - dynamic-module
+license: Apache-2.0
+type: rust
+filterType:
+  - header_formatter
+examples:
+  - title: Preserve original casing
+    description: Forward header names with the casing each peer sent
+    code: |
+      boe run --extension header-case
+  - title: Proper case
+    description: Write every header name as X-Proper-Case
+    code: |
+      boe run --extension header-case --config '{"mode": "proper_case"}'
+  - title: Exact spellings
+    description: Keep peer casing, but always write Content-type and SOAPAction exactly
+    code: |
+      boe run --extension header-case --config '
+        {
+          "mode": "preserve",
+          "overrides": {
+            "content-type": "Content-type",
+            "soapaction": "SOAPAction"
+          }
+        }'

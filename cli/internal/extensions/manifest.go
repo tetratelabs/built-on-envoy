@@ -257,6 +257,8 @@ const (
 	FilterTypeListener FilterType = "listener"
 	// FilterTypeUDPListener represents a UDP listener filter extension.
 	FilterTypeUDPListener FilterType = "udp_listener"
+	// FilterTypeHeaderFormatter represents an HTTP/1 stateful header formatter extension.
+	FilterTypeHeaderFormatter FilterType = "header_formatter"
 
 	schemaURL = "manifest.schema.json"
 )
