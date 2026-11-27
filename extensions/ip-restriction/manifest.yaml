@@ -4,8 +4,8 @@
 # the root of the repo.
 
 name: ip-restriction
-version: 0.2.0
-minEnvoyVersion: 1.37.1
+version: 0.3.0
+minEnvoyVersion: 1.39.0
 categories:
   - Security
 author: Tetrate
